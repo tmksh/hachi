@@ -153,15 +153,15 @@
   body {
     @apply text-foreground;
     /* Full-canvas diagonal gradient: very soft teal → blue → lavender */
-    background-color: oklch(0.960 0.004 220);
+    background-color: oklch(0.965 0.003 220);
     background-image:
       linear-gradient(
         145deg,
-        oklch(0.94 0.04 168)  0%,
-        oklch(0.95 0.03 195) 25%,
-        oklch(0.96 0.03 220) 50%,
-        oklch(0.95 0.04 248) 75%,
-        oklch(0.94 0.04 272) 100%
+        oklch(0.955 0.028 168)  0%,
+        oklch(0.962 0.022 195) 25%,
+        oklch(0.966 0.020 220) 50%,
+        oklch(0.962 0.026 248) 75%,
+        oklch(0.955 0.028 272) 100%
       );
     background-attachment: fixed;
     font-feature-settings: "rlig" 1, "calt" 1;
