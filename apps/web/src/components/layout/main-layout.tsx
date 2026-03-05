@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "./sidebar";
 import { MobileNav } from "./mobile-nav";
@@ -11,6 +13,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const { profile, loading, signOut } = useAuth();
+  const [expanded, setExpanded] = useState(false);
 
   if (loading) {
     return (
@@ -27,12 +30,26 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen">
-      <Sidebar profile={profile} onSignOut={signOut} />
+      <Sidebar
+        profile={profile}
+        onSignOut={signOut}
+        expanded={expanded}
+        onExpandedChange={setExpanded}
+      />
       <MobileNav />
-      <main className="md:pl-[72px] pb-20 md:pb-0">
+      {/* Desktop */}
+      <motion.main
+        animate={{ paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="hidden md:block"
+      >
         <div className="mx-auto max-w-[1600px]">
           {children}
         </div>
+      </motion.main>
+      {/* Mobile */}
+      <main className="md:hidden pb-20">
+        {children}
       </main>
     </div>
   );

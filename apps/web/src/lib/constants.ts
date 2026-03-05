@@ -96,4 +96,13 @@ export const STATUS_COLORS = {
   rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
   submitted: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   cancelled: "bg-muted text-muted-foreground",
+  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  preparing: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  contracted: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  executing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  in_progress: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  suspended: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  delayed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  paid: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
 } as const;

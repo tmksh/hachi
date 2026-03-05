@@ -197,31 +197,30 @@ export default function AttendancePage() {
 
         {/* Calendar Tab */}
         <TabsContent value="calendar" className="space-y-4 mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
-            {/* Calendar + Clock */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+            {/* Left: Clock + Calendar */}
             <div className="space-y-4">
-              {/* Clock in/out buttons */}
-              <Card>
-                <CardContent className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Clock className="h-5 w-5 text-primary" />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {format(new Date(), "yyyy年M月d日（EEEE）", { locale: ja })}
-                        </p>
-                        <p className="text-2xl font-semibold tabular-nums">
-                          {format(new Date(), "HH:mm")}
-                        </p>
-                      </div>
+
+              {/* Clock-in card */}
+              <Card className="overflow-hidden">
+                <div className={`h-1 w-full transition-colors duration-500 bg-primary/40`} />
+                <CardContent className="py-4 px-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(), "yyyy年M月d日（EEEE）", { locale: ja })}
+                      </p>
+                      <p className="text-3xl font-bold tabular-nums tracking-tight mt-0.5">
+                        {format(new Date(), "HH:mm")}
+                      </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={handleClockIn} className="gap-1.5">
-                        <LogIn className="h-4 w-4" />
+                      <Button onClick={handleClockIn} className="gap-1.5 h-9">
+                        <LogIn className="h-3.5 w-3.5" />
                         出勤
                       </Button>
-                      <Button variant="outline" onClick={handleClockOut} className="gap-1.5">
-                        <LogOut className="h-4 w-4" />
+                      <Button variant="outline" onClick={handleClockOut} className="gap-1.5 h-9">
+                        <LogOut className="h-3.5 w-3.5" />
                         退勤
                       </Button>
                     </div>
@@ -229,43 +228,33 @@ export default function AttendancePage() {
                 </CardContent>
               </Card>
 
-              {/* Monthly Calendar */}
+              {/* Monthly calendar */}
               <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                    >
+                <CardContent className="px-4 pt-4 pb-3">
+                  {/* Month nav */}
+                  <div className="flex items-center justify-between mb-3">
+                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                      onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <h2 className="text-sm font-medium">
-                      {format(currentMonth, "yyyy年 M月", { locale: ja })}
-                    </h2>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                    >
+                    <span className="text-sm font-semibold">
+                      {format(currentMonth, "yyyy年M月", { locale: ja })}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                      onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
-                </CardHeader>
-                <CardContent>
+
                   {/* Weekday headers */}
-                  <div className="grid grid-cols-7 mb-1">
+                  <div className="grid grid-cols-7 border-b border-white/20 pb-1 mb-1">
                     {WEEKDAYS.map((day, i) => (
-                      <div
-                        key={day}
-                        className={cn(
-                          "text-center text-xs font-medium py-1.5",
-                          i === 5 && "text-blue-500",
-                          i === 6 && "text-red-500",
-                        )}
-                      >
+                      <div key={day} className={cn(
+                        "text-center text-[11px] font-semibold py-1",
+                        i === 5 && "text-sky-500",
+                        i === 6 && "text-rose-500",
+                        i < 5 && "text-muted-foreground",
+                      )}>
                         {day}
                       </div>
                     ))}
@@ -274,181 +263,170 @@ export default function AttendancePage() {
                   {/* Calendar grid */}
                   <div className="grid grid-cols-7 gap-px">
                     {calendarDays.map((day, i) => {
-                      if (!day) {
-                        return <div key={`pad-${i}`} className="aspect-square" />;
-                      }
+                      if (!day) return <div key={`pad-${i}`} className="aspect-[1/1.2]" />;
 
-                      const record = records.find(
-                        (r) =>
-                          format(r.date, "yyyy-MM-dd") ===
-                          format(day, "yyyy-MM-dd"),
-                      );
-                      const isSelected =
-                        selectedDate &&
-                        format(day, "yyyy-MM-dd") ===
-                          format(selectedDate, "yyyy-MM-dd");
+                      const record = records.find(r => format(r.date, "yyyy-MM-dd") === format(day, "yyyy-MM-dd"));
+                      const isSelected = selectedDate && format(day, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
+                      const sat = isSaturday(day);
+                      const sun = isSunday(day);
+                      const tod = isToday(day);
 
                       return (
                         <button
                           key={format(day, "yyyy-MM-dd")}
-                          onClick={() => setSelectedDate(day)}
+                          onClick={() => setSelectedDate(isSelected ? null : day)}
                           className={cn(
-                            "aspect-square p-1 rounded-lg text-left transition-colors relative",
-                            "hover:bg-accent",
-                            isToday(day) && "ring-2 ring-primary/30",
-                            isSelected && "bg-primary/10 ring-2 ring-primary",
-                            record?.status === "pending" && "bg-yellow-50 dark:bg-yellow-900/10",
-                            isSaturday(day) && "text-blue-500",
-                            isSunday(day) && "text-red-500",
+                            "aspect-[1/1.2] rounded-xl p-1.5 text-left transition-all duration-150 flex flex-col",
+                            "hover:bg-white/30",
+                            isSelected && "bg-primary/10 ring-1 ring-primary/40",
+                            tod && !isSelected && "ring-1 ring-primary/30",
                           )}
                         >
-                          <span className="text-xs font-medium">
+                          <span className={cn(
+                            "inline-flex items-center justify-center h-5 w-5 rounded-full text-[11px] font-medium mb-0.5",
+                            tod ? "bg-primary text-primary-foreground font-bold" : "",
+                            !tod && sat ? "text-sky-500" : "",
+                            !tod && sun ? "text-rose-500" : "",
+                            !tod && !sat && !sun ? "text-foreground" : "",
+                          )}>
                             {format(day, "d")}
                           </span>
-                          {record?.clockIn && (
-                            <div className="mt-0.5">
-                              <p className="text-[9px] text-green-600 tabular-nums leading-tight">
+                          {record?.clockIn && !sat && !sun && (
+                            <div className="flex flex-col gap-px">
+                              <span className="text-[9px] text-emerald-600 tabular-nums leading-none font-medium">
                                 {format(record.clockIn, "HH:mm")}
-                              </p>
+                              </span>
                               {record.clockOut && (
-                                <p className="text-[9px] text-blue-600 tabular-nums leading-tight">
+                                <span className="text-[9px] text-sky-600 tabular-nums leading-none">
                                   {format(record.clockOut, "HH:mm")}
-                                </p>
+                                </span>
                               )}
                             </div>
                           )}
-                          {record?.leaveType && record.leaveType !== "none" && (
-                            <div className="absolute top-0.5 right-0.5">
-                              <div className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                            </div>
+                          {record?.status === "pending" && (
+                            <span className="mt-auto h-1 w-1 rounded-full bg-amber-400 self-end" />
                           )}
                         </button>
                       );
                     })}
                   </div>
+
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 mt-3 pt-2 border-t border-white/20">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="text-[10px] text-muted-foreground">出勤</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-sky-500" />
+                      <span className="text-[10px] text-muted-foreground">退勤</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      <span className="text-[10px] text-muted-foreground">承認待ち</span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Day detail panel */}
-            <div className="space-y-4">
+            {/* Right: Day detail panel */}
+            <div className="space-y-3">
               {selectedDate ? (
                 <>
+                  {/* Date header */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">
+                      {format(selectedDate, "M月d日（EEEE）", { locale: ja })}
+                    </p>
+                    {selectedRecord && <StatusBadge status={selectedRecord.status} />}
+                  </div>
+
+                  {/* Clock times */}
                   <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">
-                        {format(selectedDate, "M月d日（EEEE）", { locale: ja })}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">出勤</Label>
-                          <p className="text-sm font-medium tabular-nums">
-                            {selectedRecord?.clockIn
-                              ? format(selectedRecord.clockIn, "HH:mm")
-                              : "—"}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">退勤</Label>
-                          <p className="text-sm font-medium tabular-nums">
-                            {selectedRecord?.clockOut
-                              ? format(selectedRecord.clockOut, "HH:mm")
-                              : "—"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">休暇種別</Label>
-                        <Select
-                          defaultValue={selectedRecord?.leaveType ?? "none"}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(LEAVE_TYPES).map(([key, label]) => (
-                              <SelectItem key={key} value={key} className="text-xs">
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">ステータス</Label>
+                    <CardContent className="py-4 px-5">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          {selectedRecord && (
-                            <StatusBadge status={selectedRecord.status} />
-                          )}
+                          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+                            出勤
+                          </p>
+                          <p className="text-2xl font-bold tabular-nums tracking-tight">
+                            {selectedRecord?.clockIn ? format(selectedRecord.clockIn, "HH:mm") : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500 inline-block" />
+                            退勤
+                          </p>
+                          <p className="text-2xl font-bold tabular-nums tracking-tight">
+                            {selectedRecord?.clockOut ? format(selectedRecord.clockOut, "HH:mm") : "—"}
+                          </p>
                         </div>
                       </div>
-
-                      {userRole === "manager" && selectedRecord?.status === "pending" && (
-                        <div className="flex gap-2 pt-2 border-t">
-                          <Button
-                            size="sm"
-                            className="flex-1 gap-1"
-                            onClick={() => toast.success("承認しました")}
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                            承認
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1 gap-1 text-destructive"
-                            onClick={() => toast.info("差戻しました")}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                            差戻し
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="gap-1"
-                            onClick={() => setEditDialog(true)}
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </Button>
+                      {selectedRecord?.clockIn && selectedRecord?.clockOut && (
+                        <div className="mt-3 pt-3 border-t border-white/20">
+                          <p className="text-xs text-muted-foreground">勤務時間</p>
+                          <p className="text-base font-semibold tabular-nums mt-0.5">
+                            {((selectedRecord.clockOut.getTime() - selectedRecord.clockIn.getTime()) / 3600000).toFixed(1)}h
+                          </p>
                         </div>
                       )}
                     </CardContent>
                   </Card>
 
-                  {/* Comments */}
+                  {/* Leave type */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">休暇種別</Label>
+                    <Select defaultValue={selectedRecord?.leaveType ?? "none"}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(LEAVE_TYPES).map(([key, label]) => (
+                          <SelectItem key={key} value={key} className="text-xs">{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Manager actions */}
+                  {userRole === "manager" && selectedRecord?.status === "pending" && (
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 gap-1.5" onClick={() => toast.success("承認しました")}>
+                        <Check className="h-3.5 w-3.5" />承認
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-destructive"
+                        onClick={() => toast.info("差戻しました")}>
+                        <X className="h-3.5 w-3.5" />差戻し
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditDialog(true)}>
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Comment */}
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-1.5">
-                        <MessageSquare className="h-4 w-4" />
-                        コメント
+                      <CardTitle className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <MessageSquare className="h-3.5 w-3.5" />コメント
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pt-0">
                       {selectedRecord?.comments.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-4">
-                          コメントはありません
-                        </p>
+                        <p className="text-xs text-muted-foreground text-center py-3">コメントはありません</p>
                       )}
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex gap-2 mt-1">
                         <Textarea
                           placeholder="コメントを入力..."
-                          className="text-xs min-h-[60px] resize-none"
+                          className="text-xs min-h-[56px] resize-none"
                           value={newComment}
                           onChange={(e) => setNewComment(e.target.value)}
                         />
-                        <Button
-                          size="icon"
-                          className="shrink-0 h-8 w-8 self-end"
-                          disabled={!newComment.trim()}
-                          onClick={() => {
-                            toast.success("コメントを追加しました");
-                            setNewComment("");
-                          }}
-                        >
+                        <Button size="icon" className="shrink-0 h-8 w-8 self-end" disabled={!newComment.trim()}
+                          onClick={() => { toast.success("コメントを追加しました"); setNewComment(""); }}>
                           <Send className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -456,14 +434,12 @@ export default function AttendancePage() {
                   </Card>
                 </>
               ) : (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <CalendarDays className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      日付を選択してください
-                    </p>
-                  </CardContent>
-                </Card>
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+                  <div className="h-12 w-12 rounded-2xl bg-muted/30 flex items-center justify-center">
+                    <CalendarDays className="h-5 w-5 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">日付を選択してください</p>
+                </div>
               )}
             </div>
           </div>
