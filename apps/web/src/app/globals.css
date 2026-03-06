@@ -152,14 +152,19 @@
   }
   body {
     @apply text-foreground;
-    /* Base: #F5F5F7 with subtle color blobs for glassmorphism */
+    /* Base: #F5F5F7 — silver-gray diagonal gradient for glassmorphism depth */
     background-color: #F5F5F7;
     background-image:
-      radial-gradient(ellipse 60% 50% at 10% 10%,  rgba(107, 201, 179, 0.22) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 45% at 90% 8%,   rgba(99,  149, 234, 0.20) 0%, transparent 55%),
-      radial-gradient(ellipse 55% 45% at 75% 90%,  rgba(167, 139, 250, 0.16) 0%, transparent 55%),
-      radial-gradient(ellipse 45% 40% at  8% 85%,  rgba(99,  149, 234, 0.14) 0%, transparent 50%),
-      radial-gradient(ellipse 35% 35% at 50% 50%,  rgba(255, 255, 255, 0.30) 0%, transparent 60%);
+      linear-gradient(
+        145deg,
+        #FFFFFF    0%,
+        #F2F3F7   18%,
+        #E8EAF0   38%,
+        #F5F5F7   55%,
+        #DDE0E8   72%,
+        #C8CBD6   88%,
+        #BFC2CE  100%
+      );
     background-attachment: fixed;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
@@ -229,23 +234,23 @@
 
   /* ── Primary card (tables, charts, main panels) ── */
   .frost-card {
-    background: rgba(255, 255, 255, 0.22);
-    backdrop-filter: blur(36px) saturate(240%);
-    -webkit-backdrop-filter: blur(36px) saturate(240%);
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
     border: none;
     box-shadow:
-      inset 0 2px 6px rgba(0, 0, 0, 0.06),
-      inset 0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.90),
-      0 -1px 0 rgba(0, 0, 0, 0.03);
+      inset 0 2px 6px rgba(0, 0, 0, 0.05),
+      inset 0 1px 2px rgba(0, 0, 0, 0.03),
+      0 1px 0 rgba(255, 255, 255, 0.95),
+      0 -1px 0 rgba(0, 0, 0, 0.02);
   }
   .frost-card:hover {
-    background: rgba(255, 255, 255, 0.30);
+    background: rgba(255, 255, 255, 0.58);
     box-shadow:
-      inset 0 3px 8px rgba(0, 0, 0, 0.07),
-      inset 0 1px 3px rgba(0, 0, 0, 0.05),
-      0 1px 0 rgba(255, 255, 255, 0.90),
-      0 -1px 0 rgba(0, 0, 0, 0.03);
+      inset 0 3px 8px rgba(0, 0, 0, 0.06),
+      inset 0 1px 3px rgba(0, 0, 0, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.95),
+      0 -1px 0 rgba(0, 0, 0, 0.02);
   }
   .dark .frost-card {
     background: rgba(22, 28, 42, 0.58);
@@ -265,21 +270,21 @@
 
   /* ── Stat / small widget card — more transparent, less blur ── */
   .stat-card {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(24px) saturate(240%);
-    -webkit-backdrop-filter: blur(24px) saturate(240%);
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
     border: none;
     box-shadow:
-      inset 0 2px 5px rgba(0, 0, 0, 0.05),
-      inset 0 1px 2px rgba(0, 0, 0, 0.03),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 2px 5px rgba(0, 0, 0, 0.04),
+      inset 0 1px 2px rgba(0, 0, 0, 0.02),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .stat-card:hover {
-    background: rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.50);
     box-shadow:
-      inset 0 3px 7px rgba(0, 0, 0, 0.06),
-      inset 0 1px 3px rgba(0, 0, 0, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 3px 7px rgba(0, 0, 0, 0.05),
+      inset 0 1px 3px rgba(0, 0, 0, 0.03),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .dark .stat-card {
     background: rgba(20, 26, 40, 0.45);
@@ -359,73 +364,73 @@
     border: 1px solid rgba(255, 255, 255, 0.06);
   }
 
-  /* ── KPI colored glass cards ── */
+  /* ── KPI colored glass cards — palette only ── */
   .kpi-card-teal {
-    background: rgba(107, 201, 179, 0.14);
-    backdrop-filter: blur(28px) saturate(260%);
-    -webkit-backdrop-filter: blur(28px) saturate(260%);
+    background: rgba(107, 201, 179, 0.22);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
     border: none;
     box-shadow:
-      inset 0 2px 6px rgba(107, 201, 179, 0.15),
-      inset 0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 2px 6px rgba(107, 201, 179, 0.18),
+      inset 0 1px 2px rgba(0, 0, 0, 0.03),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-teal:hover {
-    background: rgba(107, 201, 179, 0.22);
+    background: rgba(107, 201, 179, 0.32);
     box-shadow:
-      inset 0 3px 8px rgba(107, 201, 179, 0.18),
-      inset 0 1px 3px rgba(0, 0, 0, 0.05),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 3px 8px rgba(107, 201, 179, 0.22),
+      inset 0 1px 3px rgba(0, 0, 0, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-blue {
-    background: rgba(99, 149, 234, 0.14);
-    backdrop-filter: blur(28px) saturate(260%);
-    -webkit-backdrop-filter: blur(28px) saturate(260%);
+    background: rgba(157, 182, 232, 0.22);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
     border: none;
     box-shadow:
-      inset 0 2px 6px rgba(99, 149, 234, 0.15),
-      inset 0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 2px 6px rgba(157, 182, 232, 0.18),
+      inset 0 1px 2px rgba(0, 0, 0, 0.03),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-blue:hover {
-    background: rgba(99, 149, 234, 0.22);
+    background: rgba(157, 182, 232, 0.32);
     box-shadow:
-      inset 0 3px 8px rgba(99, 149, 234, 0.18),
-      inset 0 1px 3px rgba(0, 0, 0, 0.05),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 3px 8px rgba(157, 182, 232, 0.22),
+      inset 0 1px 3px rgba(0, 0, 0, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-violet {
-    background: rgba(167, 139, 250, 0.14);
-    backdrop-filter: blur(28px) saturate(260%);
-    -webkit-backdrop-filter: blur(28px) saturate(260%);
+    background: rgba(47, 111, 237, 0.14);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
     border: none;
     box-shadow:
-      inset 0 2px 6px rgba(167, 139, 250, 0.15),
-      inset 0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 2px 6px rgba(47, 111, 237, 0.14),
+      inset 0 1px 2px rgba(0, 0, 0, 0.03),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-violet:hover {
-    background: rgba(167, 139, 250, 0.22);
+    background: rgba(47, 111, 237, 0.22);
     box-shadow:
-      inset 0 3px 8px rgba(167, 139, 250, 0.18),
-      inset 0 1px 3px rgba(0, 0, 0, 0.05),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 3px 8px rgba(47, 111, 237, 0.18),
+      inset 0 1px 3px rgba(0, 0, 0, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-amber {
-    background: rgba(251, 191, 36, 0.10);
-    backdrop-filter: blur(28px) saturate(260%);
-    -webkit-backdrop-filter: blur(28px) saturate(260%);
+    background: rgba(107, 157, 210, 0.20);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
     border: none;
     box-shadow:
-      inset 0 2px 6px rgba(251, 191, 36, 0.12),
-      inset 0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 2px 6px rgba(107, 157, 210, 0.16),
+      inset 0 1px 2px rgba(0, 0, 0, 0.03),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
   .kpi-card-amber:hover {
-    background: rgba(251, 191, 36, 0.18);
+    background: rgba(107, 157, 210, 0.30);
     box-shadow:
-      inset 0 3px 8px rgba(251, 191, 36, 0.15),
-      inset 0 1px 3px rgba(0, 0, 0, 0.05),
-      0 1px 0 rgba(255, 255, 255, 0.90);
+      inset 0 3px 8px rgba(107, 157, 210, 0.20),
+      inset 0 1px 3px rgba(0, 0, 0, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.95);
   }
 }
