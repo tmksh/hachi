@@ -1,0 +1,143 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
+
+export async function getWorkflowRequests(status?: string) {
+  const supabase = await createClient();
+  let query = supabase
+    .from("workflow_requests")
+    .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+    .order("created_at", { ascending: false });
+
+  if (status && status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function getWorkflowRequest(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("workflow_requests")
+    .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+
+  const { data: steps } = await supabase
+    .from("workflow_steps")
+    .select("*, approver:profiles!workflow_steps_approver_id_fkey(id, display_name)")
+    .eq("request_id", id)
+    .order("step_order");
+
+  const { data: comments } = await supabase
+    .from("workflow_comments")
+    .select("*, user:profiles!workflow_comments_user_id_fkey(id, display_name)")
+    .eq("request_id", id)
+    .order("created_at");
+
+  return { ...data, steps: steps || [], comments: comments || [] };
+}
+
+export async function createWorkflowRequest(input: {
+  type_id: string;
+  title: string;
+  amount?: number;
+  is_urgent?: boolean;
+  due_date?: string;
+  payload?: Record<string, unknown>;
+  approver_ids?: string[];
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data, error } = await supabase
+    .from("workflow_requests")
+    .insert({
+      company_id: profile.company_id,
+      type_id: input.type_id,
+      requester_id: user.id,
+      title: input.title,
+      amount: input.amount || null,
+      is_urgent: input.is_urgent || false,
+      due_date: input.due_date || null,
+      payload: input.payload || {},
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  // Create approval steps
+  if (input.approver_ids && input.approver_ids.length > 0) {
+    await supabase.from("workflow_steps").insert(
+      input.approver_ids.map((approverId, i) => ({
+        company_id: profile.company_id,
+        request_id: data.id,
+        step_order: i + 1,
+        approver_id: approverId,
+        status: "pending" as const,
+      }))
+    );
+  }
+
+  return data as WorkflowRequest;
+}
+
+export async function approveWorkflowStep(stepId: string, comment?: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workflow_steps")
+    .update({ status: "approved", comment: comment || null, decided_at: new Date().toISOString() })
+    .eq("id", stepId);
+  if (error) throw error;
+
+  // Check if all steps are approved
+  const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
+  if (step) {
+    const { data: pendingSteps } = await supabase
+      .from("workflow_steps")
+      .select("id")
+      .eq("request_id", step.request_id)
+      .eq("status", "pending");
+
+    if (!pendingSteps || pendingSteps.length === 0) {
+      await supabase
+        .from("workflow_requests")
+        .update({ status: "approved", decided_at: new Date().toISOString() })
+        .eq("id", step.request_id);
+    }
+  }
+}
+
+export async function rejectWorkflowStep(stepId: string, comment?: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workflow_steps")
+    .update({ status: "rejected", comment: comment || null, decided_at: new Date().toISOString() })
+    .eq("id", stepId);
+  if (error) throw error;
+
+  const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
+  if (step) {
+    await supabase
+      .from("workflow_requests")
+      .update({ status: "rejected", decided_at: new Date().toISOString() })
+      .eq("id", step.request_id);
+  }
+}
+
+export async function getWorkflowTypes() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("workflow_types").select("*").order("created_at");
+  if (error) throw error;
+  return data;
+}

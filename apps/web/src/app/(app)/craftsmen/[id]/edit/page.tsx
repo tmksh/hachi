@@ -1,152 +1,65 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
-
-const specialties = [
-  "大工", "左官", "電気", "設備", "塗装", "内装", "板金", "防水",
-];
-
-const mockData: Record<string, {
-  name: string;
-  specialty: string;
-  phone: string;
-  email: string;
-  address: string;
-  experience: number;
-  dailyRate: number;
-  bio: string;
-}> = {
-  "W-001": {
-    name: "木村正男",
-    specialty: "大工",
-    phone: "090-1234-5678",
-    email: "kimura@example.com",
-    address: "東京都大田区南馬込3-15-7",
-    experience: 25,
-    dailyRate: 28000,
-    bio: "木造建築を専門とし、25年以上の経験を持つ熟練大工。リノベーションや耐震補強にも精通。",
-  },
-};
-
-const defaultData = {
-  name: "木村正男",
-  specialty: "大工",
-  phone: "090-1234-5678",
-  email: "kimura@example.com",
-  address: "東京都大田区南馬込3-15-7",
-  experience: 25,
-  dailyRate: 28000,
-  bio: "木造建築を専門とし、25年以上の経験を持つ熟練大工。リノベーションや耐震補強にも精通。",
-};
+import { getCraftsman, updateCraftsman } from "@/lib/actions/craftsmen";
 
 export default function CraftsmanEditPage() {
-  const params = useParams();
+  const { id } = useParams();
   const router = useRouter();
-  const id = params.id as string;
-  const initial = mockData[id] ?? defaultData;
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [rank, setRank] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const [name, setName] = useState(initial.name);
-  const [specialty, setSpecialty] = useState(initial.specialty);
-  const [phone, setPhone] = useState(initial.phone);
-  const [email, setEmail] = useState(initial.email);
-  const [address, setAddress] = useState(initial.address);
-  const [experience, setExperience] = useState(String(initial.experience));
-  const [dailyRate, setDailyRate] = useState(String(initial.dailyRate));
-  const [bio, setBio] = useState(initial.bio);
+  useEffect(() => {
+    if (!id) return;
+    getCraftsman(id as string).then(c => { setName(c.name); setCompanyName(c.company_name ?? ""); setPhone(c.phone ?? ""); setEmail(c.email ?? ""); setSpecialty(c.specialty ?? ""); setRank(c.rank ?? ""); setNotes(c.notes ?? ""); }).catch(() => toast.error("取得に失敗")).finally(() => setLoading(false));
+  }, [id]);
 
-  const handleSave = () => {
-    toast.success("職人情報を更新しました");
-    router.push(`/craftsmen/${id}`);
+  const handleSave = async () => {
+    if (!name.trim()) { toast.error("名前を入力してください"); return; }
+    setSaving(true);
+    try {
+      await updateCraftsman(id as string, { name: name.trim(), company_name: companyName || null, phone: phone || null, email: email || null, specialty: (specialty || null) as "carpenter"|"electrical"|"interior"|"plumbing"|"general"|null, rank: (rank || null) as "A"|"B"|"C"|null, notes: notes || null });
+      toast.success("更新しました"); router.push(`/craftsmen/${id}`);
+    } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
+
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href={`/craftsmen/${id}`}>
-          <Button variant="ghost" size="icon" className="size-8">
-            <ArrowLeft className="size-4" />
-          </Button>
-        </Link>
-        <PageHeader title="職人情報編集" description="職人情報を編集します" />
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">基本情報</CardTitle>
-        </CardHeader>
+      <div className="flex items-center gap-3"><Link href={`/craftsmen/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold">職人編集</h1></div>
+      <Card><CardHeader className="pb-3"><CardTitle className="text-base">職人情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">氏名</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="specialty">専門分野</Label>
-              <Select value={specialty} onValueChange={setSpecialty}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {specialties.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">電話番号</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">メールアドレス</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="address">住所</Label>
-              <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="experience">経験年数</Label>
-              <Input id="experience" type="number" min={0} value={experience} onChange={(e) => setExperience(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dailyRate">日当（円）</Label>
-              <Input id="dailyRate" type="number" min={0} value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} />
-            </div>
+            <div className="space-y-2"><Label>名前 *</Label><Input value={name} onChange={e=>setName(e.target.value)} /></div>
+            <div className="space-y-2"><Label>会社名</Label><Input value={companyName} onChange={e=>setCompanyName(e.target.value)} /></div>
+            <div className="space-y-2"><Label>電話</Label><Input value={phone} onChange={e=>setPhone(e.target.value)} /></div>
+            <div className="space-y-2"><Label>メール</Label><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} /></div>
+            <div className="space-y-2"><Label>専門</Label><Select value={specialty} onValueChange={setSpecialty}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="carpenter">大工</SelectItem><SelectItem value="electrical">電気</SelectItem><SelectItem value="interior">内装</SelectItem><SelectItem value="plumbing">配管</SelectItem><SelectItem value="general">総合</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>ランク</Label><Select value={rank} onValueChange={setRank}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem><SelectItem value="C">C</SelectItem></SelectContent></Select></div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="bio">紹介文</Label>
-            <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} rows={4} />
-          </div>
+          <div className="space-y-2"><Label>備考</Label><Textarea rows={4} value={notes} onChange={e=>setNotes(e.target.value)} /></div>
         </CardContent>
       </Card>
-
-      <div className="flex items-center justify-end gap-3 pb-6">
-        <Link href={`/craftsmen/${id}`}>
-          <Button variant="outline">キャンセル</Button>
-        </Link>
-        <Button onClick={handleSave}>
-          <Save className="size-4 mr-1" />
-          保存
-        </Button>
-      </div>
+      <div className="flex justify-end gap-3"><Link href={`/craftsmen/${id}`}><Button variant="outline">キャンセル</Button></Link><Button onClick={handleSave} disabled={saving}><Save className="size-4 mr-1" />{saving?"保存中...":"保存"}</Button></div>
     </div>
   );
 }

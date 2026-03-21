@@ -1,155 +1,75 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
-
-const customerData: Record<string, {
-  name: string;
-  company: string;
-  type: string;
-  phone: string;
-  email: string;
-  address: string;
-  postalCode: string;
-  representative: string;
-  notes: string;
-}> = {
-  "1": {
-    name: "田中 太郎",
-    company: "田中建設株式会社",
-    type: "法人",
-    phone: "03-1234-5678",
-    email: "tanaka@tanaken.co.jp",
-    address: "東京都新宿区西新宿1-1-1 新宿ビル5F",
-    postalCode: "160-0023",
-    representative: "田中 太郎",
-    notes: "大規模マンションリフォームに興味あり。年間予算は約5,000万円。",
-  },
-};
-
-const defaultCustomer = {
-  name: "田中 太郎",
-  company: "田中建設株式会社",
-  type: "法人",
-  phone: "03-1234-5678",
-  email: "tanaka@tanaken.co.jp",
-  address: "東京都新宿区西新宿1-1-1 新宿ビル5F",
-  postalCode: "160-0023",
-  representative: "田中 太郎",
-  notes: "大規模マンションリフォームに興味あり。年間予算は約5,000万円。",
-};
+import { getCustomer, updateCustomer } from "@/lib/actions/customers";
+import { getProfiles } from "@/lib/actions/profiles";
 
 export default function CrmEditPage() {
-  const params = useParams();
+  const { id } = useParams();
   const router = useRouter();
-  const id = params.id as string;
-  const initial = customerData[id] ?? defaultCustomer;
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profiles, setProfiles] = useState<{id:string;display_name:string}[]>([]);
+  const [name, setName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [source, setSource] = useState("");
+  const [status, setStatus] = useState("active");
+  const [assignedTo, setAssignedTo] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const [name, setName] = useState(initial.name);
-  const [company, setCompany] = useState(initial.company);
-  const [type, setType] = useState(initial.type);
-  const [phone, setPhone] = useState(initial.phone);
-  const [email, setEmail] = useState(initial.email);
-  const [postalCode, setPostalCode] = useState(initial.postalCode);
-  const [address, setAddress] = useState(initial.address);
-  const [representative, setRepresentative] = useState(initial.representative);
-  const [notes, setNotes] = useState(initial.notes);
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([getCustomer(id as string), getProfiles()])
+      .then(([c, p]) => {
+        setProfiles(p.map(x => ({id:x.id,display_name:x.display_name})));
+        setName(c.name); setCompanyName(c.company_name ?? ""); setEmail(c.email ?? ""); setPhone(c.phone ?? ""); setAddress(c.address ?? ""); setSource(c.source ?? ""); setStatus(c.status); setAssignedTo(c.assigned_to ?? ""); setNotes(c.notes ?? "");
+      }).catch(() => toast.error("取得に失敗")).finally(() => setLoading(false));
+  }, [id]);
 
-  const handleSave = () => {
-    toast.success("顧客情報を更新しました");
-    router.push(`/crm/${id}`);
+  const handleSave = async () => {
+    if (!name.trim()) { toast.error("名前を入力してください"); return; }
+    setSaving(true);
+    try {
+      await updateCustomer(id as string, { name: name.trim(), company_name: companyName || null, email: email || null, phone: phone || null, address: address || null, source: source || null, status, assigned_to: assignedTo || null, notes: notes || null });
+      toast.success("更新しました"); router.push(`/crm/${id}`);
+    } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
+
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-96 w-full" /></div>;
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href={`/crm/${id}`}>
-          <Button variant="ghost" size="icon" className="size-8">
-            <ArrowLeft className="size-4" />
-          </Button>
-        </Link>
-        <PageHeader title="顧客編集" description="顧客情報を編集します" />
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">基本情報</CardTitle>
-        </CardHeader>
+      <div className="flex items-center gap-3"><Link href={`/crm/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold">顧客編集</h1></div>
+      <Card><CardHeader className="pb-3"><CardTitle className="text-base">顧客情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">氏名</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="company">会社名</Label>
-              <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="type">区分</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="法人">法人</SelectItem>
-                  <SelectItem value="個人">個人</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="representative">代表者</Label>
-              <Input id="representative" value={representative} onChange={(e) => setRepresentative(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">電話番号</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">メールアドレス</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="postalCode">郵便番号</Label>
-              <Input id="postalCode" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">住所</Label>
-              <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
-            </div>
+            <div className="space-y-2"><Label>名前 *</Label><Input value={name} onChange={e=>setName(e.target.value)} /></div>
+            <div className="space-y-2"><Label>会社名</Label><Input value={companyName} onChange={e=>setCompanyName(e.target.value)} /></div>
+            <div className="space-y-2"><Label>メール</Label><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} /></div>
+            <div className="space-y-2"><Label>電話</Label><Input value={phone} onChange={e=>setPhone(e.target.value)} /></div>
+            <div className="space-y-2 sm:col-span-2"><Label>住所</Label><Input value={address} onChange={e=>setAddress(e.target.value)} /></div>
+            <div className="space-y-2"><Label>ソース</Label><Input value={source} onChange={e=>setSource(e.target.value)} /></div>
+            <div className="space-y-2"><Label>ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">アクティブ</SelectItem><SelectItem value="inactive">非アクティブ</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>担当者</Label><Select value={assignedTo} onValueChange={setAssignedTo}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{profiles.map(p=><SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}</SelectContent></Select></div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="notes">メモ</Label>
-            <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} />
-          </div>
+          <div className="space-y-2"><Label>備考</Label><Textarea rows={4} value={notes} onChange={e=>setNotes(e.target.value)} /></div>
         </CardContent>
       </Card>
-
-      <div className="flex items-center justify-end gap-3 pb-6">
-        <Link href={`/crm/${id}`}>
-          <Button variant="outline">キャンセル</Button>
-        </Link>
-        <Button onClick={handleSave}>
-          <Save className="size-4 mr-1" />
-          保存
-        </Button>
-      </div>
+      <div className="flex justify-end gap-3"><Link href={`/crm/${id}`}><Button variant="outline">キャンセル</Button></Link><Button onClick={handleSave} disabled={saving}><Save className="size-4 mr-1" />{saving?"保存中...":"保存"}</Button></div>
     </div>
   );
 }
