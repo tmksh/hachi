@@ -41,13 +41,13 @@ export default function InvoiceNewPage() {
     setSaving(true);
     try {
       await createInvoice({ customer_id: customerId || undefined, construction_id: constructionId || undefined, recipient: recipient || undefined, invoice_date: invoiceDate || undefined, due_date: dueDate || undefined }, items.filter(i => i.description.trim()).map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, amount: i.quantity * i.unit_price })));
-      toast.success("請求書を作成しました"); router.push("/constructions");
+      toast.success("請求書を作成しました"); router.push("/invoices");
     } catch { toast.error("作成に失敗"); } finally { setSaving(false); }
   };
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3"><Link href="/constructions"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold">請求書作成</h1></div>
+      <div className="flex items-center gap-3"><Link href="/invoices"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold">請求書作成</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">基本情報</CardTitle></CardHeader>
         <CardContent><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2"><Label>顧客</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{customers.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>

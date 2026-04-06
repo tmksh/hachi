@@ -24,6 +24,8 @@ export const NAV_GROUPS = [
     items: [
       { key: "contracts", label: "契約管理", href: "/contracts" },
       { key: "constructions", label: "工事管理", href: "/constructions" },
+      { key: "invoices", label: "請求管理", href: "/invoices" },
+      { key: "budget", label: "予算管理", href: "/budget" },
     ],
   },
   {
@@ -45,6 +47,7 @@ export const NAV_GROUPS = [
       { key: "marketing-email", label: "メール配信", href: "/marketing/email" },
       { key: "marketing-sns", label: "SNSインサイト", href: "/marketing/sns" },
       { key: "marketing-roi", label: "ROI分析", href: "/marketing/roi" },
+      { key: "marketing-creative", label: "クリエイティブ", href: "/marketing/creative" },
     ],
   },
 ] as const;

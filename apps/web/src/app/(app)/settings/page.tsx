@@ -12,6 +12,7 @@ import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { updateProfile, getCompany } from "@/lib/actions/profiles";
+import { createClient } from "@/lib/supabase/client";
 import type { Company } from "@/lib/database.types";
 
 export default function SettingsPage() {
@@ -22,6 +23,21 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
   const [position, setPosition] = useState("");
+  const notifKeys = ["email_notif", "push_notif", "approval_reminder", "daily_report_reminder"] as const;
+  const notifLabels = ["メール通知","プッシュ通知","承認リマインダー","日報リマインダー"];
+  const [notifSettings, setNotifSettings] = useState<Record<string, boolean>>(
+    Object.fromEntries(notifKeys.map(k => [k, true]))
+  );
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.user_metadata?.notif_settings) {
+        setNotifSettings(user.user_metadata.notif_settings);
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (profile) { setDisplayName(profile.display_name); setPhone(profile.phone ?? ""); setDepartment(profile.department ?? ""); setPosition(profile.position ?? ""); }
@@ -63,8 +79,22 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="notifications" className="mt-4">
           <Card><CardHeader className="pb-3"><CardTitle className="text-base">通知設定</CardTitle></CardHeader>
-            <CardContent className="space-y-4">{["メール通知","プッシュ通知","承認リマインダー","日報リマインダー"].map(label => (
-              <div key={label} className="flex items-center justify-between"><Label>{label}</Label><Switch defaultChecked /></div>
+            <CardContent className="space-y-4">{notifKeys.map((key, i) => (
+              <div key={key} className="flex items-center justify-between"><Label>{notifLabels[i]}</Label><Switch checked={notifSettings[key] ?? true} disabled={notifLoading} onCheckedChange={async (checked) => {
+                const next = { ...notifSettings, [key]: checked };
+                setNotifSettings(next);
+                setNotifLoading(true);
+                try {
+                  const supabase = createClient();
+                  await supabase.auth.updateUser({ data: { notif_settings: next } });
+                  toast.success(`${notifLabels[i]}を${checked ? "有効" : "無効"}にしました`);
+                } catch {
+                  toast.error("保存に失敗しました");
+                  setNotifSettings(notifSettings);
+                } finally {
+                  setNotifLoading(false);
+                }
+              }} /></div>
             ))}</CardContent>
           </Card>
         </TabsContent>

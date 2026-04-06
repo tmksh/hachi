@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -33,8 +33,26 @@ import {
   Settings,
   User,
   ChevronRight,
+  FileText,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import type { Profile } from "@/hooks/use-auth";
+import { getNotifications, markAnnouncementAsRead, type Notification } from "@/lib/actions/notifications";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 
 const GROUP_ICONS = {
   dashboard: LayoutDashboard,
@@ -54,6 +72,16 @@ interface SidebarProps {
 export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: SidebarProps) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    getNotifications().then(setNotifications).catch(() => {});
+  }, []);
+
+  const unreadCount = notifications.length;
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -221,14 +249,14 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
         <div className="flex flex-col gap-0.5 pb-3 pt-3 px-2">
           {expanded ? (
             <>
-              <button className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <button onClick={() => setSearchOpen(true)} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
                 <Search className="h-5 w-5 shrink-0" />
                 <span className="whitespace-nowrap">検索</span>
               </button>
-              <button className="relative flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <button onClick={() => setNotifOpen(true)} className="relative flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
                 <Bell className="h-5 w-5 shrink-0" />
                 <span className="whitespace-nowrap">通知</span>
-                <span className="absolute top-2.5 left-[30px] h-2 w-2 rounded-full bg-destructive" />
+                {unreadCount > 0 && <span className="absolute top-2.5 left-[30px] h-2 w-2 rounded-full bg-destructive" />}
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -273,7 +301,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent transition-colors">
+                  <button onClick={() => setSearchOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent transition-colors">
                     <Search className="h-5 w-5" />
                   </button>
                 </TooltipTrigger>
@@ -281,9 +309,9 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="relative flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent transition-colors">
+                  <button onClick={() => setNotifOpen(true)} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent transition-colors">
                     <Bell className="h-5 w-5" />
-                    <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive" />
+                    {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive" />}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">通知</TooltipContent>
@@ -332,6 +360,96 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
           )}
         </div>
       </motion.aside>
+
+      {/* 検索ダイアログ */}
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>検索</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="ページ名やキーワードで検索..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {(NAV_GROUPS as readonly { key: string; label: string; items: readonly { key: string; label: string; href: string }[] }[]).flatMap((g) => g.items)
+                .filter((item) =>
+                  !searchQuery || item.label.toLowerCase().includes(searchQuery.toLowerCase())
+                )
+                .map((item) => (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+                    className="flex items-center px-3 py-2 rounded-lg text-sm hover:bg-accent transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 通知パネル */}
+      <Sheet open={notifOpen} onOpenChange={setNotifOpen}>
+        <SheetContent side="right" className="w-80">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              通知
+              {unreadCount > 0 && (
+                <Badge className="bg-destructive text-destructive-foreground text-xs h-5 px-1.5">{unreadCount}</Badge>
+              )}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 flex flex-col gap-1 overflow-y-auto max-h-[calc(100vh-100px)]">
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Bell className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">新しい通知はありません</p>
+              </div>
+            ) : (
+              notifications.map((n) => (
+                <Link
+                  key={n.id}
+                  href={n.href}
+                  onClick={() => {
+                    if (n.type === "announcement") {
+                      const annId = n.id.replace("ann_", "");
+                      markAnnouncementAsRead(annId).then(() => {
+                        setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                      }).catch(() => {});
+                    }
+                    setNotifOpen(false);
+                  }}
+                  className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
+                >
+                  <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.is_urgent ? "bg-rose-100" : "bg-primary/10"}`}>
+                    {n.type === "workflow" ? (
+                      <FileText className={`h-4 w-4 text-amber-600`} />
+                    ) : (
+                      <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : "text-primary"}`} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium leading-snug line-clamp-2">{n.title}</p>
+                    {n.body && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{n.body}</p>}
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {format(new Date(n.created_at), "M/d HH:mm", { locale: ja })}
+                    </p>
+                  </div>
+                  {n.is_urgent && (
+                    <Badge className="shrink-0 text-[9px] h-4 px-1 bg-rose-100 text-rose-600 hover:bg-rose-100">急</Badge>
+                  )}
+                </Link>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
     </TooltipProvider>
   );

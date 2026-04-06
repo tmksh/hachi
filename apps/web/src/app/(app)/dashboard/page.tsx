@@ -25,7 +25,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/actions/attendance";
+import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
@@ -47,6 +47,12 @@ export default function DashboardPage() {
       .then(setData)
       .catch(() => toast.error("データの取得に失敗しました"))
       .finally(() => setLoading(false));
+    getTodayAttendance().then((entry) => {
+      if (entry?.clock_in_at) {
+        setClockedIn(!entry.clock_out_at);
+        setClockInTime(new Date(entry.clock_in_at));
+      }
+    }).catch(() => {});
   }, []);
 
   const now = new Date();
@@ -226,16 +232,20 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {[
-                { label: "承認待ち", href: "/workflow", color: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
-                { label: "申請中",   href: "/workflow", color: "" },
-                { label: "完了済み", href: "/workflow", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" },
+                { label: "承認待ち", href: "/workflow", color: "bg-amber-100 text-amber-800 hover:bg-amber-100", count: data?.workflow.pendingApprovals ?? 0 },
+                { label: "申請中",   href: "/workflow", color: "", count: data?.workflow.submittedRequests ?? 0 },
+                { label: "完了済み", href: "/workflow", color: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100", count: data?.workflow.completedRequests ?? 0 },
               ].map((item, i) => (
                 <Link key={i} href={item.href}
                   className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/30 transition-colors">
                   <span className="text-xs">{item.label}</span>
-                  <Badge className={`text-xs ${item.color || ""}`} variant={item.color ? "default" : "secondary"}>
-                    →
-                  </Badge>
+                  {loading ? (
+                    <Skeleton className="h-4 w-6" />
+                  ) : (
+                    <Badge className={`text-xs ${item.color || ""}`} variant={item.color ? "default" : "secondary"}>
+                      {item.count}
+                    </Badge>
+                  )}
                 </Link>
               ))}
               <Link href="/workflow">

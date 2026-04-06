@@ -101,3 +101,17 @@ export async function rejectAttendance(id: string) {
     .eq("id", id);
   if (error) throw error;
 }
+
+export async function getTodayAttendance() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const today = new Date().toISOString().split("T")[0];
+  const { data } = await supabase
+    .from("attendance_entries")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("work_date", today)
+    .maybeSingle();
+  return data as AttendanceEntry | null;
+}

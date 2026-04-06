@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function getDashboardData() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   const [
     { count: customerCount },
@@ -14,6 +15,9 @@ export async function getDashboardData() {
     { data: announcements },
     { data: todos },
     { data: calendarEvents },
+    { count: pendingApprovals },
+    { count: submittedRequests },
+    { count: completedRequests },
   ] = await Promise.all([
     supabase.from("customers").select("*", { count: "exact", head: true }).is("deleted_at", null),
     supabase.from("deals").select("*", { count: "exact", head: true }),
@@ -23,9 +27,17 @@ export async function getDashboardData() {
     supabase.from("announcements").select("id, title, body, pinned, is_urgent, published_at, author:profiles!announcements_author_id_fkey(display_name)").order("published_at", { ascending: false }).limit(5),
     supabase.from("todos").select("id, title, status, priority, due_date, assigned_to").in("status", ["pending", "in_progress"]).order("due_date").limit(10),
     supabase.from("calendar_events").select("id, title, start_at, end_at, category, color").gte("start_at", new Date().toISOString()).order("start_at").limit(5),
+    user
+      ? supabase.from("workflow_steps").select("*", { count: "exact", head: true }).eq("approver_id", user.id).eq("status", "pending")
+      : Promise.resolve({ count: 0, data: null, error: null }),
+    user
+      ? supabase.from("workflow_requests").select("*", { count: "exact", head: true }).eq("requester_id", user.id).eq("status", "submitted")
+      : Promise.resolve({ count: 0, data: null, error: null }),
+    user
+      ? supabase.from("workflow_requests").select("*", { count: "exact", head: true }).eq("requester_id", user.id).in("status", ["approved", "rejected"])
+      : Promise.resolve({ count: 0, data: null, error: null }),
   ]);
 
-  // Calculate pipeline value
   const pipelineValue = (deals || [])
     .filter((d) => !["won", "lost"].includes(d.stage))
     .reduce((sum, d) => sum + (d.value || 0), 0);
@@ -34,7 +46,6 @@ export async function getDashboardData() {
     .filter((d) => d.stage === "won")
     .reduce((sum, d) => sum + (d.value || 0), 0);
 
-  // Count active constructions
   const activeConstructions = (constructions || []).length;
 
   return {
@@ -50,5 +61,10 @@ export async function getDashboardData() {
     announcements: announcements || [],
     todos: todos || [],
     calendarEvents: calendarEvents || [],
+    workflow: {
+      pendingApprovals: pendingApprovals || 0,
+      submittedRequests: submittedRequests || 0,
+      completedRequests: completedRequests || 0,
+    },
   };
 }
