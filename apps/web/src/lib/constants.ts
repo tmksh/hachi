@@ -62,6 +62,59 @@ export const ROLES = {
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
+/**
+ * Route prefix → 許可するロール一覧 (未定義 = 全ロール許可)
+ * ミドルウェアとクライアントで共有する。
+ */
+export const ROUTE_ROLES: Record<string, Role[]> = {
+  "/bi":          ["owner", "hq_admin", "contractor_admin"],
+  "/crm":         ["owner", "hq_admin", "contractor_admin"],
+  "/deals":       ["owner", "hq_admin", "contractor_admin"],
+  "/quotes":      ["owner", "hq_admin", "contractor_admin"],
+  "/craftsmen":   ["owner", "hq_admin", "contractor_admin"],
+  "/contracts":   ["owner", "hq_admin", "contractor_admin"],
+  "/invoices":    ["owner", "hq_admin", "contractor_admin"],
+  "/budget":      ["owner", "hq_admin"],
+  "/marketing":   ["owner", "hq_admin"],
+};
+
+/** ナビ項目キー → 許可するロール一覧 (未定義 = 全ロール許可) */
+export const NAV_ITEM_ROLES: Record<string, Role[]> = {
+  bi:                 ["owner", "hq_admin", "contractor_admin"],
+  crm:                ["owner", "hq_admin", "contractor_admin"],
+  deals:              ["owner", "hq_admin", "contractor_admin"],
+  quotes:             ["owner", "hq_admin", "contractor_admin"],
+  craftsmen:          ["owner", "hq_admin", "contractor_admin"],
+  contracts:          ["owner", "hq_admin", "contractor_admin"],
+  invoices:           ["owner", "hq_admin", "contractor_admin"],
+  budget:             ["owner", "hq_admin"],
+  "marketing-email":  ["owner", "hq_admin"],
+  "marketing-sns":    ["owner", "hq_admin"],
+  "marketing-roi":    ["owner", "hq_admin"],
+  "marketing-creative": ["owner", "hq_admin"],
+};
+
+/** ナビ項目にアクセスできるか */
+export function canAccessNavItem(key: string, role: Role): boolean {
+  const allowed = NAV_ITEM_ROLES[key];
+  if (!allowed) return true;
+  return allowed.includes(role);
+}
+
+/** パスにアクセスできるか (ミドルウェアとページ共通ヘルパー) */
+export function canAccessRoute(pathname: string, role: Role): boolean {
+  const matched = Object.keys(ROUTE_ROLES).find((p) => pathname.startsWith(p));
+  if (!matched) return true;
+  return ROUTE_ROLES[matched].includes(role);
+}
+
+export const ROLE_LABELS: Record<Role, string> = {
+  owner:            "オーナー",
+  hq_admin:         "本部管理者",
+  contractor_admin: "施工店管理者",
+  employee:         "社員",
+};
+
 // Departments
 export const DEPARTMENTS = {
   sales: "営業部",

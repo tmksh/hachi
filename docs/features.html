@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BRIDGE - 機能一覧</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #6BC9B3;
+      --primary-dark: #4aab96;
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --text: #1a2340;
+      --muted: #6b7fa8;
+      --border: #e2e8f0;
+      --shadow: 5px 5px 12px rgba(168,182,210,.28), -3px -3px 8px rgba(255,255,255,.92);
+      --shadow-sm: 3px 3px 8px rgba(168,182,210,.22), -2px -2px 5px rgba(255,255,255,.90);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans JP', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+    /* ── NAV ── */
+    nav {
+      background: rgba(255,255,255,.82);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      padding: 0 2rem;
+      display: flex; align-items: center; gap: 2rem; height: 60px;
+    }
+    nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--primary-dark); letter-spacing: .05em; }
+    nav a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; transition: color .2s; }
+    nav a:hover, nav a.active { color: var(--primary-dark); }
+    nav .badge { background: var(--primary); color: #fff; font-size: .7rem; padding: 2px 8px; border-radius: 99px; margin-left: 4px; }
+
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(135deg, #dce8f8 0%, #e8f5f1 100%);
+      padding: 5rem 2rem 4rem;
+      text-align: center;
+    }
+    .hero .tag { display: inline-block; background: var(--primary); color: #fff; font-size: .8rem; font-weight: 600; padding: 4px 14px; border-radius: 99px; margin-bottom: 1.2rem; letter-spacing: .06em; }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; color: var(--text); margin-bottom: .8rem; }
+    .hero p { font-size: 1.05rem; color: var(--muted); max-width: 580px; margin: 0 auto; }
+    .hero-stat { display: flex; justify-content: center; gap: 2.5rem; margin-top: 2.5rem; flex-wrap: wrap; }
+    .stat-item { text-align: center; }
+    .stat-item .num { font-size: 2.2rem; font-weight: 700; color: var(--primary-dark); }
+    .stat-item .lbl { font-size: .82rem; color: var(--muted); }
+
+    /* ── FILTER TABS ── */
+    .filter-wrap { max-width: 1100px; margin: 2.5rem auto 0; padding: 0 2rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+    .filter-btn {
+      padding: .45rem 1.1rem; border-radius: 99px; border: 1.5px solid var(--border);
+      background: #fff; color: var(--muted); font-size: .85rem; font-weight: 500;
+      cursor: pointer; transition: all .2s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: var(--primary); color: #fff; border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(107,201,179,.35);
+    }
+
+    /* ── GRID ── */
+    .grid-wrap { max-width: 1100px; margin: 0 auto; padding: 2rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.6rem; }
+
+    /* ── FEATURE CARD ── */
+    .feat-card {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 1.6rem;
+      transition: transform .2s, box-shadow .2s;
+      display: flex; flex-direction: column; gap: .9rem;
+      position: relative; overflow: hidden;
+    }
+    .feat-card:hover { transform: translateY(-4px); box-shadow: 8px 8px 18px rgba(168,182,210,.38), -4px -4px 12px rgba(255,255,255,.95); }
+    .feat-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 4px;
+      border-radius: 20px 20px 0 0;
+    }
+    .feat-card[data-cat="crm"]::before        { background: linear-gradient(90deg, #60a5fa, #818cf8); }
+    .feat-card[data-cat="production"]::before  { background: linear-gradient(90deg, #f59e0b, #f97316); }
+    .feat-card[data-cat="portal"]::before      { background: linear-gradient(90deg, #6BC9B3, #34d399); }
+    .feat-card[data-cat="marketing"]::before   { background: linear-gradient(90deg, #ec4899, #f472b6); }
+    .feat-card[data-cat="system"]::before      { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+
+    .feat-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+    }
+    .icon-crm        { background: #eff6ff; }
+    .icon-production { background: #fff7ed; }
+    .icon-portal     { background: #f0fdf9; }
+    .icon-marketing  { background: #fdf2f8; }
+    .icon-system     { background: #f5f3ff; }
+
+    .feat-header { display: flex; align-items: center; gap: .9rem; }
+    .feat-title-wrap .feat-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+    .feat-title-wrap .feat-cat { font-size: .75rem; color: var(--muted); font-weight: 500; }
+
+    .feat-desc { font-size: .88rem; color: var(--muted); line-height: 1.65; }
+
+    .feat-tags { display: flex; gap: .4rem; flex-wrap: wrap; }
+    .feat-tag { font-size: .72rem; padding: 3px 10px; border-radius: 6px; font-weight: 500; background: #f1f5f9; color: var(--muted); }
+
+    .feat-roles { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: auto; padding-top: .8rem; border-top: 1px solid var(--border); }
+    .role-chip { font-size: .7rem; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+    .role-all    { background: #dcfce7; color: #15803d; }
+    .role-admin  { background: #dbeafe; color: #1d4ed8; }
+    .role-mgr    { background: #fef3c7; color: #92400e; }
+
+    .status-chip { position: absolute; top: 1.2rem; right: 1.2rem; font-size: .68rem; font-weight: 700; padding: 3px 9px; border-radius: 99px; }
+    .status-done { background: #dcfce7; color: #15803d; }
+    .status-partial { background: #fef3c7; color: #92400e; }
+    .status-planned { background: #f1f5f9; color: var(--muted); }
+
+    /* ── FOOTER ── */
+    footer { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 1rem; }
+    footer a { color: var(--primary-dark); text-decoration: none; }
+
+    @media (max-width: 600px) { .grid-wrap { grid-template-columns: 1fr; padding: 1rem; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⛩ BRIDGE</span>
+  <a href="index.html">仕様書</a>
+  <a href="features.html" class="active">機能一覧 <span class="badge">NEW</span></a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="tag">🗂 機能一覧</div>
+  <h1>BRIDGE の全機能</h1>
+  <p>建設業向けに設計された統合業務管理システム。<br>フロントから現場まで、すべての業務をカバーします。</p>
+  <div class="hero-stat">
+    <div class="stat-item"><div class="num">20+</div><div class="lbl">機能モジュール</div></div>
+    <div class="stat-item"><div class="num">4</div><div class="lbl">ロール権限</div></div>
+    <div class="stat-item"><div class="num">30+</div><div class="lbl">データベーステーブル</div></div>
+    <div class="stat-item"><div class="num">100%</div><div class="lbl">日本語対応</div></div>
+  </div>
+</div>
+
+<!-- FILTER -->
+<div class="filter-wrap">
+  <button class="filter-btn active" onclick="filter('all',this)">すべて</button>
+  <button class="filter-btn" onclick="filter('crm',this)">🤝 CRM・リード</button>
+  <button class="filter-btn" onclick="filter('production',this)">🏗 工事・生産</button>
+  <button class="filter-btn" onclick="filter('portal',this)">🏠 ポータル</button>
+  <button class="filter-btn" onclick="filter('marketing',this)">📣 マーケティング</button>
+  <button class="filter-btn" onclick="filter('system',this)">⚙️ システム</button>
+</div>
+
+<!-- CARDS -->
+<div class="grid-wrap" id="grid">
+
+  <!-- ── CRM ── -->
+  <div class="feat-card" data-cat="crm">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-crm">🤝</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">顧客・商談管理 (CRM)</div>
+        <div class="feat-cat">CRM・リード</div>
+      </div>
+    </div>
+    <div class="feat-desc">顧客情報の登録・編集・検索。商談ステージ管理、AI スコア、タグ管理に対応。担当者アサインや活動履歴も記録できます。</div>
+    <div class="feat-tags"><span class="feat-tag">顧客登録</span><span class="feat-tag">タグ管理</span><span class="feat-tag">AI スコア</span><span class="feat-tag">担当者管理</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="crm">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-crm">📊</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">パイプライン管理</div>
+        <div class="feat-cat">CRM・リード</div>
+      </div>
+    </div>
+    <div class="feat-desc">商談をカンバン形式で管理。問合せ → 初回面談 → 見積提出 → 成約まで、ステージごとに進捗を可視化します。</div>
+    <div class="feat-tags"><span class="feat-tag">カンバン</span><span class="feat-tag">ステージ管理</span><span class="feat-tag">成約確率</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="crm">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-crm">📋</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">見積管理</div>
+        <div class="feat-cat">CRM・リード</div>
+      </div>
+    </div>
+    <div class="feat-desc">見積書の作成・発行・送付管理。明細行・カテゴリ・原価・粗利の自動計算に対応。PDF 出力も可能です。</div>
+    <div class="feat-tags"><span class="feat-tag">見積書作成</span><span class="feat-tag">粗利計算</span><span class="feat-tag">PDF出力</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="crm">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-crm">👷</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">職人管理</div>
+        <div class="feat-cat">CRM・リード</div>
+      </div>
+    </div>
+    <div class="feat-desc">協力業者・職人の登録と専門分野・ランク管理。報告率や稼働プロジェクト数でパフォーマンスを評価します。</div>
+    <div class="feat-tags"><span class="feat-tag">職人登録</span><span class="feat-tag">ランク管理</span><span class="feat-tag">稼働状況</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <!-- ── PRODUCTION ── -->
+  <div class="feat-card" data-cat="production">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-production">📜</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">契約管理</div>
+        <div class="feat-cat">工事・生産</div>
+      </div>
+    </div>
+    <div class="feat-desc">工事契約書の登録・ステータス管理。見積書と紐付けて契約日・着工日・完工日・金額を一元管理します。</div>
+    <div class="feat-tags"><span class="feat-tag">契約書管理</span><span class="feat-tag">見積紐付け</span><span class="feat-tag">進捗管理</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="production">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-production">🏗</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">工事管理</div>
+        <div class="feat-cat">工事・生産</div>
+      </div>
+    </div>
+    <div class="feat-desc">工事現場ごとの進捗・コスト・作業員数を管理。タスク分解・ガントチャート・下請け発注も一元管理できます。</div>
+    <div class="feat-tags"><span class="feat-tag">進捗管理</span><span class="feat-tag">コスト管理</span><span class="feat-tag">タスク分解</span><span class="feat-tag">下請け発注</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="production">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-production">💴</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">請求管理</div>
+        <div class="feat-cat">工事・生産</div>
+      </div>
+    </div>
+    <div class="feat-desc">請求書の作成・送付・入金管理。工事と紐付けて請求書を自動生成し、支払い状況をリアルタイム追跡します。</div>
+    <div class="feat-tags"><span class="feat-tag">請求書作成</span><span class="feat-tag">入金管理</span><span class="feat-tag">消費税計算</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="production">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-production">📈</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">予算管理</div>
+        <div class="feat-cat">工事・生産</div>
+      </div>
+    </div>
+    <div class="feat-desc">年度別予算の策定と実績対比。売上・原価・間接費を部門別に管理し、経営判断をサポートします。</div>
+    <div class="feat-tags"><span class="feat-tag">年度予算</span><span class="feat-tag">実績対比</span><span class="feat-tag">部門別管理</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者のみ</span></div>
+  </div>
+
+  <!-- ── PORTAL ── -->
+  <div class="feat-card" data-cat="portal">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-portal">⏰</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">勤怠管理</div>
+        <div class="feat-cat">ポータル</div>
+      </div>
+    </div>
+    <div class="feat-desc">ワンクリックで出退勤打刻。アナログ時計 UI でリアルタイム表示。管理者は全スタッフの勤怠を確認・承認できます。</div>
+    <div class="feat-tags"><span class="feat-tag">出退勤打刻</span><span class="feat-tag">承認フロー</span><span class="feat-tag">月次レポート</span><span class="feat-tag">休暇種別</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="portal">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-portal">📝</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">ワークフロー</div>
+        <div class="feat-cat">ポータル</div>
+      </div>
+    </div>
+    <div class="feat-desc">経費申請・休暇申請・購入申請を電子化。申請 → 承認フロー → 完了まで、ステータスをリアルタイムで追跡できます。</div>
+    <div class="feat-tags"><span class="feat-tag">経費申請</span><span class="feat-tag">休暇申請</span><span class="feat-tag">購入申請</span><span class="feat-tag">承認フロー</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="portal">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-portal">📢</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">社内回覧板</div>
+        <div class="feat-cat">ポータル</div>
+      </div>
+    </div>
+    <div class="feat-desc">お知らせ・社内通達を電子回覧。緊急フラグ・既読管理・部署別配信に対応。ベルアイコンで未読通知を表示します。</div>
+    <div class="feat-tags"><span class="feat-tag">既読管理</span><span class="feat-tag">緊急通知</span><span class="feat-tag">部署別配信</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="portal">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-portal">📅</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">カレンダー</div>
+        <div class="feat-cat">ポータル</div>
+      </div>
+    </div>
+    <div class="feat-desc">月次・週次カレンダーで予定を管理。工事・商談・施設・設備カテゴリで色分けし、Google カレンダー連携にも対応。</div>
+    <div class="feat-tags"><span class="feat-tag">月次表示</span><span class="feat-tag">カテゴリ色分け</span><span class="feat-tag">Google連携</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="portal">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-portal">📧</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">メール連携</div>
+        <div class="feat-cat">ポータル</div>
+      </div>
+    </div>
+    <div class="feat-desc">Gmail と連携してメールをシステム内で送受信。スレッド管理・スター管理・添付ファイル対応。顧客と紐付けて閲覧可能。</div>
+    <div class="feat-tags"><span class="feat-tag">Gmail連携</span><span class="feat-tag">スレッド管理</span><span class="feat-tag">顧客紐付け</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="portal">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-portal">📁</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">文書管理</div>
+        <div class="feat-cat">ポータル</div>
+      </div>
+    </div>
+    <div class="feat-desc">社内文書をクラウドで一元管理。就業規則・経理帳票・安全書類などをカテゴリ別に整理し、ファイルのアップロード・ダウンロードに対応。</div>
+    <div class="feat-tags"><span class="feat-tag">ファイル管理</span><span class="feat-tag">カテゴリ分類</span><span class="feat-tag">検索対応</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <!-- ── MARKETING ── -->
+  <div class="feat-card" data-cat="marketing">
+    <span class="status-chip status-partial">部分実装</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-marketing">📨</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">メール配信</div>
+        <div class="feat-cat">マーケティング</div>
+      </div>
+    </div>
+    <div class="feat-desc">顧客リストへのメルマガ一斉配信。配信リスト作成・テンプレート管理・配信予約・開封率トラッキングに対応予定。</div>
+    <div class="feat-tags"><span class="feat-tag">一斉配信</span><span class="feat-tag">テンプレート</span><span class="feat-tag">開封率</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者のみ</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="marketing">
+    <span class="status-chip status-partial">部分実装</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-marketing">📱</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">SNS インサイト</div>
+        <div class="feat-cat">マーケティング</div>
+      </div>
+    </div>
+    <div class="feat-desc">SNS のフォロワー数・エンゲージメント・インプレッションを一元管理。投稿パフォーマンスを視覚的に分析します。</div>
+    <div class="feat-tags"><span class="feat-tag">Instagram</span><span class="feat-tag">Twitter/X</span><span class="feat-tag">分析</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者のみ</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="marketing">
+    <span class="status-chip status-partial">部分実装</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-marketing">💹</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">ROI 分析</div>
+        <div class="feat-cat">マーケティング</div>
+      </div>
+    </div>
+    <div class="feat-desc">マーケティング施策ごとの投資対効果を可視化。チャネル別の集客数・コスト・成約率を比較分析できます。</div>
+    <div class="feat-tags"><span class="feat-tag">ROI計算</span><span class="feat-tag">チャネル分析</span><span class="feat-tag">コスト対比</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者のみ</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="marketing">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-marketing">🎨</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">クリエイティブ管理</div>
+        <div class="feat-cat">マーケティング</div>
+      </div>
+    </div>
+    <div class="feat-desc">バナー・チラシ・動画などのクリエイティブ素材をアップロード・管理。Supabase Storage に保存し、ダウンロード共有できます。</div>
+    <div class="feat-tags"><span class="feat-tag">ファイル管理</span><span class="feat-tag">クラウド保存</span><span class="feat-tag">共有機能</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者のみ</span></div>
+  </div>
+
+  <!-- ── SYSTEM ── -->
+  <div class="feat-card" data-cat="system">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-system">📊</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">BI ダッシュボード</div>
+        <div class="feat-cat">システム</div>
+      </div>
+    </div>
+    <div class="feat-desc">受注額・粗利・案件数など経営 KPI をグラフで可視化。月次トレンド・部門別比較・前期対比などのレポートを提供します。</div>
+    <div class="feat-tags"><span class="feat-tag">KPI管理</span><span class="feat-tag">グラフ表示</span><span class="feat-tag">月次トレンド</span></div>
+    <div class="feat-roles"><span class="role-chip role-admin">オーナー</span><span class="role-chip role-admin">本部管理者</span><span class="role-chip role-mgr">施工店管理者</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="system">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-system">🔐</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">ロールベース権限管理</div>
+        <div class="feat-cat">システム</div>
+      </div>
+    </div>
+    <div class="feat-desc">オーナー・本部管理者・施工店管理者・社員の 4 段階ロール制御。ページアクセス・メニュー表示・データ閲覧をすべてロールで制限します。</div>
+    <div class="feat-tags"><span class="feat-tag">RBAC</span><span class="feat-tag">RLS</span><span class="feat-tag">ルート保護</span><span class="feat-tag">メニュー制御</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール（権限差あり）</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="system">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-system">🔔</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">リアルタイム通知</div>
+        <div class="feat-cat">システム</div>
+      </div>
+    </div>
+    <div class="feat-desc">未読のお知らせ・承認依頼をベルアイコンで通知。クリックで既読にし、バッジカウントをリアルタイムで更新します。</div>
+    <div class="feat-tags"><span class="feat-tag">未読バッジ</span><span class="feat-tag">既読管理</span><span class="feat-tag">ワークフロー通知</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+  <div class="feat-card" data-cat="system">
+    <span class="status-chip status-done">実装済み</span>
+    <div class="feat-header">
+      <div class="feat-icon icon-system">⚙️</div>
+      <div class="feat-title-wrap">
+        <div class="feat-title">設定・プロフィール</div>
+        <div class="feat-cat">システム</div>
+      </div>
+    </div>
+    <div class="feat-desc">ユーザープロフィール・会社情報・通知設定を管理。通知設定は Supabase user_metadata に永続保存されます。</div>
+    <div class="feat-tags"><span class="feat-tag">プロフィール編集</span><span class="feat-tag">通知設定</span><span class="feat-tag">会社情報</span></div>
+    <div class="feat-roles"><span class="role-chip role-all">全ロール</span></div>
+  </div>
+
+</div><!-- /grid-wrap -->
+
+<!-- Legend -->
+<div style="max-width:1100px;margin:0 auto;padding:0 2rem 3rem;display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center;">
+  <span style="font-size:.82rem;color:var(--muted);font-weight:600;">ステータス：</span>
+  <span style="background:#dcfce7;color:#15803d;font-size:.75rem;font-weight:700;padding:3px 10px;border-radius:6px;">実装済み</span>
+  <span style="background:#fef3c7;color:#92400e;font-size:.75rem;font-weight:700;padding:3px 10px;border-radius:6px;">部分実装</span>
+  <span style="background:#f1f5f9;color:var(--muted);font-size:.75rem;font-weight:700;padding:3px 10px;border-radius:6px;">未実装</span>
+</div>
+
+<footer>
+  <p>BRIDGE 統合業務支援システム &copy; 2026 &nbsp;|&nbsp; <a href="https://github.com/tmksh/hachi" target="_blank">GitHub</a> &nbsp;|&nbsp; <a href="index.html">仕様書</a></p>
+</footer>
+
+<script>
+  function filter(cat, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.feat-card').forEach(card => {
+      if (cat === 'all' || card.dataset.cat === cat) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  }
+</script>
+
+</body>
+</html>

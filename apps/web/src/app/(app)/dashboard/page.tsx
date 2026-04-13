@@ -26,6 +26,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
+import { AnalogClock } from "@/components/shared/analog-clock";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
@@ -124,7 +125,9 @@ export default function DashboardPage() {
                 <CardContent className="pt-4 pb-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                    <kpi.icon className="h-4 w-4 text-muted-foreground/60" />
+                    <div className="neumorph-icon h-8 w-8">
+                      <kpi.icon className="h-4 w-4 text-muted-foreground/70" />
+                    </div>
                   </div>
                   <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
                 </CardContent>
@@ -140,26 +143,31 @@ export default function DashboardPage() {
         {/* Attendance */}
         {isVisible("attendance") && (
           <Card className="overflow-hidden">
-            <div className={`h-1 w-full transition-colors duration-500 ${clockedIn ? "bg-emerald-400" : "bg-muted/60"}`} />
             <CardContent className="pt-4 pb-5 px-5">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-1.5">
                   <span className={`h-2 w-2 rounded-full transition-all duration-500 ${clockedIn ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" : "bg-muted-foreground/30"}`} />
                   <span className="text-xs font-medium text-muted-foreground">{clockedIn ? "勤務中" : "未出勤"}</span>
                 </div>
                 <span className="text-xs text-muted-foreground tabular-nums">{format(now, "M月d日（EEE）", { locale: ja })}</span>
               </div>
-              <p className="text-4xl font-bold tabular-nums tracking-tight leading-none text-center py-3">
-                {format(now, "HH:mm")}
-              </p>
-              <p className="text-xs text-muted-foreground text-center mb-4 tabular-nums">
-                {clockInTime ? `出勤 ${format(clockInTime, "HH:mm")}〜` : "出勤打刻をしてください"}
-              </p>
+
+              {/* Analog clock + digital time */}
+              <div className="flex flex-col items-center gap-2 mb-4">
+                <AnalogClock size={92} />
+                <p className="text-sm font-semibold tabular-nums text-muted-foreground tracking-widest">
+                  {format(now, "HH:mm")}
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {clockInTime ? `出勤 ${format(clockInTime, "HH:mm")}〜` : "出勤打刻をしてください"}
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" onClick={handleClockIn} disabled={clockedIn} className="gap-1.5 h-9">
+                <Button size="sm" onClick={handleClockIn} disabled={clockedIn} className="gap-1.5 h-9 neumorph-btn-primary">
                   <LogIn className="h-3.5 w-3.5" />出勤
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleClockOut} disabled={!clockedIn} className="gap-1.5 h-9">
+                <Button size="sm" variant="outline" onClick={handleClockOut} disabled={!clockedIn} className="gap-1.5 h-9 neumorph-btn">
                   <LogOut className="h-3.5 w-3.5" />退勤
                 </Button>
               </div>
@@ -172,7 +180,7 @@ export default function DashboardPage() {
           <Card className="overflow-hidden">
             <CardContent className="h-full flex flex-col justify-between py-5 px-5 gap-4">
               <div className="flex items-start gap-3">
-                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <div className="neumorph-icon h-9 w-9 shrink-0">
                   <Zap className="h-4 w-4 text-primary" />
                 </div>
                 <div>
@@ -226,7 +234,9 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" />
+                <div className="neumorph-icon h-7 w-7">
+                  <FileText className="h-3.5 w-3.5 text-primary" />
+                </div>
                 ワークフロー
               </CardTitle>
             </CardHeader>
@@ -266,7 +276,9 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="pb-2 flex-row items-center justify-between">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Megaphone className="h-4 w-4 text-primary" />
+                <div className="neumorph-icon h-7 w-7">
+                  <Megaphone className="h-3.5 w-3.5 text-primary" />
+                </div>
                 お知らせ
               </CardTitle>
               {!loading && data?.announcements && data.announcements.length > 0 && (

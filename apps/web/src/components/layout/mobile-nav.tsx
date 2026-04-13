@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS } from "@/lib/constants";
+import { NAV_GROUPS, canAccessNavItem } from "@/lib/constants";
+import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard,
   Users,
@@ -25,6 +26,7 @@ const GROUP_ICONS = {
 export function MobileNav() {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const { profile } = useAuth();
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -35,6 +37,16 @@ export function MobileNav() {
     const group = NAV_GROUPS.find((g) => g.key === groupKey);
     return group?.items.some((item) => isActive(item.href)) ?? false;
   };
+
+  /** ロールでフィルタされたナビグループ */
+  const visibleGroups = NAV_GROUPS
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => !profile?.role || canAccessNavItem(item.key, profile.role),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -63,10 +75,10 @@ export function MobileNav() {
           >
             <div className="glass rounded-2xl p-3 shadow-xl">
               <p className="px-2 pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {NAV_GROUPS.find((g) => g.key === openGroup)?.label}
+                {visibleGroups.find((g) => g.key === openGroup)?.label}
               </p>
               <div className="grid grid-cols-2 gap-1.5">
-                {NAV_GROUPS.find((g) => g.key === openGroup)?.items.map(
+                {visibleGroups.find((g) => g.key === openGroup)?.items.map(
                   (item) => (
                     <Link
                       key={item.key}
@@ -93,7 +105,7 @@ export function MobileNav() {
       <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
         <div className="glass border-t mx-2 mb-2 rounded-2xl">
           <div className="flex items-center justify-around h-16 px-1">
-            {NAV_GROUPS.map((group) => {
+            {visibleGroups.map((group) => {
               const Icon = GROUP_ICONS[group.key as keyof typeof GROUP_ICONS];
               const active = isGroupActive(group.key);
 

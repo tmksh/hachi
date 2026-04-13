@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS } from "@/lib/constants";
+import { NAV_GROUPS, canAccessNavItem, ROLE_LABELS } from "@/lib/constants";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -93,6 +93,16 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
     return group?.items.some((item) => isActive(item.href)) ?? false;
   };
 
+  /** ロールでフィルタされたナビグループ */
+  const visibleGroups = NAV_GROUPS
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => !profile?.role || canAccessNavItem(item.key, profile.role),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+
   const toggleGroup = (key: string) => {
     setOpenGroup((prev) => (prev === key ? null : key));
   };
@@ -129,7 +139,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
 
         {/* Nav Groups */}
         <nav className="flex-1 flex flex-col gap-0.5 py-3 overflow-y-auto px-2">
-          {NAV_GROUPS.map((group) => {
+          {visibleGroups.map((group) => {
             const Icon = GROUP_ICONS[group.key as keyof typeof GROUP_ICONS];
             const active = isGroupActive(group.key);
             const isOpen = openGroup === group.key;
@@ -275,6 +285,11 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                   <div className="px-2 py-2">
                     <p className="text-sm font-medium">{profile?.display_name ?? "ユーザー"}</p>
                     <p className="text-xs text-muted-foreground">{profile?.email}</p>
+                    {profile?.role && (
+                      <p className="text-xs text-primary font-medium mt-0.5">
+                        {ROLE_LABELS[profile.role]}
+                      </p>
+                    )}
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -332,6 +347,11 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                       <div className="px-2 py-2">
                         <p className="text-sm font-medium">{profile?.display_name ?? "ユーザー"}</p>
                         <p className="text-xs text-muted-foreground">{profile?.email}</p>
+                        {profile?.role && (
+                          <p className="text-xs text-primary font-medium mt-0.5">
+                            {ROLE_LABELS[profile.role]}
+                          </p>
+                        )}
                       </div>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
@@ -375,7 +395,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
               autoFocus
             />
             <div className="space-y-1 max-h-64 overflow-y-auto">
-              {(NAV_GROUPS as readonly { key: string; label: string; items: readonly { key: string; label: string; href: string }[] }[]).flatMap((g) => g.items)
+              {visibleGroups.flatMap((g) => g.items)
                 .filter((item) =>
                   !searchQuery || item.label.toLowerCase().includes(searchQuery.toLowerCase())
                 )

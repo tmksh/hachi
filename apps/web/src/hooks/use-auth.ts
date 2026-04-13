@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { type Role, canAccessRoute } from "@/lib/constants";
 
 export type Profile = {
   id: string;
   company_id: string;
   display_name: string;
   email: string;
-  role: "owner" | "hq_admin" | "contractor_admin" | "employee";
+  role: Role;
   avatar_url: string | null;
   department: string | null;
   position: string | null;
@@ -60,7 +61,36 @@ export function useAuth() {
     window.location.href = "/login";
   };
 
-  const isAdmin = profile?.role === "owner" || profile?.role === "hq_admin";
+  const role = profile?.role ?? null;
 
-  return { user, profile, loading, signOut, isAdmin, supabase };
+  /** owner または hq_admin */
+  const isAdmin = role === "owner" || role === "hq_admin";
+  /** オーナーのみ */
+  const isOwner = role === "owner";
+  /** 施工店管理者以上 (contractor_admin | hq_admin | owner) */
+  const isManager = role === "owner" || role === "hq_admin" || role === "contractor_admin";
+  /** 一般社員 */
+  const isEmployee = role === "employee";
+
+  /** 指定ロールのいずれかに該当するか */
+  const hasRole = (...roles: Role[]) => !!role && roles.includes(role);
+
+  /** パスにアクセス権があるか (ミドルウェアと同じロジック) */
+  const canAccess = (pathname: string) =>
+    !!role && canAccessRoute(pathname, role);
+
+  return {
+    user,
+    profile,
+    loading,
+    signOut,
+    role,
+    isAdmin,
+    isOwner,
+    isManager,
+    isEmployee,
+    hasRole,
+    canAccess,
+    supabase,
+  };
 }
