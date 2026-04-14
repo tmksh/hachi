@@ -189,26 +189,31 @@
 
 <!-- LOGIN INFO -->
 <section>
-  <h2>🔑 <span>テストアカウント一覧</span></h2>
-  <p class="section-sub">以下のアカウントでログインして各ロールの機能を確認できます。<br>パスワードはすべて共通です。</p>
+  <h2>🔑 <span>ログイン情報</span></h2>
+  <p class="section-sub">実際に使用するアカウントと、各ロール確認用のテストアカウントです。</p>
 
-  <div class="login-grid">
-    <!-- Existing Admin -->
+  <!-- メインアカウント -->
+  <p style="font-size:.85rem;font-weight:700;color:var(--primary-dark);margin-bottom:.8rem;letter-spacing:.04em;">▌ 実際に使用するアカウント</p>
+  <div class="login-grid" style="margin-bottom:2rem;">
     <div class="login-card" style="border: 2px solid var(--primary); box-shadow: 0 0 0 4px rgba(107,201,179,.12), var(--shadow);">
       <div class="role-badge" style="background:#e0faf4;color:var(--primary-dark);font-size:1.1rem;">⭐</div>
       <div class="login-info">
-        <div class="label" style="color:var(--primary-dark);font-weight:700;">既存アカウント（メインアカウント）</div>
+        <div class="label" style="color:var(--primary-dark);font-weight:700;">管理者アカウント（メイン）</div>
         <div class="email">admin@example.com</div>
-        <div class="role-name">初期セットアップ済みの管理者アカウント</div>
+        <div class="role-name">全機能フルアクセス</div>
       </div>
       <div style="text-align:right">
         <div class="pw-badge" style="background:#e0faf4;color:var(--primary-dark);">admin2026</div>
         <div class="access-tags" style="margin-top:6px;justify-content:flex-end">
-          <span class="access-tag tag-green">メインアカウント</span>
+          <span class="access-tag tag-green">全ページ閲覧可</span>
         </div>
       </div>
     </div>
+  </div>
 
+  <!-- テストアカウント -->
+  <p style="font-size:.85rem;font-weight:700;color:var(--muted);margin-bottom:.8rem;letter-spacing:.04em;">▌ ロール確認用テストアカウント（パスワード共通: Bridge2024!）</p>
+  <div class="login-grid">
     <!-- Owner -->
     <div class="login-card">
       <div class="role-badge role-owner">👑</div>
