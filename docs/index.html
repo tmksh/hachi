@@ -5,352 +5,646 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BRIDGE - システム仕様書</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --primary: #6BC9B3;
-      --primary-dark: #4aab96;
-      --bg: #f4f6fb;
+      --accent: #6BC9B3;
+      --accent-dark: #4aab96;
+      --accent-light: #e6f7f3;
+      --bg: #f7f8fa;
       --card: #ffffff;
-      --text: #1a2340;
-      --muted: #6b7fa8;
-      --border: #e2e8f0;
-      --shadow: 5px 5px 12px rgba(168,182,210,.28), -3px -3px 8px rgba(255,255,255,.92);
-      --shadow-sm: 3px 3px 8px rgba(168,182,210,.22), -2px -2px 5px rgba(255,255,255,.90);
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Noto Sans JP', 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+    body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
 
-    /* ── NAV ── */
+    /* NAV */
     nav {
-      background: rgba(255,255,255,.82);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
+      background: #fff; border-bottom: 1px solid var(--border);
       position: sticky; top: 0; z-index: 100;
-      padding: 0 2rem;
-      display: flex; align-items: center; gap: 2rem; height: 60px;
+      padding: 0 2rem; display: flex; align-items: center; height: 56px;
     }
-    nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--primary-dark); letter-spacing: .05em; }
-    nav a { color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 500; transition: color .2s; }
-    nav a:hover, nav a.active { color: var(--primary-dark); }
-    nav .badge { background: var(--primary); color: #fff; font-size: .7rem; padding: 2px 8px; border-radius: 99px; margin-left: 4px; }
-
-    /* ── HERO ── */
-    .hero {
-      background: linear-gradient(135deg, #e8f5f1 0%, #dce8f8 100%);
-      padding: 5rem 2rem 4rem;
-      text-align: center;
+    .nav-logo { font-weight: 700; font-size: .95rem; color: var(--text); letter-spacing: .1em; text-transform: uppercase; margin-right: 2.5rem; }
+    .nav-links { display: flex; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 500;
+      padding: 0 1.2rem; height: 56px; display: flex; align-items: center;
+      border-bottom: 2px solid transparent; transition: all .2s;
     }
-    .hero .tag { display: inline-block; background: var(--primary); color: #fff; font-size: .8rem; font-weight: 600; padding: 4px 14px; border-radius: 99px; margin-bottom: 1.2rem; letter-spacing: .06em; }
-    .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 700; color: var(--text); margin-bottom: .8rem; }
-    .hero p { font-size: 1.05rem; color: var(--muted); max-width: 560px; margin: 0 auto 2rem; }
-    .hero-btns { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
-    .btn { display: inline-flex; align-items: center; gap: .5rem; padding: .65rem 1.6rem; border-radius: 10px; font-weight: 600; font-size: .9rem; text-decoration: none; transition: transform .15s, box-shadow .15s; }
-    .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 4px 14px rgba(107,201,179,.4); }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(107,201,179,.5); }
-    .btn-outline { background: #fff; color: var(--text); border: 1.5px solid var(--border); box-shadow: var(--shadow-sm); }
-    .btn-outline:hover { transform: translateY(-2px); }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent-dark); border-bottom-color: var(--accent); }
 
-    /* ── SECTION ── */
-    section { max-width: 960px; margin: 0 auto; padding: 4rem 2rem; }
-    section h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
-    section h2 span { color: var(--primary-dark); }
-    .section-sub { color: var(--muted); font-size: .95rem; margin-bottom: 2rem; }
-    .divider { border: none; border-top: 1.5px solid var(--border); margin: 3.5rem 0; }
-
-    /* ── LOGIN TABLE ── */
-    .login-grid { display: grid; gap: 1.2rem; }
-    .login-card {
-      background: var(--card);
-      border-radius: 16px;
-      box-shadow: var(--shadow);
-      padding: 1.4rem 1.8rem;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      gap: 1.2rem;
+    /* HERO */
+    .hero { background: #fff; border-bottom: 1px solid var(--border); padding: 5rem 2rem 4.5rem; }
+    .hero-inner { max-width: 960px; margin: 0 auto; }
+    .hero-eyebrow {
+      font-size: .72rem; font-weight: 700; color: var(--accent-dark);
+      letter-spacing: .14em; text-transform: uppercase; margin-bottom: 1.2rem;
     }
-    .role-badge { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; font-weight: 700; font-size: .85rem; }
-    .role-owner   { background: #fef3c7; color: #b45309; }
-    .role-hq      { background: #dbeafe; color: #1d4ed8; }
-    .role-con     { background: #dcfce7; color: #15803d; }
-    .role-emp     { background: #f3e8ff; color: #7c3aed; }
-    .login-info .label { font-size: .75rem; color: var(--muted); font-weight: 500; margin-bottom: 2px; }
-    .login-info .email { font-size: .95rem; font-weight: 600; color: var(--text); }
-    .login-info .role-name { font-size: .82rem; color: var(--muted); }
-    .pw-badge { background: #f1f5f9; color: var(--muted); font-size: .85rem; font-weight: 600; padding: 6px 14px; border-radius: 8px; font-family: monospace; }
-    .access-tags { display: flex; gap: .4rem; flex-wrap: wrap; }
-    .access-tag { font-size: .72rem; padding: 2px 8px; border-radius: 6px; font-weight: 500; }
-    .tag-green  { background: #dcfce7; color: #15803d; }
-    .tag-yellow { background: #fef3c7; color: #92400e; }
-    .tag-red    { background: #fee2e2; color: #b91c1c; }
-
-    /* ── SCREENSHOTS ── */
-    .ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1.8rem; }
-    .ss-card {
-      background: var(--card);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
+    .hero h1 { font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.18; margin-bottom: 1rem; }
+    .hero h1 em { font-style: normal; color: var(--accent-dark); }
+    .hero-desc { font-size: 1rem; color: var(--muted); max-width: 540px; margin-bottom: 2.2rem; line-height: 1.85; }
+    .hero-btns { display: flex; gap: .8rem; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .6rem 1.5rem; border-radius: 8px;
+      font-weight: 600; font-size: .88rem; text-decoration: none; transition: all .15s;
     }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(107,201,179,.35); }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-outline { background: #fff; color: var(--text); border: 1.5px solid var(--border); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent-dark); }
+
+    /* LAYOUT */
+    .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+    section { padding: 4rem 0; border-top: 1px solid var(--border); }
+    .section-label {
+      font-size: .7rem; font-weight: 700; color: var(--accent-dark);
+      letter-spacing: .14em; text-transform: uppercase; margin-bottom: .6rem;
+    }
+    section h2 { font-size: 1.45rem; font-weight: 700; margin-bottom: .5rem; }
+    .section-desc { color: var(--muted); font-size: .92rem; margin-bottom: 2.5rem; }
+
+    /* OVERVIEW GRID */
+    .overview-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+    .overview-item { background: var(--card); padding: 1.8rem 1.6rem; }
+    .overview-num { font-size: 2.2rem; font-weight: 700; color: var(--accent); font-family: 'IBM Plex Mono', monospace; line-height: 1; margin-bottom: .5rem; }
+    .overview-title { font-weight: 700; font-size: .95rem; margin-bottom: .3rem; }
+    .overview-desc { font-size: .82rem; color: var(--muted); }
+
+    /* ARCHITECTURE DIAGRAM */
+    .arch-diagram { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .arch-layer { padding: 1.6rem 2rem; }
+    .arch-layer-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .7rem; opacity: .7; }
+    .arch-layer-title { font-weight: 700; font-size: .95rem; margin-bottom: .5rem; }
+    .arch-layer-body { font-size: .83rem; line-height: 1.65; opacity: .85; margin-bottom: .8rem; }
+    .arch-tags { display: flex; gap: .4rem; flex-wrap: wrap; }
+    .arch-tag { font-size: .73rem; padding: 3px 10px; border-radius: 5px; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.7); font-weight: 500; }
+    .arch-client { background: #f0fdf9; color: #065f46; border-bottom: 1px solid #d1fae5; }
+    .arch-server { background: #eff6ff; color: #1e40af; border-bottom: 1px solid #bfdbfe; }
+    .arch-arrow { text-align: center; font-size: .72rem; color: var(--muted); padding: .5rem; background: var(--bg); border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); letter-spacing: .05em; }
+    .arch-data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); }
+    .arch-data-item { background: #fafafa; padding: 1.4rem 1.2rem; }
+    .arch-data-label { font-size: .67rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .4rem; }
+    .arch-data-name { font-size: .9rem; font-weight: 700; margin-bottom: .3rem; font-family: 'IBM Plex Mono', monospace; color: var(--accent-dark); }
+    .arch-data-desc { font-size: .78rem; color: var(--muted); line-height: 1.55; }
+
+    /* TABLE */
+    .table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+    thead tr { background: var(--bg); }
+    th { padding: .75rem 1.2rem; text-align: left; font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; border-bottom: 1px solid var(--border); }
+    td { padding: .9rem 1.2rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .td-name { font-weight: 600; }
+    .td-chip { display: inline-block; background: var(--accent-light); color: var(--accent-dark); font-size: .7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+    .td-mono { font-family: 'IBM Plex Mono', monospace; font-size: .8rem; color: var(--muted); }
+
+    /* DB GRID */
+    .db-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .db-item { background: var(--card); padding: 1.1rem 1.3rem; }
+    .db-item-name { font-family: 'IBM Plex Mono', monospace; font-size: .8rem; font-weight: 600; color: var(--accent-dark); margin-bottom: .3rem; }
+    .db-item-desc { font-size: .78rem; color: var(--muted); }
+    .db-note { margin-top: 1.4rem; padding: 1rem 1.4rem; background: var(--accent-light); border-radius: 8px; font-size: .83rem; color: var(--accent-dark); border: 1px solid #b2e8d8; line-height: 1.6; }
+
+    /* ROLE HIERARCHY */
+    .role-hierarchy { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem; }
+    .role-row { display: flex; align-items: flex-start; padding: 1.2rem 1.6rem; background: var(--card); border-bottom: 1px solid var(--border); gap: 1.2rem; }
+    .role-row:last-child { border-bottom: none; }
+    .role-bar { width: 3px; min-height: 36px; border-radius: 2px; flex-shrink: 0; margin-top: 3px; }
+    .bar-l0 { background: var(--accent); }
+    .bar-l1 { background: var(--accent); opacity: .7; }
+    .bar-l2 { background: var(--accent); opacity: .45; }
+    .bar-l3 { background: var(--border); }
+    .role-indent-0 { padding-left: 1.6rem; }
+    .role-indent-1 { padding-left: 3.6rem; }
+    .role-indent-2 { padding-left: 5.6rem; }
+    .role-indent-3 { padding-left: 7.6rem; }
+    .role-info-name { font-weight: 700; font-size: .93rem; margin-bottom: .2rem; }
+    .role-info-id { font-family: 'IBM Plex Mono', monospace; font-size: .73rem; color: var(--muted); margin-left: .5rem; font-weight: 400; }
+    .role-info-desc { font-size: .82rem; color: var(--muted); line-height: 1.55; }
+
+    /* PERMISSION MATRIX */
+    .perm-matrix { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .perm-matrix th { font-size: .72rem; }
+    .perm-cell { text-align: center; }
+    .perm-yes { background: var(--accent-light); }
+    .dot-yes { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+    .dot-no { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+
+    /* AUTH FLOW */
+    .auth-flow { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .auth-step { flex: 1; padding: 1.2rem 1rem; background: var(--card); text-align: center; }
+    .auth-step.step-last { background: var(--accent-light); }
+    .auth-step-num { font-size: .68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .4rem; }
+    .auth-step.step-last .auth-step-num { color: var(--accent-dark); }
+    .auth-step-title { font-weight: 700; font-size: .88rem; margin-bottom: .2rem; }
+    .auth-step.step-last .auth-step-title { color: var(--accent-dark); }
+    .auth-step-desc { font-size: .75rem; color: var(--muted); }
+    .auth-step.step-last .auth-step-desc { color: var(--accent-dark); opacity: .8; }
+    .auth-arrow { display: flex; align-items: center; justify-content: center; padding: 0 .5rem; background: var(--bg); border-left: 1px solid var(--border); border-right: 1px solid var(--border); font-size: .75rem; color: var(--muted); flex-shrink: 0; }
+
+    /* LOGIN */
+    .login-table { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .login-section-header { padding: .7rem 1.2rem; background: var(--bg); border-bottom: 1px solid var(--border); font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    .login-row { display: grid; grid-template-columns: 130px 1fr 140px 130px; align-items: center; padding: .95rem 1.2rem; background: var(--card); border-bottom: 1px solid var(--border); gap: 1rem; }
+    .login-row:last-child { border-bottom: none; }
+    .login-row.main { background: var(--accent-light); }
+    .login-role { font-size: .75rem; font-weight: 700; color: var(--muted); }
+    .login-row.main .login-role { color: var(--accent-dark); }
+    .login-email { font-weight: 600; font-size: .88rem; }
+    .login-pass { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; background: rgba(0,0,0,.06); padding: 3px 9px; border-radius: 5px; display: inline-block; }
+    .badge-full { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--accent); color: #fff; font-size: .7rem; font-weight: 700; }
+    .badge-limited { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--border); color: var(--muted); font-size: .7rem; font-weight: 700; }
+
+    /* SCREENSHOTS */
+    .ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1.4rem; }
+    .ss-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
     .ss-card img { width: 100%; display: block; border-bottom: 1px solid var(--border); }
-    .ss-card .ss-label { padding: .9rem 1.2rem; }
-    .ss-card .ss-title { font-weight: 600; font-size: .95rem; margin-bottom: .2rem; }
-    .ss-card .ss-desc { font-size: .83rem; color: var(--muted); }
+    .ss-info { padding: 1rem 1.2rem; }
+    .ss-title { font-weight: 700; font-size: .9rem; margin-bottom: .3rem; }
+    .ss-desc { font-size: .82rem; color: var(--muted); line-height: 1.6; }
 
-    /* ── SYSTEM INFO ── */
-    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.2rem; }
-    .info-card {
-      background: var(--card);
-      border-radius: 14px;
-      box-shadow: var(--shadow-sm);
-      padding: 1.4rem;
-    }
-    .info-card .icon { font-size: 1.4rem; margin-bottom: .6rem; }
-    .info-card h3 { font-size: .9rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .4rem; }
-    .info-card p { font-size: .95rem; font-weight: 500; color: var(--text); }
-    .info-card .chip { display: inline-block; background: #e0faf4; color: var(--primary-dark); font-size: .78rem; font-weight: 600; padding: 2px 10px; border-radius: 6px; margin-top: 4px; }
+    /* FOOTER */
+    footer { padding: 2.5rem 2rem; border-top: 1px solid var(--border); text-align: center; margin-top: 2rem; }
+    footer p { font-size: .83rem; color: var(--muted); }
+    footer a { color: var(--accent-dark); text-decoration: none; }
 
-    /* ── FOOTER ── */
-    footer { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 2rem; }
-    footer a { color: var(--primary-dark); text-decoration: none; }
-
-    @media (max-width: 600px) {
-      .login-card { grid-template-columns: auto 1fr; }
-      .pw-badge { display: none; }
+    @media (max-width: 700px) {
+      .overview-grid, .arch-data-grid { grid-template-columns: repeat(2, 1fr); }
       .ss-grid { grid-template-columns: 1fr; }
+      .login-row { grid-template-columns: 1fr 1fr; }
+      .auth-flow { flex-direction: column; }
+      .auth-arrow { padding: .3rem; border-left: none; border-right: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
     }
   </style>
 </head>
 <body>
 
 <nav>
-  <span class="logo">⛩ BRIDGE</span>
-  <a href="index.html" class="active">仕様書</a>
-  <a href="features.html">機能一覧 <span class="badge">NEW</span></a>
+  <span class="nav-logo">BRIDGE</span>
+  <div class="nav-links">
+    <a href="index.html" class="active">仕様書</a>
+    <a href="features.html">機能一覧</a>
+  </div>
 </nav>
 
 <!-- HERO -->
 <div class="hero">
-  <div class="tag">📋 システム仕様書 v1.0</div>
-  <h1>BRIDGE<br>統合業務支援システム</h1>
-  <p>建設業向けのオールインワン業務管理プラットフォーム。<br>顧客管理から工事・勤怠・ワークフローまでを一元管理します。</p>
-  <div class="hero-btns">
-    <a href="features.html" class="btn btn-primary">🗂 機能一覧を見る</a>
-    <a href="https://github.com/tmksh/hachi" class="btn btn-outline" target="_blank">📦 GitHub リポジトリ</a>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">System Specification — v1.0</div>
+    <h1>BRIDGE<br><em>統合業務支援システム</em></h1>
+    <p class="hero-desc">建設業・リフォーム業向けに設計されたオールインワン業務管理プラットフォーム。顧客管理・工事管理・勤怠・ワークフロー・マーケティングを一つのシステムで管理します。</p>
+    <div class="hero-btns">
+      <a href="features.html" class="btn btn-primary">機能一覧を見る</a>
+      <a href="https://github.com/tmksh/hachi" class="btn btn-outline" target="_blank">GitHub</a>
+    </div>
   </div>
 </div>
 
-<!-- SYSTEM INFO -->
-<section>
-  <h2>🛠 <span>システム情報</span></h2>
-  <p class="section-sub">使用技術スタックとインフラ構成</p>
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="icon">⚡</div>
-      <h3>フロントエンド</h3>
-      <p>Next.js 16 (App Router)</p>
-      <span class="chip">React 19 / TypeScript</span>
-    </div>
-    <div class="info-card">
-      <div class="icon">🎨</div>
-      <h3>UI フレームワーク</h3>
-      <p>Tailwind CSS + Shadcn/UI</p>
-      <span class="chip">Neumorphism デザイン</span>
-    </div>
-    <div class="info-card">
-      <div class="icon">🗄</div>
-      <h3>データベース</h3>
-      <p>Supabase (PostgreSQL)</p>
-      <span class="chip">RLS ポリシー設定済み</span>
-    </div>
-    <div class="info-card">
-      <div class="icon">🔐</div>
-      <h3>認証</h3>
-      <p>Supabase Auth</p>
-      <span class="chip">メール＋パスワード</span>
-    </div>
-    <div class="info-card">
-      <div class="icon">☁️</div>
-      <h3>デプロイ</h3>
-      <p>Netlify</p>
-      <span class="chip">自動デプロイ対応</span>
-    </div>
-    <div class="info-card">
-      <div class="icon">📁</div>
-      <h3>ファイルストレージ</h3>
-      <p>Supabase Storage</p>
-      <span class="chip">文書・クリエイティブ</span>
-    </div>
-  </div>
-</section>
+<div class="container">
 
-<hr class="divider" style="max-width:960px;margin:0 auto;" />
-
-<!-- LOGIN INFO -->
-<section>
-  <h2>🔑 <span>ログイン情報</span></h2>
-  <p class="section-sub">実際に使用するアカウントと、各ロール確認用のテストアカウントです。</p>
-
-  <!-- メインアカウント -->
-  <p style="font-size:.85rem;font-weight:700;color:var(--primary-dark);margin-bottom:.8rem;letter-spacing:.04em;">▌ 実際に使用するアカウント</p>
-  <div class="login-grid" style="margin-bottom:2rem;">
-    <div class="login-card" style="border: 2px solid var(--primary); box-shadow: 0 0 0 4px rgba(107,201,179,.12), var(--shadow);">
-      <div class="role-badge" style="background:#e0faf4;color:var(--primary-dark);font-size:1.1rem;">⭐</div>
-      <div class="login-info">
-        <div class="label" style="color:var(--primary-dark);font-weight:700;">管理者アカウント（メイン）</div>
-        <div class="email">admin@example.com</div>
-        <div class="role-name">全機能フルアクセス</div>
+  <!-- OVERVIEW -->
+  <section>
+    <div class="section-label">Overview</div>
+    <h2>システム概要</h2>
+    <p class="section-desc">BRIDGEは建設業・リフォーム業の現場と経営をひとつのプラットフォームで繋ぎます。受注から施工完了まで、すべての業務フローをカバーします。</p>
+    <div class="overview-grid">
+      <div class="overview-item">
+        <div class="overview-num">20+</div>
+        <div class="overview-title">機能モジュール</div>
+        <div class="overview-desc">CRMから工事管理・社内ポータルまで幅広い業務をカバー</div>
       </div>
-      <div style="text-align:right">
-        <div class="pw-badge" style="background:#e0faf4;color:var(--primary-dark);">admin2026</div>
-        <div class="access-tags" style="margin-top:6px;justify-content:flex-end">
-          <span class="access-tag tag-green">全ページ閲覧可</span>
+      <div class="overview-item">
+        <div class="overview-num">4</div>
+        <div class="overview-title">ロール権限</div>
+        <div class="overview-desc">オーナー・本部管理者・施工店管理者・社員の4段階制御</div>
+      </div>
+      <div class="overview-item">
+        <div class="overview-num">30+</div>
+        <div class="overview-title">DB テーブル</div>
+        <div class="overview-desc">RLSポリシーで行レベルのマルチテナント制御を実現</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section>
+    <div class="section-label">Architecture</div>
+    <h2>システムアーキテクチャ</h2>
+    <p class="section-desc">3層構成。クライアント・サーバー・データ層が明確に分離されており、エッジでのロール保護とリアルタイム通信を実現しています。</p>
+    <div class="arch-diagram">
+      <div class="arch-layer arch-client">
+        <div class="arch-layer-label">クライアント層</div>
+        <div class="arch-layer-title">Next.js App Router + React 19</div>
+        <div class="arch-layer-body">ブラウザ上で動作するフロントエンドアプリケーション。サーバーコンポーネントとクライアントコンポーネントを組み合わせ、初回表示速度と操作性を両立します。Tailwind CSS + Shadcn/UI によるニューモーフィズムデザイン。</div>
+        <div class="arch-tags">
+          <span class="arch-tag">ダッシュボード</span>
+          <span class="arch-tag">CRM / 商談</span>
+          <span class="arch-tag">工事管理</span>
+          <span class="arch-tag">勤怠</span>
+          <span class="arch-tag">ワークフロー</span>
+          <span class="arch-tag">マーケティング</span>
+          <span class="arch-tag">設定</span>
+        </div>
+      </div>
+      <div class="arch-arrow">HTTPS / Supabase JS Client (REST + WebSocket)</div>
+      <div class="arch-layer arch-server">
+        <div class="arch-layer-label">サーバー・エッジ層</div>
+        <div class="arch-layer-title">Next.js Middleware + Server Actions（Netlify Edge）</div>
+        <div class="arch-layer-body">Netlify のエッジネットワーク上でミドルウェアが実行されます。すべてのページリクエストに対して認証チェックとロールベースのルート保護を行い、権限のないユーザーを /unauthorized にリダイレクトします。</div>
+        <div class="arch-tags">
+          <span class="arch-tag">middleware.ts（RBAC）</span>
+          <span class="arch-tag">Server Actions</span>
+          <span class="arch-tag">セッション更新</span>
+          <span class="arch-tag">ルート保護</span>
+        </div>
+      </div>
+      <div class="arch-arrow">PostgreSQL クエリ / REST API / WebSocket (Realtime)</div>
+      <div class="arch-data-grid">
+        <div class="arch-data-item">
+          <div class="arch-data-label">Database</div>
+          <div class="arch-data-name">Supabase DB</div>
+          <div class="arch-data-desc">PostgreSQL 15。RLS（行レベルセキュリティ）で company_id ごとにデータを分離</div>
+        </div>
+        <div class="arch-data-item">
+          <div class="arch-data-label">Auth</div>
+          <div class="arch-data-name">Supabase Auth</div>
+          <div class="arch-data-desc">メール＋パスワード認証。JWT トークンをブラウザの Cookie に保存</div>
+        </div>
+        <div class="arch-data-item">
+          <div class="arch-data-label">Storage</div>
+          <div class="arch-data-name">Supabase Storage</div>
+          <div class="arch-data-desc">文書・クリエイティブファイルのクラウド保存。RLS で会社ごとに分離</div>
+        </div>
+        <div class="arch-data-item">
+          <div class="arch-data-label">Realtime</div>
+          <div class="arch-data-name">Supabase Realtime</div>
+          <div class="arch-data-desc">WebSocket による通知・勤怠状態のリアルタイム配信</div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- テストアカウント -->
-  <p style="font-size:.85rem;font-weight:700;color:var(--muted);margin-bottom:.8rem;letter-spacing:.04em;">▌ ロール確認用テストアカウント（パスワード共通: Bridge2024!）</p>
-  <div class="login-grid">
-    <!-- Owner -->
-    <div class="login-card">
-      <div class="role-badge role-owner">👑</div>
-      <div class="login-info">
-        <div class="label">メールアドレス</div>
-        <div class="email">owner@bridge.test</div>
-        <div class="role-name">ロール：オーナー（全機能フルアクセス）</div>
+  <!-- TECH STACK -->
+  <section>
+    <div class="section-label">Tech Stack</div>
+    <h2>技術スタック</h2>
+    <p class="section-desc">使用している主要技術とバージョン一覧です。</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>カテゴリ</th>
+            <th>技術 / サービス</th>
+            <th>バージョン</th>
+            <th>用途・備考</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="td-chip">フレームワーク</span></td>
+            <td class="td-name">Next.js</td>
+            <td class="td-mono">16.x</td>
+            <td>App Router、Server Components、Server Actions による SSR/SSG</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">UI ライブラリ</span></td>
+            <td class="td-name">React</td>
+            <td class="td-mono">19.x</td>
+            <td>Server / Client コンポーネント分離で高速レンダリング</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">言語</span></td>
+            <td class="td-name">TypeScript</td>
+            <td class="td-mono">5.x</td>
+            <td>型安全な開発。Supabase スキーマから型定義を自動生成</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">スタイリング</span></td>
+            <td class="td-name">Tailwind CSS</td>
+            <td class="td-mono">3.x</td>
+            <td>ユーティリティ CSS。CSS 変数でニューモーフィズムデザインを実装</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">UI コンポーネント</span></td>
+            <td class="td-name">Shadcn/UI</td>
+            <td class="td-mono">latest</td>
+            <td>Radix UI ベース。Card / Button / Dialog / Sheet / Tabs など</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">BaaS</span></td>
+            <td class="td-name">Supabase</td>
+            <td class="td-mono">2.x</td>
+            <td>DB / Auth / Storage / Realtime をワンプラットフォームで提供</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">データベース</span></td>
+            <td class="td-name">PostgreSQL</td>
+            <td class="td-mono">15.x</td>
+            <td>RLS（Row Level Security）ポリシーでマルチテナント実現</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">デプロイ</span></td>
+            <td class="td-name">Netlify</td>
+            <td class="td-mono">—</td>
+            <td>Git push で自動デプロイ。エッジネットワークで配信</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">パッケージ管理</span></td>
+            <td class="td-name">npm Workspaces</td>
+            <td class="td-mono">—</td>
+            <td>モノレポ構成。apps/web 配下にフロントエンドを配置</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">日付処理</span></td>
+            <td class="td-name">date-fns</td>
+            <td class="td-mono">3.x</td>
+            <td>日本語ロケール対応の日付フォーマット・計算</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- DATABASE -->
+  <section>
+    <div class="section-label">Database</div>
+    <h2>データベース設計</h2>
+    <p class="section-desc">PostgreSQL + Supabase RLS によるマルチテナント構成。全テーブルに company_id を持ち、ログインユーザーは自社データのみアクセス可能です。</p>
+    <div class="db-grid">
+      <div class="db-item"><div class="db-item-name">companies</div><div class="db-item-desc">会社マスタ。マルチテナントの基点</div></div>
+      <div class="db-item"><div class="db-item-name">profiles</div><div class="db-item-desc">ユーザープロフィール・ロール情報</div></div>
+      <div class="db-item"><div class="db-item-name">customers</div><div class="db-item-desc">顧客情報・タグ・担当者</div></div>
+      <div class="db-item"><div class="db-item-name">leads</div><div class="db-item-desc">リード・見込み客管理</div></div>
+      <div class="db-item"><div class="db-item-name">deals</div><div class="db-item-desc">商談・パイプライン</div></div>
+      <div class="db-item"><div class="db-item-name">quotes</div><div class="db-item-desc">見積書ヘッダー</div></div>
+      <div class="db-item"><div class="db-item-name">quote_items</div><div class="db-item-desc">見積書明細行</div></div>
+      <div class="db-item"><div class="db-item-name">contracts</div><div class="db-item-desc">工事契約</div></div>
+      <div class="db-item"><div class="db-item-name">construction_projects</div><div class="db-item-desc">工事案件・進捗管理</div></div>
+      <div class="db-item"><div class="db-item-name">craftsmen</div><div class="db-item-desc">職人・協力業者</div></div>
+      <div class="db-item"><div class="db-item-name">invoices</div><div class="db-item-desc">請求書</div></div>
+      <div class="db-item"><div class="db-item-name">budgets</div><div class="db-item-desc">年度予算・実績</div></div>
+      <div class="db-item"><div class="db-item-name">attendance_records</div><div class="db-item-desc">出退勤ログ</div></div>
+      <div class="db-item"><div class="db-item-name">workflow_requests</div><div class="db-item-desc">各種申請書</div></div>
+      <div class="db-item"><div class="db-item-name">announcements</div><div class="db-item-desc">社内回覧板</div></div>
+      <div class="db-item"><div class="db-item-name">documents</div><div class="db-item-desc">社内文書管理</div></div>
+      <div class="db-item"><div class="db-item-name">events</div><div class="db-item-desc">カレンダー予定</div></div>
+      <div class="db-item"><div class="db-item-name">marketing_campaigns</div><div class="db-item-desc">マーケティング施策</div></div>
+    </div>
+    <div class="db-note">
+      全テーブルに <strong>company_id</strong> カラムを設け、RLS（Row Level Security）ポリシーを適用しています。ログインユーザーのトークンから company_id を取得し、自社データのみ参照・更新できます。異なる会社のデータは一切アクセスできません。
+    </div>
+  </section>
+
+  <!-- ROLE DESIGN -->
+  <section>
+    <div class="section-label">Access Control</div>
+    <h2>認証・ロール設計</h2>
+    <p class="section-desc">4段階のロール体系でページアクセス・メニュー表示・データ閲覧を制御します。ミドルウェアとデータベース両方でアクセス制御を二重に実施しています。</p>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ロール階層図</div>
+    <div class="role-hierarchy">
+      <div class="role-row role-indent-0">
+        <div class="role-bar bar-l0"></div>
+        <div>
+          <div class="role-info-name">オーナー <span class="role-info-id">owner</span></div>
+          <div class="role-info-desc">全機能・全データにフルアクセス。予算管理・マーケティングを含む最上位権限。会社の代表者が使用します。</div>
+        </div>
       </div>
-      <div style="text-align:right">
-        <div class="pw-badge">Bridge2024!</div>
-        <div class="access-tags" style="margin-top:6px;justify-content:flex-end">
-          <span class="access-tag tag-green">全ページ閲覧可</span>
+      <div class="role-row role-indent-1">
+        <div class="role-bar bar-l1"></div>
+        <div>
+          <div class="role-info-name">本部管理者 <span class="role-info-id">hq_admin</span></div>
+          <div class="role-info-desc">オーナーとほぼ同等の権限。予算管理・マーケティングへのアクセスも可能。本社スタッフが使用します。</div>
+        </div>
+      </div>
+      <div class="role-row role-indent-2">
+        <div class="role-bar bar-l2"></div>
+        <div>
+          <div class="role-info-name">施工店管理者 <span class="role-info-id">contractor_admin</span></div>
+          <div class="role-info-desc">CRM・工事・請求管理にアクセス可能。予算管理・マーケティングは閲覧不可。施工店の責任者が使用します。</div>
+        </div>
+      </div>
+      <div class="role-row role-indent-3">
+        <div class="role-bar bar-l3"></div>
+        <div>
+          <div class="role-info-name">社員 <span class="role-info-id">employee</span></div>
+          <div class="role-info-desc">勤怠・ワークフロー・回覧・カレンダー・文書などポータル機能のみ利用可能。一般スタッフが使用します。</div>
         </div>
       </div>
     </div>
 
-    <!-- HQ Admin -->
-    <div class="login-card">
-      <div class="role-badge role-hq">🏢</div>
-      <div class="login-info">
-        <div class="label">メールアドレス</div>
-        <div class="email">hqadmin@bridge.test</div>
-        <div class="role-name">ロール：本部管理者（管理者権限）</div>
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">アクセス権限マトリクス</div>
+    <div class="perm-matrix">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:220px;">ページ / 機能</th>
+            <th style="text-align:center;">オーナー</th>
+            <th style="text-align:center;">本部管理者</th>
+            <th style="text-align:center;">施工店管理者</th>
+            <th style="text-align:center;">社員</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ダッシュボード / BI</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+          </tr>
+          <tr>
+            <td>顧客管理 / CRM</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+          </tr>
+          <tr>
+            <td>商談 / 見積 / 契約</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+          </tr>
+          <tr>
+            <td>工事管理 / 職人管理</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+          </tr>
+          <tr>
+            <td>請求管理</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+          </tr>
+          <tr>
+            <td>予算管理</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+          </tr>
+          <tr>
+            <td>マーケティング</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+            <td class="perm-cell"><span class="dot-no"></span></td>
+          </tr>
+          <tr>
+            <td>勤怠 / ワークフロー</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+          </tr>
+          <tr>
+            <td>回覧 / 文書 / カレンダー</td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-top:2.5rem;margin-bottom:.8rem;">認証フロー</div>
+    <div class="auth-flow">
+      <div class="auth-step">
+        <div class="auth-step-num">Step 1</div>
+        <div class="auth-step-title">ログイン</div>
+        <div class="auth-step-desc">メール＋パスワード入力</div>
       </div>
-      <div style="text-align:right">
-        <div class="pw-badge">Bridge2024!</div>
-        <div class="access-tags" style="margin-top:6px;justify-content:flex-end">
-          <span class="access-tag tag-green">全ページ閲覧可</span>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step">
+        <div class="auth-step-num">Step 2</div>
+        <div class="auth-step-title">JWT 発行</div>
+        <div class="auth-step-desc">Supabase Auth がトークン生成</div>
+      </div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step">
+        <div class="auth-step-num">Step 3</div>
+        <div class="auth-step-title">ロール取得</div>
+        <div class="auth-step-desc">profiles テーブルを参照</div>
+      </div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step">
+        <div class="auth-step-num">Step 4</div>
+        <div class="auth-step-title">セッション保存</div>
+        <div class="auth-step-desc">Cookie にトークンを保存</div>
+      </div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step step-last">
+        <div class="auth-step-num">Step 5</div>
+        <div class="auth-step-title">ルート保護</div>
+        <div class="auth-step-desc">middleware.ts で毎リクエスト制御</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGIN INFO -->
+  <section>
+    <div class="section-label">Accounts</div>
+    <h2>ログイン情報</h2>
+    <p class="section-desc">以下のアカウントでログインして各機能を確認できます。</p>
+    <div class="login-table">
+      <div class="login-section-header">実際に使用するアカウント</div>
+      <div class="login-row main">
+        <div class="login-role">管理者（メイン）</div>
+        <div class="login-email">admin@example.com</div>
+        <div><span class="login-pass">admin2026</span></div>
+        <div><span class="badge-full">全機能アクセス</span></div>
+      </div>
+      <div class="login-section-header">ロール確認用テストアカウント — パスワード共通: Bridge2024!</div>
+      <div class="login-row">
+        <div class="login-role">オーナー</div>
+        <div class="login-email">owner@bridge.test</div>
+        <div><span class="login-pass">Bridge2024!</span></div>
+        <div><span class="badge-full">全機能アクセス</span></div>
+      </div>
+      <div class="login-row">
+        <div class="login-role">本部管理者</div>
+        <div class="login-email">hqadmin@bridge.test</div>
+        <div><span class="login-pass">Bridge2024!</span></div>
+        <div><span class="badge-full">全機能アクセス</span></div>
+      </div>
+      <div class="login-row">
+        <div class="login-role">施工店管理者</div>
+        <div class="login-email">contractor@bridge.test</div>
+        <div><span class="login-pass">Bridge2024!</span></div>
+        <div><span class="badge-limited">予算・マーケ除く</span></div>
+      </div>
+      <div class="login-row">
+        <div class="login-role">社員</div>
+        <div class="login-email">employee@bridge.test</div>
+        <div><span class="login-pass">Bridge2024!</span></div>
+        <div><span class="badge-limited">ポータルのみ</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREENSHOTS -->
+  <section>
+    <div class="section-label">Screenshots</div>
+    <h2>画面スクリーンショット</h2>
+    <p class="section-desc">実際のシステム画面の一部です。</p>
+    <div class="ss-grid">
+      <div class="ss-card">
+        <img src="screenshots/dashboard.png" alt="ダッシュボード" />
+        <div class="ss-info">
+          <div class="ss-title">ダッシュボード</div>
+          <div class="ss-desc">受注額・パイプライン・顧客数・進行件数などのKPIをウィジェット形式で一覧表示。勤怠打刻・ワークフロー状況・未読お知らせも確認できます。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/attendance.png" alt="勤怠管理" />
+        <div class="ss-info">
+          <div class="ss-title">勤怠管理</div>
+          <div class="ss-desc">ワンクリックで出退勤打刻。アナログ時計UIでリアルタイム表示。管理者は全スタッフの勤怠確認・承認・月次レポートに対応しています。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/workflow.png" alt="ワークフロー" />
+        <div class="ss-info">
+          <div class="ss-title">ワークフロー</div>
+          <div class="ss-desc">経費申請・休暇申請・購入申請を電子化。申請から承認フロー・完了まで、ステータスをリアルタイムで管理できます。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/settings.png" alt="設定" />
+        <div class="ss-info">
+          <div class="ss-title">設定・プロフィール</div>
+          <div class="ss-desc">プロフィール編集・通知設定・会社情報の管理。通知設定は Supabase に永続保存されます。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/unauthorized.png" alt="アクセス制限" />
+        <div class="ss-info">
+          <div class="ss-title">アクセス制限ページ</div>
+          <div class="ss-desc">権限のないページにアクセスした場合に表示されます。ミドルウェアによるロールベースのルート保護（RBAC）を実装済みです。</div>
         </div>
       </div>
     </div>
+  </section>
 
-    <!-- Contractor Admin -->
-    <div class="login-card">
-      <div class="role-badge role-con">🪖</div>
-      <div class="login-info">
-        <div class="label">メールアドレス</div>
-        <div class="email">contractor@bridge.test</div>
-        <div class="role-name">ロール：施工店管理者（現場監督）</div>
-      </div>
-      <div style="text-align:right">
-        <div class="pw-badge">Bridge2024!</div>
-        <div class="access-tags" style="margin-top:6px;justify-content:flex-end">
-          <span class="access-tag tag-yellow">予算・マーケ除く</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Employee -->
-    <div class="login-card">
-      <div class="role-badge role-emp">👷</div>
-      <div class="login-info">
-        <div class="label">メールアドレス</div>
-        <div class="email">employee@bridge.test</div>
-        <div class="role-name">ロール：社員（一般社員）</div>
-      </div>
-      <div style="text-align:right">
-        <div class="pw-badge">Bridge2024!</div>
-        <div class="access-tags" style="margin-top:6px;justify-content:flex-end">
-          <span class="access-tag tag-red">ポータル系のみ</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Role matrix -->
-  <div style="margin-top:2rem;background:var(--card);border-radius:16px;box-shadow:var(--shadow-sm);overflow:hidden;">
-    <table style="width:100%;border-collapse:collapse;font-size:.88rem;">
-      <thead>
-        <tr style="background:#f8fafc;">
-          <th style="padding:.8rem 1rem;text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);">ページ</th>
-          <th style="padding:.8rem;text-align:center;border-bottom:1px solid var(--border);">👑 オーナー</th>
-          <th style="padding:.8rem;text-align:center;border-bottom:1px solid var(--border);">🏢 本部管理者</th>
-          <th style="padding:.8rem;text-align:center;border-bottom:1px solid var(--border);">🪖 施工店管理者</th>
-          <th style="padding:.8rem;text-align:center;border-bottom:1px solid var(--border);">👷 社員</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td style="padding:.7rem 1rem;border-bottom:1px solid var(--border);">ダッシュボード / BI</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td></tr>
-        <tr style="background:#fafbfd"><td style="padding:.7rem 1rem;border-bottom:1px solid var(--border);">顧客・商談・見積・契約</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">❌</td></tr>
-        <tr><td style="padding:.7rem 1rem;border-bottom:1px solid var(--border);">工事管理・職人管理</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">❌</td></tr>
-        <tr style="background:#fafbfd"><td style="padding:.7rem 1rem;border-bottom:1px solid var(--border);">請求管理</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">❌</td></tr>
-        <tr><td style="padding:.7rem 1rem;border-bottom:1px solid var(--border);">予算管理</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">❌</td><td style="text-align:center;">❌</td></tr>
-        <tr style="background:#fafbfd"><td style="padding:.7rem 1rem;border-bottom:1px solid var(--border);">マーケティング</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">❌</td><td style="text-align:center;">❌</td></tr>
-        <tr><td style="padding:.7rem 1rem;">勤怠・ワークフロー・回覧・文書</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td><td style="text-align:center;">✅</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<hr class="divider" style="max-width:960px;margin:0 auto;" />
-
-<!-- SCREENSHOTS -->
-<section>
-  <h2>📸 <span>画面スクリーンショット</span></h2>
-  <p class="section-sub">実際のシステム画面です</p>
-  <div class="ss-grid">
-    <div class="ss-card">
-      <img src="screenshots/dashboard.png" alt="ダッシュボード" />
-      <div class="ss-label">
-        <div class="ss-title">ダッシュボード</div>
-        <div class="ss-desc">受注額・パイプライン・顧客数・進行件数などのKPIを一覧表示。勤怠打刻・ワークフロー状況・お知らせをウィジェット形式で確認できます。</div>
-      </div>
-    </div>
-    <div class="ss-card">
-      <img src="screenshots/attendance.png" alt="勤怠管理" />
-      <div class="ss-label">
-        <div class="ss-title">勤怠管理</div>
-        <div class="ss-desc">ワンクリックで出退勤打刻。管理者は全スタッフの勤怠を確認・承認でき、月次レポートにも対応しています。</div>
-      </div>
-    </div>
-    <div class="ss-card">
-      <img src="screenshots/workflow.png" alt="ワークフロー" />
-      <div class="ss-label">
-        <div class="ss-title">ワークフロー</div>
-        <div class="ss-desc">経費申請・休暇申請・購入申請などを電子化。承認フローを設定し、ステータスをリアルタイムで管理できます。</div>
-      </div>
-    </div>
-    <div class="ss-card">
-      <img src="screenshots/settings.png" alt="設定" />
-      <div class="ss-label">
-        <div class="ss-title">設定・プロフィール</div>
-        <div class="ss-desc">プロフィール編集・通知設定・会社情報の管理。通知設定はSupabaseに永続保存されます。</div>
-      </div>
-    </div>
-    <div class="ss-card">
-      <img src="screenshots/unauthorized.png" alt="アクセス制限" />
-      <div class="ss-label">
-        <div class="ss-title">アクセス制限ページ</div>
-        <div class="ss-desc">権限のないページにアクセスした場合、このページが表示されます。ロールベースのアクセス制御（RBAC）を実装済みです。</div>
-      </div>
-    </div>
-  </div>
-</section>
+</div><!-- /container -->
 
 <footer>
-  <p>BRIDGE 統合業務支援システム &copy; 2026 &nbsp;|&nbsp; <a href="https://github.com/tmksh/hachi" target="_blank">GitHub</a> &nbsp;|&nbsp; <a href="features.html">機能一覧</a></p>
+  <p>BRIDGE 統合業務支援システム &copy; 2026 &nbsp;&nbsp; <a href="https://github.com/tmksh/hachi" target="_blank">GitHub</a> &nbsp;&nbsp; <a href="features.html">機能一覧</a></p>
 </footer>
 
 </body>
