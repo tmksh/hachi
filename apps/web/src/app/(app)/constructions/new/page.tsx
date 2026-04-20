@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,17 +18,18 @@ import { getProfiles } from "@/lib/actions/profiles";
 
 export default function ConstructionNewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<{id:string;name:string}[]>([]);
   const [contracts, setContracts] = useState<{id:string;contract_no:string;title:string}[]>([]);
   const [profiles, setProfiles] = useState<{id:string;display_name:string}[]>([]);
-  const [title, setTitle] = useState("");
-  const [customerId, setCustomerId] = useState("");
+  const [title, setTitle] = useState(searchParams.get("title") ?? "");
+  const [customerId, setCustomerId] = useState(searchParams.get("customer_id") ?? "");
   const [contractId, setContractId] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [orderAmount, setOrderAmount] = useState("");
+  const [orderAmount, setOrderAmount] = useState(searchParams.get("order_amount") ?? "");
   const [budgetCost, setBudgetCost] = useState("");
 
   useEffect(() => {

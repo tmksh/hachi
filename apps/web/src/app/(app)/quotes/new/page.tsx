@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -19,12 +20,19 @@ type LineItem = { name: string; quantity: number; unit: string; selling_price: n
 
 export default function QuoteNewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<{id:string;name:string}[]>([]);
-  const [customerId, setCustomerId] = useState("");
-  const [title, setTitle] = useState("");
+  const [customerId, setCustomerId] = useState(searchParams.get("customer_id") ?? "");
+  const [title, setTitle] = useState(searchParams.get("title") ? `${searchParams.get("title")} 見積書` : "");
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<LineItem[]>([{ name: "", quantity: 1, unit: "式", selling_price: 0 }]);
+  const initValue = searchParams.get("value");
+  const [items, setItems] = useState<LineItem[]>([{
+    name: searchParams.get("title") ? `${searchParams.get("title")} 一式` : "",
+    quantity: 1,
+    unit: "式",
+    selling_price: initValue ? Number(initValue) : 0,
+  }]);
 
   useEffect(() => { getCustomers().then(c => setCustomers(c.map(x => ({id:x.id,name:x.name})))).catch(() => {}); }, []);
 

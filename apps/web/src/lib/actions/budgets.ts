@@ -3,6 +3,14 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Budget, BudgetItem } from "@/lib/database.types";
 
+/** 年度（4月始まり）の開始日・終了日を返す */
+function fiscalYearRange(year: number) {
+  return {
+    start: `${year}-04-01`,
+    end:   `${year + 1}-03-31`,
+  };
+}
+
 export async function getBudgets() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -10,7 +18,39 @@ export async function getBudgets() {
     .select("*, items:budget_items(*)")
     .order("fiscal_year", { ascending: false });
   if (error) throw error;
-  return data;
+
+  // 各年度の完了工事実績を集計して付加する
+  const enriched = await Promise.all(
+    (data ?? []).map(async (budget) => {
+      const { start, end } = fiscalYearRange(budget.fiscal_year);
+      const { data: constructions } = await supabase
+        .from("constructions")
+        .select("order_amount, actual_cost, budget_cost")
+        .eq("status", "completed")
+        .gte("end_date", start)
+        .lte("end_date", end);
+
+      const actualRevenue  = (constructions ?? []).reduce((s, c) => s + (c.order_amount ?? 0), 0);
+      const actualCost     = (constructions ?? []).reduce((s, c) => s + (c.actual_cost  ?? 0), 0);
+      const budgetCostSum  = (constructions ?? []).reduce((s, c) => s + (c.budget_cost  ?? 0), 0);
+      const grossProfit    = actualRevenue - actualCost;
+      const completedCount = (constructions ?? []).length;
+
+      return {
+        ...budget,
+        actuals: {
+          revenue:      actualRevenue,
+          cost:         actualCost,
+          budget_cost:  budgetCostSum,
+          gross_profit: grossProfit,
+          gross_rate:   actualRevenue > 0 ? (grossProfit / actualRevenue) * 100 : 0,
+          completed_count: completedCount,
+        },
+      };
+    })
+  );
+
+  return enriched;
 }
 
 export async function getBudget(id: string) {

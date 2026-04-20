@@ -192,7 +192,8 @@
   <span class="nav-logo">BRIDGE</span>
   <div class="nav-links">
     <a href="index.html" class="active">仕様書</a>
-    <a href="index.html#cost">工事原価管理</a>
+    <a href="index.html#lead-flow">リードフロー</a>
+          <a href="index.html#cost">工事原価管理</a>
     <a href="features.html">機能一覧</a>
   </div>
 </nav>
@@ -595,6 +596,97 @@
         <div><span class="login-pass">Bridge2024!</span></div>
         <div><span class="badge-limited">ポータルのみ</span></div>
       </div>
+    </div>
+  </section>
+
+  <!-- LEAD FLOW -->
+  <section id="lead-flow">
+    <div class="section-label">Feature Detail</div>
+    <h2>リード〜受注フロー</h2>
+    <p class="section-desc">問い合わせから受注・工事着工までの一連の流れをシステムが連携してサポートします。各ステップで次のアクションへワンクリックで遷移できます。</p>
+
+    <!-- フロー図 -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ステップフロー</div>
+    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:2.5rem;overflow-x:auto;">
+      <!-- Step 1 -->
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-radius:12px 0 0 12px;padding:1.4rem 1.2rem;position:relative;">
+        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 1</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">顧客登録</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">顧客管理（/crm）から新規顧客を登録。氏名・連絡先・予算感・担当者を入力。</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
+      <!-- Step 2 -->
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 2</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">商談追加</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">パイプライン（/deals）の「＋商談追加」ボタンから顧客を選択して商談を作成。ステージ・金額・クロージング日を設定。</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
+      <!-- Step 3 -->
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 3</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">見積作成</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">商談カードの「見積を作成」ボタン（見積提出ステージ以降で表示）から見積新規作成へ。顧客・金額が自動引き継ぎ。</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
+      <!-- Step 4 -->
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 4</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">受注確定</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">商談カードを「受注」ステージにドラッグすると受注ダイアログが表示。次のアクション（見積 or 工事）を選択。</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
+      <!-- Step 5 -->
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;border-radius:0 12px 12px 0;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 5</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">工事登録</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">工事管理（/constructions）で工事を登録。顧客・受注額が引き継がれた状態で新規作成フォームが開く。</div>
+      </div>
+    </div>
+
+    <!-- パイプライン操作 -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">パイプライン操作ガイド</div>
+    <div class="table-wrap" style="margin-bottom:2.5rem;">
+      <table>
+        <thead>
+          <tr><th style="width:200px;">操作</th><th style="width:180px;">場所</th><th>説明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">商談を追加</td>
+            <td>パイプライン右上</td>
+            <td>「＋商談追加」ボタン → 顧客選択・商談名・金額・ステージを入力してDB保存</td>
+          </tr>
+          <tr>
+            <td class="td-name">ステージを変更</td>
+            <td>カンバン上</td>
+            <td>商談カードをドラッグ&amp;ドロップで別ステージへ移動。自動でDBを更新</td>
+          </tr>
+          <tr>
+            <td class="td-name">見積を作成</td>
+            <td>商談カード内</td>
+            <td>「見積提出」以降のステージで商談カード下部に表示されるボタン。顧客・金額を引き継いで見積新規作成ページへ遷移</td>
+          </tr>
+          <tr>
+            <td class="td-name">受注確定</td>
+            <td>カンバン上</td>
+            <td>「受注」ステージへドラッグすると受注ダイアログが表示。見積作成・工事登録のどちらかを選択して次へ進める</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ステージ一覧 -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ステージ一覧</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
+      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">問い合わせ</div><div style="font-size:.76rem;color:var(--muted);">初回コンタクト・Webからの問合せ</div></div>
+      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">初回面談</div><div style="font-size:.76rem;color:var(--muted);">現地調査・ヒアリング実施</div></div>
+      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">資料送付</div><div style="font-size:.76rem;color:var(--muted);">会社案内・プラン資料の送付</div></div>
+      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">見積提出</div><div style="font-size:.76rem;color:var(--muted);">見積書の提出・説明</div></div>
+      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">交渉中</div><div style="font-size:.76rem;color:var(--muted);">価格・仕様の調整・交渉</div></div>
+      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">クロージング</div><div style="font-size:.76rem;color:var(--muted);">最終確認・契約直前</div></div>
+      <div style="background:#f0fdf4;padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;color:#15803d;">受注</div><div style="font-size:.76rem;color:var(--muted);">契約成立。工事へ引き継ぎ</div></div>
+      <div style="background:#fef2f2;padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;color:#dc2626;">失注</div><div style="font-size:.76rem;color:var(--muted);">競合他社への流出・キャンセル</div></div>
     </div>
   </section>
 

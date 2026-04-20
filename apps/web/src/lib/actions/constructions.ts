@@ -120,3 +120,78 @@ export async function deleteConstructionTask(id: string) {
   const { error } = await supabase.from("construction_tasks").delete().eq("id", id);
   if (error) throw error;
 }
+
+export async function completeConstruction(
+  constructionId: string,
+  input: {
+    actual_cost: number;
+    createInvoice: boolean;
+    invoice?: {
+      recipient: string;
+      invoice_date: string;
+      due_date: string;
+      amount: number;
+      payment_terms?: string;
+    };
+  }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  // 工事を完了ステータスに更新
+  const { data: construction, error: updateErr } = await supabase
+    .from("constructions")
+    .update({ status: "completed", progress: 100, actual_cost: input.actual_cost })
+    .eq("id", constructionId)
+    .select("*, customer:customers(id, name, company_name)")
+    .single();
+  if (updateErr) throw updateErr;
+
+  let invoiceId: string | null = null;
+
+  // 最終精算請求書を生成
+  if (input.createInvoice && input.invoice) {
+    const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true });
+    const invoiceNo = `INV-${String((count || 0) + 1).padStart(4, "0")}`;
+    const subtotal = input.invoice.amount;
+    const tax = Math.floor(subtotal * 0.1);
+
+    const { data: inv, error: invErr } = await supabase
+      .from("invoices")
+      .insert({
+        company_id: profile.company_id,
+        invoice_no: invoiceNo,
+        construction_id: constructionId,
+        customer_id: construction.customer_id,
+        recipient: input.invoice.recipient,
+        invoice_date: input.invoice.invoice_date,
+        due_date: input.invoice.due_date,
+        payment_terms: input.invoice.payment_terms || null,
+        subtotal,
+        tax,
+        total: subtotal + tax,
+        status: "draft",
+        created_by: user.id,
+      })
+      .select()
+      .single();
+    if (invErr) throw invErr;
+
+    await supabase.from("invoice_items").insert({
+      company_id: profile.company_id,
+      invoice_id: inv.id,
+      description: `最終精算払い（${construction.title} 竣工引渡し）`,
+      quantity: 1,
+      unit_price: subtotal,
+      amount: subtotal,
+      sort_order: 0,
+    });
+
+    invoiceId = inv.id;
+  }
+
+  return { construction, invoiceId };
+}

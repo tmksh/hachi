@@ -106,7 +106,7 @@ function compute(row: ContractorRow) {
   const budget_total = row.budget + row.add_contract_1 + row.add_contract_2;
   const confirmed    = row.order_amount + row.add_order_1 + row.add_order_2 + row.add_order_3;
   const budget_rem   = budget_total - confirmed;
-  const total_billed = Object.values(row.monthly).reduce((s, v) => s + (v ?? 0), 0);
+  const total_billed = Object.values(row.monthly).reduce((s: number, v) => s + (v ?? 0), 0);
   const billing_rem  = confirmed - total_billed;
   return { budget_total, confirmed, budget_rem, total_billed, billing_rem };
 }
