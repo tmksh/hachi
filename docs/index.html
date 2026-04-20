@@ -192,6 +192,7 @@
   <span class="nav-logo">BRIDGE</span>
   <div class="nav-links">
     <a href="index.html" class="active">仕様書</a>
+    <a href="index.html#cost">工事原価管理</a>
     <a href="features.html">機能一覧</a>
   </div>
 </nav>
@@ -594,6 +595,157 @@
         <div><span class="login-pass">Bridge2024!</span></div>
         <div><span class="badge-limited">ポータルのみ</span></div>
       </div>
+    </div>
+  </section>
+
+  <!-- COST MANAGEMENT -->
+  <section id="cost">
+    <div class="section-label">Feature Detail</div>
+    <h2>工事原価管理表</h2>
+    <p class="section-desc">工事詳細ページ「原価」タブに搭載。1工事につき複数の下請け業者ごとに予算・発注・月次請求を管理し、粗利をリアルタイムで把握できます。</p>
+
+    <!-- 何ができるか -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">何ができるか</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
+      <div style="background:var(--card);padding:1.4rem 1.6rem;">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-dark);margin-bottom:.5rem;">Input</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">数値を直接入力</div>
+        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">白いセルをクリックするだけで編集開始。業者名・工種・予算額・発注額・月次請求を入力できます。</div>
+      </div>
+      <div style="background:var(--card);padding:1.4rem 1.6rem;">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-dark);margin-bottom:.5rem;">Auto Calc</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">緑セルは自動計算</div>
+        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">実行予算合計・確定額・予算残・請求残・工事粗利額・粗利率がリアルタイムで自動更新されます。</div>
+      </div>
+      <div style="background:var(--card);padding:1.4rem 1.6rem;">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-dark);margin-bottom:.5rem;">Alert</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">赤字でアラート</div>
+        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">予算残がマイナスになると赤く表示。請求残（未回収）も赤字で一目でわかります。</div>
+      </div>
+    </div>
+
+    <!-- 列の説明 -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">列の構成</div>
+    <div class="table-wrap" style="margin-bottom:2.5rem;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:140px;">グループ</th>
+            <th style="width:160px;">列名</th>
+            <th style="width:80px;">種別</th>
+            <th>内容・説明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td rowspan="4" style="vertical-align:top;font-weight:700;">基本情報</td>
+            <td class="td-name">発注ステータス</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>クリックで「発注済 ↔ 未発注」を切り替え</td>
+          </tr>
+          <tr>
+            <td class="td-name">施工業者名</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>下請け業者・職人の名称</td>
+          </tr>
+          <tr>
+            <td class="td-name">工種</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>外構工事・電気工事・塗装工事など</td>
+          </tr>
+          <tr>
+            <td class="td-name">管理用予算</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>社内管理用の上限予算（対外的な実行予算とは別管理）</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td rowspan="3" style="vertical-align:top;font-weight:700;">実行予算・<br>追加契約</td>
+            <td class="td-name">実行予算</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>当初の発注予定金額</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td class="td-name">追加契約①②</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>設計変更・追加工事が発生した場合の増額分</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td class="td-name">追加含む実行予算</td>
+            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
+            <td><span class="td-mono" style="font-size:.8rem;">実行予算 + 追加契約① + 追加契約②</span></td>
+          </tr>
+          <tr>
+            <td rowspan="5" style="vertical-align:top;font-weight:700;">発注</td>
+            <td class="td-name">発注額</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>実際に発注した金額</td>
+          </tr>
+          <tr>
+            <td class="td-name">追加発注①②③</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>工事中に発生した追加発注</td>
+          </tr>
+          <tr>
+            <td class="td-name">確定額</td>
+            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
+            <td><span class="td-mono" style="font-size:.8rem;">発注額 + 追加発注① + 追加発注② + 追加発注③</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">予算残</td>
+            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
+            <td><span class="td-mono" style="font-size:.8rem;">追加含む実行予算 − 確定額</span>（マイナスで赤字）</td>
+          </tr>
+          <tr>
+            <td class="td-name">〇月請求（12ヶ月）</td>
+            <td><span class="td-chip">入力</span></td>
+            <td>業者から届いた月次請求書の金額を月ごとに入力</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td style="font-weight:700;">請求管理</td>
+            <td class="td-name">請求残</td>
+            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
+            <td><span class="td-mono" style="font-size:.8rem;">確定額 − 月次請求の合計</span>（未払いがあると赤字）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 計算式まとめ -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">サマリーの計算式</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
+      <div style="background:var(--card);padding:1.2rem 1.6rem;">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.5rem;">実行予算ベース（暫定）</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:.82rem;line-height:2;color:var(--text);">
+          工事粗利額 = 契約金額 − 実行予算合計<br>
+          工事粗利率 = 工事粗利額 ÷ 契約金額 × 100
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:.5rem;">発注確定前の見込み値。計画段階で利益を確認するために使います。</div>
+      </div>
+      <div style="background:var(--card);padding:1.2rem 1.6rem;">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.5rem;">確定額ベース（実績）</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:.82rem;line-height:2;color:var(--text);">
+          工事粗利額 = 契約金額 − 確定額合計<br>
+          工事粗利率 = 工事粗利額 ÷ 契約金額 × 100
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:.5rem;">実際に発注した金額ベースの粗利。工事が進むにつれて精度が上がります。</div>
+      </div>
+    </div>
+
+    <!-- 操作方法 -->
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">操作方法</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>操作</th><th>方法</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="td-name">数値を入力する</td><td>白いセルをクリック → キーボードで入力 → Enter または別セルへ移動で確定</td></tr>
+          <tr><td class="td-name">発注ステータスを変える</td><td>「発注済」「未発注」バッジをクリックするたびに切り替わります</td></tr>
+          <tr><td class="td-name">業者行を追加する</td><td>表の下部「+ 行を追加」をクリック</td></tr>
+          <tr><td class="td-name">業者行を削除する</td><td>対象行にホバー → 右端のゴミ箱ボタンをクリック</td></tr>
+          <tr><td class="td-name">保存する</td><td>右上「保存する」ボタンをクリック（緑の「保存済み」に変わります）</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
