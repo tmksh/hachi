@@ -114,3 +114,9 @@ export async function updateConstructionTask(id: string, input: Partial<Pick<Con
   const { error } = await supabase.from("construction_tasks").update(input).eq("id", id);
   if (error) throw error;
 }
+
+export async function deleteConstructionTask(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("construction_tasks").delete().eq("id", id);
+  if (error) throw error;
+}

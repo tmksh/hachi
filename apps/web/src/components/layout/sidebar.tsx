@@ -34,6 +34,7 @@ import {
   User,
   ChevronRight,
   FileText,
+  CalendarDays,
 } from "lucide-react";
 import {
   Dialog,
@@ -447,9 +448,11 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                   }}
                   className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
                 >
-                  <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.is_urgent ? "bg-rose-100" : "bg-primary/10"}`}>
+                  <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : "bg-primary/10"}`}>
                     {n.type === "workflow" ? (
                       <FileText className={`h-4 w-4 text-amber-600`} />
+                    ) : n.type === "calendar" ? (
+                      <CalendarDays className="h-4 w-4 text-sky-600" />
                     ) : (
                       <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : "text-primary"}`} />
                     )}
@@ -462,7 +465,10 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                     </p>
                   </div>
                   {n.is_urgent && (
-                    <Badge className="shrink-0 text-[9px] h-4 px-1 bg-rose-100 text-rose-600 hover:bg-rose-100">急</Badge>
+                      <Badge className="shrink-0 text-[9px] h-4 px-1 bg-rose-100 text-rose-600 hover:bg-rose-100">急</Badge>
+                    )}
+                  {n.type === "calendar" && (
+                    <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1 border-sky-200 text-sky-600">予定</Badge>
                   )}
                 </Link>
               ))

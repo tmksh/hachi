@@ -91,25 +91,25 @@ BEGIN
     last_sign_in_at, created_at, updated_at
   ) VALUES
     (
-      owner_id::text, owner_id,
+      owner_id, owner_id,
       json_build_object('sub', owner_id::text, 'email', 'owner@bridge.test'),
       'email', owner_id::text,
       NOW(), NOW(), NOW()
     ),
     (
-      hq_id::text, hq_id,
+      hq_id, hq_id,
       json_build_object('sub', hq_id::text, 'email', 'hqadmin@bridge.test'),
       'email', hq_id::text,
       NOW(), NOW(), NOW()
     ),
     (
-      contr_id::text, contr_id,
+      contr_id, contr_id,
       json_build_object('sub', contr_id::text, 'email', 'contractor@bridge.test'),
       'email', contr_id::text,
       NOW(), NOW(), NOW()
     ),
     (
-      emp_id::text, emp_id,
+      emp_id, emp_id,
       json_build_object('sub', emp_id::text, 'email', 'employee@bridge.test'),
       'email', emp_id::text,
       NOW(), NOW(), NOW()

@@ -7,11 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { getConstruction } from "@/lib/actions/constructions";
+import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
+import { TasksTab } from "@/components/constructions/tasks-tab";
 
 type Detail = Awaited<ReturnType<typeof getConstruction>>;
 
@@ -51,19 +52,16 @@ export default function ConstructionDetailPage() {
           </div>
         </TabsContent>
         <TabsContent value="tasks" className="mt-4">
-          <Card><CardContent className="pt-4"><Table><TableHeader><TableRow><TableHead>工程名</TableHead><TableHead>期間</TableHead><TableHead>進捗</TableHead><TableHead>ステータス</TableHead></TableRow></TableHeader>
-            <TableBody>{(data.tasks ?? []).length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-4 text-muted-foreground">工程なし</TableCell></TableRow> : (data.tasks ?? []).map((t: { id: string; name: string; start_date: string|null; end_date: string|null; progress: number; status: string }) => (
-              <TableRow key={t.id}><TableCell>{t.name}</TableCell><TableCell className="text-sm">{t.start_date ?? "-"} ~ {t.end_date ?? "-"}</TableCell><TableCell><div className="flex items-center gap-2"><Progress value={t.progress} className="w-20 h-1.5" /><span className="text-xs">{t.progress}%</span></div></TableCell><TableCell>{t.status}</TableCell></TableRow>
-            ))}</TableBody>
-          </Table></CardContent></Card>
+          <TasksTab
+            constructionId={id as string}
+            initialTasks={(data.tasks ?? []) as { id: string; name: string; start_date: string | null; end_date: string | null; progress: number; status: string }[]}
+          />
         </TabsContent>
         <TabsContent value="cost" className="mt-4">
-          <Card><CardContent className="pt-4 space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">受注原価</span><span className="font-medium tabular-nums">¥{(data.order_cost??0).toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">予算原価</span><span className="tabular-nums">¥{(data.budget_cost??0).toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">実績原価</span><span className="tabular-nums">¥{(data.actual_cost??0).toLocaleString()}</span></div>
-            <div className="flex justify-between pt-2 border-t"><span className="font-medium">粗利</span><span className="font-semibold tabular-nums">¥{((data.order_amount??0) - (data.actual_cost??0)).toLocaleString()}</span></div>
-          </CardContent></Card>
+          <CostBudgetTab
+            constructionId={id as string}
+            contractAmount={data.order_amount ?? undefined}
+          />
         </TabsContent>
       </Tabs>
     </div>

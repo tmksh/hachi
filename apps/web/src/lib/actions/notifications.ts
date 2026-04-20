@@ -1,10 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 
 export type Notification = {
   id: string;
-  type: "announcement" | "workflow";
+  type: "announcement" | "workflow" | "calendar";
   title: string;
   body?: string;
   href: string;
@@ -17,18 +19,30 @@ export async function getNotifications(): Promise<Notification[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
+  const now = new Date();
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
   const [
     { data: readRecords },
     { data: announcements },
     { data: pendingSteps },
+    { data: upcomingEvents },
   ] = await Promise.all([
     supabase.from("announcement_reads").select("announcement_id").eq("user_id", user.id),
     supabase.from("announcements").select("id, title, body, is_urgent, published_at").order("published_at", { ascending: false }).limit(30),
     supabase.from("workflow_steps").select("id, request_id").eq("approver_id", user.id).eq("status", "pending").limit(10),
+    supabase
+      .from("calendar_events")
+      .select("id, title, start_at, category, location")
+      .gte("start_at", now.toISOString())
+      .lte("start_at", in7days.toISOString())
+      .order("start_at")
+      .limit(5),
   ]);
 
   const readIdSet = new Set((readRecords || []).map((r) => r.announcement_id));
 
+  // 回覧通知
   const announcementNotifs: Notification[] = (announcements || [])
     .filter((a) => !readIdSet.has(a.id))
     .map((a) => ({
@@ -41,6 +55,7 @@ export async function getNotifications(): Promise<Notification[]> {
       is_urgent: a.is_urgent,
     }));
 
+  // ワークフロー承認依頼通知
   let workflowNotifs: Notification[] = [];
   if (pendingSteps && pendingSteps.length > 0) {
     const requestIds = pendingSteps.map((s) => s.request_id);
@@ -59,9 +74,23 @@ export async function getNotifications(): Promise<Notification[]> {
     }));
   }
 
-  return [...announcementNotifs, ...workflowNotifs]
+  // カレンダー直近予定通知（7日以内）
+  const calendarNotifs: Notification[] = (upcomingEvents || []).map((ev) => {
+    const dateLabel = format(new Date(ev.start_at), "M/d(E) HH:mm", { locale: ja });
+    return {
+      id: `cal_${ev.id}`,
+      type: "calendar" as const,
+      title: ev.title,
+      body: `${dateLabel}${ev.location ? `　${ev.location}` : ""}`,
+      href: `/calendar`,
+      created_at: ev.start_at,
+      is_urgent: false,
+    };
+  });
+
+  return [...announcementNotifs, ...workflowNotifs, ...calendarNotifs]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 15);
+    .slice(0, 20);
 }
 
 export async function markAnnouncementAsRead(announcementId: string) {
