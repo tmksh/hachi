@@ -32,8 +32,8 @@ export default function BudgetPage() {
         <div className="space-y-8">
           {budgets.map(b => {
             const act = b.actuals;
-            const planRevenue = (b.items ?? []).filter(i => i.category === "revenue").reduce((s, i) => s + i.amount, 0);
-            const planCost    = (b.items ?? []).filter(i => i.category === "direct_cost").reduce((s, i) => s + i.amount, 0);
+            const planRevenue = (b.items ?? []).filter((i: { category: string | null; amount: number }) => i.category === "revenue").reduce((s: number, i: { amount: number }) => s + i.amount, 0);
+            const planCost    = (b.items ?? []).filter((i: { category: string | null; amount: number }) => i.category === "direct_cost").reduce((s: number, i: { amount: number }) => s + i.amount, 0);
             const planGross   = planRevenue - planCost;
             const achieveRate = planRevenue > 0 ? Math.min((act.revenue / planRevenue) * 100, 100) : 0;
 
