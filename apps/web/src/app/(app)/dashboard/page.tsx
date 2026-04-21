@@ -103,38 +103,37 @@ export default function DashboardPage() {
 
       {/* ── Row 1: KPI cards ────────────────────────────────── */}
       {isVisible("kpi") && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {loading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="stat-card">
-                <CardContent className="pt-4 pb-3 space-y-2">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-8 w-24" />
-                  <Skeleton className="h-3 w-20" />
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            [
-              { label: "受注額", value: formatYen(data?.kpis.wonValue ?? 0), icon: TrendingUp },
-              { label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0), icon: BarChart3 },
-              { label: "顧客数", value: String(data?.kpis.customerCount ?? 0), icon: Users },
-              { label: "進行案件", value: String(data?.kpis.activeConstructions ?? 0), icon: Briefcase },
-            ].map((kpi, i) => (
-              <Card key={i} className="stat-card transition-[box-shadow,background-color] duration-200">
-                <CardContent className="pt-4 pb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                    <div className="neumorph-icon h-8 w-8">
-                      <kpi.icon className="h-4 w-4 text-muted-foreground/70" />
-                    </div>
+        <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
+          <CardContent className="py-2">
+            <div className="grid grid-cols-2 lg:grid-cols-4">
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="px-4 first:pl-0 last:pr-0 space-y-1.5">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-6 w-24" />
                   </div>
-                  <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
+                ))
+              ) : (
+                [
+                  { label: "受注額", value: formatYen(data?.kpis.wonValue ?? 0), icon: TrendingUp },
+                  { label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0), icon: BarChart3 },
+                  { label: "顧客数", value: String(data?.kpis.customerCount ?? 0), icon: Users },
+                  { label: "進行案件", value: String(data?.kpis.activeConstructions ?? 0), icon: Briefcase },
+                ].map((kpi, i) => (
+                  <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                      <div className="neumorph-icon h-8 w-8">
+                        <kpi.icon className="h-4 w-4 text-muted-foreground/70" />
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Row 2: Attendance (left) + AI focus + Workflow (right) ── */}
