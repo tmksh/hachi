@@ -124,13 +124,13 @@ export default function DealsPage() {
               onDragLeave={() => setDragOverStage(null)}
               onDrop={e => handleDrop(e, stage.key)}
             >
-              <div className={`rounded-t-lg px-3 py-2 ${stage.color}`}>
+              <div className={`rounded-t-lg px-3 py-2 border border-b-0 border-white/60 dark:border-white/10 ${stage.color}`}>
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-sm">{stage.label}</h3>
                   <Badge variant="secondary" className="text-xs">{stageDeals.length}</Badge>
                 </div>
               </div>
-              <div className={`flex-1 bg-black/[0.03] rounded-b-lg p-2 space-y-2 min-h-[120px] transition-colors ${dragOverStage === stage.key ? "bg-primary/10 ring-2 ring-primary/30 ring-inset" : ""}`}>
+              <div className={`flex-1 rounded-b-lg p-2 space-y-2 min-h-[200px] transition-colors border border-t-0 border-white/60 dark:border-white/10 bg-white/40 dark:bg-white/[0.03] ${dragOverStage === stage.key ? "!bg-primary/10 ring-2 ring-primary/40 ring-inset" : ""}`}>
                 {stageDeals.map(deal => {
                   const quoteParams = new URLSearchParams();
                   if (deal.customer_id) quoteParams.set("customer_id", deal.customer_id);
