@@ -33,8 +33,8 @@
       padding: 0 1.2rem; height: 56px; display: flex; align-items: center;
       border-bottom: 2px solid transparent; transition: all .2s;
     }
-    .nav-links a:hover { color: var(--text); }
-    .nav-links a.active { color: var(--accent-dark); border-bottom-color: var(--accent); }
+    .nav-links a:hover { color: var(--text); background: rgba(107,201,179,.08); border-radius: 4px 4px 0 0; }
+    .nav-links a.active { color: var(--accent-dark); border-bottom-color: var(--accent); font-weight: 600; }
 
     /* HERO */
     .hero { background: #fff; border-bottom: 1px solid var(--border); padding: 5rem 2rem 4.5rem; }
@@ -332,7 +332,7 @@
 <nav>
   <span class="nav-logo">BRIDGE</span>
   <div class="nav-links">
-    <a href="index.html" class="active">仕様書</a>
+    <a href="index.html">仕様書</a>
     <a href="index.html#lead-flow">リードフロー</a>
           <a href="index.html#cost">工事原価管理</a>
     <a href="index.html#kickoff-input">導入準備</a>
@@ -1812,6 +1812,46 @@ function kiSave(id) {
   const btn = document.getElementById('tog-' + id);
   if (btn && allDots.length > 0) btn.classList.add('done');
 }
+
+// ─── Scrollspy ──────────────────────────────────────────────────────────────
+(function() {
+  const navLinks = document.querySelectorAll('.nav-links a[href^="index.html#"], .nav-links a[href="index.html"]');
+  const sectionIds = [];
+  navLinks.forEach(a => {
+    const hash = a.getAttribute('href').split('#')[1];
+    if (hash) sectionIds.push(hash);
+  });
+
+  function setActive(id) {
+    navLinks.forEach(a => {
+      const hash = a.getAttribute('href').split('#')[1] || null;
+      const isTop = !hash && a.getAttribute('href') === 'index.html';
+      const match = id ? hash === id : isTop;
+      a.classList.toggle('active', match);
+    });
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) setActive(entry.target.id);
+    });
+  }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    sectionIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    // Highlight based on current hash on load
+    const hash = location.hash.slice(1);
+    if (hash) setActive(hash); else setActive(null);
+  });
+
+  window.addEventListener('hashchange', () => {
+    const hash = location.hash.slice(1);
+    setActive(hash || null);
+  });
+})();
 
 // ─── Restore on load ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
