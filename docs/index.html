@@ -1100,10 +1100,11 @@
                 </div>
                 <div class="ki-field">
                   <div class="ki-field-label"><span class="ki-status" id="st-role-2"></span>ユーザー招待の運用</div>
+                  <div style="font-size:.72rem;color:var(--muted);margin-bottom:.45rem">新しいユーザーをシステムへ追加する際、誰がどのように行うかをお選びください</div>
                   <div class="ki-radio-group" id="rg-invite">
-                    <span class="ki-radio-btn" data-val="hq" onclick="kiSingle(this,'rg-invite','st-role-2')">人事部門が一括登録</span>
-                    <span class="ki-radio-btn" data-val="store" onclick="kiSingle(this,'rg-invite','st-role-2')">店舗・部署ごとに招待</span>
-                    <span class="ki-radio-btn" data-val="mixed" onclick="kiSingle(this,'rg-invite','st-role-2')">管理者＋一括の併用</span>
+                    <span class="ki-radio-btn" data-val="hq" onclick="kiSingle(this,'rg-invite','st-role-2')">本社・人事が一括管理<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">管理者がまとめて登録</span></span>
+                    <span class="ki-radio-btn" data-val="store" onclick="kiSingle(this,'rg-invite','st-role-2')">各店舗・部署が自己管理<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">担当者が自分で招待</span></span>
+                    <span class="ki-radio-btn" data-val="mixed" onclick="kiSingle(this,'rg-invite','st-role-2')">両方を使い分け<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">役割によって切替</span></span>
                   </div>
                 </div>
                 <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-role" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
