@@ -73,10 +73,10 @@ export function AnalogClock({ size = 88, className = "" }: AnalogClockProps) {
         {/* Hands */}
         {hand(h, r * 0.46, 2.8, "#8a9cc0")}
         {hand(m, r * 0.62, 2.2, "#6b7fa8")}
-        {hand(s, r * 0.70, 1.4, "#6BC9B3")}
+        {hand(s, r * 0.70, 1.4, "var(--primary)")}
 
         {/* Center dot */}
-        <circle cx={cx} cy={cy} r={3.5} fill="#6BC9B3" />
+        <circle cx={cx} cy={cy} r={3.5} fill="var(--primary)" />
         <circle cx={cx} cy={cy} r={1.5} fill="white" />
       </svg>
     </div>

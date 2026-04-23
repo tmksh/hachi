@@ -30,6 +30,13 @@ import { AnalogClock } from "@/components/shared/analog-clock";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
+    : null;
+}
+
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
   if (n >= 10_000) return `¥${(n / 10_000).toFixed(0)}万`;
@@ -73,6 +80,33 @@ export default function DashboardPage() {
   }, []);
 
   const now = new Date();
+
+  const primaryRgb = kpiColor ? hexToRgb(kpiColor) : null;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const rgb = kpiColor ? hexToRgb(kpiColor) : null;
+    if (rgb && kpiColor) {
+      root.style.setProperty("--primary", kpiColor);
+      root.style.setProperty("--color-primary", kpiColor);
+      root.style.setProperty("--primary-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+      root.style.setProperty(
+        "--primary-dark-rgb",
+        `${Math.round(rgb.r * 0.55)}, ${Math.round(rgb.g * 0.55)}, ${Math.round(rgb.b * 0.55)}`,
+      );
+    } else {
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--color-primary");
+      root.style.removeProperty("--primary-rgb");
+      root.style.removeProperty("--primary-dark-rgb");
+    }
+    return () => {
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--color-primary");
+      root.style.removeProperty("--primary-rgb");
+      root.style.removeProperty("--primary-dark-rgb");
+    };
+  }, [kpiColor]);
 
   const handleClockIn = async () => {
     try {
@@ -249,7 +283,23 @@ export default function DashboardPage() {
             <CardContent className="pt-4 pb-5 px-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full transition-all duration-500 ${clockedIn ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" : "bg-muted-foreground/30"}`} />
+                  <span
+                    className={`h-2 w-2 rounded-full transition-all duration-500 ${
+                      clockedIn
+                        ? primaryRgb
+                          ? ""
+                          : "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]"
+                        : "bg-muted-foreground/30"
+                    }`}
+                    style={
+                      clockedIn && primaryRgb
+                        ? {
+                            backgroundColor: kpiColor!,
+                            boxShadow: `0 0 6px rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.7)`,
+                          }
+                        : {}
+                    }
+                  />
                   <span className="text-xs font-medium text-muted-foreground">{clockedIn ? "勤務中" : "未出勤"}</span>
                 </div>
                 <span className="text-xs text-muted-foreground tabular-nums">{format(now, "M月d日（EEE）", { locale: ja })}</span>
@@ -492,6 +542,7 @@ export default function DashboardPage() {
                 ) : data?.constructions.length ? (
                   data.constructions.map((c, i: number) => {
                     const colors = ["bg-emerald-500", "bg-blue-500", "bg-violet-500", "bg-amber-500", "bg-rose-500"];
+                    const barColor = colors[i % colors.length];
                     return (
                       <Link key={c.id} href={`/constructions/${c.id}`}
                         className="block px-2 py-2 rounded-lg hover:bg-white/30 transition-colors space-y-1.5">
@@ -503,7 +554,16 @@ export default function DashboardPage() {
                           <span className="text-xs font-semibold tabular-nums">{c.progress}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-muted/50 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${colors[i % colors.length]}`} style={{ width: `${c.progress}%` }} />
+                          <div
+                            className={primaryRgb && i === 0 ? "" : barColor}
+                            style={{
+                              width: `${c.progress}%`,
+                              height: "100%",
+                              borderRadius: "9999px",
+                              transition: "all 0.3s",
+                              ...(primaryRgb && i === 0 ? { backgroundColor: kpiColor! } : {}),
+                            }}
+                          />
                         </div>
                       </Link>
                     );

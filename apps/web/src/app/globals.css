@@ -57,6 +57,9 @@
 
 :root {
   --radius: 0.875rem;
+  /* Primary color RGB for rgba() usage */
+  --primary-rgb: 107, 201, 179;
+  --primary-dark-rgb: 40, 120, 100;
   /* Background: light cool gray ~#EAECF0 */
   --background: oklch(0.938 0.006 240);
   --foreground: oklch(0.15 0.01 240);
@@ -524,23 +527,23 @@
   /* ── Neumorphic primary button ── */
   .neumorph-btn-primary {
     box-shadow:
-      inset 2px 2px 5px rgba(107, 201, 179, 0.40),
-      inset -2px -2px 5px rgba(40, 120, 100, 0.30),
+      inset 2px 2px 5px rgba(var(--primary-rgb), 0.40),
+      inset -2px -2px 5px rgba(var(--primary-dark-rgb), 0.30),
       3px 3px 6px rgba(180, 190, 210, 0.40),
       -2px -2px 5px rgba(255, 255, 255, 0.80) !important;
     transition: box-shadow 0.2s ease, transform 0.1s ease !important;
   }
   .neumorph-btn-primary:hover:not(:disabled) {
     box-shadow:
-      inset 2px 2px 6px rgba(107, 201, 179, 0.50),
-      inset -2px -2px 6px rgba(40, 120, 100, 0.40),
+      inset 2px 2px 6px rgba(var(--primary-rgb), 0.50),
+      inset -2px -2px 6px rgba(var(--primary-dark-rgb), 0.40),
       4px 4px 8px rgba(180, 190, 210, 0.50),
       -2px -2px 6px rgba(255, 255, 255, 0.90) !important;
   }
   .neumorph-btn-primary:active:not(:disabled) {
     box-shadow:
-      inset 3px 3px 8px rgba(40, 120, 100, 0.45),
-      inset -2px -2px 5px rgba(107, 201, 179, 0.25) !important;
+      inset 3px 3px 8px rgba(var(--primary-dark-rgb), 0.45),
+      inset -2px -2px 5px rgba(var(--primary-rgb), 0.25) !important;
     transform: scale(0.98);
   }
 }
