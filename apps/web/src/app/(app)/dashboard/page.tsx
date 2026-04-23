@@ -36,9 +36,25 @@ function formatYen(n: number) {
   return `¥${n.toLocaleString()}`;
 }
 
+const KPI_SWATCHES = [
+  { color: "#34d399", label: "エメラルド" },
+  { color: "#38bdf8", label: "スカイ" },
+  { color: "#818cf8", label: "インディゴ" },
+  { color: "#c084fc", label: "パープル" },
+  { color: "#fb7185", label: "ローズ" },
+  { color: "#fb923c", label: "オレンジ" },
+  { color: "#fbbf24", label: "アンバー" },
+  { color: "#2dd4bf", label: "ティール" },
+  { color: "#60a5fa", label: "ブルー" },
+  { color: "#a3e635", label: "ライム" },
+  { color: "#f472b6", label: "ピンク" },
+  { color: "#22d3ee", label: "シアン" },
+] as const;
+
 export default function DashboardPage() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
+  const [kpiColor, setKpiColor] = useState<string | null>(null);
   const { widgets, hydrated, toggleVisible, moveUp, moveDown, reset } = useWidgets();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +108,69 @@ export default function DashboardPage() {
             {format(now, "yyyy年M月d日（EEEE）", { locale: ja })}
           </p>
         </div>
+
+        {/* Color swatches */}
+        <div className="flex items-center gap-1">
+          {KPI_SWATCHES.map(({ color, label }) => (
+            <button
+              key={color}
+              title={label}
+              onClick={() => setKpiColor(kpiColor === color ? null : color)}
+              className={`flex flex-col items-center gap-0.5 transition-all duration-150 ${
+                kpiColor === color ? "scale-110" : "opacity-55 hover:opacity-90 hover:scale-105"
+              }`}
+            >
+              <span
+                className={`h-7 w-7 rounded block ${kpiColor === color ? "ring-2 ring-offset-1 ring-foreground/40" : ""}`}
+                style={{ backgroundColor: color }}
+              />
+              <span className="text-[8px] text-muted-foreground tabular-nums leading-none">{color}</span>
+            </button>
+          ))}
+
+          {/* Custom color picker */}
+          <label
+            title="カスタムカラー"
+            className={`flex flex-col items-center gap-0.5 cursor-pointer transition-all duration-150 ${
+              kpiColor && !KPI_SWATCHES.some((s) => s.color === kpiColor)
+                ? "scale-110"
+                : "opacity-55 hover:opacity-90 hover:scale-105"
+            }`}
+          >
+            <span
+              className={`h-7 w-7 rounded flex items-center justify-center border border-dashed border-foreground/30 overflow-hidden relative ${
+                kpiColor && !KPI_SWATCHES.some((s) => s.color === kpiColor)
+                  ? "ring-2 ring-offset-1 ring-foreground/40"
+                  : ""
+              }`}
+              style={
+                kpiColor && !KPI_SWATCHES.some((s) => s.color === kpiColor)
+                  ? { backgroundColor: kpiColor }
+                  : {}
+              }
+            >
+              {(!kpiColor || KPI_SWATCHES.some((s) => s.color === kpiColor)) && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-foreground/40">
+                  <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
+                  <path d="M6 1 A5 5 0 0 1 11 6" stroke="#fb7185" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M11 6 A5 5 0 0 1 6 11" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M6 11 A5 5 0 0 1 1 6" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M1 6 A5 5 0 0 1 6 1" stroke="#818cf8" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              )}
+              <input
+                type="color"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                value={kpiColor && !KPI_SWATCHES.some((s) => s.color === kpiColor) ? kpiColor : "#ffffff"}
+                onChange={(e) => setKpiColor(e.target.value)}
+              />
+            </span>
+            <span className="text-[8px] text-muted-foreground tabular-nums leading-none">
+              {kpiColor && !KPI_SWATCHES.some((s) => s.color === kpiColor) ? kpiColor : "カスタム"}
+            </span>
+          </label>
+        </div>
+
         <WidgetCustomizer
           widgets={widgets}
           onToggle={toggleVisible}
@@ -119,37 +198,38 @@ export default function DashboardPage() {
                     label: "受注額",
                     value: formatYen(data?.kpis.wonValue ?? 0),
                     icon: TrendingUp,
-                    iconBg: "bg-emerald-300",
-                    iconFg: "text-white",
                   },
                   {
                     label: "パイプライン",
                     value: formatYen(data?.kpis.pipelineValue ?? 0),
                     icon: BarChart3,
-                    iconBg: "bg-indigo-300",
-                    iconFg: "text-white",
                   },
                   {
                     label: "顧客数",
                     value: String(data?.kpis.customerCount ?? 0),
                     icon: Users,
-                    iconBg: "bg-amber-300",
-                    iconFg: "text-white",
                   },
                   {
                     label: "進行案件",
                     value: String(data?.kpis.activeConstructions ?? 0),
                     icon: Briefcase,
-                    iconBg: "bg-rose-300",
-                    iconFg: "text-white",
                   },
                 ].map((kpi, i) => (
                   <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                      <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-md ${kpi.iconBg}`}>
-                        <kpi.icon className={`h-4 w-4 ${kpi.iconFg}`} />
-                      </div>
+                      {kpiColor ? (
+                        <div
+                          className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-md"
+                          style={{ backgroundColor: kpiColor }}
+                        >
+                          <kpi.icon className="h-4 w-4 text-white" />
+                        </div>
+                      ) : (
+                        <div className="neumorph-icon h-8 w-8">
+                          <kpi.icon className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
                     </div>
                     <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
                   </div>
