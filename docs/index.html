@@ -164,7 +164,8 @@
     .badge-full { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--accent); color: #fff; font-size: .7rem; font-weight: 700; }
     .badge-limited { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--border); color: var(--muted); font-size: .7rem; font-weight: 700; }
 
-    /* KICKOFF INPUT (導入準備) */
+    /* SCREENSHOTS */
+    .ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1.4rem; }
     .prio-grid {
       display: grid; grid-template-columns: repeat(3, 1fr);
       gap: 1px; background: var(--border);
@@ -197,8 +198,95 @@
       border: 1px solid #b2e8d8; line-height: 1.7;
     }
 
-    /* SCREENSHOTS */
-    .ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1.4rem; }
+    /* KICKOFF INPUT PANELS */
+    .ki-toggle {
+      display: inline-flex; align-items: center; gap: .35rem;
+      margin-top: .75rem; padding: 4px 12px;
+      background: var(--accent-light); color: var(--accent-dark);
+      border: 1px solid #b2e8d8; border-radius: 6px;
+      font-size: .75rem; font-weight: 700; cursor: pointer;
+      transition: background .15s;
+    }
+    .ki-toggle:hover { background: #d0f3ec; }
+    .ki-toggle svg { flex-shrink: 0; transition: transform .2s; }
+    .ki-toggle.open svg { transform: rotate(180deg); }
+    .ki-toggle.done {
+      background: #ecfdf5; color: #065f46;
+      border-color: #6ee7b7;
+    }
+    .ki-toggle.done::before { content: "✓  "; }
+
+    .ki-panel {
+      display: none; margin-top: .8rem;
+      border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; background: var(--card);
+    }
+    .ki-panel.open { display: block; }
+
+    .ki-field { padding: .9rem 1rem; border-bottom: 1px solid var(--border); }
+    .ki-field:last-child { border-bottom: none; }
+    .ki-field-label {
+      font-size: .71rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em;
+      margin-bottom: .45rem; display: flex; align-items: center; gap: .4rem;
+    }
+    .ki-field-label .ki-status {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border); flex-shrink: 0;
+    }
+    .ki-field-label .ki-status.filled { background: var(--accent); }
+
+    .ki-input {
+      width: 100%; font-size: .83rem; padding: .45rem .65rem;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text);
+      font-family: 'Noto Sans JP', sans-serif;
+      resize: vertical; outline: none;
+      transition: border-color .15s;
+    }
+    .ki-input:focus { border-color: var(--accent); }
+
+    .ki-file-zone {
+      border: 2px dashed var(--border); border-radius: 6px;
+      padding: .7rem 1rem; background: var(--bg);
+      font-size: .8rem; color: var(--muted);
+      display: flex; align-items: center; gap: .6rem;
+      cursor: pointer; transition: border-color .15s, background .15s;
+      position: relative; overflow: hidden;
+    }
+    .ki-file-zone:hover { border-color: var(--accent); background: var(--accent-light); }
+    .ki-file-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+    .ki-file-name {
+      font-size: .78rem; color: var(--accent-dark); font-weight: 600;
+      margin-top: .3rem; word-break: break-all;
+    }
+
+    .ki-radio-group { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .ki-radio-btn {
+      padding: 4px 12px; border-radius: 999px;
+      border: 1px solid var(--border); font-size: .78rem;
+      cursor: pointer; background: var(--bg); color: var(--muted);
+      transition: all .15s;
+    }
+    .ki-radio-btn.selected {
+      background: var(--accent); color: #fff; border-color: var(--accent-dark);
+      font-weight: 700;
+    }
+
+    .ki-save-btn {
+      margin: .7rem 1rem .9rem; padding: 6px 18px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 6px; font-size: .8rem; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .ki-save-btn:hover { background: var(--accent-dark); }
+    .ki-save-msg {
+      font-size: .75rem; color: var(--accent-dark); margin-left: .5rem;
+      opacity: 0; transition: opacity .3s;
+    }
+    .ki-save-msg.show { opacity: 1; }
     .ss-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
     .ss-card img { width: 100%; display: block; border-bottom: 1px solid var(--border); }
     .ss-info { padding: 1rem 1.2rem; }
@@ -922,6 +1010,47 @@
                 <li>社員名簿（氏名・メール・部署・ロール・入社日）20〜30件</li>
                 <li>ロゴデータ（PNG / SVG、明暗対応あれば尚可）</li>
               </ul>
+              <button class="ki-toggle" id="tog-org" onclick="kiToggle('org')">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                入力・ファイル提出
+              </button>
+              <div class="ki-panel" id="panel-org">
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-org-0"></span>会社情報</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem">
+                    <input class="ki-input" id="org-name" placeholder="正式名称" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
+                    <input class="ki-input" id="org-rep"  placeholder="代表者名" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
+                    <input class="ki-input" id="org-addr" placeholder="住所" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
+                    <input class="ki-input" id="org-inv"  placeholder="インボイス登録番号 T-XXXXXXXXXXXXXXX" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
+                  </div>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-org-1"></span>部署一覧 / 施工店一覧</div>
+                  <textarea class="ki-input" id="org-depts" rows="3" placeholder="例：営業部、工務部、設計部、総務部&#10;施工店：〇〇建設（エリア：東京）、△△工務（エリア：神奈川）" oninput="kiMark('org-1','org-depts')"></textarea>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-org-2"></span>社員名簿（CSV / Excel）</div>
+                  <div class="ki-file-zone" id="fz-org-staff">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" accept=".csv,.xlsx,.xls" onchange="kiFile(this,'fz-org-staff','fn-org-staff','st-org-2')">
+                  </div>
+                  <div class="ki-file-name" id="fn-org-staff"></div>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-org-3"></span>ロゴデータ（PNG / SVG）</div>
+                  <div class="ki-file-zone" id="fz-org-logo">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" accept=".png,.svg,.jpg,.jpeg,.webp" onchange="kiFile(this,'fz-org-logo','fn-org-logo','st-org-3')">
+                  </div>
+                  <div class="ki-file-name" id="fn-org-logo"></div>
+                </div>
+                <div style="display:flex;align-items:center">
+                  <button class="ki-save-btn" onclick="kiSave('org')">保存</button>
+                  <span class="ki-save-msg" id="msg-org">保存しました</span>
+                </div>
+              </div>
             </td>
             <td><span class="pri-chip p1">最優先</span></td>
           </tr>
@@ -933,8 +1062,57 @@
                 <li>ロール別の公開範囲最終確認（予算・BI・請求の見せ方）</li>
                 <li>ユーザー招待運用（人事一括 or 店舗個別）</li>
               </ul>
+              <button class="ki-toggle" id="tog-role" onclick="kiToggle('role')">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                入力・確認
+              </button>
+              <div class="ki-panel" id="panel-role">
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-role-0"></span>ロール別 該当者一覧</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem">
+                    <div>
+                      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">オーナー</div>
+                      <input class="ki-input" id="role-owner" placeholder="氏名・メール" oninput="kiMark('role-0','role-owner','role-hq','role-ca','role-emp')">
+                    </div>
+                    <div>
+                      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">本部管理者</div>
+                      <textarea class="ki-input" id="role-hq" rows="2" placeholder="氏名・メール（複数行可）" oninput="kiMark('role-0','role-owner','role-hq','role-ca','role-emp')"></textarea>
+                    </div>
+                    <div>
+                      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">施工店管理者</div>
+                      <textarea class="ki-input" id="role-ca" rows="2" placeholder="氏名・メール（複数行可）" oninput="kiMark('role-0','role-owner','role-hq','role-ca','role-emp')"></textarea>
+                    </div>
+                    <div>
+                      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">社員</div>
+                      <textarea class="ki-input" id="role-emp" rows="2" placeholder="社員名簿CSVで代替可" oninput="kiMark('role-0','role-owner','role-hq','role-ca','role-emp')"></textarea>
+                    </div>
+                  </div>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-role-1"></span>公開範囲 — 予算・BI・請求を閲覧できるロール</div>
+                  <div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem;">複数選択可</div>
+                  <div class="ki-radio-group" id="rg-visibility">
+                    <span class="ki-radio-btn" data-val="owner" onclick="kiMulti(this,'rg-visibility','st-role-1')">オーナー</span>
+                    <span class="ki-radio-btn" data-val="hq_admin" onclick="kiMulti(this,'rg-visibility','st-role-1')">本部管理者</span>
+                    <span class="ki-radio-btn" data-val="contractor_admin" onclick="kiMulti(this,'rg-visibility','st-role-1')">施工店管理者</span>
+                    <span class="ki-radio-btn" data-val="employee" onclick="kiMulti(this,'rg-visibility','st-role-1')">社員</span>
+                  </div>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-role-2"></span>ユーザー招待の運用</div>
+                  <div class="ki-radio-group" id="rg-invite">
+                    <span class="ki-radio-btn" data-val="hq" onclick="kiSingle(this,'rg-invite','st-role-2')">人事部門が一括登録</span>
+                    <span class="ki-radio-btn" data-val="store" onclick="kiSingle(this,'rg-invite','st-role-2')">店舗・部署ごとに各自招待</span>
+                    <span class="ki-radio-btn" data-val="mixed" onclick="kiSingle(this,'rg-invite','st-role-2')">管理者 + 一括の併用</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center">
+                  <button class="ki-save-btn" onclick="kiSave('role')">保存</button>
+                  <span class="ki-save-msg" id="msg-role">保存しました</span>
+                </div>
+              </div>
             </td>
-            <td><span class="pri-chip p2">運用</span></td>
+            <td><span class="pri-chip p2">要確認</span></td>
           </tr>
           <tr>
             <td class="td-name">CRM / 商談</td>
@@ -1149,5 +1327,103 @@
   <p>BRIDGE 統合業務支援システム &copy; 2026 &nbsp;&nbsp; <a href="https://github.com/tmksh/hachi" target="_blank">GitHub</a> &nbsp;&nbsp; <a href="features.html">機能一覧</a></p>
 </footer>
 
+<script>
+// ─── Kickoff Input Helper ───────────────────────────────────────────────────
+
+function kiToggle(id) {
+  const panel = document.getElementById('panel-' + id);
+  const btn   = document.getElementById('tog-'   + id);
+  const open  = panel.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+function kiMark(statusId) {
+  // Collect all value args (2nd onwards)
+  const ids = Array.from(arguments).slice(1);
+  const filled = ids.some(i => {
+    const el = document.getElementById(i);
+    return el && el.value.trim().length > 0;
+  });
+  const dot = document.getElementById('st-' + statusId);
+  if (dot) dot.classList.toggle('filled', filled);
+}
+
+function kiFile(input, zoneId, nameId, statusId) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById(nameId).textContent = '📎 ' + file.name;
+  const dot = document.getElementById('st-' + statusId);
+  if (dot) dot.classList.add('filled');
+  const zone = document.getElementById(zoneId);
+  if (zone) { zone.style.borderColor = 'var(--accent)'; zone.style.background = 'var(--accent-light)'; }
+}
+
+function kiSingle(el, groupId, statusId) {
+  document.querySelectorAll('#' + groupId + ' .ki-radio-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  const dot = document.getElementById('st-' + statusId);
+  if (dot) dot.classList.add('filled');
+}
+
+function kiMulti(el, groupId, statusId) {
+  el.classList.toggle('selected');
+  const any = document.querySelectorAll('#' + groupId + ' .ki-radio-btn.selected').length > 0;
+  const dot = document.getElementById('st-' + statusId);
+  if (dot) dot.classList.toggle('filled', any);
+}
+
+function kiSave(id) {
+  // Persist text inputs to localStorage
+  document.querySelectorAll('#panel-' + id + ' [id]').forEach(el => {
+    if ((el.tagName === 'INPUT' && el.type !== 'file') || el.tagName === 'TEXTAREA') {
+      localStorage.setItem('ki_' + el.id, el.value);
+    }
+  });
+  // Persist radio selections
+  document.querySelectorAll('#panel-' + id + ' .ki-radio-btn.selected').forEach(el => {
+    const group = el.closest('.ki-radio-group');
+    if (group) localStorage.setItem('ki_sel_' + group.id + '_' + el.dataset.val, '1');
+  });
+  document.querySelectorAll('#panel-' + id + ' .ki-radio-group .ki-radio-btn:not(.selected)').forEach(el => {
+    const group = el.closest('.ki-radio-group');
+    if (group) localStorage.removeItem('ki_sel_' + group.id + '_' + el.dataset.val);
+  });
+  // Show save message
+  const msg = document.getElementById('msg-' + id);
+  if (msg) { msg.classList.add('show'); setTimeout(() => msg.classList.remove('show'), 2000); }
+  // Mark toggle button as done if any field filled
+  const allDots = document.querySelectorAll('#panel-' + id + ' .ki-status.filled');
+  const btn = document.getElementById('tog-' + id);
+  if (btn && allDots.length > 0) btn.classList.add('done');
+}
+
+// ─── Restore on load ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Restore text/textarea
+  document.querySelectorAll('.ki-input').forEach(el => {
+    const saved = localStorage.getItem('ki_' + el.id);
+    if (saved) {
+      el.value = saved;
+      // Trigger mark
+      el.dispatchEvent(new Event('input'));
+    }
+  });
+  // Restore radio buttons
+  document.querySelectorAll('.ki-radio-btn').forEach(el => {
+    const group = el.closest('.ki-radio-group');
+    if (!group) return;
+    const key = 'ki_sel_' + group.id + '_' + el.dataset.val;
+    if (localStorage.getItem(key)) {
+      el.classList.add('selected');
+      const statusId = group.closest('.ki-field')
+        ?.querySelector('.ki-status')?.id?.replace('st-','');
+      if (statusId) {
+        const dot = document.getElementById('st-' + statusId);
+        if (dot) dot.classList.add('filled');
+      }
+    }
+  });
+});
+</script>
 </body>
 </html>
