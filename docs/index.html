@@ -259,9 +259,27 @@
       position: absolute; inset: 0; opacity: 0; cursor: pointer;
     }
     .ki-file-name {
-      font-size: .78rem; color: var(--accent-dark); font-weight: 600;
-      margin-top: .3rem; word-break: break-all;
+      margin-top: .3rem;
     }
+    .ki-file-chip {
+      display: flex; align-items: center; gap: .4rem;
+      background: rgba(99,102,241,.07); border: 1px solid rgba(99,102,241,.25);
+      border-radius: 6px; padding: .2rem .45rem .2rem .5rem;
+      margin-bottom: .3rem;
+    }
+    .ki-file-chip-name {
+      flex: 1; font-size: .74rem; color: var(--accent-dark); font-weight: 500;
+      text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .ki-file-chip-name:hover { text-decoration: underline; }
+    .ki-file-chip-del {
+      flex-shrink: 0; background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: .85rem; line-height: 1; padding: 0 .15rem; border-radius: 3px;
+    }
+    .ki-file-chip-del:hover { color: #ef4444; background: rgba(239,68,68,.1); }
+
+    .ki-other-input { margin-top: .45rem; }
+    .ki-other-input input { width: 100%; }
 
     .ki-radio-group { display: flex; gap: .5rem; flex-wrap: wrap; }
     .ki-radio-btn {
@@ -1213,6 +1231,9 @@
                     <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-esign','st-contract-1')">その他</span>
                     <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-esign','st-contract-1')">利用しない</span>
                   </div>
+                  <div class="ki-other-input" id="oi-rg-esign" style="display:none">
+                    <input class="ki-input" id="other-esign" placeholder="サービス名を入力">
+                  </div>
                 </div>
                 <div class="ki-field">
                   <div class="ki-field-label"><span class="ki-status" id="st-contract-2"></span>契約書テンプレート（複数ファイル可）</div>
@@ -1254,6 +1275,9 @@
                     <span class="ki-radio-btn" data-val="kanjo" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">勘定奉行</span>
                     <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">その他</span>
                     <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">連携なし</span>
+                  </div>
+                  <div class="ki-other-input" id="oi-rg-accounting" style="display:none">
+                    <input class="ki-input" id="other-accounting" placeholder="会計ソフト名を入力">
                   </div>
                 </div>
                 <div class="ki-field">
@@ -1355,19 +1379,22 @@
                 <div class="ki-field">
                   <div class="ki-field-label"><span class="ki-status" id="st-mail-0"></span>利用メールサービス</div>
                   <div class="ki-radio-group" id="rg-mailsvc">
-                    <span class="ki-radio-btn" data-val="gmail" onclick="kiSingle(this,'rg-mailsvc','st-mail-0')">Gmail</span>
-                    <span class="ki-radio-btn" data-val="m365" onclick="kiSingle(this,'rg-mailsvc','st-mail-0')">Microsoft 365</span>
-                    <span class="ki-radio-btn" data-val="xserver" onclick="kiSingle(this,'rg-mailsvc','st-mail-0')">Xserver</span>
-                    <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-mailsvc','st-mail-0')">その他</span>
+                    <span class="ki-radio-btn" data-val="gmail" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">Gmail</span>
+                    <span class="ki-radio-btn" data-val="m365" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">Microsoft 365</span>
+                    <span class="ki-radio-btn" data-val="xserver" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">Xserver</span>
+                    <span class="ki-radio-btn" data-val="other" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">その他</span>
+                  </div>
+                  <div class="ki-other-input" id="oi-rg-mailsvc" style="display:none">
+                    <input class="ki-input" id="other-mailsvc" placeholder="メールサービス名を入力">
                   </div>
                 </div>
                 <div class="ki-field">
                   <div class="ki-field-label"><span class="ki-status" id="st-mail-1"></span>連携方式</div>
                   <div class="ki-radio-group" id="rg-mailconn">
-                    <span class="ki-radio-btn" data-val="oauth" onclick="kiSingle(this,'rg-mailconn','st-mail-1')">OAuth（推奨）</span>
-                    <span class="ki-radio-btn" data-val="imap" onclick="kiSingle(this,'rg-mailconn','st-mail-1')">IMAP</span>
-                    <span class="ki-radio-btn" data-val="forward" onclick="kiSingle(this,'rg-mailconn','st-mail-1')">手動フォワード</span>
-                    <span class="ki-radio-btn" data-val="undecided" onclick="kiSingle(this,'rg-mailconn','st-mail-1')">未定</span>
+                    <span class="ki-radio-btn" data-val="oauth" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">OAuth（推奨）</span>
+                    <span class="ki-radio-btn" data-val="imap" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">IMAP</span>
+                    <span class="ki-radio-btn" data-val="forward" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">手動フォワード</span>
+                    <span class="ki-radio-btn" data-val="undecided" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">未定</span>
                   </div>
                 </div>
                 <div class="ki-field">
@@ -1413,6 +1440,9 @@
                     <span class="ki-radio-btn" data-val="freee" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">freee人事</span>
                     <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">その他</span>
                     <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">連携なし</span>
+                  </div>
+                  <div class="ki-other-input" id="oi-rg-hrtools" style="display:none">
+                    <input class="ki-input" id="other-hrtools" placeholder="システム名を入力">
                   </div>
                 </div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('attend')">保存</button><span class="ki-save-msg" id="msg-attend">保存しました</span></div>
@@ -1505,7 +1535,6 @@
                 <li>フォルダ体系・カテゴリ（社内規程 / 議事録 / 図面 / 写真 等）</li>
                 <li>ファイル命名規約・閲覧権限・保存期間</li>
                 <li>既存保管場所（Dropbox / GDrive / ファイルサーバ）からの移行要否</li>
-                <li>OCR / 全文検索の要否</li>
               </ul>
               <button class="ki-toggle" id="tog-doc" onclick="kiToggle('doc')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
               <div class="ki-panel" id="panel-doc">
@@ -1521,11 +1550,16 @@
                     <span class="ki-radio-btn" data-val="fileserver" onclick="kiMulti(this,'rg-docmigrate','st-doc-1')">ファイルサーバ</span>
                     <span class="ki-radio-btn" data-val="none" onclick="kiMulti(this,'rg-docmigrate','st-doc-1')">移行なし</span>
                   </div>
-                  <div style="font-size:.72rem;color:var(--muted);margin-bottom:.35rem">OCR / 全文検索</div>
-                  <div class="ki-radio-group" id="rg-docfts">
-                    <span class="ki-radio-btn" data-val="yes" onclick="kiSingle(this,'rg-docfts','st-doc-1')">必要</span>
-                    <span class="ki-radio-btn" data-val="no" onclick="kiSingle(this,'rg-docfts','st-doc-1')">不要</span>
-                    <span class="ki-radio-btn" data-val="undecided" onclick="kiSingle(this,'rg-docfts','st-doc-1')">未定</span>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-doc-2"></span>移行・アップロード方法（複数選択可）</div>
+                  <div style="font-size:.72rem;color:var(--muted);margin-bottom:.45rem">既存ファイルをどのように取り込むかお選びください</div>
+                  <div class="ki-radio-group" id="rg-docupload">
+                    <span class="ki-radio-btn" data-val="manual" onclick="kiMulti(this,'rg-docupload','st-doc-2')">手動アップロード<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">一つずつ選択</span></span>
+                    <span class="ki-radio-btn" data-val="bulk" onclick="kiMulti(this,'rg-docupload','st-doc-2')">一括アップロード<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">ZIP / フォルダ</span></span>
+                    <span class="ki-radio-btn" data-val="api" onclick="kiMulti(this,'rg-docupload','st-doc-2')">クラウド連携移行<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">API 自動取込</span></span>
+                    <span class="ki-radio-btn" data-val="assist" onclick="kiMulti(this,'rg-docupload','st-doc-2')">開発側で対応<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">移行作業を依頼</span></span>
+                    <span class="ki-radio-btn" data-val="undecided" onclick="kiMulti(this,'rg-docupload','st-doc-2')">未定</span>
                   </div>
                 </div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('doc')">保存</button><span class="ki-save-msg" id="msg-doc">保存しました</span></div>
@@ -1656,27 +1690,62 @@ function kiMark(statusId) {
   if (dot) dot.classList.toggle('filled', filled);
 }
 
+// ─── File store (zone ID → File[]) ──────────────────────────────────────────
+const _kiFileStore = {};
+
 function kiFile(input, zoneId, nameId, statusId) {
-  const files = Array.from(input.files);
-  if (!files.length) return;
-  _kiApplyFiles(files, zoneId, nameId, statusId);
+  const newFiles = Array.from(input.files);
+  if (!newFiles.length) return;
+  if (!_kiFileStore[zoneId]) _kiFileStore[zoneId] = [];
+  _kiFileStore[zoneId].push(...newFiles);
+  input.value = '';
+  _kiRenderFiles(zoneId, nameId, statusId);
 }
 
 function kiDrop(event, zoneId, nameId, statusId) {
   event.preventDefault();
-  const files = Array.from(event.dataTransfer.files);
-  if (!files.length) return;
-  _kiApplyFiles(files, zoneId, nameId, statusId);
+  const newFiles = Array.from(event.dataTransfer.files);
+  if (!newFiles.length) return;
+  if (!_kiFileStore[zoneId]) _kiFileStore[zoneId] = [];
+  _kiFileStore[zoneId].push(...newFiles);
+  _kiRenderFiles(zoneId, nameId, statusId);
 }
 
-function _kiApplyFiles(files, zoneId, nameId, statusId) {
-  const label = files.length === 1
-    ? '📎 ' + files[0].name
-    : '📎 ' + files[0].name + ' 他 ' + (files.length - 1) + ' 件';
-  document.getElementById(nameId).textContent = label;
+function kiRemoveFile(zoneId, nameId, statusId, index) {
+  if (_kiFileStore[zoneId]) {
+    URL.revokeObjectURL(_kiFileStore[zoneId + '_urls']?.[index]);
+    _kiFileStore[zoneId].splice(index, 1);
+    _kiRenderFiles(zoneId, nameId, statusId);
+  }
+}
+
+function _kiRenderFiles(zoneId, nameId, statusId) {
+  const files = _kiFileStore[zoneId] || [];
+  const nameEl = document.getElementById(nameId);
+  if (!nameEl) return;
+  const zone = document.getElementById(zoneId);
+
+  if (files.length === 0) {
+    nameEl.innerHTML = '';
+    const dot = document.getElementById(statusId);
+    if (dot) dot.classList.remove('filled');
+    if (zone) { zone.style.borderColor = ''; zone.style.background = ''; }
+    return;
+  }
+
+  nameEl.innerHTML = files.map((file, i) => {
+    const url = URL.createObjectURL(file);
+    if (!_kiFileStore[zoneId + '_urls']) _kiFileStore[zoneId + '_urls'] = [];
+    _kiFileStore[zoneId + '_urls'][i] = url;
+    return `<div class="ki-file-chip">
+      <a href="${url}" target="_blank" title="クリックでプレビュー" class="ki-file-chip-name">📎 ${file.name}</a>
+      <a href="${url}" download="${file.name}" title="ダウンロード" style="font-size:.75rem;color:var(--muted);text-decoration:none;padding:0 .1rem" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">↓</a>
+      <button class="ki-file-chip-del" onclick="kiRemoveFile('${zoneId}','${nameId}','${statusId}',${i})" title="削除">✕</button>
+    </div>`;
+  }).join('');
+
   const dot = document.getElementById(statusId);
   if (dot) dot.classList.add('filled');
-  const zone = document.getElementById(zoneId);
   if (zone) { zone.style.borderColor = 'var(--accent)'; zone.style.background = 'var(--accent-light)'; }
 }
 
@@ -1685,6 +1754,7 @@ function kiSingle(el, groupId, statusId) {
   el.classList.add('selected');
   const dot = document.getElementById('st-' + statusId);
   if (dot) dot.classList.add('filled');
+  _kiCheckOther(groupId);
 }
 
 function kiMulti(el, groupId, statusId) {
@@ -1692,6 +1762,16 @@ function kiMulti(el, groupId, statusId) {
   const any = document.querySelectorAll('#' + groupId + ' .ki-radio-btn.selected').length > 0;
   const dot = document.getElementById('st-' + statusId);
   if (dot) dot.classList.toggle('filled', any);
+  _kiCheckOther(groupId);
+}
+
+function _kiCheckOther(groupId) {
+  const box = document.getElementById('oi-' + groupId);
+  if (!box) return;
+  const sel = document.querySelector('#' + groupId + ' .ki-radio-btn.selected');
+  const hasOther = !!(sel && sel.dataset.val === 'other');
+  box.style.display = hasOther ? 'block' : 'none';
+  if (hasOther) box.querySelector('input,textarea')?.focus();
 }
 
 function kiSave(id) {
