@@ -164,6 +164,39 @@
     .badge-full { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--accent); color: #fff; font-size: .7rem; font-weight: 700; }
     .badge-limited { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--border); color: var(--muted); font-size: .7rem; font-weight: 700; }
 
+    /* KICKOFF INPUT (導入準備) */
+    .prio-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+      margin-bottom: 2.2rem;
+    }
+    .prio-item { background: var(--card); padding: 1.4rem 1.4rem 1.3rem; }
+    .prio-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; margin-bottom: .5rem; }
+    .prio-label.p1 { color: #b91c1c; }
+    .prio-label.p2 { color: var(--accent-dark); }
+    .prio-label.p3 { color: #6b7280; }
+    .prio-title { font-weight: 700; font-size: .95rem; margin-bottom: .35rem; }
+    .prio-desc { font-size: .8rem; color: var(--muted); line-height: 1.6; }
+
+    .input-table th:nth-child(1) { width: 140px; }
+    .input-table th:nth-child(3) { width: 90px; text-align: center; }
+    .input-table td:nth-child(3) { text-align: center; }
+    .input-table ul { margin: 0; padding-left: 1.1rem; font-size: .83rem; line-height: 1.75; color: var(--text); }
+    .input-table li { margin-bottom: .15rem; }
+    .input-table li:last-child { margin-bottom: 0; }
+    .pri-chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; }
+    .pri-chip.p1 { background: #fee2e2; color: #b91c1c; }
+    .pri-chip.p2 { background: var(--accent-light); color: var(--accent-dark); }
+    .pri-chip.p3 { background: #f3f4f6; color: #4b5563; }
+
+    .kickoff-note {
+      margin-top: 1.6rem; padding: 1rem 1.3rem;
+      background: var(--accent-light); border-radius: 8px;
+      font-size: .82rem; color: var(--accent-dark);
+      border: 1px solid #b2e8d8; line-height: 1.7;
+    }
+
     /* SCREENSHOTS */
     .ss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1.4rem; }
     .ss-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
@@ -183,6 +216,8 @@
       .login-row { grid-template-columns: 1fr 1fr; }
       .auth-flow { flex-direction: column; }
       .auth-arrow { padding: .3rem; border-left: none; border-right: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+      .prio-grid { grid-template-columns: 1fr; }
+      .input-table th:nth-child(1) { width: auto; }
     }
   </style>
 </head>
@@ -194,6 +229,7 @@
     <a href="index.html" class="active">仕様書</a>
     <a href="index.html#lead-flow">リードフロー</a>
           <a href="index.html#cost">工事原価管理</a>
+    <a href="index.html#kickoff-input">導入準備</a>
     <a href="features.html">機能一覧</a>
   </div>
 </nav>
@@ -838,6 +874,228 @@
           <tr><td class="td-name">保存する</td><td>右上「保存する」ボタンをクリック（緑の「保存済み」に変わります）</td></tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- KICKOFF INPUT (導入準備) -->
+  <section id="kickoff-input">
+    <div class="section-label">Kickoff Input</div>
+    <h2>導入準備｜先方よりご提供いただきたい情報</h2>
+    <p class="section-desc">工事管理以外の機能を本番相当データでご覧いただくために、以下の資料・マスタ情報をご提供ください。優先度別に整理しています。</p>
+
+    <!-- Priority Summary -->
+    <div class="prio-grid">
+      <div class="prio-item">
+        <div class="prio-label p1">■ 最優先 / Must</div>
+        <div class="prio-title">画面をリアルに表示するための素材</div>
+        <div class="prio-desc">社員名簿・顧客サンプル・各種フォーマット類。デモ品質に直結。</div>
+      </div>
+      <div class="prio-item">
+        <div class="prio-label p2">■ 運用ルール / Rules</div>
+        <div class="prio-title">キックオフ時に一緒に決めるもの</div>
+        <div class="prio-desc">承認フロー／公開範囲／通知チャネル／連携先 SaaS など。</div>
+      </div>
+      <div class="prio-item">
+        <div class="prio-label p3">■ 中期 / Later</div>
+        <div class="prio-title">フェーズ2以降に必要な情報</div>
+        <div class="prio-desc">文書体系、マーケ KPI、既存システムからの移行データ等。</div>
+      </div>
+    </div>
+
+    <!-- Module × Items -->
+    <div class="table-wrap input-table">
+      <table>
+        <thead>
+          <tr>
+            <th>モジュール</th>
+            <th>ご提供いただきたい情報</th>
+            <th>優先度</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">共通 / 組織</td>
+            <td>
+              <ul>
+                <li>会社情報（正式名称・住所・代表者・インボイス登録番号）</li>
+                <li>部署一覧／施工店（協力店）一覧とエリア</li>
+                <li>社員名簿（氏名・メール・部署・ロール・入社日）20〜30件</li>
+                <li>ロゴデータ（PNG / SVG、明暗対応あれば尚可）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p1">最優先</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">権限・ロール</td>
+            <td>
+              <ul>
+                <li>4ロール（オーナー／本部管理者／施工店管理者／社員）の該当者一覧</li>
+                <li>ロール別の公開範囲最終確認（予算・BI・請求の見せ方）</li>
+                <li>ユーザー招待運用（人事一括 or 店舗個別）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">CRM / 商談</td>
+            <td>
+              <ul>
+                <li>商談ステージ名と順序／失注理由の選択肢</li>
+                <li>紹介元区分（HP・紹介・展示会・OB紹介…）／顧客タグ</li>
+                <li>実顧客サンプル 30〜50件（匿名化可）</li>
+                <li>「アクティブ顧客」の定義（最終連絡〇日以内 など）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p1">最優先</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">見積管理</td>
+            <td>
+              <ul>
+                <li>見積フォーマット（現行 Excel 可）／見積番号の採番ルール</li>
+                <li>単価マスタ（工種・部材単価・単位）</li>
+                <li>消費税・端数処理・値引き上限・有効期限デフォルト</li>
+                <li>実見積書サンプル 3〜5件（PDF）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p1">最優先</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">職人管理</td>
+            <td>
+              <ul>
+                <li>職種区分・評価ランク（A/B/C）基準・資格の選択肢</li>
+                <li>契約形態（常用／一人親方／法人）・単価の持ち方</li>
+                <li>協力職人名簿 10〜20件</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p1">最優先</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">契約管理</td>
+            <td>
+              <ul>
+                <li>契約書テンプレート（Word/PDF）／契約番号の採番ルール</li>
+                <li>支払条件の選択肢（前受・中間・完工・手形 等）</li>
+                <li>電子契約サービス利用有無（クラウドサイン等）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">請求管理</td>
+            <td>
+              <ul>
+                <li>請求書フォーマット・振込先口座・インボイス番号</li>
+                <li>請求サイクル（月末締め翌月末 等）／採番ルール</li>
+                <li>入金消込の運用・連携会計ソフト（freee / MF / 弥生 等）</li>
+                <li>実請求書サンプル 5件程度</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p1">最優先</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">予算管理</td>
+            <td>
+              <ul>
+                <li>予算区分（全社／部署／店舗／案件）と管理粒度（月／四半期／年）</li>
+                <li>科目マスタ（人件費・材料費・外注費・販管費…）</li>
+                <li>消化アラート閾値／直近年度の予算表 1 式</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">カレンダー</td>
+            <td>
+              <ul>
+                <li>カテゴリ最終ラベル（営業／工事／タスク／施設／機材…）</li>
+                <li>公開範囲ルール（個人 / 部署 / 全社）</li>
+                <li>Google カレンダー連携の要否（双方向 / 読取のみ）</li>
+                <li>会社休業日カレンダー</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">メール</td>
+            <td>
+              <ul>
+                <li>利用メールサービス（Gmail / M365 / Xserver 等）</li>
+                <li>連携方式（IMAP / OAuth / 手動フォワード）</li>
+                <li>共有メール（info@ 等）の扱い／署名テンプレート</li>
+                <li>CRM 自動ひも付けルール（From アドレス・件名キーワード）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">勤怠</td>
+            <td>
+              <ul>
+                <li>就業時間（始業・終業・休憩）・勤務体系パターン</li>
+                <li>休暇区分（有給・夏季・慶弔・特別…）</li>
+                <li>打刻方法（PC / スマホ / GPS / IC）／残業申請フロー</li>
+                <li>既存勤怠システム（KING OF TIME 等）連携有無</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">ワークフロー</td>
+            <td>
+              <ul>
+                <li>申請種別の一覧（稟議・経費・有給・捺印・備品購入…）</li>
+                <li>種別ごとの承認ルート／金額別の分岐条件</li>
+                <li>承認期限・自動エスカレーション／電子印影の要否</li>
+                <li>現行の申請書テンプレート（紙 / Excel）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p1">最優先</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">回覧 / お知らせ</td>
+            <td>
+              <ul>
+                <li>「緊急」「ピン留め」の使用基準</li>
+                <li>既読必須扱い・期限超過者への催促有無</li>
+                <li>投稿権限（全員 / 管理者のみ）・追加カテゴリ</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">文書管理</td>
+            <td>
+              <ul>
+                <li>フォルダ体系・カテゴリ（社内規程 / 議事録 / 図面 / 写真 等）</li>
+                <li>ファイル命名規約・閲覧権限・保存期間</li>
+                <li>既存保管場所（Dropbox / GDrive / ファイルサーバ）からの移行要否</li>
+                <li>OCR / 全文検索の要否</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p3">中期</span></td>
+          </tr>
+          <tr>
+            <td class="td-name">通知・外部連携</td>
+            <td>
+              <ul>
+                <li>通知チャネル優先度（アプリ内 / メール / LINE WORKS / Slack / Chatwork）</li>
+                <li>リマインド頻度（毎朝〇時 / リアルタイム）</li>
+                <li>SSO 希望（Google / Microsoft 365）</li>
+                <li>既存 SaaS との連携（会計・電子契約・勤怠・チャット）</li>
+              </ul>
+            </td>
+            <td><span class="pri-chip p2">運用</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="kickoff-note">
+      <strong>お願い：</strong>
+      上記の各項目について「① すぐ出せる／② 相談して決めたい／③ 今は出せない」の3段階でご回答いただけますと、優先度を付けて順次実装を進められます。
+      まずは「<strong>社員名簿・顧客サンプル・見積／請求／契約のフォーマット</strong>」が揃うと、デモ品質が一気に上がります。
     </div>
   </section>
 

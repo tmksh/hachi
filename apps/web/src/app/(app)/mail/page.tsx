@@ -10,27 +10,63 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Star, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { getEmailThreads, getEmailThread, markThreadRead, toggleThreadStar } from "@/lib/actions/mail";
+import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mock";
 
 type Thread = Awaited<ReturnType<typeof getEmailThreads>>[number];
 type ThreadDetail = Awaited<ReturnType<typeof getEmailThread>>;
+
+const isMockId = (id: string) => id.startsWith("mock_");
 
 export default function MailPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ThreadDetail | null>(null);
 
-  useEffect(() => { getEmailThreads().then(setThreads).catch(() => {}).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    getEmailThreads()
+      .then((data) => {
+        if (!data || data.length === 0) {
+          setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
+        } else {
+          setThreads(data);
+        }
+      })
+      .catch(() => {
+        setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const selectThread = async (t: Thread) => {
     try {
+      if (isMockId(t.id)) {
+        const detail = MOCK_MAIL_THREAD_DETAILS[t.id];
+        if (detail) setSelected(detail as unknown as ThreadDetail);
+        if (!t.is_read) {
+          setThreads((prev) => prev.map((x) => (x.id === t.id ? { ...x, is_read: true } : x)));
+        }
+        return;
+      }
       const detail = await getEmailThread(t.id);
       setSelected(detail as ThreadDetail);
-      if (!t.is_read) { await markThreadRead(t.id); setThreads(prev => prev.map(x => x.id === t.id ? { ...x, is_read: true } : x)); }
-    } catch { toast.error("読み込みに失敗"); }
+      if (!t.is_read) {
+        await markThreadRead(t.id);
+        setThreads((prev) => prev.map((x) => (x.id === t.id ? { ...x, is_read: true } : x)));
+      }
+    } catch {
+      toast.error("読み込みに失敗");
+    }
   };
 
   const handleStar = async (id: string, current: boolean) => {
-    try { await toggleThreadStar(id, !current); setThreads(prev => prev.map(x => x.id === id ? { ...x, is_starred: !current } : x)); } catch {}
+    if (isMockId(id)) {
+      setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, is_starred: !current } : x)));
+      return;
+    }
+    try {
+      await toggleThreadStar(id, !current);
+      setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, is_starred: !current } : x)));
+    } catch {}
   };
 
   return (

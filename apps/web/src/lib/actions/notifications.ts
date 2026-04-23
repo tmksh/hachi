@@ -20,7 +20,16 @@ export async function getNotifications(): Promise<Notification[]> {
   if (!user) return [];
 
   const now = new Date();
+  // TODO フェーズ2: 直近7日のみに戻す。現在はテスト用に1ヶ月前〜1週間後の予定を通知として表示。
+  const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const { data: selfProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  const selfRole: string | null = selfProfile?.role ?? null;
 
   const [
     { data: readRecords },
@@ -29,22 +38,32 @@ export async function getNotifications(): Promise<Notification[]> {
     { data: upcomingEvents },
   ] = await Promise.all([
     supabase.from("announcement_reads").select("announcement_id").eq("user_id", user.id),
-    supabase.from("announcements").select("id, title, body, is_urgent, published_at").order("published_at", { ascending: false }).limit(30),
+    supabase
+      .from("announcements")
+      .select("id, title, body, is_urgent, published_at, target_type, target_roles")
+      .order("published_at", { ascending: false })
+      .limit(30),
     supabase.from("workflow_steps").select("id, request_id").eq("approver_id", user.id).eq("status", "pending").limit(10),
     supabase
       .from("calendar_events")
       .select("id, title, start_at, category, location")
-      .gte("start_at", now.toISOString())
+      .gte("start_at", oneMonthAgo.toISOString())
       .lte("start_at", in7days.toISOString())
-      .order("start_at")
-      .limit(5),
+      .order("start_at", { ascending: false })
+      .limit(10),
   ]);
 
   const readIdSet = new Set((readRecords || []).map((r) => r.announcement_id));
 
-  // 回覧通知
+  // 回覧通知（未読 & 現在ユーザーのロールが対象に含まれるもののみ）
   const announcementNotifs: Notification[] = (announcements || [])
     .filter((a) => !readIdSet.has(a.id))
+    .filter((a) => {
+      if (a.target_type !== "roles") return true;
+      const targets: string[] = (a.target_roles as string[] | null) ?? [];
+      if (targets.length === 0) return true;
+      return selfRole ? targets.includes(selfRole) : false;
+    })
     .map((a) => ({
       id: `ann_${a.id}`,
       type: "announcement" as const,

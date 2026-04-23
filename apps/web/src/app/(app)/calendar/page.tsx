@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   format,
   startOfMonth,
@@ -23,18 +23,47 @@ import {
 } from "date-fns";
 import { ja } from "date-fns/locale";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ChevronLeft,
   ChevronRight,
   Plus,
   ListTodo,
+  Clock,
+  MapPin,
+  Tag,
+  FileText,
+  Pencil,
+  Trash2,
 } from "lucide-react";
-import { getCalendarEvents } from "@/lib/actions/calendar";
+import {
+  getCalendarEvents,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from "@/lib/actions/calendar";
+import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
@@ -73,6 +102,13 @@ export default function CalendarPage() {
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<Ev[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeEvent, setActiveEvent] = useState<Ev | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const openEvent = useCallback((ev: Ev) => setActiveEvent(ev), []);
+  const refreshEvents = useCallback(() => setReloadKey((k) => k + 1), []);
+  const newEventHref = (d: Date) =>
+    `/calendar/new?date=${format(d, "yyyy-MM-dd")}`;
 
   const { rangeStart, rangeEnd } = useMemo(() => {
     if (view === "day") {
@@ -98,7 +134,7 @@ export default function CalendarPage() {
       .then(setEvents)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [rangeStart, rangeEnd]);
+  }, [rangeStart, rangeEnd, reloadKey]);
 
   const visibleEvents = useMemo(
     () => events.filter((e) => !hiddenCats.has(e.category ?? "")),
@@ -194,7 +230,7 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
-          <Link href="/calendar/new">
+          <Link href={newEventHref(selectedDate)}>
             <Button size="sm" className="gap-1.5 h-8">
               <Plus className="h-4 w-4" /> 作成
             </Button>
@@ -261,6 +297,7 @@ export default function CalendarPage() {
               selected={selectedDate}
               onSelect={setSelectedDate}
               events={visibleEvents}
+              onEventClick={openEvent}
             />
           ) : view === "week" ? (
             <WeekView
@@ -268,9 +305,14 @@ export default function CalendarPage() {
               selected={selectedDate}
               onSelect={setSelectedDate}
               events={visibleEvents}
+              onEventClick={openEvent}
             />
           ) : (
-            <DayView date={currentDate} events={visibleEvents} />
+            <DayView
+              date={currentDate}
+              events={visibleEvents}
+              onEventClick={openEvent}
+            />
           )}
         </div>
 
@@ -283,7 +325,7 @@ export default function CalendarPage() {
                   <ListTodo className="h-4 w-4 text-primary" />
                   <h3 className="text-sm font-semibold">タスク</h3>
                 </div>
-                <Link href="/calendar/new">
+                <Link href={newEventHref(selectedDate)}>
                   <button className="text-muted-foreground hover:text-foreground">
                     <Plus className="h-4 w-4" />
                   </button>
@@ -299,9 +341,10 @@ export default function CalendarPage() {
                   </p>
                 ) : (
                   selectedDateEvents.map((ev) => (
-                    <div
+                    <button
                       key={ev.id}
-                      className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/40 transition-colors"
+                      onClick={() => openEvent(ev)}
+                      className="w-full flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors text-left"
                     >
                       <span
                         className={cn(
@@ -320,7 +363,7 @@ export default function CalendarPage() {
                           )}
                         </p>
                       </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -328,6 +371,21 @@ export default function CalendarPage() {
           </Card>
         </aside>
       </div>
+
+      <EventDialog
+        event={activeEvent}
+        onOpenChange={(open) => {
+          if (!open) setActiveEvent(null);
+        }}
+        onSaved={() => {
+          setActiveEvent(null);
+          refreshEvents();
+        }}
+        onDeleted={() => {
+          setActiveEvent(null);
+          refreshEvents();
+        }}
+      />
     </div>
   );
 }
@@ -426,11 +484,13 @@ function MonthView({
   selected,
   onSelect,
   events,
+  onEventClick,
 }: {
   date: Date;
   selected: Date;
   onSelect: (d: Date) => void;
   events: Ev[];
+  onEventClick: (ev: Ev) => void;
 }) {
   const ms = startOfMonth(date);
   const me = endOfMonth(date);
@@ -499,10 +559,23 @@ function MonthView({
               </div>
               <div className="space-y-0.5">
                 {dayEvents.slice(0, 3).map((ev) => (
-                  <div
+                  <span
                     key={ev.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEventClick(ev);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onEventClick(ev);
+                      }
+                    }}
                     className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded truncate border text-left",
+                      "block text-[10px] px-1.5 py-0.5 rounded truncate border text-left cursor-pointer hover:brightness-95 hover:shadow-sm",
                       CAT_CHIP[ev.category ?? ""] ||
                         "bg-muted text-foreground border-border"
                     )}
@@ -513,7 +586,7 @@ function MonthView({
                       </span>
                     )}
                     {ev.title}
-                  </div>
+                  </span>
                 ))}
                 {dayEvents.length > 3 && (
                   <div className="text-[10px] text-muted-foreground px-1.5">
@@ -535,11 +608,13 @@ function WeekView({
   selected,
   onSelect,
   events,
+  onEventClick,
 }: {
   date: Date;
   selected: Date;
   onSelect: (d: Date) => void;
   events: Ev[];
+  onEventClick: (ev: Ev) => void;
 }) {
   const ws = startOfWeek(date, { weekStartsOn: 0 });
   const we = endOfWeek(date, { weekStartsOn: 0 });
@@ -600,10 +675,12 @@ function WeekView({
                 <span className="text-[10px] text-muted-foreground/50">-</span>
               ) : (
                 dayEvents.map((ev) => (
-                  <div
+                  <button
                     key={ev.id}
+                    type="button"
+                    onClick={() => onEventClick(ev)}
                     className={cn(
-                      "text-[10px] px-1.5 py-1 rounded border",
+                      "w-full text-left text-[10px] px-1.5 py-1 rounded border cursor-pointer hover:brightness-95 hover:shadow-sm transition",
                       CAT_CHIP[ev.category ?? ""] ||
                         "bg-muted text-foreground border-border"
                     )}
@@ -614,7 +691,7 @@ function WeekView({
                       </div>
                     )}
                     <div className="truncate">{ev.title}</div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>
@@ -626,7 +703,15 @@ function WeekView({
 }
 
 /* ──────────────────── Day View ──────────────────── */
-function DayView({ date, events }: { date: Date; events: Ev[] }) {
+function DayView({
+  date,
+  events,
+  onEventClick,
+}: {
+  date: Date;
+  events: Ev[];
+  onEventClick: (ev: Ev) => void;
+}) {
   const dayEvents = events
     .filter((e) => isSameDay(parseISO(e.start_at), date))
     .sort((a, b) => a.start_at.localeCompare(b.start_at));
@@ -644,9 +729,11 @@ function DayView({ date, events }: { date: Date; events: Ev[] }) {
         ) : (
           <div className="space-y-2">
             {dayEvents.map((ev) => (
-              <div
+              <button
                 key={ev.id}
-                className="flex items-start gap-3 p-3 rounded-md border hover:bg-muted/30 transition-colors"
+                type="button"
+                onClick={() => onEventClick(ev)}
+                className="w-full text-left flex items-start gap-3 p-3 rounded-md border hover:bg-muted/40 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col items-center min-w-[56px]">
                   <span className="text-[10px] text-muted-foreground">開始</span>
@@ -679,11 +766,325 @@ function DayView({ date, events }: { date: Date; events: Ev[] }) {
                     </Badge>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/* ──────────────────── Event Dialog ──────────────────── */
+function EventDialog({
+  event,
+  onOpenChange,
+  onSaved,
+  onDeleted,
+}: {
+  event: Ev | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+  onDeleted: () => void;
+}) {
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("10:00");
+  const [allDay, setAllDay] = useState(false);
+  const [category, setCategory] = useState<string>("");
+  const [location, setLocation] = useState("");
+
+  useEffect(() => {
+    if (!event) return;
+    setMode("view");
+    setTitle(event.title ?? "");
+    setDescription(event.description ?? "");
+    const s = parseISO(event.start_at);
+    const e = event.end_at ? parseISO(event.end_at) : s;
+    setStartDate(format(s, "yyyy-MM-dd"));
+    setStartTime(format(s, "HH:mm"));
+    setEndDate(format(e, "yyyy-MM-dd"));
+    setEndTime(format(e, "HH:mm"));
+    setAllDay(!!event.all_day);
+    setCategory(event.category ?? "");
+    setLocation(event.location ?? "");
+  }, [event]);
+
+  const open = !!event;
+
+  const handleSave = async () => {
+    if (!event) return;
+    if (!title.trim() || !startDate) {
+      toast.error("タイトルと開始日を入力してください");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateCalendarEvent(event.id, {
+        title: title.trim(),
+        description: description || null,
+        start_at: `${startDate}T${startTime}:00`,
+        end_at: `${endDate || startDate}T${endTime}:00`,
+        all_day: allDay,
+        category: (category || null) as CalendarEvent["category"],
+        location: location || null,
+      });
+      toast.success("予定を更新しました");
+      onSaved();
+    } catch {
+      toast.error("更新に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!event) return;
+    if (!confirm("この予定を削除しますか？")) return;
+    setDeleting(true);
+    try {
+      await deleteCalendarEvent(event.id);
+      toast.success("予定を削除しました");
+      onDeleted();
+    } catch {
+      toast.error("削除に失敗しました");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (!event) {
+    return (
+      <Dialog open={false} onOpenChange={onOpenChange}>
+        <DialogContent />
+      </Dialog>
+    );
+  }
+
+  const startDt = parseISO(event.start_at);
+  const endDt = event.end_at ? parseISO(event.end_at) : startDt;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-base">
+            {mode === "view" ? "予定の詳細" : "予定を編集"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {mode === "view" ? (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2">
+              <span
+                className={cn(
+                  "h-3 w-3 rounded-full mt-1.5 shrink-0",
+                  CAT_DOT[event.category ?? ""] || "bg-gray-400"
+                )}
+              />
+              <h3 className="text-lg font-semibold leading-snug">
+                {event.title}
+              </h3>
+            </div>
+
+            <div className="space-y-2 text-sm pl-5">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                <span className="tabular-nums">
+                  {format(startDt, "yyyy/M/d（E）", { locale: ja })}
+                  {event.all_day
+                    ? " ・ 終日"
+                    : ` ${format(startDt, "HH:mm")} - ${format(endDt, "HH:mm")}`}
+                </span>
+              </div>
+              {event.location && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <span>{event.location}</span>
+                </div>
+              )}
+              {event.category && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Tag className="h-3.5 w-3.5" />
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[10px]", CAT_CHIP[event.category])}
+                  >
+                    {CAT_LABELS[event.category]}
+                  </Badge>
+                </div>
+              )}
+              {event.description && (
+                <div className="flex items-start gap-2 text-muted-foreground">
+                  <FileText className="h-3.5 w-3.5 mt-0.5" />
+                  <p className="whitespace-pre-wrap leading-relaxed">
+                    {event.description}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">タイトル *</Label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="ev-all-day"
+                checked={allDay}
+                onCheckedChange={(v) => setAllDay(!!v)}
+              />
+              <Label htmlFor="ev-all-day" className="text-xs cursor-pointer">
+                終日
+              </Label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">開始日 *</Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">開始時刻</Label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  disabled={allDay}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">終了日</Label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">終了時刻</Label>
+                <Input
+                  type="time"
+                  value={endTime}
+                  disabled={allDay}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">カテゴリ</Label>
+                <Select
+                  value={category || "_none"}
+                  onValueChange={(v) => setCategory(v === "_none" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">なし</SelectItem>
+                    <SelectItem value="sales">営業</SelectItem>
+                    <SelectItem value="construction">工事</SelectItem>
+                    <SelectItem value="task">タスク</SelectItem>
+                    <SelectItem value="facility">施設</SelectItem>
+                    <SelectItem value="equipment">機材</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">場所</Label>
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">説明</Label>
+              <Textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          {mode === "view" ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                {deleting ? "削除中..." : "削除"}
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenChange(false)}
+                >
+                  閉じる
+                </Button>
+                <Button size="sm" onClick={() => setMode("edit")}>
+                  <Pencil className="h-4 w-4 mr-1" />
+                  編集
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                {deleting ? "削除中..." : "削除"}
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMode("view")}
+                  disabled={saving}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? "保存中..." : "保存"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

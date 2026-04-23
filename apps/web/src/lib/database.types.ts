@@ -282,7 +282,8 @@ export type Announcement = {
   body: string;
   pinned: boolean;
   is_urgent: boolean;
-  target_type: 'all' | 'departments' | 'individuals';
+  target_type: 'all' | 'roles' | 'departments' | 'individuals';
+  target_roles: string[];
   target_departments: string[];
   due_date: string | null;
   published_at: string;

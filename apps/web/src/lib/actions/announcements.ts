@@ -5,13 +5,31 @@ import type { Announcement } from "@/lib/database.types";
 
 export async function getAnnouncements() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  const role: string | null = profile?.role ?? null;
+
   const { data, error } = await supabase
     .from("announcements")
     .select("*, author:profiles!announcements_author_id_fkey(id, display_name)")
     .order("pinned", { ascending: false })
     .order("published_at", { ascending: false });
   if (error) throw error;
-  return data;
+
+  // クライアント側でロールターゲティングを適用（target_type='roles' のみ絞り込み）
+  return (data || []).filter((a) => {
+    if (a.target_type !== "roles") return true;
+    if (!role) return false;
+    const targets: string[] = (a.target_roles as string[] | null) ?? [];
+    if (targets.length === 0) return true;
+    return targets.includes(role);
+  });
 }
 
 export async function getAnnouncement(id: string) {
@@ -52,6 +70,7 @@ export async function createAnnouncement(input: {
   pinned?: boolean;
   is_urgent?: boolean;
   target_type?: Announcement["target_type"];
+  target_roles?: string[];
   target_departments?: string[];
   due_date?: string;
 }) {
@@ -60,6 +79,13 @@ export async function createAnnouncement(input: {
   if (!user) throw new Error("Not authenticated");
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
+
+  const target_type = input.target_type || "all";
+  // roles を指定した時は target_type='roles' に自動補正
+  const effectiveTargetType =
+    input.target_roles && input.target_roles.length > 0 && target_type === "all"
+      ? "roles"
+      : target_type;
 
   const { data, error } = await supabase
     .from("announcements")
@@ -70,7 +96,8 @@ export async function createAnnouncement(input: {
       body: input.body,
       pinned: input.pinned || false,
       is_urgent: input.is_urgent || false,
-      target_type: input.target_type || "all",
+      target_type: effectiveTargetType,
+      target_roles: input.target_roles || [],
       target_departments: input.target_departments || [],
       due_date: input.due_date || null,
     })

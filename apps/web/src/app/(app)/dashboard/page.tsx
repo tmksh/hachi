@@ -115,16 +115,40 @@ export default function DashboardPage() {
                 ))
               ) : (
                 [
-                  { label: "受注額", value: formatYen(data?.kpis.wonValue ?? 0), icon: TrendingUp },
-                  { label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0), icon: BarChart3 },
-                  { label: "顧客数", value: String(data?.kpis.customerCount ?? 0), icon: Users },
-                  { label: "進行案件", value: String(data?.kpis.activeConstructions ?? 0), icon: Briefcase },
+                  {
+                    label: "受注額",
+                    value: formatYen(data?.kpis.wonValue ?? 0),
+                    icon: TrendingUp,
+                    iconBg: "bg-emerald-300",
+                    iconFg: "text-white",
+                  },
+                  {
+                    label: "パイプライン",
+                    value: formatYen(data?.kpis.pipelineValue ?? 0),
+                    icon: BarChart3,
+                    iconBg: "bg-indigo-300",
+                    iconFg: "text-white",
+                  },
+                  {
+                    label: "顧客数",
+                    value: String(data?.kpis.customerCount ?? 0),
+                    icon: Users,
+                    iconBg: "bg-amber-300",
+                    iconFg: "text-white",
+                  },
+                  {
+                    label: "進行案件",
+                    value: String(data?.kpis.activeConstructions ?? 0),
+                    icon: Briefcase,
+                    iconBg: "bg-rose-300",
+                    iconFg: "text-white",
+                  },
                 ].map((kpi, i) => (
                   <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                      <div className="neumorph-icon h-8 w-8">
-                        <kpi.icon className="h-4 w-4 text-muted-foreground/70" />
+                      <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-md ${kpi.iconBg}`}>
+                        <kpi.icon className={`h-4 w-4 ${kpi.iconFg}`} />
                       </div>
                     </div>
                     <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>

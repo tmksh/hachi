@@ -12,6 +12,7 @@ import { LogIn, LogOut, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { getAttendanceEntries, clockIn, clockOut, approveAttendance, rejectAttendance } from "@/lib/actions/attendance";
+import { AnalogClock } from "@/components/shared/analog-clock";
 
 type Entry = Awaited<ReturnType<typeof getAttendanceEntries>>[number];
 const LEAVE_LABELS: Record<string, string> = { none: "-", overtime: "残業", dayoff: "休日", morning_leave: "午前休", afternoon_leave: "午後休" };
@@ -48,7 +49,12 @@ export default function AttendancePage() {
           <div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${clockedIn ? "bg-emerald-400" : "bg-muted-foreground/30"}`} /><span className="text-sm">{clockedIn ? "勤務中" : "未出勤"}</span></div>
           <span className="text-sm text-muted-foreground">{format(new Date(), "yyyy年M月d日（EEE）", { locale: ja })}</span>
         </div>
-        <p className="text-4xl font-bold tabular-nums text-center py-3">{format(new Date(), "HH:mm")}</p>
+        <div className="flex flex-col items-center gap-2 py-3">
+          <AnalogClock size={120} />
+          <p className="text-lg font-semibold tabular-nums text-muted-foreground tracking-widest">
+            {format(new Date(), "HH:mm")}
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-2 mt-4">
           <Button onClick={handleClockIn} disabled={clockedIn} className="gap-1.5"><LogIn className="h-4 w-4" />出勤</Button>
           <Button variant="outline" onClick={handleClockOut} disabled={!clockedIn} className="gap-1.5"><LogOut className="h-4 w-4" />退勤</Button>

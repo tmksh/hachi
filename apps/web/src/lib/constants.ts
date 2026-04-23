@@ -40,16 +40,17 @@ export const NAV_GROUPS = [
       { key: "documents", label: "文書管理", href: "/documents" },
     ],
   },
-  {
-    key: "marketing",
-    label: "マーケティング",
-    items: [
-      { key: "marketing-email", label: "メール配信", href: "/marketing/email" },
-      { key: "marketing-sns", label: "SNSインサイト", href: "/marketing/sns" },
-      { key: "marketing-roi", label: "ROI分析", href: "/marketing/roi" },
-      { key: "marketing-creative", label: "クリエイティブ", href: "/marketing/creative" },
-    ],
-  },
+  // マーケティンググループ: フェーズ2で公開予定のため現在は非表示
+  // {
+  //   key: "marketing",
+  //   label: "マーケティング",
+  //   items: [
+  //     { key: "marketing-email", label: "メール配信", href: "/marketing/email" },
+  //     { key: "marketing-sns", label: "SNSインサイト", href: "/marketing/sns" },
+  //     { key: "marketing-roi", label: "ROI分析", href: "/marketing/roi" },
+  //     { key: "marketing-creative", label: "クリエイティブ", href: "/marketing/creative" },
+  //   ],
+  // },
 ] as const;
 
 // User roles

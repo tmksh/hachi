@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Send, Users } from "lucide-react";
 import { toast } from "sonner";
 import { getAnnouncement, addAnnouncementComment } from "@/lib/actions/announcements";
+import { ROLE_LABELS, type Role } from "@/lib/constants";
 
 type Detail = Awaited<ReturnType<typeof getAnnouncement>>;
 
@@ -39,7 +40,20 @@ export default function CirculationDetailPage() {
     <div className="p-4 md:p-6 space-y-6">
       <Link href="/circulation" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />一覧に戻る</Link>
       <div>
-        <div className="flex items-center gap-2 mb-2">{data.is_urgent && <Badge variant="destructive">緊急</Badge>}{data.pinned && <Badge variant="secondary">固定</Badge>}</div>
+        <div className="flex items-center gap-2 mb-2">
+          {data.is_urgent && <Badge variant="destructive">緊急</Badge>}
+          {data.pinned && <Badge variant="secondary">固定</Badge>}
+          {data.target_type === "roles" &&
+            Array.isArray(data.target_roles) &&
+            data.target_roles.length > 0 && (
+              <Badge variant="outline" className="gap-1">
+                <Users className="h-3 w-3" />
+                {(data.target_roles as Role[])
+                  .map((r) => ROLE_LABELS[r] ?? r)
+                  .join("・")}
+              </Badge>
+            )}
+        </div>
         <h1 className="text-xl font-semibold">{data.title}</h1>
         <p className="text-sm text-muted-foreground mt-1">{data.author?.display_name ?? "-"} · {format(parseISO(data.published_at), "yyyy年M月d日 HH:mm", { locale: ja })}</p>
       </div>

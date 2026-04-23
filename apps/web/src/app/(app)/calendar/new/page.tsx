@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,14 @@ import { createCalendarEvent } from "@/lib/actions/calendar";
 
 export default function CalendarNewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialDate = searchParams.get("date") ?? "";
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [startDate, setStartDate] = useState("");
+  const [startDate, setStartDate] = useState(initialDate);
   const [startTime, setStartTime] = useState("09:00");
-  const [endDate, setEndDate] = useState("");
+  const [endDate, setEndDate] = useState(initialDate);
   const [endTime, setEndTime] = useState("10:00");
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
