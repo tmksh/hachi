@@ -77,7 +77,7 @@ export default function CrmPage() {
             view === "grid" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{Array.from({length:6}).map((_,i)=><Card key={i}><CardContent className="p-5 space-y-3"><Skeleton className="h-5 w-32" /><Skeleton className="h-4 w-48" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}</div>
             ) : (
-              <Card><CardContent className="p-0"><div className="p-4 space-y-2">{Array.from({length:6}).map((_,i)=><Skeleton key={i} className="h-10 w-full" />)}</div></CardContent></Card>
+              <Card variant="inset"><CardContent className="p-0"><div className="p-4 space-y-2">{Array.from({length:6}).map((_,i)=><Skeleton key={i} className="h-10 w-full" />)}</div></CardContent></Card>
             )
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">顧客が見つかりません</div>
@@ -106,7 +106,7 @@ export default function CrmPage() {
               ))}
             </div>
           ) : (
-            <Card>
+            <Card variant="inset">
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>

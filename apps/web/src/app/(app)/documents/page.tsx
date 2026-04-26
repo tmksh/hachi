@@ -118,7 +118,7 @@ export default function DocumentsPage() {
           {Object.entries(CAT_LABELS).map(([k, v]) => <TabsTrigger key={k} value={k}>{v}</TabsTrigger>)}
         </TabsList>
         <TabsContent value={tab} className="mt-4">
-          <Card>
+          <Card variant="inset">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>

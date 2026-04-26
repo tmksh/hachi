@@ -32,7 +32,7 @@ const tabsListVariants = cva(
       variant: {
         default:
           "bg-white/72 border-none " +
-          "shadow-[0_1px_0_rgba(255,255,255,0.98),5px_5px_12px_rgba(168,182,210,0.38),-3px_-3px_8px_rgba(255,255,255,0.92)] " +
+          "shadow-[0_1px_0_rgba(255,255,255,0.75),4px_4px_10px_rgba(168,182,210,0.28),-2px_-2px_6px_rgba(255,255,255,0.60)] " +
           "dark:bg-[rgba(28,35,52,0.80)] dark:shadow-[5px_5px_12px_rgba(0,0,0,0.35),-3px_-3px_8px_rgba(255,255,255,0.04)]",
         line: "gap-1 bg-transparent",
       },

@@ -17,7 +17,7 @@ export async function getConstruction(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("constructions")
-    .select("*, customer:customers(id, name, company_name), contract:contracts(id, contract_no, title), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
+    .select("*, customer:customers(id, name, company_name, address), contract:contracts(id, contract_no, title, amount, contract_date, start_date, end_date, notes, status, estimate_id), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -34,7 +34,28 @@ export async function getConstruction(id: string) {
     .eq("construction_id", id)
     .order("created_at", { ascending: false });
 
-  return { ...data, tasks: tasks || [], orders: orders || [] };
+  // 契約に紐づく見積もり明細を取得
+  let estimate = null;
+  const contractData = data as typeof data & { estimate_id?: string | null };
+  if (contractData.contract_id) {
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("estimate_id")
+      .eq("id", contractData.contract_id)
+      .single();
+    if (contract?.estimate_id) {
+      const { data: est } = await supabase
+        .from("estimates")
+        .select("*, categories:estimate_categories(*), items:estimate_items(*)")
+        .eq("id", contract.estimate_id)
+        .single();
+      if (est) {
+        estimate = est;
+      }
+    }
+  }
+
+  return { ...data, tasks: tasks || [], orders: orders || [], estimate };
 }
 
 export async function createConstruction(input: {
@@ -194,4 +215,218 @@ export async function completeConstruction(
   }
 
   return { construction, invoiceId };
+}
+
+export async function createContractorOrder(input: {
+  constructionId: string;
+  title: string;
+  amount: number;
+  craftsmanId?: string;
+  notes?: string;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data, error } = await supabase
+    .from("contractor_orders")
+    .insert({
+      company_id: profile.company_id,
+      construction_id: input.constructionId,
+      craftsman_id: input.craftsmanId || null,
+      title: input.title,
+      amount: input.amount,
+      status: "draft",
+      notes: input.notes || null,
+    })
+    .select("*, craftsman:craftsmen(id, name)")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateContractorOrder(
+  id: string,
+  input: { status?: "draft" | "submitted" | "approved" | "rejected"; notes?: string }
+) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("contractor_orders").update(input).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteContractorOrder(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("contractor_orders").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* ─────────────────── 契約書ドキュメント（テンプレートベース） ─────────────────── */
+// notes フィールドに JSON で template_id / form / construction_id を保存して
+// 1工事に複数の契約書ドキュメントを紐付ける。
+const DOC_PREFIX = "@@HACHI_DOC@@";
+
+type DocMeta = {
+  construction_id: string;
+  template_id: string;
+  form: Record<string, string | number>;
+};
+
+function packMeta(meta: DocMeta): string {
+  return DOC_PREFIX + JSON.stringify(meta);
+}
+function unpackMeta(notes: string | null): DocMeta | null {
+  if (!notes || !notes.startsWith(DOC_PREFIX)) return null;
+  try { return JSON.parse(notes.slice(DOC_PREFIX.length)) as DocMeta; }
+  catch { return null; }
+}
+
+export async function getConstructionContractDocs(constructionId: string) {
+  const supabase = await createClient();
+  const { data: con } = await supabase
+    .from("constructions")
+    .select("id, customer_id, contract_id")
+    .eq("id", constructionId)
+    .single();
+  if (!con) return [];
+
+  // この工事に紐づく可能性のある契約書を広めに取得（同じ顧客 OR construction.contract_id）
+  const filters: string[] = [];
+  if (con.customer_id) filters.push(`customer_id.eq.${con.customer_id}`);
+  if (con.contract_id) filters.push(`id.eq.${con.contract_id}`);
+
+  let q = supabase.from("contracts").select("*").order("created_at", { ascending: false });
+  if (filters.length > 0) q = q.or(filters.join(","));
+  const { data, error } = await q;
+  if (error) throw error;
+
+  return (data || []).filter(c => {
+    const meta = unpackMeta(c.notes);
+    if (meta) return meta.construction_id === constructionId;
+    return c.id === con.contract_id;
+  }).map(c => {
+    const meta = unpackMeta(c.notes);
+    return {
+      id: c.id,
+      contract_no: c.contract_no,
+      title: c.title,
+      status: c.status,
+      amount: c.amount,
+      contract_date: c.contract_date,
+      template_id: meta?.template_id ?? null,
+      form: meta?.form ?? null,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+    };
+  });
+}
+
+export async function createContractDoc(input: {
+  construction_id: string;
+  template_id: string;
+  title: string;
+  form: Record<string, string | number>;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: con } = await supabase.from("constructions").select("customer_id").eq("id", input.construction_id).single();
+
+  const { count } = await supabase.from("contracts").select("*", { count: "exact", head: true });
+  const contractNo = `CTR-${String((count || 0) + 1).padStart(4, "0")}`;
+  const amount = Number(input.form.amount_excl_tax) || 0;
+  const taxRate = Number(input.form.tax_rate) || 10;
+  const total = amount + Math.floor(amount * taxRate / 100);
+  const contractDate = (input.form.contract_date as string) || null;
+
+  const meta: DocMeta = {
+    construction_id: input.construction_id,
+    template_id: input.template_id,
+    form: input.form,
+  };
+
+  const { data, error } = await supabase
+    .from("contracts")
+    .insert({
+      company_id: profile.company_id,
+      customer_id: con?.customer_id || null,
+      contract_no: contractNo,
+      title: input.title,
+      status: "preparing",
+      amount: total,
+      contract_date: contractDate,
+      notes: packMeta(meta),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return { ...data, template_id: input.template_id, form: input.form };
+}
+
+export async function updateContractDoc(input: {
+  id: string;
+  construction_id: string;
+  template_id: string;
+  title?: string;
+  form: Record<string, string | number>;
+  status?: string;
+}) {
+  const supabase = await createClient();
+  const amount = Number(input.form.amount_excl_tax) || 0;
+  const taxRate = Number(input.form.tax_rate) || 10;
+  const total = amount + Math.floor(amount * taxRate / 100);
+  const contractDate = (input.form.contract_date as string) || null;
+  const meta: DocMeta = {
+    construction_id: input.construction_id,
+    template_id: input.template_id,
+    form: input.form,
+  };
+  const update: Record<string, unknown> = {
+    notes: packMeta(meta),
+    amount: total,
+    contract_date: contractDate,
+  };
+  if (input.title !== undefined) update.title = input.title;
+  if (input.status !== undefined) update.status = input.status;
+  const { error } = await supabase.from("contracts").update(update).eq("id", input.id);
+  if (error) throw error;
+}
+
+export async function deleteContractDoc(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("contracts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function seedContractorOrders(constructionId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const seeds = [
+    { title: "基礎工事 下請発注", amount: 1_200_000, status: "approved" as const, notes: "2026年3月着工予定" },
+    { title: "木工事（躯体・造作）下請発注", amount: 3_500_000, status: "submitted" as const, notes: "木造建設㈱への発注書" },
+    { title: "屋根・板金工事 下請発注", amount: 480_000, status: "draft" as const, notes: "見積査定中" },
+  ];
+
+  const { data, error } = await supabase
+    .from("contractor_orders")
+    .insert(seeds.map(s => ({
+      company_id: profile.company_id,
+      construction_id: constructionId,
+      craftsman_id: null,
+      title: s.title,
+      amount: s.amount,
+      status: s.status,
+      notes: s.notes,
+    })))
+    .select("*, craftsman:craftsmen(id, name)");
+  if (error) throw error;
+  return data;
 }

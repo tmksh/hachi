@@ -33,7 +33,7 @@ export default function InvoicesPage() {
           <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規作成</Button>
         </Link>
       </PageHeader>
-      <Card>
+      <Card variant="inset">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>

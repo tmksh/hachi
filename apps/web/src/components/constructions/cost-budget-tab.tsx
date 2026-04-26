@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, MessageSquare, Send, X } from "lucide-react";
 
 /* ─────────────────── types ─────────────────── */
 type ContractorRow = {
@@ -161,7 +161,202 @@ function TextInput({
   );
 }
 
-/* ─────────────────── main component ─────────────────── */
+/* ─────────────────── comment types ─────────────────── */
+type CellComment = {
+  id: string;
+  cellKey: string; // "{rowId}:{colName}"
+  author: string;
+  avatarInitial: string;
+  avatarColor: string;
+  text: string;
+  createdAt: string;
+};
+
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-violet-500", "bg-rose-500",
+  "bg-amber-500", "bg-emerald-500", "bg-sky-500",
+];
+
+function getAvatarColor(author: string) {
+  const idx = author.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[idx];
+}
+
+/* ── セルコメントポップオーバー ── */
+function CommentPopover({
+  cellKey, comments, onAdd, onClose, anchorRect,
+}: {
+  cellKey: string;
+  comments: CellComment[];
+  onAdd: (cellKey: string, text: string) => void;
+  onClose: () => void;
+  anchorRect: DOMRect | null;
+}) {
+  const [text, setText] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  const style: React.CSSProperties = anchorRect
+    ? { position: "fixed", top: anchorRect.bottom + 6, left: anchorRect.left, zIndex: 9999 }
+    : { position: "fixed", top: "40%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 9999 };
+
+  return (
+    <div
+      ref={ref}
+      style={style}
+      className="w-72 bg-white rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.18),0_2px_8px_rgba(0,0,0,0.10)] border border-gray-100 overflow-hidden"
+    >
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+        <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+          <MessageSquare className="h-3.5 w-3.5" />コメント
+        </span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* コメント一覧 */}
+      <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
+        {comments.length === 0 ? (
+          <p className="text-[11px] text-gray-400 text-center py-4">まだコメントはありません</p>
+        ) : (
+          comments.map(c => (
+            <div key={c.id} className="px-3 py-2.5 flex gap-2">
+              <div className={cn("h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5", c.avatarColor)}>
+                {c.avatarInitial}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-semibold text-gray-700">{c.author}</span>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0">{c.createdAt}</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-0.5 leading-relaxed whitespace-pre-wrap">{c.text}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* 入力欄 */}
+      <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/50 flex gap-2 items-end">
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (text.trim()) { onAdd(cellKey, text.trim()); setText(""); }
+            }
+          }}
+          placeholder="コメントを入力… (Enter で送信)"
+          rows={2}
+          className="flex-1 text-xs resize-none rounded-lg border border-gray-200 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+        />
+        <button
+          onClick={() => { if (text.trim()) { onAdd(cellKey, text.trim()); setText(""); } }}
+          disabled={!text.trim()}
+          className="p-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Send className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── コメントアイコン付きセルラッパー ── */
+function CommentableCell({
+  cellKey, comments, onOpenPopover, commentMode, children, className,
+}: {
+  cellKey: string;
+  comments: CellComment[];
+  onOpenPopover: (cellKey: string, rect: DOMRect) => void;
+  commentMode?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const cellRef = useRef<HTMLTableCellElement>(null);
+  const hasComments = comments.length > 0;
+
+  function handleClick() {
+    if (commentMode && cellRef.current) {
+      onOpenPopover(cellKey, cellRef.current.getBoundingClientRect());
+    }
+  }
+
+  return (
+    <td
+      ref={cellRef}
+      onClick={handleClick}
+      className={cn(
+        "relative group/cell",
+        commentMode && "hover:bg-blue-50/40",
+        className
+      )}
+    >
+      {children}
+      {/* コメントバブル（コメントあり） */}
+      {hasComments && (
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            cellRef.current && onOpenPopover(cellKey, cellRef.current.getBoundingClientRect());
+          }}
+          className="absolute -top-2.5 -right-2 z-10 flex items-center"
+          style={{ pointerEvents: "auto" }}
+        >
+          {comments.slice(0, 2).map((c, i) => (
+            <div
+              key={c.id}
+              className={cn(
+                "h-5 w-5 rounded-full border-2 border-white text-[9px] font-bold text-white flex items-center justify-center",
+                c.avatarColor,
+                i > 0 ? "-ml-1.5" : "",
+              )}
+              style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.25))" }}
+            >
+              {c.avatarInitial}
+            </div>
+          ))}
+          {comments.length > 2 && (
+            <div className="-ml-1.5 h-5 w-5 rounded-full border-2 border-white bg-gray-400 text-[8px] font-bold text-white flex items-center justify-center"
+              style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.25))" }}>
+              +{comments.length - 2}
+            </div>
+          )}
+        </button>
+      )}
+      {/* コメントモード時のホバーアイコン */}
+      {commentMode && !hasComments && (
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cell:opacity-100 pointer-events-none">
+          <MessageSquare className="h-3 w-3 text-blue-400" />
+        </div>
+      )}
+      {/* 通常モード：ホバー時の小アイコン */}
+      {!commentMode && !hasComments && (
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            cellRef.current && onOpenPopover(cellKey, cellRef.current.getBoundingClientRect());
+          }}
+          className="absolute top-0.5 right-0.5 z-10 opacity-0 group-hover/cell:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-200/60"
+        >
+          <MessageSquare className="h-3 w-3 text-gray-400" />
+        </button>
+      )}
+    </td>
+  );
+}
+
+
 interface Props {
   constructionId: string;
   contractAmount?: number;
@@ -176,6 +371,49 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
     initial.rows.map(r => ({ ...r, monthly: { ...r.monthly } }))
   );
   const [saved, setSaved] = useState(false);
+
+  /* ── コメント ── */
+  const [comments, setComments] = useState<CellComment[]>([]);
+  const [openPopover, setOpenPopover] = useState<{ cellKey: string; rect: DOMRect } | null>(null);
+  const [commentMode, setCommentMode] = useState(false);
+
+  const cellComments = useCallback(
+    (cellKey: string) => comments.filter(c => c.cellKey === cellKey),
+    [comments]
+  );
+  const handleAddComment = useCallback((cellKey: string, text: string) => {
+    const author = "田中 一郎"; // TODO: 認証ユーザーから取得
+    setComments(prev => [...prev, {
+      id: `c-${Date.now()}`,
+      cellKey,
+      author,
+      avatarInitial: author.charAt(0),
+      avatarColor: getAvatarColor(author),
+      text,
+      createdAt: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+    }]);
+  }, []);
+  const handleOpenPopover = useCallback((cellKey: string, rect: DOMRect) => {
+    setOpenPopover(prev => prev?.cellKey === cellKey ? null : { cellKey, rect });
+  }, []);
+
+  // コメントモード時：テーブル全体のクリックをキャッチ
+  const handleTableClick = useCallback((e: React.MouseEvent<HTMLTableElement>) => {
+    if (!commentMode) return;
+    // 最も近い td または th を探す
+    const cell = (e.target as HTMLElement).closest("td, th") as HTMLTableCellElement | null;
+    if (!cell) return;
+    const row = cell.closest("tr") as HTMLTableRowElement | null;
+    if (!row) return;
+    const tbody = cell.closest("tbody");
+    const thead = cell.closest("thead");
+    const section = tbody ? "body" : thead ? "head" : "foot";
+    const rowIdx = row.rowIndex;
+    const cellIdx = cell.cellIndex;
+    const cellKey = `${section}:r${rowIdx}:c${cellIdx}`;
+    const rect = cell.getBoundingClientRect();
+    setOpenPopover(prev => prev?.cellKey === cellKey ? null : { cellKey, rect });
+  }, [commentMode]);
 
   const contractAmount =
     propAmount && propAmount > 0 ? propAmount : initial.contract_amount;
@@ -244,6 +482,16 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
 
   return (
     <div className="space-y-3">
+      {/* コメントポップオーバー */}
+      {openPopover && (
+        <CommentPopover
+          cellKey={openPopover.cellKey}
+          comments={cellComments(openPopover.cellKey)}
+          onAdd={handleAddComment}
+          onClose={() => setOpenPopover(null)}
+          anchorRect={openPopover.rect}
+        />
+      )}
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
         <div>
@@ -252,22 +500,50 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
             緑色のセルは自動計算 — 白いセルをクリックして入力できます
           </p>
         </div>
-        <button
-          onClick={() => setSaved(true)}
-          className={cn(
-            "text-xs font-semibold px-3 py-1.5 rounded-md transition-colors",
-            saved
-              ? "bg-green-100 text-green-700 cursor-default"
-              : "bg-[#6BC9B3] text-white hover:bg-[#4aab96]"
-          )}
-        >
-          {saved ? "保存済み" : "保存する"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* コメントモードトグル */}
+          <button
+            onClick={() => { setCommentMode(v => !v); setOpenPopover(null); }}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
+              commentMode
+                ? "bg-blue-500 text-white shadow-[0_2px_6px_rgba(59,130,246,0.45),inset_0_1px_0_rgba(255,255,255,0.20)]"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            )}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            {commentMode ? "コメント中..." : "コメント"}
+            {comments.length > 0 && (
+              <span className={cn(
+                "ml-0.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center",
+                commentMode ? "bg-white text-blue-600" : "bg-blue-500 text-white"
+              )}>
+                {comments.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setSaved(true)}
+            className={cn(
+              "text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
+              saved
+                ? "bg-green-100 text-green-700 cursor-default shadow-inner"
+                : "bg-[#6BC9B3] text-white hover:bg-[#4aab96] shadow-[0_2px_6px_rgba(107,201,179,0.50),0_1px_2px_rgba(107,201,179,0.30),inset_0_1px_0_rgba(255,255,255,0.25)] hover:shadow-[0_4px_10px_rgba(107,201,179,0.55),0_2px_4px_rgba(107,201,179,0.35),inset_0_1px_0_rgba(255,255,255,0.28)] hover:-translate-y-px active:translate-y-0 active:shadow-inner"
+            )}
+          >
+            {saved ? "保存済み" : "保存する"}
+          </button>
+        </div>
       </div>
 
       {/* テーブル */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-        <table className="border-collapse text-sm" style={{ minWidth: "1750px" }}>
+      <div className={cn(
+        "overflow-x-auto rounded-lg border border-gray-200 shadow-sm transition-all",
+        commentMode && "ring-2 ring-blue-400 ring-offset-1"
+      )}
+        style={{ cursor: commentMode ? "crosshair" : undefined }}
+      >
+        <table className="border-collapse text-sm" style={{ minWidth: "1750px" }} onClick={handleTableClick}>
           <colgroup>
             <col style={{ width: 32 }} /><col style={{ width: 62 }} />
             <col style={{ width: 130 }} /><col style={{ width: 115 }} />
@@ -321,7 +597,9 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
             {rows.map((row, idx) => {
               const c = compute(row);
               return (
-                <tr key={row.id} className="hover:bg-gray-50/40 transition-colors group/row">
+                <tr key={row.id} className={cn("hover:bg-gray-50/40 transition-colors group/row", commentMode && "hover:bg-blue-50/30")}
+                  onClick={commentMode ? undefined : undefined}
+                >
                   <td className={cn(tcc, "bg-gray-50 text-gray-400 text-[11px]")}>{idx + 1}</td>
                   {/* 発注ステータス (クリックで切替) */}
                   <td className={cn(tcc)}>
@@ -372,18 +650,18 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
                     <NumInput value={row.management_budget} onChange={v => updateField(row.id, "management_budget", v)} />
                   </td>
                   {/* 発注 */}
-                  <td className={cn(tdc, "bg-amber-50/40")}>
+                  <CommentableCell cellKey={`${row.id}:order_amount`} comments={cellComments(`${row.id}:order_amount`)} onOpenPopover={handleOpenPopover} commentMode={commentMode} className={cn(tdc, "bg-amber-50/40")}>
                     <NumInput value={row.order_amount} onChange={v => updateField(row.id, "order_amount", v)} />
-                  </td>
-                  <td className={cn(tdc, "bg-amber-50/40")}>
+                  </CommentableCell>
+                  <CommentableCell cellKey={`${row.id}:add_order_1`} comments={cellComments(`${row.id}:add_order_1`)} onOpenPopover={handleOpenPopover} commentMode={commentMode} className={cn(tdc, "bg-amber-50/40")}>
                     <NumInput value={row.add_order_1} onChange={v => updateField(row.id, "add_order_1", v)} />
-                  </td>
-                  <td className={cn(tdc, "bg-amber-50/40")}>
+                  </CommentableCell>
+                  <CommentableCell cellKey={`${row.id}:add_order_2`} comments={cellComments(`${row.id}:add_order_2`)} onOpenPopover={handleOpenPopover} commentMode={commentMode} className={cn(tdc, "bg-amber-50/40")}>
                     <NumInput value={row.add_order_2} onChange={v => updateField(row.id, "add_order_2", v)} />
-                  </td>
-                  <td className={cn(tdc, "bg-amber-50/40")}>
+                  </CommentableCell>
+                  <CommentableCell cellKey={`${row.id}:add_order_3`} comments={cellComments(`${row.id}:add_order_3`)} onOpenPopover={handleOpenPopover} commentMode={commentMode} className={cn(tdc, "bg-amber-50/40")}>
                     <NumInput value={row.add_order_3} onChange={v => updateField(row.id, "add_order_3", v)} />
-                  </td>
+                  </CommentableCell>
                   {/* 確定額（自動計算） */}
                   <td className={cn(tdc, "bg-sky-100/50 font-semibold")}>{fmtView(c.confirmed)}</td>
                   {/* 予算残（自動計算） */}
@@ -395,12 +673,12 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
                   </td>
                   {/* 月次請求 */}
                   {months.map(m => (
-                    <td key={m} className={cn(tdc, "bg-sky-50/20")}>
+                    <CommentableCell key={m} cellKey={`${row.id}:${m}`} comments={cellComments(`${row.id}:${m}`)} onOpenPopover={handleOpenPopover} commentMode={commentMode} className={cn(tdc, "bg-sky-50/20")}>
                       <NumInput
                         value={row.monthly[m] ?? 0}
                         onChange={v => updateMonthly(row.id, m, v)}
                       />
-                    </td>
+                    </CommentableCell>
                   ))}
                   {/* 請求残（自動計算） */}
                   <td className={cn(tdc,

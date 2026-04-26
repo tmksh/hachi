@@ -12,6 +12,7 @@ import {
   addWeeks,
   subWeeks,
   addDays,
+  addMinutes,
   subDays,
   parseISO,
   startOfWeek,
@@ -68,6 +69,32 @@ import { cn } from "@/lib/utils";
 
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
 type View = "day" | "week" | "month";
+
+/* ─── Week-view time grid constants ─── */
+const PX_PER_MIN = 1.2;       // 1px per minute → 72px/hr
+const HOUR_H = PX_PER_MIN * 60;
+const SNAP_MIN = 15;
+
+type DragInfo = {
+  type: "move" | "resize";
+  ev: Ev;
+  originalStart: number;   // minutes from midnight
+  originalEnd: number;
+  clickOffsetMin: number;  // offset within event when clicked (move only)
+  currentStart: number;
+  currentEnd: number;
+  currentDay: Date;
+};
+
+function toMin(d: Date) {
+  return d.getHours() * 60 + d.getMinutes();
+}
+function snapTo(m: number) {
+  return Math.round(m / SNAP_MIN) * SNAP_MIN;
+}
+function minToTimeStr(m: number) {
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
 
 const CATEGORIES = ["sales", "construction", "task", "facility", "equipment"] as const;
 
@@ -306,6 +333,7 @@ export default function CalendarPage() {
               onSelect={setSelectedDate}
               events={visibleEvents}
               onEventClick={openEvent}
+              onRefresh={refreshEvents}
             />
           ) : (
             <DayView
@@ -602,101 +630,305 @@ function MonthView({
   );
 }
 
-/* ──────────────────── Week View ──────────────────── */
+/* ──────────────────── Week View (Google Calendar style) ──────────────────── */
 function WeekView({
   date,
   selected,
   onSelect,
   events,
   onEventClick,
+  onRefresh,
 }: {
   date: Date;
   selected: Date;
   onSelect: (d: Date) => void;
   events: Ev[];
   onEventClick: (ev: Ev) => void;
+  onRefresh: () => void;
 }) {
   const ws = startOfWeek(date, { weekStartsOn: 0 });
-  const we = endOfWeek(date, { weekStartsOn: 0 });
-  const days = eachDayOfInterval({ start: ws, end: we });
+  const days = eachDayOfInterval({ start: ws, end: addDays(ws, 6) });
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const gridRef  = useRef<HTMLDivElement>(null);
+
+  const [dragging, setDragging] = useState<DragInfo | null>(null);
+  const dragRef = useRef<DragInfo | null>(null);
+
+  /* Scroll to 8am on mount */
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 8 * HOUR_H });
+  }, []);
+
+  /* Current time indicator */
+  const [nowMin, setNowMin] = useState(() => {
+    const n = new Date();
+    return toMin(n);
+  });
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(toMin(new Date())), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  /* Coordinate helpers */
+  const getMinFromY = useCallback((clientY: number) => {
+    const scroll = scrollRef.current;
+    if (!scroll) return 0;
+    const rect = scroll.getBoundingClientRect();
+    const y = clientY - rect.top + scroll.scrollTop;
+    return Math.max(0, Math.min(1439, Math.floor(y / PX_PER_MIN)));
+  }, []);
+
+  const getDayFromX = useCallback((clientX: number): Date => {
+    const grid = gridRef.current;
+    if (!grid) return days[0];
+    const rect = grid.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const idx = Math.max(0, Math.min(6, Math.floor((x / rect.width) * 7)));
+    return days[idx];
+  }, [days]);
+
+  /* Start drag */
+  const startDrag = useCallback((
+    e: React.MouseEvent,
+    ev: Ev,
+    type: "move" | "resize",
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startDt = parseISO(ev.start_at);
+    const endDt   = ev.end_at ? parseISO(ev.end_at) : addMinutes(startDt, 60);
+    const sMin = toMin(startDt);
+    const eMin = toMin(endDt);
+    const clickMin = getMinFromY(e.clientY);
+    const info: DragInfo = {
+      type,
+      ev,
+      originalStart: sMin,
+      originalEnd: eMin,
+      clickOffsetMin: type === "move" ? clickMin - sMin : 0,
+      currentStart: sMin,
+      currentEnd: eMin,
+      currentDay: startDt,
+    };
+    dragRef.current = info;
+    setDragging({ ...info });
+  }, [getMinFromY]);
+
+  /* Global mouse handlers during drag */
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const info = dragRef.current;
+      if (!info) return;
+      const clickMin = getMinFromY(e.clientY);
+      let updated: DragInfo;
+      if (info.type === "move") {
+        const dur = info.originalEnd - info.originalStart;
+        const newStart = snapTo(Math.max(0, Math.min(1440 - dur, clickMin - info.clickOffsetMin)));
+        updated = { ...info, currentStart: newStart, currentEnd: newStart + dur, currentDay: getDayFromX(e.clientX) };
+      } else {
+        const newEnd = snapTo(Math.max(info.currentStart + 15, Math.min(1440, clickMin)));
+        updated = { ...info, currentEnd: newEnd };
+      }
+      dragRef.current = updated;
+      setDragging({ ...updated });
+    };
+
+    const onUp = async () => {
+      const info = dragRef.current;
+      if (!info) return;
+      dragRef.current = null;
+      setDragging(null);
+
+      const origDay = parseISO(info.ev.start_at);
+      const noChange =
+        info.currentStart === info.originalStart &&
+        info.currentEnd   === info.originalEnd &&
+        isSameDay(info.currentDay, origDay);
+      if (noChange) return;
+
+      const day = info.currentDay;
+      const newStartDt = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
+        Math.floor(info.currentStart / 60), info.currentStart % 60, 0);
+      const endMin = info.type === "move"
+        ? info.currentStart + (info.originalEnd - info.originalStart)
+        : info.currentEnd;
+      const newEndDt = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
+        Math.floor(endMin / 60), endMin % 60, 0);
+
+      try {
+        await updateCalendarEvent(info.ev.id, {
+          start_at: format(newStartDt, "yyyy-MM-dd'T'HH:mm:ss"),
+          end_at:   format(newEndDt,   "yyyy-MM-dd'T'HH:mm:ss"),
+        });
+        onRefresh();
+      } catch {
+        toast.error("更新に失敗しました");
+      }
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [getMinFromY, getDayFromX, onRefresh]);
+
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const isDraggingRef = useRef(false);
 
   return (
-    <Card className="overflow-hidden py-0">
-      <div className="grid grid-cols-7 border-b">
+    <Card className="overflow-hidden py-0 select-none">
+      {/* Sticky day header */}
+      <div className="grid border-b" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+        <div className="border-r bg-background" />
         {days.map((d) => {
-          const today = isToday(d);
-          const isSel = isSameDay(d, selected);
+          const today   = isToday(d);
+          const isSel   = isSameDay(d, selected);
           const weekday = d.getDay();
           return (
             <button
               key={d.toISOString()}
               onClick={() => onSelect(d)}
               className={cn(
-                "flex flex-col items-center gap-1 py-3 border-r last:border-r-0 transition-colors",
+                "flex flex-col items-center gap-0.5 py-2 border-r last:border-r-0 transition-colors hover:bg-muted/40",
                 isSel && "bg-primary/5",
-                "hover:bg-muted/40"
               )}
             >
-              <span
-                className={cn(
-                  "text-[10px] font-medium",
-                  weekday === 0
-                    ? "text-rose-500"
-                    : weekday === 6
-                    ? "text-blue-500"
-                    : "text-muted-foreground"
-                )}
-              >
+              <span className={cn(
+                "text-[10px] font-medium",
+                weekday === 0 ? "text-rose-500" : weekday === 6 ? "text-blue-500" : "text-muted-foreground",
+              )}>
                 {format(d, "E", { locale: ja })}
               </span>
-              <span
-                className={cn(
-                  "text-lg font-semibold tabular-nums h-8 w-8 rounded-full flex items-center justify-center",
-                  today && "bg-primary text-primary-foreground"
-                )}
-              >
+              <span className={cn(
+                "text-base font-semibold tabular-nums h-7 w-7 rounded-full flex items-center justify-center",
+                today && "bg-primary text-primary-foreground",
+              )}>
                 {format(d, "d")}
               </span>
             </button>
           );
         })}
       </div>
-      <div className="grid grid-cols-7 min-h-[500px]">
-        {days.map((d) => {
-          const dayEvents = events
-            .filter((e) => isSameDay(parseISO(e.start_at), d))
-            .sort((a, b) => a.start_at.localeCompare(b.start_at));
-          return (
-            <div
-              key={d.toISOString()}
-              className="border-r last:border-r-0 p-2 space-y-1"
-            >
-              {dayEvents.length === 0 ? (
-                <span className="text-[10px] text-muted-foreground/50">-</span>
-              ) : (
-                dayEvents.map((ev) => (
-                  <button
-                    key={ev.id}
-                    type="button"
-                    onClick={() => onEventClick(ev)}
-                    className={cn(
-                      "w-full text-left text-[10px] px-1.5 py-1 rounded border cursor-pointer hover:brightness-95 hover:shadow-sm transition",
-                      CAT_CHIP[ev.category ?? ""] ||
-                        "bg-muted text-foreground border-border"
-                    )}
-                  >
-                    {!ev.all_day && (
-                      <div className="tabular-nums font-medium">
-                        {format(parseISO(ev.start_at), "HH:mm")}
+
+      {/* Scrollable time grid */}
+      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 580 }}>
+        <div style={{ display: "flex" }}>
+          {/* Time labels */}
+          <div className="shrink-0 border-r relative" style={{ width: 52, height: 24 * HOUR_H }}>
+            {hours.map((h) => (
+              <div
+                key={h}
+                className="absolute text-[10px] text-muted-foreground text-right"
+                style={{ top: h * HOUR_H - 6, right: 6, lineHeight: "12px" }}
+              >
+                {h === 0 ? "" : `${String(h).padStart(2, "0")}:00`}
+              </div>
+            ))}
+          </div>
+
+          {/* Day columns */}
+          <div
+            ref={gridRef}
+            className="flex-1 grid"
+            style={{ gridTemplateColumns: "repeat(7, 1fr)", cursor: dragging ? "grabbing" : "default" }}
+          >
+            {days.map((d) => {
+              const today = isToday(d);
+
+              /* events to render in this column:
+                 - dragged event follows currentDay, not original day */
+              const colEvents = events.filter((e) => {
+                if (e.all_day) return false;
+                if (dragging?.ev.id === e.id) return isSameDay(dragging.currentDay, d);
+                return isSameDay(parseISO(e.start_at), d);
+              }).sort((a, b) => a.start_at.localeCompare(b.start_at));
+
+              return (
+                <div
+                  key={d.toISOString()}
+                  className="relative border-r last:border-r-0"
+                  style={{ height: 24 * HOUR_H }}
+                >
+                  {/* Hour / half-hour lines */}
+                  {hours.map((h) => (
+                    <div key={h}>
+                      <div className="absolute w-full border-t border-slate-300/70" style={{ top: h * HOUR_H }} />
+                      <div className="absolute w-full border-t border-slate-200/40 border-dashed" style={{ top: h * HOUR_H + HOUR_H / 2 }} />
+                    </div>
+                  ))}
+
+                  {/* Current time indicator */}
+                  {today && (
+                    <div
+                      className="absolute w-full z-20 pointer-events-none"
+                      style={{ top: nowMin * PX_PER_MIN }}
+                    >
+                      <div className="relative flex items-center">
+                        <div className="absolute -left-1 h-2.5 w-2.5 rounded-full bg-red-500 z-10" />
+                        <div className="w-full h-px bg-red-500" />
                       </div>
-                    )}
-                    <div className="truncate">{ev.title}</div>
-                  </button>
-                ))
-              )}
-            </div>
-          );
-        })}
+                    </div>
+                  )}
+
+                  {/* Events */}
+                  {colEvents.map((ev) => {
+                    const isDraggingThis = dragging?.ev.id === ev.id;
+                    const startDt = parseISO(ev.start_at);
+                    const endDt   = ev.end_at ? parseISO(ev.end_at) : addMinutes(startDt, 60);
+                    const sMin = isDraggingThis ? dragging!.currentStart : toMin(startDt);
+                    const eMin = isDraggingThis ? dragging!.currentEnd   : toMin(endDt);
+                    const top    = sMin * PX_PER_MIN;
+                    const height = Math.max(20, (eMin - sMin) * PX_PER_MIN);
+
+                    return (
+                      <div
+                        key={ev.id}
+                        className={cn(
+                          "absolute left-0.5 right-0.5 rounded border text-[10px] overflow-hidden z-10",
+                          CAT_CHIP[ev.category ?? ""] || "bg-muted text-foreground border-border",
+                          isDraggingThis ? "opacity-60 cursor-grabbing shadow-lg" : "cursor-grab hover:brightness-95 hover:shadow-sm",
+                        )}
+                        style={{ top, height }}
+                        onMouseDown={(e) => {
+                          isDraggingRef.current = false;
+                          startDrag(e, ev, "move");
+                        }}
+                        onClick={(e) => {
+                          if (!isDraggingRef.current) {
+                            e.stopPropagation();
+                            onEventClick(ev);
+                          }
+                        }}
+                      >
+                        <div className="px-1 pt-0.5 flex flex-col h-full">
+                          <div className="font-semibold tabular-nums shrink-0">
+                            {isDraggingThis
+                              ? minToTimeStr(dragging!.currentStart)
+                              : format(startDt, "HH:mm")}
+                          </div>
+                          <div className="truncate">{ev.title}</div>
+                        </div>
+                        {/* Resize handle */}
+                        <div
+                          className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize hover:bg-black/10 rounded-b"
+                          title="ドラッグして長さを変更"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            isDraggingRef.current = true;
+                            startDrag(e, ev, "resize");
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </Card>
   );

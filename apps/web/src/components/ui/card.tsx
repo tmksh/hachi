@@ -2,12 +2,20 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+type CardVariant = "default" | "inset";
+
+interface CardProps extends React.ComponentProps<"div"> {
+  variant?: CardVariant;
+}
+
+function Card({ className, variant = "default", ...props }: CardProps) {
   return (
     <div
       data-slot="card"
+      data-variant={variant}
       className={cn(
-        "text-card-foreground flex flex-col gap-6 rounded-xl py-6 frost-card transition-[box-shadow] duration-200",
+        "text-card-foreground flex flex-col gap-6 rounded-xl py-6 transition-[box-shadow] duration-200",
+        variant === "inset" ? "frost-card-inset" : "frost-card",
         className
       )}
       {...props}
