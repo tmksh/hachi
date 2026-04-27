@@ -338,7 +338,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold mb-1">今日のフォーカス</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                  <span className="text-xs text-muted-foreground leading-relaxed block">
                     {loading ? (
                       <Skeleton className="h-3 w-48" />
                     ) : (
@@ -346,7 +346,7 @@ export default function DashboardPage() {
                         今日は<span className="text-primary font-semibold">{data?.todos.length ?? 0}件</span>の対応を優先してください。
                       </>
                     )}
-                  </p>
+                  </span>
                 </div>
               </div>
               <div className="space-y-2">

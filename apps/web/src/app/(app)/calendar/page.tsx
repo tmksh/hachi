@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   format,
   startOfMonth,
@@ -31,8 +31,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { TimeSelect } from "@/components/ui/time-select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -66,8 +68,12 @@ import {
 } from "@/lib/actions/calendar";
 import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent } from "@/lib/google-calendar";
+import { useAuth } from "@/hooks/use-auth";
 
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
+type AnyEv = (Ev | MappedGoogleEvent) & { _isGoogle?: true; _htmlLink?: string };
 type View = "day" | "week" | "month";
 
 /* ─── Week-view time grid constants ─── */
@@ -77,7 +83,7 @@ const SNAP_MIN = 15;
 
 type DragInfo = {
   type: "move" | "resize";
-  ev: Ev;
+  ev: AnyEv;
   originalStart: number;   // minutes from midnight
   originalEnd: number;
   clickOffsetMin: number;  // offset within event when clicked (move only)
@@ -104,6 +110,7 @@ const CAT_DOT: Record<string, string> = {
   task: "bg-amber-500",
   facility: "bg-violet-500",
   equipment: "bg-orange-500",
+  google: "bg-sky-400",
 };
 
 const CAT_CHIP: Record<string, string> = {
@@ -112,6 +119,7 @@ const CAT_CHIP: Record<string, string> = {
   task: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30",
   facility: "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30",
   equipment: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30",
+  google: "bg-sky-50 text-sky-700 border-sky-200",
 };
 
 const CAT_LABELS: Record<string, string> = {
@@ -123,16 +131,25 @@ const CAT_LABELS: Record<string, string> = {
 };
 
 export default function CalendarPage() {
+  const { profile } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState<View>("month");
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<Ev[]>([]);
+  const [googleEvents, setGoogleEvents] = useState<MappedGoogleEvent[]>([]);
+  const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeEvent, setActiveEvent] = useState<Ev | null>(null);
+  const [activeEvent, setActiveEvent] = useState<AnyEv | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const openEvent = useCallback((ev: Ev) => setActiveEvent(ev), []);
+  const openEvent = useCallback((ev: AnyEv) => {
+    if ((ev as MappedGoogleEvent)._isGoogle && (ev as MappedGoogleEvent)._htmlLink) {
+      window.open((ev as MappedGoogleEvent)._htmlLink, "_blank");
+      return;
+    }
+    setActiveEvent(ev);
+  }, []);
   const refreshEvents = useCallback(() => setReloadKey((k) => k + 1), []);
   const newEventHref = (d: Date) =>
     `/calendar/new?date=${format(d, "yyyy-MM-dd")}`;
@@ -155,6 +172,7 @@ export default function CalendarPage() {
     };
   }, [currentDate, view]);
 
+  /* ローカルイベント取得 */
   useEffect(() => {
     setLoading(true);
     getCalendarEvents({ start: rangeStart.toISOString(), end: rangeEnd.toISOString() })
@@ -163,10 +181,25 @@ export default function CalendarPage() {
       .finally(() => setLoading(false));
   }, [rangeStart, rangeEnd, reloadKey]);
 
-  const visibleEvents = useMemo(
-    () => events.filter((e) => !hiddenCats.has(e.category ?? "")),
-    [events, hiddenCats]
-  );
+  /* Google Calendar イベント取得 */
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.provider_token) return;
+      setGoogleConnected(true);
+      fetchGoogleCalendarEvents(
+        session.provider_token,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString(),
+      ).then((gEvs) => setGoogleEvents(gEvs.map(mapGoogleEvent)));
+    });
+  }, [rangeStart, rangeEnd, reloadKey]);
+
+  const visibleEvents = useMemo(() => {
+    const local = events.filter((e) => !hiddenCats.has(e.category ?? ""));
+    const goog  = hiddenCats.has("google") ? [] : googleEvents;
+    return [...local, ...goog] as AnyEv[];
+  }, [events, googleEvents, hiddenCats]);
 
   const toggleCat = (c: string) => {
     setHiddenCats((prev) => {
@@ -221,6 +254,32 @@ export default function CalendarPage() {
           <h1 className="text-xl font-semibold tracking-tight">カレンダー</h1>
           <p className="text-xs text-muted-foreground mt-0.5">スケジュール管理</p>
         </div>
+
+        {/* ログイン中のユーザー表示 */}
+        {profile && (
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/50 border border-white/60 backdrop-blur-sm shadow-sm">
+            <Avatar className="h-7 w-7 shrink-0">
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {profile.display_name?.charAt(0) ?? "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col leading-tight">
+              <span className="text-xs font-medium text-foreground">{profile.display_name}</span>
+              <span className="text-[10px] text-muted-foreground">{profile.email}</span>
+            </div>
+            {googleConnected && (
+              <div className="flex items-center gap-1 pl-2 border-l border-border/40">
+                <svg className="h-3 w-3" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                <span className="text-[10px] text-sky-600 font-medium">連携中</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -265,8 +324,8 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Main 3-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_280px] gap-4">
+      {/* Main 2-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
         {/* Left sidebar */}
         <aside className="space-y-3">
           <MiniCalendar
@@ -276,6 +335,61 @@ export default function CalendarPage() {
               setCurrentDate(d);
             }}
           />
+
+          {/* Tasks panel (moved from right sidebar) */}
+          <Card>
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <ListTodo className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold">タスク</h3>
+                </div>
+                <Link href={newEventHref(selectedDate)}>
+                  <button className="text-muted-foreground hover:text-foreground">
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </Link>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                {format(selectedDate, "M月d日（E）", { locale: ja })} ・ {selectedDateEvents.length}件
+              </p>
+              <div className="space-y-1">
+                {selectedDateEvents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-6">
+                    予定はありません
+                  </p>
+                ) : (
+                  selectedDateEvents.map((ev) => (
+                    <button
+                      key={ev.id}
+                      onClick={() => openEvent(ev)}
+                      className="w-full flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <span
+                        className={cn(
+                          "h-2 w-2 rounded-full mt-1.5 shrink-0",
+                          CAT_DOT[ev.category ?? ""] || "bg-gray-400"
+                        )}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{ev.title}</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">
+                          {ev.all_day
+                            ? "終日"
+                            : format(parseISO(ev.start_at), "HH:mm")}
+                          {ev.category && (
+                            <span className="ml-1.5">・{CAT_LABELS[ev.category]}</span>
+                          )}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Category filter */}
           <Card>
             <CardContent className="py-3 px-4 space-y-1">
               <div className="flex items-center justify-between mb-2">
@@ -310,6 +424,31 @@ export default function CalendarPage() {
                   </label>
                 );
               })}
+
+              {/* Google カレンダー */}
+              {googleConnected && (
+                <>
+                  <div className="border-t border-border/40 my-1.5" />
+                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/40 rounded-md px-1.5 py-1.5">
+                    <Checkbox
+                      checked={!hiddenCats.has("google")}
+                      onCheckedChange={() => toggleCat("google")}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className="h-2 w-2 rounded-full bg-sky-400" />
+                    <span className="flex-1 flex items-center gap-1">
+                      <svg className="h-3 w-3" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                      Google カレンダー
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">{googleEvents.length}</span>
+                  </label>
+                </>
+              )}
             </CardContent>
           </Card>
         </aside>
@@ -343,61 +482,6 @@ export default function CalendarPage() {
             />
           )}
         </div>
-
-        {/* Right tasks panel */}
-        <aside>
-          <Card>
-            <CardContent className="py-3 px-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <ListTodo className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold">タスク</h3>
-                </div>
-                <Link href={newEventHref(selectedDate)}>
-                  <button className="text-muted-foreground hover:text-foreground">
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </Link>
-              </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                {format(selectedDate, "M月d日（E）", { locale: ja })} ・ {selectedDateEvents.length}件
-              </p>
-              <div className="space-y-1">
-                {selectedDateEvents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-10">
-                    予定はありません
-                  </p>
-                ) : (
-                  selectedDateEvents.map((ev) => (
-                    <button
-                      key={ev.id}
-                      onClick={() => openEvent(ev)}
-                      className="w-full flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors text-left"
-                    >
-                      <span
-                        className={cn(
-                          "h-2 w-2 rounded-full mt-1.5 shrink-0",
-                          CAT_DOT[ev.category ?? ""] || "bg-gray-400"
-                        )}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{ev.title}</p>
-                        <p className="text-[10px] text-muted-foreground tabular-nums">
-                          {ev.all_day
-                            ? "終日"
-                            : format(parseISO(ev.start_at), "HH:mm")}
-                          {ev.category && (
-                            <span className="ml-1.5">・{CAT_LABELS[ev.category]}</span>
-                          )}
-                        </p>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </aside>
       </div>
 
       <EventDialog
@@ -517,8 +601,8 @@ function MonthView({
   date: Date;
   selected: Date;
   onSelect: (d: Date) => void;
-  events: Ev[];
-  onEventClick: (ev: Ev) => void;
+  events: AnyEv[];
+  onEventClick: (ev: AnyEv) => void;
 }) {
   const ms = startOfMonth(date);
   const me = endOfMonth(date);
@@ -642,8 +726,8 @@ function WeekView({
   date: Date;
   selected: Date;
   onSelect: (d: Date) => void;
-  events: Ev[];
-  onEventClick: (ev: Ev) => void;
+  events: AnyEv[];
+  onEventClick: (ev: AnyEv) => void;
   onRefresh: () => void;
 }) {
   const ws = startOfWeek(date, { weekStartsOn: 0 });
@@ -691,9 +775,11 @@ function WeekView({
   /* Start drag */
   const startDrag = useCallback((
     e: React.MouseEvent,
-    ev: Ev,
+    ev: AnyEv,
     type: "move" | "resize",
   ) => {
+    /* Google イベントはドラッグ不可 */
+    if ((ev as MappedGoogleEvent)._isGoogle) return;
     e.preventDefault();
     e.stopPropagation();
     const startDt = parseISO(ev.start_at);
@@ -941,8 +1027,8 @@ function DayView({
   onEventClick,
 }: {
   date: Date;
-  events: Ev[];
-  onEventClick: (ev: Ev) => void;
+  events: AnyEv[];
+  onEventClick: (ev: AnyEv) => void;
 }) {
   const dayEvents = events
     .filter((e) => isSameDay(parseISO(e.start_at), date))
@@ -1014,7 +1100,7 @@ function EventDialog({
   onSaved,
   onDeleted,
 }: {
-  event: Ev | null;
+  event: AnyEv | null;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
   onDeleted: () => void;
@@ -1193,11 +1279,10 @@ function EventDialog({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">開始時刻</Label>
-                <Input
-                  type="time"
+                <TimeSelect
                   value={startTime}
                   disabled={allDay}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  onChange={setStartTime}
                 />
               </div>
               <div className="space-y-1.5">
@@ -1210,11 +1295,10 @@ function EventDialog({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">終了時刻</Label>
-                <Input
-                  type="time"
+                <TimeSelect
                   value={endTime}
                   disabled={allDay}
-                  onChange={(e) => setEndTime(e.target.value)}
+                  onChange={setEndTime}
                 />
               </div>
             </div>

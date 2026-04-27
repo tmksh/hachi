@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TimeSelect } from "@/components/ui/time-select";
 import { ArrowLeft, Save } from "lucide-react";
 import { createCalendarEvent } from "@/lib/actions/calendar";
 
@@ -44,9 +45,9 @@ export default function CalendarNewPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2 sm:col-span-2"><Label>タイトル *</Label><Input value={title} onChange={e=>setTitle(e.target.value)} /></div>
             <div className="space-y-2"><Label>開始日 *</Label><Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
-            <div className="space-y-2"><Label>開始時刻</Label><Input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)} /></div>
+            <div className="space-y-2"><Label>開始時刻</Label><TimeSelect value={startTime} onChange={setStartTime} /></div>
             <div className="space-y-2"><Label>終了日</Label><Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>
-            <div className="space-y-2"><Label>終了時刻</Label><Input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)} /></div>
+            <div className="space-y-2"><Label>終了時刻</Label><TimeSelect value={endTime} onChange={setEndTime} /></div>
             <div className="space-y-2"><Label>カテゴリ</Label><Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="sales">営業</SelectItem><SelectItem value="construction">工事</SelectItem><SelectItem value="task">タスク</SelectItem><SelectItem value="facility">施設</SelectItem><SelectItem value="equipment">機材</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>場所</Label><Input value={location} onChange={e=>setLocation(e.target.value)} /></div>
           </div>

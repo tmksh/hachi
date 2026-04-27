@@ -35,6 +35,7 @@ import {
   ChevronRight,
   FileText,
   CalendarDays,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -107,6 +108,8 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
   const toggleGroup = (key: string) => {
     setOpenGroup((prev) => (prev === key ? null : key));
   };
+
+  const isSuperAdmin = profile?.email === "admin@example.com";
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -254,6 +257,43 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
               </div>
             );
           })}
+
+          {/* 運営管理者専用ボタン */}
+          {isSuperAdmin && (
+            <div className="mt-2 pt-2 border-t border-white/20">
+              {expanded ? (
+                <Link
+                  href="/admin"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
+                    "hover:bg-accent/60",
+                    isActive("/admin") ? "text-amber-600 bg-amber-50/60" : "text-amber-500"
+                  )}
+                >
+                  <ShieldCheck className="h-5 w-5 shrink-0" />
+                  <span className="flex-1 text-left whitespace-nowrap overflow-hidden text-ellipsis">
+                    管理コンソール
+                  </span>
+                </Link>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      href="/admin"
+                      className={cn(
+                        "relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200",
+                        "hover:bg-amber-50/60",
+                        isActive("/admin") ? "bg-amber-50/60 text-amber-600" : "text-amber-500"
+                      )}
+                    >
+                      <ShieldCheck className="h-5 w-5" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">管理コンソール</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* Bottom actions */}

@@ -78,6 +78,16 @@ export async function updateSession(request: NextRequest) {
   // ── ロールベースのルート保護 ──────────────────────────────────
   if (user) {
     const { pathname } = request.nextUrl;
+
+    // /admin は admin@example.com のみアクセス可
+    if (pathname.startsWith("/admin")) {
+      if (user.email !== "admin@example.com") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/unauthorized";
+        return NextResponse.redirect(url);
+      }
+    }
+
     const matchedPath = Object.keys(ROUTE_ROLES).find((p) =>
       pathname.startsWith(p),
     );
