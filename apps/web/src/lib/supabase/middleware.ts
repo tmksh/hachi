@@ -14,18 +14,54 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/marketing": ["owner", "hq_admin"],
 };
 
+// ── サブドメイン予約語（これらは会社 slug として使えない） ───────────────────────
+const RESERVED_SUBDOMAINS = new Set([
+  "www", "app", "admin", "api", "mail", "ftp", "smtp", "pop",
+  "cdn", "static", "assets", "status", "help", "support", "docs",
+]);
+
+/**
+ * リクエストホストからサブドメイン（会社 slug）を抽出する。
+ *
+ * - NEXT_PUBLIC_APP_DOMAIN が未設定 → null を返す（サブドメイン機能オフ）
+ * - localhost / IP アドレス → null（開発環境はスキップ）
+ * - www.bridge.jp, bridge.jp → null（apex / www はテナントなし）
+ * - acme.bridge.jp → "acme"
+ */
+function extractSubdomain(request: NextRequest): string | null {
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN; // 例: "bridge.jp"
+  if (!appDomain) return null;
+
+  const host = request.headers.get("host") ?? "";
+  // ポート番号を除去
+  const hostname = host.split(":")[0];
+
+  // localhost や IP は開発環境なのでスキップ
+  if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return null;
+
+  // apex ドメインまたは www はスキップ
+  if (hostname === appDomain || hostname === `www.${appDomain}`) return null;
+
+  // {slug}.{appDomain} の形式かチェック
+  const suffix = `.${appDomain}`;
+  if (!hostname.endsWith(suffix)) return null;
+
+  const slug = hostname.slice(0, -suffix.length);
+  // ネストしたサブドメイン（a.b.bridge.jp）や予約語はスキップ
+  if (slug.includes(".") || RESERVED_SUBDOMAINS.has(slug)) return null;
+
+  return slug;
+}
+
 export async function updateSession(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Skip auth check if Supabase is not configured
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.next({ request });
   }
 
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
@@ -36,9 +72,7 @@ export async function updateSession(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value),
         );
-        supabaseResponse = NextResponse.next({
-          request,
-        });
+        supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options),
         );
@@ -46,12 +80,78 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Public routes that don't require auth
-  const publicPaths = ["/login", "/api/auth/callback", "/unauthorized"];
+  // ── サブドメイン解決（NEXT_PUBLIC_APP_DOMAIN 設定後に有効） ─────────────────
+  const slug = extractSubdomain(request);
+  if (slug) {
+    const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN!;
+    const { pathname } = request.nextUrl;
+
+    // slug が DB に存在するか確認
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("slug", slug)
+      .single();
+
+    if (!company) {
+      // 存在しない slug → apex ドメインのトップにリダイレクト
+      const url = request.nextUrl.clone();
+      url.host = appDomain;
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    // 未ログインで /login 以外にアクセス → サブドメインの /login へ
+    if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // ログイン済みで /login → /dashboard へ
+    if (user && pathname === "/login") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+
+    // ログイン済みユーザーが別テナントのサブドメインにアクセスしようとした場合は弾く
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profile && profile.company_id !== company.id) {
+        // 自テナントのサブドメインにリダイレクト
+        const { data: myCompany } = await supabase
+          .from("companies")
+          .select("slug")
+          .eq("id", profile.company_id)
+          .single();
+
+        const url = request.nextUrl.clone();
+        if (myCompany?.slug) {
+          url.host = `${myCompany.slug}.${appDomain}`;
+        } else {
+          url.host = appDomain;
+        }
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+    }
+
+    // サブドメイン情報をヘッダーで Server Components に伝搬
+    supabaseResponse.headers.set("x-tenant-slug", slug);
+    supabaseResponse.headers.set("x-tenant-id", company.id);
+    return supabaseResponse;
+  }
+  // ── ここから下は従来のシングルドメイン動作（現状と完全に同一） ─────────────
+
+  const publicPaths = ["/login", "/api/auth/callback", "/unauthorized", "/reset-password", "/update-password"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
@@ -68,18 +168,15 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect root to dashboard
   if (user && request.nextUrl.pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // ── ロールベースのルート保護 ──────────────────────────────────
   if (user) {
     const { pathname } = request.nextUrl;
 
-    // /admin は admin@example.com のみアクセス可
     if (pathname.startsWith("/admin")) {
       if (user.email !== "admin@example.com") {
         const url = request.nextUrl.clone();

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { Search, Trash2, FileText, Upload, Download } from "lucide-react";
@@ -42,6 +43,7 @@ export default function DocumentsPage() {
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Doc | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -50,8 +52,7 @@ export default function DocumentsPage() {
   useEffect(load, [tab]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("削除しますか？")) return;
-    try { await deleteDocument(id); toast.success("削除しました"); load(); } catch { toast.error("失敗"); }
+    try { await deleteDocument(id); toast.success("削除しました"); setDeleteTarget(null); load(); } catch { toast.error("失敗"); }
   };
 
   const handleUpload = async () => {
@@ -162,7 +163,7 @@ export default function DocumentsPage() {
                               <Button size="icon" variant="ghost" onClick={() => handleDownload(d.storage_path, d.file_name)} title="ダウンロード">
                                 <Download className="h-4 w-4" />
                               </Button>
-                              <Button size="icon" variant="ghost" onClick={() => handleDelete(d.id)}>
+                              <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(d)}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -211,6 +212,27 @@ export default function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 削除確認ダイアログ */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>文書を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{deleteTarget?.name}」を削除します。この操作は元に戻せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              onClick={() => deleteTarget && handleDelete(deleteTarget.id)}
+            >
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -285,8 +286,20 @@ function OrdersTab({ constructionId, initialOrders }: { constructionId: string; 
   }
 
   async function handleStatusChange(id: string, status: "draft" | "submitted" | "approved" | "rejected") {
-    await updateContractorOrder(id, { status }).catch(console.error);
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+    const prev = orders;
+    const target = prev.find(o => o.id === id);
+    if (!target || target.status === status) return;
+    setOrders(prev.map(o => o.id === id ? { ...o, status } : o));
+    try {
+      await updateContractorOrder(id, { status });
+      toast.success(`ステータスを「${ORDER_STATUS_MAP[status].label}」に変更しました`);
+    } catch (e) {
+      console.error(e);
+      setOrders(prev);
+      toast.error("ステータスの更新に失敗しました", {
+        description: "権限または通信エラーの可能性があります",
+      });
+    }
   }
 
   const total = orders.reduce((s, o) => s + o.amount, 0);
@@ -345,12 +358,17 @@ function OrdersTab({ constructionId, initialOrders }: { constructionId: string; 
                           value={order.status}
                           onValueChange={(v) => handleStatusChange(order.id, v as "draft" | "submitted" | "approved" | "rejected")}
                         >
-                          <SelectTrigger className="h-6 text-[11px] font-semibold px-2 border-0 shadow-none">
-                            <span className={`px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                          <SelectTrigger
+                            title="クリックでステータスを変更"
+                            className={`h-7 text-[11px] font-semibold pl-2.5 pr-1.5 gap-1 cursor-pointer rounded-full border ${st.cls} hover:brightness-95 hover:shadow-sm transition-all`}
+                          >
+                            <span>{st.label}</span>
                           </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(ORDER_STATUS_MAP).map(([val, { label }]) => (
-                              <SelectItem key={val} value={val} className="text-xs">{label}</SelectItem>
+                          <SelectContent align="center">
+                            {Object.entries(ORDER_STATUS_MAP).map(([val, { label, cls }]) => (
+                              <SelectItem key={val} value={val} className="text-xs">
+                                <span className={`px-1.5 py-0.5 rounded-full ${cls}`}>{label}</span>
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

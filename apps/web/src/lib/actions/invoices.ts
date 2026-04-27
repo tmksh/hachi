@@ -31,6 +31,12 @@ export async function getInvoice(id: string) {
   return { ...data, items: items || [] };
 }
 
+export async function updateInvoiceStatus(id: string, status: "draft" | "sent" | "paid" | "cancelled") {
+  const supabase = await createClient();
+  const { error } = await supabase.from("invoices").update({ status }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function createInvoice(
   input: {
     construction_id?: string;

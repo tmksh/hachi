@@ -51,8 +51,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { Profile } from "@/hooks/use-auth";
+import { useAuth, type Profile } from "@/hooks/use-auth";
 import { getNotifications, markAnnouncementAsRead, type Notification } from "@/lib/actions/notifications";
+import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -77,11 +78,26 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     getNotifications().then(setNotifications).catch(() => {});
   }, []);
+
+  // デバウンスグローバル検索
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults([]); return; }
+    const timer = setTimeout(() => {
+      setSearchLoading(true);
+      globalSearch(searchQuery)
+        .then(setSearchResults)
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearchLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const unreadCount = notifications.length;
 
@@ -109,7 +125,8 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
     setOpenGroup((prev) => (prev === key ? null : key));
   };
 
-  const isSuperAdmin = profile?.email === "admin@example.com";
+  const { user } = useAuth();
+  const isSuperAdmin = user?.email === "admin@example.com";
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -423,33 +440,68 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
       </motion.aside>
 
       {/* 検索ダイアログ */}
-      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+      <Dialog open={searchOpen} onOpenChange={(v) => { setSearchOpen(v); if (!v) { setSearchQuery(""); setSearchResults([]); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>検索</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              placeholder="ページ名やキーワードで検索..."
+              placeholder="顧客名・工事名・商談名で検索..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
             />
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {visibleGroups.flatMap((g) => g.items)
-                .filter((item) =>
-                  !searchQuery || item.label.toLowerCase().includes(searchQuery.toLowerCase())
+            <div className="space-y-1 max-h-72 overflow-y-auto">
+              {/* データ検索結果 */}
+              {searchQuery.trim() ? (
+                searchLoading ? (
+                  <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">検索中...</div>
+                ) : searchResults.length > 0 ? (
+                  <>
+                    {(["customer", "construction", "deal"] as const).map((type) => {
+                      const items = searchResults.filter(r => r.type === type);
+                      if (!items.length) return null;
+                      const labels = { customer: "顧客", construction: "工事", deal: "商談" };
+                      const colors = { customer: "text-blue-600 bg-blue-50", construction: "text-amber-600 bg-amber-50", deal: "text-emerald-600 bg-emerald-50" };
+                      return (
+                        <div key={type}>
+                          <p className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{labels[type]}</p>
+                          {items.map(r => (
+                            <Link
+                              key={r.id}
+                              href={r.href}
+                              onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }}
+                              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-accent transition-colors"
+                            >
+                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${colors[type]}`}>{labels[type]}</span>
+                              <span className="flex-1 font-medium">{r.title}</span>
+                              <span className="text-xs text-muted-foreground truncate max-w-[100px]">{r.subtitle}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">「{searchQuery}」に一致する結果なし</div>
                 )
-                .map((item) => (
-                  <Link
-                    key={item.key}
-                    href={item.href}
-                    onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
-                    className="flex items-center px-3 py-2 rounded-lg text-sm hover:bg-accent transition-colors"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+              ) : (
+                /* 未入力時：ナビメニュー一覧 */
+                <>
+                  <p className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">ページ</p>
+                  {visibleGroups.flatMap((g) => g.items).map((item) => (
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+                      className="flex items-center px-3 py-2 rounded-lg text-sm hover:bg-accent transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </DialogContent>

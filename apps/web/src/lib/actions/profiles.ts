@@ -55,3 +55,39 @@ export async function getCompany() {
   if (error) throw error;
   return data as Company;
 }
+
+export async function updateCompany(input: {
+  name?: string;
+  phone?: string;
+  address?: string;
+  postal_code?: string;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: profile } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+  if (!["owner", "hq_admin"].includes(profile.role)) throw new Error("権限がありません");
+
+  const { data: current } = await supabase.from("companies").select("settings").eq("id", profile.company_id).single();
+
+  const newSettings = {
+    ...(current?.settings ?? {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    ...(input.address !== undefined ? { address: input.address } : {}),
+    ...(input.postal_code !== undefined ? { postal_code: input.postal_code } : {}),
+  };
+
+  const updatePayload: Record<string, unknown> = { settings: newSettings };
+  if (input.name !== undefined) updatePayload.name = input.name;
+
+  const { data, error } = await supabase
+    .from("companies")
+    .update(updatePayload)
+    .eq("id", profile.company_id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Company;
+}

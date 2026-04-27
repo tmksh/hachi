@@ -60,6 +60,9 @@ import {
   FileText,
   Pencil,
   Trash2,
+  Link2,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import {
   getCalendarEvents,
@@ -139,6 +142,8 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<Ev[]>([]);
   const [googleEvents, setGoogleEvents] = useState<MappedGoogleEvent[]>([]);
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleAccountEmail, setGoogleAccountEmail] = useState<string | null>(null);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeEvent, setActiveEvent] = useState<AnyEv | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -185,7 +190,11 @@ export default function CalendarPage() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.provider_token) return;
+      if (!session?.provider_token) {
+        setGoogleConnected(false);
+        setGoogleEvents([]);
+        return;
+      }
       setGoogleConnected(true);
       fetchGoogleCalendarEvents(
         session.provider_token,
@@ -194,6 +203,40 @@ export default function CalendarPage() {
       ).then((gEvs) => setGoogleEvents(gEvs.map(mapGoogleEvent)));
     });
   }, [rangeStart, rangeEnd, reloadKey]);
+
+  /* 連携している Google アカウントのメール取得 */
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const googleIdentity = user?.identities?.find((i) => i.provider === "google");
+      const email =
+        (googleIdentity?.identity_data?.email as string | undefined) ??
+        (user?.user_metadata?.email as string | undefined) ??
+        null;
+      setGoogleAccountEmail(email);
+    });
+  }, [reloadKey]);
+
+  /* Google 連携を開始 / 再連携 */
+  const connectGoogle = useCallback(async () => {
+    setConnectingGoogle(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback?next=/calendar`,
+        scopes: "https://www.googleapis.com/auth/calendar.readonly",
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+    if (error) {
+      toast.error("Google 連携に失敗しました");
+      setConnectingGoogle(false);
+    }
+  }, []);
 
   const visibleEvents = useMemo(() => {
     const local = events.filter((e) => !hiddenCats.has(e.category ?? ""));
@@ -267,17 +310,6 @@ export default function CalendarPage() {
               <span className="text-xs font-medium text-foreground">{profile.display_name}</span>
               <span className="text-[10px] text-muted-foreground">{profile.email}</span>
             </div>
-            {googleConnected && (
-              <div className="flex items-center gap-1 pl-2 border-l border-border/40">
-                <svg className="h-3 w-3" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-                <span className="text-[10px] text-sky-600 font-medium">連携中</span>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -334,6 +366,14 @@ export default function CalendarPage() {
               setSelectedDate(d);
               setCurrentDate(d);
             }}
+          />
+
+          {/* Connected accounts panel */}
+          <ConnectedAccountsPanel
+            googleConnected={googleConnected}
+            googleAccountEmail={googleAccountEmail}
+            connectingGoogle={connectingGoogle}
+            onConnectGoogle={connectGoogle}
           />
 
           {/* Tasks panel (moved from right sidebar) */}
@@ -584,6 +624,93 @@ function MiniCalendar({
               </button>
             );
           })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ──────────────────── Connected Accounts Panel ──────────────────── */
+type ConnectedAccountsPanelProps = {
+  googleConnected: boolean;
+  googleAccountEmail: string | null;
+  connectingGoogle: boolean;
+  onConnectGoogle: () => void;
+};
+
+function GoogleLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    </svg>
+  );
+}
+
+function ConnectedAccountsPanel({
+  googleConnected,
+  googleAccountEmail,
+  connectingGoogle,
+  onConnectGoogle,
+}: ConnectedAccountsPanelProps) {
+  return (
+    <Card>
+      <CardContent className="py-3 px-4 space-y-2">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Link2 className="h-3.5 w-3.5 text-primary" />
+          <h3 className="text-xs font-semibold">連携アカウント</h3>
+        </div>
+
+        {/* Google */}
+        <div className="flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-muted/40 transition-colors">
+          <GoogleLogo className="h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium leading-tight">Google カレンダー</div>
+            <div className="text-[10px] text-muted-foreground truncate">
+              {googleConnected
+                ? googleAccountEmail ?? "連携済み"
+                : "未連携"}
+            </div>
+          </div>
+          {googleConnected ? (
+            <button
+              onClick={onConnectGoogle}
+              disabled={connectingGoogle}
+              title="再連携してトークンを更新"
+              className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {connectingGoogle ? (
+                <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-2.5 w-2.5" />
+              )}
+              連携中
+            </button>
+          ) : (
+            <button
+              onClick={onConnectGoogle}
+              disabled={connectingGoogle}
+              className="text-[10px] font-medium text-primary hover:underline disabled:opacity-50"
+            >
+              {connectingGoogle ? "接続中..." : "連携する"}
+            </button>
+          )}
+        </div>
+
+        {/* 将来の連携サービス用プレースホルダ */}
+        <div className="flex items-center gap-2 px-1.5 py-1.5 rounded-md opacity-60">
+          <div className="h-4 w-4 shrink-0 rounded-sm bg-[#0078D4] flex items-center justify-center">
+            <span className="text-[8px] font-bold text-white">M</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium leading-tight">Microsoft 365</div>
+            <div className="text-[10px] text-muted-foreground">近日対応予定</div>
+          </div>
+          <span className="text-[10px] text-muted-foreground border border-border rounded-full px-1.5 py-0.5">
+            準備中
+          </span>
         </div>
       </CardContent>
     </Card>

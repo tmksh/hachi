@@ -3,6 +3,7 @@
 export type Company = {
   id: string;
   name: string;
+  slug: string | null;
   logo_url: string | null;
   settings: Record<string, unknown>;
   created_at: string;

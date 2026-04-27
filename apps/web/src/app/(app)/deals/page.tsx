@@ -7,11 +7,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, Users, DollarSign, BarChart3, Plus, FileText } from "lucide-react";
 import { getDeals, updateDeal } from "@/lib/actions/deals";
+import { getProfiles } from "@/lib/actions/profiles";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
 import type { Deal } from "@/lib/database.types";
+import type { Profile } from "@/lib/database.types";
 
 type DealRow = Deal & {
   customer: { id: string; name: string; company_name: string | null } | null;
@@ -29,28 +32,38 @@ const STAGES: { key: Deal["stage"]; label: string; color: string }[] = [
   { key: "lost",            label: "失注",         color: "bg-red-50 dark:bg-red-950/30" },
 ];
 
-/** 見積ボタンを表示するステージ */
 const QUOTE_STAGES: Deal["stage"][] = ["quote_submitted", "negotiation", "closing", "won"];
 
 export default function DealsPage() {
   const router = useRouter();
   const [deals, setDeals]               = useState<DealRow[]>([]);
+  const [profiles, setProfiles]         = useState<Profile[]>([]);
   const [loading, setLoading]           = useState(true);
   const [draggedDeal, setDraggedDeal]   = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [addOpen, setAddOpen]           = useState(false);
   const [wonDeal, setWonDeal]           = useState<DealRow | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState("_all");
 
   const fetchDeals = useCallback(async () => {
     try { const d = await getDeals(); setDeals(d as DealRow[]); } catch {} finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchDeals(); }, [fetchDeals]);
+  useEffect(() => {
+    fetchDeals();
+    getProfiles().then(setProfiles).catch(() => {});
+  }, [fetchDeals]);
 
-  const totalAmount    = deals.reduce((s, d) => s + (d.value || 0), 0);
-  const wonDeals       = deals.filter(d => d.stage === "won");
-  const pipelineValue  = deals.filter(d => d.stage !== "won" && d.stage !== "lost").reduce((s, d) => s + (d.value || 0), 0);
-  const closedCount    = wonDeals.length + deals.filter(d => d.stage === "lost").length;
+  const filteredDeals = assigneeFilter === "_all"
+    ? deals
+    : assigneeFilter === "_unassigned"
+      ? deals.filter((d) => !d.assignee)
+      : deals.filter((d) => d.assignee?.id === assigneeFilter);
+
+  const totalAmount    = filteredDeals.reduce((s, d) => s + (d.value || 0), 0);
+  const wonDeals       = filteredDeals.filter(d => d.stage === "won");
+  const pipelineValue  = filteredDeals.filter(d => d.stage !== "won" && d.stage !== "lost").reduce((s, d) => s + (d.value || 0), 0);
+  const closedCount    = wonDeals.length + filteredDeals.filter(d => d.stage === "lost").length;
   const convRate       = closedCount > 0 ? Math.round((wonDeals.length / closedCount) * 100) : 0;
 
   const handleDrop = async (e: React.DragEvent, targetStage: Deal["stage"]) => {
@@ -60,13 +73,11 @@ export default function DealsPage() {
     const deal = deals.find(d => d.id === draggedDeal);
     if (!deal || deal.stage === targetStage) { setDraggedDeal(null); return; }
 
-    // 楽観的更新
     setDeals(prev => prev.map(d => d.id === draggedDeal ? { ...d, stage: targetStage } : d));
     setDraggedDeal(null);
 
     try {
       await updateDeal(draggedDeal, { stage: targetStage });
-      // 受注ステージに移動したら WonDialog を表示
       if (targetStage === "won") {
         setWonDeal({ ...deal, stage: "won" });
       }
@@ -93,10 +104,10 @@ export default function DealsPage() {
       {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "総商談数",    val: deals.length,                                        icon: Users },
-          { label: "総金額",      val: `${Math.round(totalAmount/10000).toLocaleString()}万円`, icon: DollarSign },
-          { label: "受注率",      val: `${convRate}%`,                                      icon: TrendingUp },
-          { label: "パイプライン", val: `${Math.round(pipelineValue/10000).toLocaleString()}万円`, icon: BarChart3 },
+          { label: "総商談数",    val: filteredDeals.length,                                            icon: Users },
+          { label: "総金額",      val: `${Math.round(totalAmount/10000).toLocaleString()}万円`,         icon: DollarSign },
+          { label: "受注率",      val: `${convRate}%`,                                                  icon: TrendingUp },
+          { label: "パイプライン", val: `${Math.round(pipelineValue/10000).toLocaleString()}万円`,      icon: BarChart3 },
         ].map((k, i) => (
           <Card key={i}>
             <CardContent className="p-4 flex items-center gap-3">
@@ -112,10 +123,31 @@ export default function DealsPage() {
         ))}
       </div>
 
+      {/* 担当者フィルタ */}
+      <div className="flex items-center gap-2">
+        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="担当者でフィルタ" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">担当者：すべて</SelectItem>
+            <SelectItem value="_unassigned">未割り当て</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {assigneeFilter !== "_all" && (
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-9" onClick={() => setAssigneeFilter("_all")}>
+            リセット
+          </Button>
+        )}
+      </div>
+
       {/* カンバン */}
       <div className="flex gap-4 overflow-x-auto pb-4">
         {STAGES.map(stage => {
-          const stageDeals = deals.filter(d => d.stage === stage.key);
+          const stageDeals = filteredDeals.filter(d => d.stage === stage.key);
           return (
             <div
               key={stage.key}

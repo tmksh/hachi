@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createClient } from "@/lib/supabase/client";
@@ -135,7 +136,12 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">パスワード</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">パスワード</Label>
+                <Link href="/reset-password" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  パスワードを忘れた場合
+                </Link>
+              </div>
               <div className="relative">
                 <Input
                   id="password"
