@@ -928,7 +928,7 @@ function WeekView({
                  - dragged event follows currentDay, not original day */
               const colEvents = events.filter((e) => {
                 if (e.all_day) return false;
-                if (dragging?.ev.id === e.id) return isSameDay(dragging.currentDay, d);
+                if (dragging?.ev.id === e.id) return isSameDay(dragging!.currentDay, d);
                 return isSameDay(parseISO(e.start_at), d);
               }).sort((a, b) => a.start_at.localeCompare(b.start_at));
 

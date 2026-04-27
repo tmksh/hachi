@@ -110,13 +110,13 @@ function EstimateTab({ data }: { data: Detail }) {
   };
 
   // カテゴリ別に明細を整理
-  const categories = estimate.categories ?? [];
-  const items = estimate.items ?? [];
-  const itemsByCategory = categories.map(cat => ({
+  const categories: EstimateCategory[] = estimate.categories ?? [];
+  const items: EstimateItem[] = estimate.items ?? [];
+  const itemsByCategory = categories.map((cat: EstimateCategory) => ({
     category: cat,
-    items: items.filter(item => item.category_id === cat.id),
+    items: items.filter((item: EstimateItem) => item.category_id === cat.id),
   }));
-  const uncategorized = items.filter(item => !item.category_id);
+  const uncategorized = items.filter((item: EstimateItem) => !item.category_id);
 
   return (
     <div className="space-y-4">
@@ -165,7 +165,7 @@ function EstimateTab({ data }: { data: Detail }) {
             </tr>
           </thead>
           <tbody>
-            {itemsByCategory.map(({ category, items: catItems }) => (
+            {itemsByCategory.map(({ category, items: catItems }: { category: EstimateCategory; items: EstimateItem[] }) => (
               <>
                 <tr key={category.id} className="bg-muted/30">
                   <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-slate-600">{category.name}</td>
