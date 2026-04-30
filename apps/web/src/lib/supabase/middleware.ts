@@ -151,10 +151,21 @@ export async function updateSession(request: NextRequest) {
   }
   // ── ここから下は従来のシングルドメイン動作（現状と完全に同一） ─────────────
 
-  const publicPaths = ["/login", "/api/auth/callback", "/api/auth/accept-invite", "/unauthorized", "/reset-password", "/update-password", "/onboarding"];
+  const publicPaths = ["/login", "/admin/login", "/api/auth/callback", "/api/auth/accept-invite", "/unauthorized", "/reset-password", "/update-password", "/onboarding"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
+
+  // /admin 配下は super-admin@example.com 以外なら /admin/login へ
+  if (
+    request.nextUrl.pathname.startsWith("/admin") &&
+    request.nextUrl.pathname !== "/admin/login" &&
+    (!user || user.email !== "super-admin@example.com")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin/login";
+    return NextResponse.redirect(url);
+  }
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
@@ -168,6 +179,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  if (user && request.nextUrl.pathname === "/admin/login" && user.email === "super-admin@example.com") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
+
   if (user && request.nextUrl.pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
@@ -176,14 +193,6 @@ export async function updateSession(request: NextRequest) {
 
   if (user) {
     const { pathname } = request.nextUrl;
-
-    if (pathname.startsWith("/admin")) {
-      if (user.email !== "admin@example.com") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/unauthorized";
-        return NextResponse.redirect(url);
-      }
-    }
 
     const matchedPath = Object.keys(ROUTE_ROLES).find((p) =>
       pathname.startsWith(p),

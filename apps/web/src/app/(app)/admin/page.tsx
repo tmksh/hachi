@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   getAdminStats,
@@ -18,7 +18,6 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,7 +45,6 @@ import {
   Activity,
   Wallet,
   Percent,
-  BarChart3,
   Plus,
   Trash2,
   Loader2,
@@ -139,6 +137,8 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const section = (searchParams.get("tab") ?? "bi") as "bi" | "companies" | "users";
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [stats, setStats] = useState<{ companyCount: number; userCount: number; constructionCount: number; contractCount: number } | null>(null);
@@ -160,21 +160,23 @@ export default function AdminPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
-    const s = await getAdminStats();
+    const [s, c, u, ov, rank, trend, status, dist] = await Promise.all([
+      getAdminStats(),
+      getAdminCompanies(),
+      getAdminUsers(),
+      getAdminBiOverview(),
+      getAdminBiCompanyRanking(),
+      getAdminBiMonthlyTrend(),
+      getAdminBiStatusBreakdown(),
+      getAdminBiGrossRateDistribution(),
+    ]);
     setStats(s);
-    const c = await getAdminCompanies();
     setCompanies(c ?? []);
-    const u = await getAdminUsers();
     setUsers(u ?? []);
-    const ov = await getAdminBiOverview();
     setBi(ov);
-    const rank = await getAdminBiCompanyRanking();
     setBiRanking(rank);
-    const trend = await getAdminBiMonthlyTrend();
     setBiTrend(trend);
-    const status = await getAdminBiStatusBreakdown();
     setBiStatus(status);
-    const dist = await getAdminBiGrossRateDistribution();
     setBiDist(dist);
     setLoading(false);
   }, []);
@@ -182,8 +184,12 @@ export default function AdminPage() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user || user.email !== "admin@example.com") {
-        router.replace("/dashboard");
+      if (!user) {
+        router.replace("/admin/login");
+        return;
+      }
+      if (user.email !== "super-admin@example.com") {
+        router.replace("/unauthorized");
         return;
       }
       loadData().catch((e) => {
@@ -287,19 +293,11 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs defaultValue="bi">
-        <TabsList>
-          <TabsTrigger value="bi" className="text-xs">
-            <BarChart3 className="h-3.5 w-3.5 mr-1" />
-            全国加盟店BI
-          </TabsTrigger>
-          <TabsTrigger value="companies" className="text-xs">企業一覧</TabsTrigger>
-          <TabsTrigger value="users" className="text-xs">ユーザー一覧</TabsTrigger>
-        </TabsList>
+      <div className="space-y-6">
 
         {/* ─────────── BI ─────────── */}
-        <TabsContent value="bi" className="mt-4 space-y-6">
+        {section === "bi" && (
+          <div className="space-y-6">
           {/* Headline KPIs */}
           {loading || !bi ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -536,10 +534,12 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+          </div>
+        )}
 
         {/* ─────────── 企業一覧 ─────────── */}
-        <TabsContent value="companies" className="mt-4">
+        {section === "companies" && (
+          <div>
           <div className="flex justify-end mb-3">
             <Button size="sm" className="gap-1.5 text-xs" onClick={() => setAddDialog(true)}>
               <Plus className="h-3.5 w-3.5" />企業を追加
@@ -613,10 +613,12 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </div>
+        )}
 
         {/* ─────────── ユーザー一覧 ─────────── */}
-        <TabsContent value="users" className="mt-4">
+        {section === "users" && (
+          <div>
           <Card variant="inset">
             <CardContent className="p-0">
               {loading ? (
@@ -672,8 +674,9 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+          </div>
+        )}
+      </div>
 
       {/* ─── 企業追加ダイアログ ─── */}
       <Dialog open={addDialog} onOpenChange={setAddDialog}>

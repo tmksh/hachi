@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const SUPER_ADMIN_EMAIL = "admin@example.com";
+const SUPER_ADMIN_EMAIL = "super-admin@example.com";
 
 /**
  * 認証チェック専用: 通常のサーバークライアントで auth.user を確認し、
