@@ -18,13 +18,25 @@ export default function CalendarNewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialDate = searchParams.get("date") ?? "";
+  const initialTime = searchParams.get("time") ?? "";
+  const initialEndTime = searchParams.get("endTime") ?? "";
+
+  const computeEndTime = (hhmm: string) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return "10:00";
+    const total = (h * 60 + m + 60) % (24 * 60);
+    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  };
+
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState(initialDate);
-  const [startTime, setStartTime] = useState("09:00");
+  const [startTime, setStartTime] = useState(initialTime || "09:00");
   const [endDate, setEndDate] = useState(initialDate);
-  const [endTime, setEndTime] = useState("10:00");
+  const [endTime, setEndTime] = useState(
+    initialEndTime || (initialTime ? computeEndTime(initialTime) : "10:00")
+  );
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
 

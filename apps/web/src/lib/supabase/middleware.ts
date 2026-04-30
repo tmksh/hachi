@@ -104,7 +104,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     // 未ログインで /login 以外にアクセス → サブドメインの /login へ
-    if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth")) {
+    if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth") && !pathname.startsWith("/onboarding")) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
@@ -151,7 +151,7 @@ export async function updateSession(request: NextRequest) {
   }
   // ── ここから下は従来のシングルドメイン動作（現状と完全に同一） ─────────────
 
-  const publicPaths = ["/login", "/api/auth/callback", "/unauthorized", "/reset-password", "/update-password"];
+  const publicPaths = ["/login", "/api/auth/callback", "/api/auth/accept-invite", "/unauthorized", "/reset-password", "/update-password", "/onboarding"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );

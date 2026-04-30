@@ -488,6 +488,34 @@
     transform: translateY(-1px);
   }
 
+  /* ── Calendar sidebar: 影を控えめに（カードが密集するため） ── */
+  .calendar-sidebar .frost-card {
+    box-shadow:
+      0 4px 14px rgba(108, 122, 158, 0.16),
+      0 1px 3px rgba(108, 122, 158, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+  .calendar-sidebar .frost-card:hover {
+    transform: none;
+    box-shadow:
+      0 6px 18px rgba(108, 122, 158, 0.20),
+      0 2px 5px rgba(108, 122, 158, 0.13),
+      inset 0 1px 0 rgba(255, 255, 255, 0.70);
+  }
+  .dark .calendar-sidebar .frost-card {
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.22),
+      0 1px 2px rgba(0, 0, 0, 0.16),
+      inset 0 1px 1px rgba(255, 255, 255, 0.04);
+  }
+  .dark .calendar-sidebar .frost-card:hover {
+    transform: none;
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.28),
+      0 2px 4px rgba(0, 0, 0, 0.20),
+      inset 0 1px 2px rgba(255, 255, 255, 0.05);
+  }
+
   /* ── Glass tabs list ── */
   .glass-tabs {
     background: rgba(255, 255, 255, 0.35);

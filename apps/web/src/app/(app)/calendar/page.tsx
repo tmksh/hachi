@@ -24,6 +24,7 @@ import {
 } from "date-fns";
 import { ja } from "date-fns/locale";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -156,8 +157,17 @@ export default function CalendarPage() {
     setActiveEvent(ev);
   }, []);
   const refreshEvents = useCallback(() => setReloadKey((k) => k + 1), []);
+  const router = useRouter();
   const newEventHref = (d: Date) =>
     `/calendar/new?date=${format(d, "yyyy-MM-dd")}`;
+  const createAtSlot = useCallback(
+    (d: Date, hhmm?: string) => {
+      const dateStr = format(d, "yyyy-MM-dd");
+      const qs = hhmm ? `?date=${dateStr}&time=${hhmm}` : `?date=${dateStr}`;
+      router.push(`/calendar/new${qs}`);
+    },
+    [router]
+  );
 
   const { rangeStart, rangeEnd } = useMemo(() => {
     if (view === "day") {
@@ -290,9 +300,9 @@ export default function CalendarPage() {
   );
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="md:h-screen md:flex md:flex-col p-4 md:p-6 md:gap-3 space-y-4 md:space-y-0 md:overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between md:shrink-0">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">カレンダー</h1>
           <p className="text-xs text-muted-foreground mt-0.5">スケジュール管理</p>
@@ -315,7 +325,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3 md:shrink-0">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={goToday} className="h-8">
             今日
@@ -357,9 +367,9 @@ export default function CalendarPage() {
       </div>
 
       {/* Main 2-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 md:flex-1 md:min-h-0 md:grid-rows-1">
         {/* Left sidebar */}
-        <aside className="space-y-3">
+        <aside className="calendar-sidebar space-y-3 md:overflow-y-auto md:pr-1 md:pb-1 md:min-h-0">
           <MiniCalendar
             selected={selectedDate}
             onSelect={(d) => {
@@ -494,9 +504,9 @@ export default function CalendarPage() {
         </aside>
 
         {/* Main calendar */}
-        <div className="min-w-0">
+        <div className="min-w-0 md:h-full md:min-h-0 md:flex md:flex-col">
           {loading ? (
-            <Skeleton className="h-[600px] w-full" />
+            <Skeleton className="h-[600px] md:h-full w-full" />
           ) : view === "month" ? (
             <MonthView
               date={currentDate}
@@ -504,6 +514,7 @@ export default function CalendarPage() {
               onSelect={setSelectedDate}
               events={visibleEvents}
               onEventClick={openEvent}
+              onCreateAt={createAtSlot}
             />
           ) : view === "week" ? (
             <WeekView
@@ -513,12 +524,14 @@ export default function CalendarPage() {
               events={visibleEvents}
               onEventClick={openEvent}
               onRefresh={refreshEvents}
+              onCreateAt={createAtSlot}
             />
           ) : (
             <DayView
               date={currentDate}
               events={visibleEvents}
               onEventClick={openEvent}
+              onCreateAt={createAtSlot}
             />
           )}
         </div>
@@ -724,12 +737,14 @@ function MonthView({
   onSelect,
   events,
   onEventClick,
+  onCreateAt,
 }: {
   date: Date;
   selected: Date;
   onSelect: (d: Date) => void;
   events: AnyEv[];
   onEventClick: (ev: AnyEv) => void;
+  onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
   const ms = startOfMonth(date);
   const me = endOfMonth(date);
@@ -737,9 +752,11 @@ function MonthView({
   const ge = endOfWeek(me, { weekStartsOn: 0 });
   const days = eachDayOfInterval({ start: gs, end: ge });
 
+  const numWeeks = days.length / 7;
+
   return (
-    <Card className="overflow-hidden py-0">
-      <div className="grid grid-cols-7 border-b">
+    <Card className="overflow-hidden py-0 md:flex md:flex-col md:h-full md:min-h-0">
+      <div className="grid grid-cols-7 border-b md:shrink-0">
         {["日", "月", "火", "水", "木", "金", "土"].map((d, i) => (
           <div
             key={d}
@@ -756,7 +773,10 @@ function MonthView({
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      <div
+        className="grid grid-cols-7 md:flex-1 md:min-h-0"
+        style={{ gridTemplateRows: `repeat(${numWeeks}, minmax(0, 1fr))` }}
+      >
         {days.map((d, i) => {
           const inMonth = isSameMonth(d, date);
           const today = isToday(d);
@@ -771,8 +791,14 @@ function MonthView({
             <button
               key={d.toISOString()}
               onClick={() => onSelect(d)}
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onCreateAt(d);
+              }}
+              title="ダブルクリックで予定を追加"
               className={cn(
-                "min-h-[100px] p-1.5 text-left transition-colors relative",
+                "min-h-[100px] md:min-h-0 md:h-full p-1.5 text-left transition-colors relative flex flex-col overflow-hidden",
                 !isLastCol && "border-r",
                 !isLastRow && "border-b",
                 !inMonth && "bg-muted/30",
@@ -796,7 +822,7 @@ function MonthView({
               >
                 {format(d, "d")}
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 flex-1 min-h-0 overflow-hidden">
                 {dayEvents.slice(0, 3).map((ev) => (
                   <span
                     key={ev.id}
@@ -849,6 +875,7 @@ function WeekView({
   events,
   onEventClick,
   onRefresh,
+  onCreateAt,
 }: {
   date: Date;
   selected: Date;
@@ -856,6 +883,7 @@ function WeekView({
   events: AnyEv[];
   onEventClick: (ev: AnyEv) => void;
   onRefresh: () => void;
+  onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
   const ws = startOfWeek(date, { weekStartsOn: 0 });
   const days = eachDayOfInterval({ start: ws, end: addDays(ws, 6) });
@@ -992,9 +1020,9 @@ function WeekView({
   const isDraggingRef = useRef(false);
 
   return (
-    <Card className="overflow-hidden py-0 select-none">
+    <Card className="overflow-hidden py-0 select-none md:flex md:flex-col md:h-full md:min-h-0">
       {/* Sticky day header */}
-      <div className="grid border-b" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
+      <div className="grid border-b md:shrink-0" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
         <div className="border-r bg-background" />
         {days.map((d) => {
           const today   = isToday(d);
@@ -1027,7 +1055,7 @@ function WeekView({
       </div>
 
       {/* Scrollable time grid */}
-      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 580 }}>
+      <div ref={scrollRef} className="overflow-y-auto md:flex-1 md:min-h-0 md:!max-h-none max-h-[580px]">
         <div style={{ display: "flex" }}>
           {/* Time labels */}
           <div className="shrink-0 border-r relative" style={{ width: 52, height: 24 * HOUR_H }}>
@@ -1062,8 +1090,19 @@ function WeekView({
               return (
                 <div
                   key={d.toISOString()}
-                  className="relative border-r last:border-r-0"
+                  className="relative border-r last:border-r-0 cursor-pointer"
                   style={{ height: 24 * HOUR_H }}
+                  title="クリックで予定を追加"
+                  onClick={(e) => {
+                    if (isDraggingRef.current || dragRef.current) return;
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    const y = e.clientY - rect.top;
+                    const min = Math.max(0, Math.min(1439, Math.floor(y / PX_PER_MIN)));
+                    const snapped = snapTo(min);
+                    const hh = String(Math.floor(snapped / 60)).padStart(2, "0");
+                    const mm = String(snapped % 60).padStart(2, "0");
+                    onCreateAt(d, `${hh}:${mm}`);
+                  }}
                 >
                   {/* Hour / half-hour lines */}
                   {hours.map((h) => (
@@ -1152,25 +1191,32 @@ function DayView({
   date,
   events,
   onEventClick,
+  onCreateAt,
 }: {
   date: Date;
   events: AnyEv[];
   onEventClick: (ev: AnyEv) => void;
+  onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
   const dayEvents = events
     .filter((e) => isSameDay(parseISO(e.start_at), date))
     .sort((a, b) => a.start_at.localeCompare(b.start_at));
 
   return (
-    <Card>
-      <CardContent className="py-4 px-5">
-        <h3 className="text-sm font-semibold mb-4">
+    <Card className="md:flex md:flex-col md:h-full md:min-h-0">
+      <CardContent className="py-4 px-5 md:flex-1 md:min-h-0 md:overflow-y-auto md:flex md:flex-col">
+        <h3 className="text-sm font-semibold mb-4 md:shrink-0">
           {format(date, "yyyy年M月d日（E）", { locale: ja })}
         </h3>
         {dayEvents.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-16">
-            この日は予定がありません
-          </p>
+          <button
+            type="button"
+            onClick={() => onCreateAt(date)}
+            className="text-sm text-muted-foreground text-center py-16 md:flex-1 md:flex md:items-center md:justify-center hover:bg-muted/40 rounded transition-colors cursor-pointer"
+            title="クリックで予定を追加"
+          >
+            この日は予定がありません（クリックで追加）
+          </button>
         ) : (
           <div className="space-y-2">
             {dayEvents.map((ev) => (
@@ -1213,6 +1259,15 @@ function DayView({
                 </div>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => onCreateAt(date)}
+              className="w-full text-sm text-muted-foreground py-3 rounded-md border border-dashed hover:bg-muted/40 transition-colors cursor-pointer flex items-center justify-center gap-1"
+              title="クリックで予定を追加"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              予定を追加
+            </button>
           </div>
         )}
       </CardContent>
