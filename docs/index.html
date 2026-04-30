@@ -6,6 +6,7 @@
   <title>BRIDGE - システム仕様書</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     :root {
       --accent: #6BC9B3;
@@ -1622,6 +1623,47 @@
             </td>
             <td><span class="pri-chip p2">要確認</span></td>
           </tr>
+
+          <!-- Google OAuth 審査 -->
+          <tr>
+            <td class="td-name">Google OAuth 審査</td>
+            <td>
+              <ul>
+                <li>calendar.readonly は機密スコープのため、Google の審査が必須（審査期間：約2〜6週間）</li>
+                <li>プライバシーポリシーの URL（公開ページ）</li>
+                <li>利用規約の URL</li>
+                <li>アプリのホームページ URL</li>
+                <li>デモ動画（YouTube 限定公開でOK・OAuth 同意フローを 5 分程度で説明）</li>
+                <li>アプリの説明（なぜカレンダー情報が必要か）</li>
+              </ul>
+              <button class="ki-toggle" id="tog-goauth" onclick="kiToggle('goauth')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
+              <div class="ki-panel" id="panel-goauth">
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-0"></span>プライバシーポリシー URL</div>
+                  <input class="ki-input" id="goauth-pp" placeholder="https://example.com/privacy" oninput="kiMark('goauth-0','goauth-pp')">
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-1"></span>利用規約 URL</div>
+                  <input class="ki-input" id="goauth-tos" placeholder="https://example.com/terms" oninput="kiMark('goauth-1','goauth-tos')">
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-2"></span>アプリのホームページ URL</div>
+                  <input class="ki-input" id="goauth-hp" placeholder="https://example.com" oninput="kiMark('goauth-2','goauth-hp')">
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-3"></span>デモ動画 URL（YouTube 限定公開）</div>
+                  <input class="ki-input" id="goauth-demo" placeholder="https://youtu.be/xxxxxxxxxx" oninput="kiMark('goauth-3','goauth-demo')">
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-4"></span>アプリの説明（なぜカレンダー情報が必要か）</div>
+                  <textarea class="ki-input" id="goauth-desc" rows="4" placeholder="例：現場担当者が工事スケジュールとGoogleカレンダーを同期することで、社内外の予定を一元管理するため。カレンダーへの書き込みは行わず、読み取りのみ使用します。" oninput="kiMark('goauth-4','goauth-desc')"></textarea>
+                </div>
+                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-goauth" rows="2" placeholder="審査状況・対応済み項目・その他メモ"></textarea></div>
+                <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('goauth')">保存</button><span class="ki-save-msg" id="msg-goauth">保存しました</span></div>
+              </div>
+            </td>
+            <td><span class="pri-chip p2">要確認</span></td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -1685,6 +1727,16 @@
 
 <script>
 // ─── Kickoff Input Helper ───────────────────────────────────────────────────
+
+// ─── Supabase ────────────────────────────────────────────────────────────────
+// ↓ Supabase プロジェクトの URL と anon key に置き換えてください
+const _KI_SUPABASE_URL = 'https://fleqhmgwbhxoqfgsxfqy.supabase.co';
+const _KI_SUPABASE_KEY = 'sb_publishable_E9xqLzDQg1G-IOZkqAdA9g_npXcLmFj';
+
+const _kiSupabase = (
+  typeof supabase !== 'undefined' &&
+  _KI_SUPABASE_URL !== 'YOUR_SUPABASE_URL'
+) ? supabase.createClient(_KI_SUPABASE_URL, _KI_SUPABASE_KEY) : null;
 
 function kiToggle(id) {
   const panel = document.getElementById('panel-' + id);
@@ -1788,22 +1840,29 @@ function _kiCheckOther(groupId) {
   if (hasOther) box.querySelector('input,textarea')?.focus();
 }
 
-function kiSave(id) {
-  // Persist text inputs to localStorage
+async function kiSave(id) {
+  const updates = [];
+  // Collect text inputs
   document.querySelectorAll('#panel-' + id + ' [id]').forEach(el => {
     if ((el.tagName === 'INPUT' && el.type !== 'file') || el.tagName === 'TEXTAREA') {
-      localStorage.setItem('ki_' + el.id, el.value);
+      updates.push({ key: 'ki_' + el.id, value: el.value || null });
     }
   });
-  // Persist radio selections
-  document.querySelectorAll('#panel-' + id + ' .ki-radio-btn.selected').forEach(el => {
-    const group = el.closest('.ki-radio-group');
-    if (group) localStorage.setItem('ki_sel_' + group.id + '_' + el.dataset.val, '1');
+  // Collect radio selections (selected=1, deselected=null)
+  document.querySelectorAll('#panel-' + id + ' .ki-radio-group').forEach(group => {
+    group.querySelectorAll('.ki-radio-btn').forEach(el => {
+      updates.push({ key: 'ki_sel_' + group.id + '_' + el.dataset.val, value: el.classList.contains('selected') ? '1' : null });
+    });
   });
-  document.querySelectorAll('#panel-' + id + ' .ki-radio-group .ki-radio-btn:not(.selected)').forEach(el => {
-    const group = el.closest('.ki-radio-group');
-    if (group) localStorage.removeItem('ki_sel_' + group.id + '_' + el.dataset.val);
-  });
+  // Save to Supabase (or fall back to localStorage)
+  if (_kiSupabase) {
+    await _kiSupabase.from('kickoff_inputs').upsert(updates, { onConflict: 'key' });
+  } else {
+    updates.forEach(({ key, value }) => {
+      if (value) localStorage.setItem(key, value);
+      else localStorage.removeItem(key);
+    });
+  }
   // Show save message
   const msg = document.getElementById('msg-' + id);
   if (msg) { msg.classList.add('show'); setTimeout(() => msg.classList.remove('show'), 2000); }
@@ -1813,7 +1872,45 @@ function kiSave(id) {
   if (btn && allDots.length > 0) btn.classList.add('done');
 }
 
-// ─── Scrollspy ──────────────────────────────────────────────────────────────
+// ─── localStorage → Supabase 移行 ───────────────────────────────────────────
+function _kiShowMigrationBanner(lsKeys, lsMap) {
+  const banner = document.createElement('div');
+  banner.id = 'ki-migrate-banner';
+  banner.style.cssText = [
+    'position:fixed', 'bottom:1.5rem', 'right:1.5rem',
+    'background:#fff', 'border:1px solid #e5e7eb', 'border-radius:8px',
+    'padding:1rem 1.25rem', 'box-shadow:0 4px 16px rgba(0,0,0,.12)',
+    'z-index:9999', 'font-size:.84rem', 'display:flex',
+    'align-items:center', 'gap:.75rem', 'max-width:360px',
+  ].join(';');
+  banner.innerHTML = `
+    <span style="color:#111827;line-height:1.5">このブラウザに保存されたデータが見つかりました。<br>Supabase に移行すると全員で共有できます。</span>
+    <button id="ki-migrate-btn" style="flex-shrink:0;background:#6BC9B3;color:#fff;border:none;border-radius:4px;padding:.4rem .9rem;cursor:pointer;font-size:.82rem;font-weight:600;white-space:nowrap;">移行する</button>
+    <button onclick="document.getElementById('ki-migrate-banner').remove()" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:1.2rem;line-height:1;">×</button>
+  `;
+  document.body.appendChild(banner);
+  document.getElementById('ki-migrate-btn').addEventListener('click', () => _kiMigrateFromLocalStorage(lsKeys, lsMap));
+}
+
+async function _kiMigrateFromLocalStorage(lsKeys, lsMap) {
+  const btn = document.getElementById('ki-migrate-btn');
+  if (btn) { btn.textContent = '移行中…'; btn.disabled = true; }
+  const updates = lsKeys.map(k => ({ key: k, value: lsMap[k] || null }));
+  const { error } = await _kiSupabase.from('kickoff_inputs').upsert(updates, { onConflict: 'key' });
+  if (!error) {
+    lsKeys.forEach(k => localStorage.removeItem(k));
+    const banner = document.getElementById('ki-migrate-banner');
+    if (banner) {
+      banner.innerHTML = '<span style="color:#4aab96;font-weight:600;padding:.2rem 0">✓ 移行が完了しました。全員で共有できます。</span>';
+      setTimeout(() => banner.remove(), 3000);
+    }
+  } else {
+    if (btn) { btn.textContent = '移行する'; btn.disabled = false; }
+    alert('移行に失敗しました。Supabase の設定を確認してください。');
+  }
+}
+
+// ─── Scrollspy ───────────────────────────────────────────────────────────────
 (function() {
   const navLinks = document.querySelectorAll('.nav-links a[href^="index.html#"], .nav-links a[href="index.html"]');
   const sectionIds = [];
@@ -1854,22 +1951,16 @@ function kiSave(id) {
 })();
 
 // ─── Restore on load ────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  // Restore text/textarea
+function _kiApplyData(map) {
   document.querySelectorAll('.ki-input').forEach(el => {
-    const saved = localStorage.getItem('ki_' + el.id);
-    if (saved) {
-      el.value = saved;
-      // Trigger mark
-      el.dispatchEvent(new Event('input'));
-    }
+    const val = map['ki_' + el.id];
+    if (val) { el.value = val; el.dispatchEvent(new Event('input')); }
   });
-  // Restore radio buttons
   document.querySelectorAll('.ki-radio-btn').forEach(el => {
     const group = el.closest('.ki-radio-group');
     if (!group) return;
     const key = 'ki_sel_' + group.id + '_' + el.dataset.val;
-    if (localStorage.getItem(key)) {
+    if (map[key] === '1') {
       el.classList.add('selected');
       const statusId = group.closest('.ki-field')
         ?.querySelector('.ki-status')?.id?.replace('st-','');
@@ -1879,6 +1970,40 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+}
+
+function _kiLocalStorageMap() {
+  const map = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('ki_')) map[k] = localStorage.getItem(k);
+  }
+  return map;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  let restoredFromSupabase = false;
+
+  if (_kiSupabase) {
+    const { data } = await _kiSupabase.from('kickoff_inputs').select('key, value');
+    if (data && data.length > 0) {
+      const map = {};
+      data.forEach(row => { map[row.key] = row.value; });
+      _kiApplyData(map);
+      restoredFromSupabase = true;
+    }
+  }
+
+  const lsMap = _kiLocalStorageMap();
+  const lsKeys = Object.keys(lsMap);
+
+  if (!restoredFromSupabase && lsKeys.length > 0) {
+    _kiApplyData(lsMap);
+  }
+
+  if (_kiSupabase && lsKeys.length > 0) {
+    _kiShowMigrationBanner(lsKeys, lsMap);
+  }
 });
 </script>
 </body>
