@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BRIDGE - 外部連携 API / Webhook</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #6BC9B3;
+      --accent-dark: #4aab96;
+      --accent-light: #e6f7f3;
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+
+    /* NAV */
+    nav {
+      background: #fff; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      padding: 0 2rem; display: flex; align-items: center; height: 56px;
+    }
+    .nav-logo { font-weight: 700; font-size: .95rem; letter-spacing: .1em; text-transform: uppercase; margin-right: 2.5rem; color: var(--text); text-decoration: none; }
+    .nav-links { display: flex; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 500;
+      padding: 0 1.2rem; height: 56px; display: flex; align-items: center;
+      border-bottom: 2px solid transparent; transition: all .2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent-dark); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* HERO */
+    .hero { background: #fff; border-bottom: 1px solid var(--border); padding: 4.5rem 2rem 3.5rem; }
+    .hero-inner { max-width: 900px; margin: 0 auto; }
+    .hero-eyebrow { font-size: .72rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 1rem; }
+    .hero h1 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 700; line-height: 1.2; margin-bottom: .8rem; }
+    .hero h1 em { font-style: normal; color: var(--accent-dark); }
+    .hero-desc { font-size: .97rem; color: var(--muted); max-width: 600px; line-height: 1.85; }
+
+    /* MAIN */
+    .main { max-width: 900px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+
+    /* SECTION */
+    .sec { margin-bottom: 4rem; }
+    .sec-eyebrow { font-size: .7rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .12em; text-transform: uppercase; margin-bottom: .6rem; }
+    .sec h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; }
+    .sec p { color: #374151; line-height: 1.85; margin-bottom: .9rem; }
+    .sec p:last-child { margin-bottom: 0; }
+
+    /* DIAGRAM */
+    .diagram {
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      padding: 1.75rem 2rem; margin: 1.5rem 0;
+      font-family: 'IBM Plex Mono', monospace; font-size: .82rem; line-height: 1.9;
+      color: #374151; overflow-x: auto;
+    }
+    .diagram .arrow { color: var(--accent-dark); font-weight: 700; }
+    .diagram .label { color: var(--muted); font-size: .75rem; }
+    .diagram .highlight { color: var(--accent-dark); font-weight: 600; }
+
+    /* CARD GRID */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+    .card {
+      background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--accent);
+      border-radius: 10px; padding: 1.4rem;
+    }
+    .card h3 { font-size: .95rem; font-weight: 700; margin-bottom: .5rem; }
+    .card p { font-size: .84rem; color: var(--muted); line-height: 1.65; }
+
+    /* TABLE */
+    .tbl-wrap { overflow-x: auto; margin: 1.5rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th { background: var(--accent-light); color: var(--accent-dark); font-weight: 700; padding: .65rem 1rem; text-align: left; border: 1px solid #b2e8d8; }
+    td { padding: .6rem 1rem; border: 1px solid var(--border); vertical-align: top; line-height: 1.7; }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    /* EVENT LIST */
+    .event-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+    .event-group { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; }
+    .event-group-title { font-size: .78rem; font-weight: 700; color: var(--accent-dark); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .7rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+    .event-name { font-family: 'IBM Plex Mono', monospace; font-size: .78rem; color: #374151; padding: .18rem 0; }
+    .event-name::before { content: '◎ '; color: var(--accent); font-size: .7rem; }
+
+    /* PHASE */
+    .phase-list { display: flex; flex-direction: column; gap: .75rem; margin: 1.5rem 0; }
+    .phase-item { display: flex; gap: 1.2rem; align-items: flex-start; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.4rem; }
+    .phase-num { flex-shrink: 0; width: 2rem; height: 2rem; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; }
+    .phase-body h3 { font-size: .95rem; font-weight: 700; margin-bottom: .3rem; }
+    .phase-body p { font-size: .84rem; color: var(--muted); line-height: 1.65; }
+
+    /* NOTICE */
+    .notice { background: #fffbeb; border: 1px solid #fbd38d; border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1.5rem 0; font-size: .87rem; line-height: 1.75; }
+    .notice strong { color: #b45309; }
+
+    /* TAG */
+    .tag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-right: .3rem; }
+    .tag-must { background: #fee2e2; color: #b91c1c; }
+    .tag-later { background: #fff7e6; color: #b45309; }
+    .tag-decide { background: var(--accent-light); color: var(--accent-dark); }
+
+    /* FOOTER */
+    footer { padding: 2.5rem 2rem; border-top: 1px solid var(--border); text-align: center; }
+    footer p { font-size: .83rem; color: var(--muted); }
+    footer a { color: var(--accent-dark); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">BRIDGE</span>
+  <div class="nav-links">
+    <a href="index.html">仕様書</a>
+    <a href="index.html#lead-flow">リードフロー</a>
+    <a href="index.html#cost">工事原価管理</a>
+    <a href="index.html#kickoff-input">導入準備</a>
+    <a href="features.html">機能一覧</a>
+    <a href="api.html" class="active">外部連携</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">External Integration — API &amp; Webhook</div>
+    <h1>外部連携 API・<em>Webhook</em></h1>
+    <p class="hero-desc">BRIDGE のデータを他のシステムと繋ぐための設計方針と仕様をまとめたページです。kintone・Salesforce などの既存システムとの連携も、最初の設計段階から対応しています。</p>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ① 外部APIとWebhookとは -->
+  <div class="sec">
+    <div class="sec-eyebrow">Basics</div>
+    <h2>外部 API と Webhook とは？</h2>
+    <p>まずこの2つの言葉を、できるだけわかりやすく説明します。</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h3>🔌 外部向け API</h3>
+        <p>「BRIDGE のデータを外から取り出したり、書き込んだりするための窓口」です。<br><br>
+        たとえば Salesforce や kintone、自社の基幹システムから <code>/api/v1/customers</code> という URL にアクセスすると、顧客データを取得・更新できます。ブラウザを使わなくても、他のシステムが直接 BRIDGE と話せるようになります。</p>
+      </div>
+      <div class="card">
+        <h3>📣 Webhook（ウェブフック）</h3>
+        <p>「BRIDGE 内で何かが起きたとき、自動で相手のシステムに通知する仕組み」です。<br><br>
+        たとえば「新しい顧客が登録されたら kintone に自動で通知する」「案件のステータスが変わったら Salesforce に即時反映する」ということが、ボタンを押さなくても自動で行われます。</p>
+      </div>
+    </div>
+
+    <div class="diagram">
+<pre>【外部向け API のイメージ】
+
+  kintone / Salesforce                BRIDGE
+  ／自社システム / Zapier              （このアプリ）
+        │
+        │  「顧客データをください」
+        ├──────────────────────→  GET /api/v1/customers
+        │                                  │
+        │  ← データが返ってくる ───────────┘
+        │   { "name": "田中建設", ... }
+
+【Webhook のイメージ】
+
+  BRIDGE                          kintone / Salesforce
+  （このアプリ）                    ／他システム
+        │
+        │  顧客が登録された！
+        ├──── POST https://相手のURL ──→
+        │     { event: "customer.created",
+        │       data: { name: "田中建設" } }
+        │                                │
+        │                         受け取って自動処理 ✓</pre>
+    </div>
+  </div>
+
+  <!-- ② なぜ最初から設計するのか -->
+  <div class="sec">
+    <div class="sec-eyebrow">Design Policy</div>
+    <h2>なぜ最初の設計段階から対応するのか</h2>
+    <p>「後から追加すればいい」と思われがちですが、外部連携は後から付け足すと大変なことになります。理由は主に3つです。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>問題</th><th>後から追加した場合</th><th>最初から設計した場合</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>APIのURL設計</td>
+            <td>後から <code>/api/v1/</code> を追加すると、既存の連携が壊れる可能性がある</td>
+            <td>最初から <code>/api/v1/</code> の形にしておくので将来の変更も安全</td>
+          </tr>
+          <tr>
+            <td>データの変更通知</td>
+            <td>業務ロジックのあちこちを改修してWebhookの呼び出しを差し込む必要がある</td>
+            <td>最初から「何かが変更されたら通知する」仕組みを組み込んでおく</td>
+          </tr>
+          <tr>
+            <td>APIキー管理</td>
+            <td>後から専用テーブルを作ると既存データ構造との整合が難しい</td>
+            <td>最初からテーブル設計に含めるので、設定画面からすぐに発行できる</td>
+          </tr>
+          <tr>
+            <td>囲い込みリスク</td>
+            <td>APIがないと「BRIDGE をやめたい」ときにデータを取り出せない</td>
+            <td>APIがあれば、いつでも他システムに移行できる（囲い込みなし）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ③ 連携対象データ -->
+  <div class="sec">
+    <div class="sec-eyebrow">Events</div>
+    <h2>連携できるデータとイベント一覧</h2>
+    <p>BRIDGE のすべてのモジュールが連携対象です。Webhook のイベント名は <code>モジュール名.アクション名</code> の形式で統一します。</p>
+
+    <div class="event-grid">
+      <div class="event-group">
+        <div class="event-group-title">顧客 / Customers</div>
+        <div class="event-name">customer.created</div>
+        <div class="event-name">customer.updated</div>
+        <div class="event-name">customer.deleted</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">案件 / Deals</div>
+        <div class="event-name">deal.created</div>
+        <div class="event-name">deal.updated</div>
+        <div class="event-name">deal.stage_changed</div>
+        <div class="event-name">deal.closed</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">見積 / Estimates</div>
+        <div class="event-name">estimate.created</div>
+        <div class="event-name">estimate.approved</div>
+        <div class="event-name">estimate.rejected</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">契約 / Contracts</div>
+        <div class="event-name">contract.created</div>
+        <div class="event-name">contract.signed</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">工事 / Constructions</div>
+        <div class="event-name">construction.created</div>
+        <div class="event-name">construction.started</div>
+        <div class="event-name">construction.completed</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">請求 / Invoices</div>
+        <div class="event-name">invoice.issued</div>
+        <div class="event-name">invoice.paid</div>
+        <div class="event-name">invoice.overdue</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">ワークフロー / Workflows</div>
+        <div class="event-name">workflow.requested</div>
+        <div class="event-name">workflow.approved</div>
+        <div class="event-name">workflow.rejected</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">勤怠 / Attendance</div>
+        <div class="event-name">attendance.checked_in</div>
+        <div class="event-name">attendance.checked_out</div>
+      </div>
+      <div class="event-group">
+        <div class="event-group-title">お知らせ / Announcements</div>
+        <div class="event-name">announcement.published</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 双方向連携 -->
+  <div class="sec">
+    <div class="sec-eyebrow">Bidirectional Sync</div>
+    <h2>双方向連携について</h2>
+    <p>「kintone でも BRIDGE でも登録・更新できて、両方に自動で反映したい」という双方向の同期は技術的には可能です。ただし、いくつか決めておくべきことがあります。</p>
+
+    <div class="notice">
+      <strong>⚠ 双方向連携で事前に合意が必要な点</strong><br>
+      同じデータを両方のシステムで更新できる場合、「どちらの更新が正しいか」が競合するケースが発生します。たとえば BRIDGE で顧客の住所を変更した直後に kintone でも同じ顧客の住所を変更した場合、どちらを残すかをルールとして決めておく必要があります。
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>連携パターン</th><th>内容</th><th>難しさ</th><th>向いているケース</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>BRIDGE → 外部（一方向）</strong></td>
+            <td>BRIDGE が正のデータ。Webhook と外部API で外部に通知・読み取りさせる</td>
+            <td>低</td>
+            <td>BRIDGE をメインで使い、kintone / SF には読み取りのみさせたい場合</td>
+          </tr>
+          <tr>
+            <td><strong>外部 → BRIDGE（一方向）</strong></td>
+            <td>kintone / SF が正のデータ。変更を BRIDGE に取り込む</td>
+            <td>中</td>
+            <td>既存の kintone / SF 運用を変えたくない場合</td>
+          </tr>
+          <tr>
+            <td><strong>双方向</strong></td>
+            <td>どちらでも更新でき、自動で同期する</td>
+            <td>高</td>
+            <td>両方のシステムを並行運用する過渡期など</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>現時点では「どちらのシステムで登録するか」の運用ルールをまず決めていただくことで、一方向に絞れる可能性が高いです。双方向が必要な場合も対応できますが、設計コストが上がるため別途ご相談ください。</p>
+  </div>
+
+  <!-- ⑤ APIキー / セキュリティ -->
+  <div class="sec">
+    <div class="sec-eyebrow">Security</div>
+    <h2>API キーと権限管理</h2>
+    <p>外部 API を使うためには API キーが必要です。API キーは BRIDGE の設定画面から発行・管理できます。Stripe や kintone と同じ仕組みです。</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h3>スコープ（権限）</h3>
+        <p>「顧客データは読み取りのみ」「案件は読み書き可」のように、API キーごとに操作できる範囲を絞れます。外部システムに必要最小限の権限だけ渡せます。</p>
+      </div>
+      <div class="card">
+        <h3>複数キーの発行</h3>
+        <p>「kintone 連携用」「Zapier 用」「自社スクリプト用」などの用途別にキーを発行できます。不要になったキーはいつでも無効化できます。</p>
+      </div>
+      <div class="card">
+        <h3>Webhook 署名検証</h3>
+        <p>Webhook の送信には HMAC 署名を付けます。受け取る側のシステムは署名を検証することで、なりすましを防げます（Stripe と同じ方式です）。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 実装フェーズ -->
+  <div class="sec">
+    <div class="sec-eyebrow">Phases</div>
+    <h2>実装フェーズ</h2>
+    <p>外部連携の機能は段階的にリリースします。「土台を最初に作る」ことで、後のフェーズをスムーズに追加できます。</p>
+
+    <div class="phase-list">
+      <div class="phase-item">
+        <div class="phase-num">1</div>
+        <div class="phase-body">
+          <h3>フェーズ1（初期リリース時）<span class="tag tag-must" style="margin-left:.5rem">最初から設計</span></h3>
+          <p>DB のテーブル設計に API キー・Webhook 設定・配信履歴を含める。API URL を <code>/api/v1/</code> の形式で確保する。業務ロジックにイベント発火の仕組みを差し込んでおく。<br>→ この段階ではまだ外部から使えなくて OK。「後で壊れない土台」を作る。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">2</div>
+        <div class="phase-body">
+          <h3>フェーズ2（外部連携開始）<span class="tag tag-decide" style="margin-left:.5rem">要確認</span></h3>
+          <p>API キー発行の設定画面をリリース。主要モジュール（顧客・案件・見積）の外部向け API エンドポイントを公開。Webhook の配信と配信履歴画面を追加。<br>→ Zapier や自社スクリプトから BRIDGE のデータを取得・更新できる状態になる。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">3</div>
+        <div class="phase-body">
+          <h3>フェーズ3（個別システム連携）<span class="tag tag-later" style="margin-left:.5rem">フェーズ2以降</span></h3>
+          <p>kintone・Salesforce など具体的なシステムとの連携を実装。連携方向・対象データ・運用ルールを合意した上で着手。<br>→ kintone の API キーを設定画面に入力するだけで、データが自動同期される状態を目指す。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑦ 確認事項 -->
+  <div class="sec">
+    <div class="sec-eyebrow">Next Steps</div>
+    <h2>今後の確認事項</h2>
+    <p>フェーズ2・3 の設計を進めるにあたり、以下について教えていただけると助かります。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>確認事項</th><th>なぜ必要か</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>①</td>
+            <td>連携したいシステムの具体名（kintone・Salesforce 以外にもあれば）</td>
+            <td>優先度をつけて実装順を決めるため</td>
+          </tr>
+          <tr>
+            <td>②</td>
+            <td>連携の方向（BRIDGE → 外部 / 外部 → BRIDGE / 両方向）</td>
+            <td>設計コストと方式が変わるため</td>
+          </tr>
+          <tr>
+            <td>③</td>
+            <td>どのデータを連携したいか（顧客・案件・請求など）</td>
+            <td>API エンドポイントの優先順位を決めるため</td>
+          </tr>
+          <tr>
+            <td>④</td>
+            <td>リアルタイム同期か、定期バッチか</td>
+            <td>リアルタイムは設計コストが高く、バッチで済むなら工数を抑えられるため</td>
+          </tr>
+          <tr>
+            <td>⑤</td>
+            <td>kintone：API トークンを発行できる管理者がいるか</td>
+            <td>こちらが kintone に書き込む際に先方での発行作業が必要なため</td>
+          </tr>
+          <tr>
+            <td>⑥</td>
+            <td>Salesforce：Connected App の設定ができる管理者がいるか</td>
+            <td>SF 側の設定作業が必要なため</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>BRIDGE 統合業務支援システム &copy; 2026 &nbsp;&nbsp;
+    <a href="https://github.com/tmksh/hachi" target="_blank">GitHub</a> &nbsp;&nbsp;
+    <a href="index.html">仕様書</a> &nbsp;&nbsp;
+    <a href="features.html">機能一覧</a>
+  </p>
+</footer>
+
+</body>
+</html>
