@@ -5,7 +5,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { PageHeader } from "@/components/shared/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -107,6 +107,12 @@ export default function CrmPage() {
             </div>
           ) : (
             <Card variant="inset">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">
+                  顧客リスト
+                  <Badge className="ml-2 bg-primary/10 text-primary hover:bg-primary/10 text-[10px] h-4 px-1.5 font-normal">{filtered.length}</Badge>
+                </CardTitle>
+              </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
@@ -125,7 +131,7 @@ export default function CrmPage() {
                       <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => { window.location.href = `/crm/${c.id}`; }}>
                         <TableCell>
                           <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><span className="text-xs font-semibold text-primary">{c.name.charAt(0)}</span></div>
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-semibold text-primary">{c.name.charAt(0)}</div>
                             <span className="font-medium">{c.name}</span>
                           </div>
                         </TableCell>
@@ -133,7 +139,16 @@ export default function CrmPage() {
                         <TableCell className="text-muted-foreground tabular-nums">{c.phone || "-"}</TableCell>
                         <TableCell className="text-muted-foreground">{c.email || "-"}</TableCell>
                         <TableCell className="text-muted-foreground max-w-[240px] truncate">{c.address || "-"}</TableCell>
-                        <TableCell><Badge variant="secondary" className="text-xs">{c.status}</Badge></TableCell>
+                        <TableCell>
+                          <Badge className={cn(
+                            "text-[10px] h-5 px-1.5",
+                            c.status === "active"   && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                            c.status === "inactive" && "bg-gray-100 text-gray-500 hover:bg-gray-100",
+                            c.status === "pending"  && "bg-amber-100 text-amber-700 hover:bg-amber-100",
+                          )}>
+                            {c.status}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-muted-foreground tabular-nums text-xs">{format(new Date(c.created_at), "yyyy/MM/dd", { locale: ja })}</TableCell>
                       </TableRow>
                     ))}

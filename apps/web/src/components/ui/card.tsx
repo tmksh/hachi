@@ -1,3 +1,15 @@
+/*
+  ── Card spacing rules ────────────────────────────────────────────
+  カード内の余白は以下のルールに従う。
+
+  Card          外側 py-5 (20px 上下)、セクション間 gap-4 (16px)
+  CardHeader    px-6 pt-5 pb-3  — タイトル行。下のみ少し詰める
+  CardContent   px-6 py-4       — コンテンツ本体
+  CardFooter    px-6 pt-3 pb-5  — アクションエリア
+
+  ページ固有の上書きは最小限に。py-0 等の全リセットは避ける。
+  ──────────────────────────────────────────────────────────────────
+*/
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
@@ -14,7 +26,7 @@ function Card({ className, variant = "default", ...props }: CardProps) {
       data-slot="card"
       data-variant={variant}
       className={cn(
-        "text-card-foreground flex flex-col gap-6 rounded-xl py-6 transition-[box-shadow] duration-200",
+        "text-card-foreground flex flex-col gap-4 rounded-lg py-5 transition-[box-shadow] duration-200",
         variant === "inset" ? "frost-card-inset" : "frost-card",
         className
       )}
@@ -28,7 +40,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-6 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6",
+        "flex flex-row items-center justify-between min-h-10 px-5 border-b border-border/60",
         className
       )}
       {...props}
@@ -83,7 +95,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-footer"
-      className={cn("flex items-center px-6 [.border-t]:pt-6", className)}
+      className={cn("flex items-center px-6 [.border-t]:pt-4", className)}
       {...props}
     />
   )
