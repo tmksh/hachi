@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { getCustomers } from "@/lib/actions/customers";
 
-const COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+const COLORS = ["#0F5132", "#1A7A52", "#2D9E6B", "#4DB88A", "#7DCFAA", "#A8DFC5"];
 
 export default function MarketingSnsPage() {
   const [customers, setCustomers] = useState<{ source: string | null }[]>([]);
@@ -27,8 +27,8 @@ export default function MarketingSnsPage() {
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader title="SNS・チャネル分析" description="顧客獲得チャネルの分析" />
       <div className="grid grid-cols-2 gap-3">
-        <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">総顧客数</p><p className="text-2xl font-semibold">{customers.length}</p></CardContent></Card>
-        <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">チャネル数</p><p className="text-2xl font-semibold">{sourceData.length}</p></CardContent></Card>
+        <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">総顧客数</p><p className="text-2xl font-semibold">{customers.length}</p></CardContent></Card>
+        <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">チャネル数</p><p className="text-2xl font-semibold">{sourceData.length}</p></CardContent></Card>
       </div>
       <Card><CardHeader className="pb-2"><CardTitle className="text-sm">顧客獲得チャネル内訳</CardTitle></CardHeader>
         <CardContent>{sourceData.length > 0 ? (

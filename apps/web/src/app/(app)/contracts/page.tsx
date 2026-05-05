@@ -47,7 +47,7 @@ export default function ContractsListPage() {
           { label: "有効契約", val: rows.filter(c => c.status === "executing" || c.status === "contracted").length, icon: FileSignature },
           { label: "有効金額", val: fmt(rows.filter(c => c.status === "executing" || c.status === "contracted").reduce((s, c) => s + (c.amount ?? 0), 0)), icon: TrendingUp },
         ].map((k, i) => (
-          <Card key={i}><CardContent className="pt-4 pb-3"><div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">{k.label}</span><k.icon className="h-4 w-4 text-muted-foreground" /></div>{loading ? <Skeleton className="h-8 w-20" /> : <p className="text-2xl font-semibold tabular-nums">{k.val}</p>}</CardContent></Card>
+          <Card key={i} className="py-0"><CardContent className="pt-4 pb-3"><div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">{k.label}</span><k.icon className="h-4 w-4 text-muted-foreground" /></div>{loading ? <Skeleton className="h-8 w-20" /> : <p className="text-2xl font-semibold tabular-nums">{k.val}</p>}</CardContent></Card>
         ))}
       </div>
 

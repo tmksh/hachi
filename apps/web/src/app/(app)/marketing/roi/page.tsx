@@ -33,13 +33,13 @@ export default function MarketingRoiPage() {
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader title="ROI分析" description="投資対効果の分析" />
       <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">受注金額</p><p className="text-2xl font-semibold tabular-nums">¥{Math.round(wonValue/10000).toLocaleString()}万</p></CardContent></Card>
-        <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">総商談数</p><p className="text-2xl font-semibold">{totalDeals}</p></CardContent></Card>
-        <Card><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">受注率</p><p className="text-2xl font-semibold">{convRate}%</p></CardContent></Card>
+        <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">受注金額</p><p className="text-2xl font-semibold tabular-nums">¥{Math.round(wonValue/10000).toLocaleString()}万</p></CardContent></Card>
+        <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">総商談数</p><p className="text-2xl font-semibold">{totalDeals}</p></CardContent></Card>
+        <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">受注率</p><p className="text-2xl font-semibold">{convRate}%</p></CardContent></Card>
       </div>
       <Card><CardHeader className="pb-2"><CardTitle className="text-sm">ステージ別商談数</CardTitle></CardHeader>
         <CardContent>{stageData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}><BarChart data={stageData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="stage" tick={{fontSize:11}} /><YAxis /><Tooltip /><Bar dataKey="件数" fill="#2563eb" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={300}><BarChart data={stageData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="stage" tick={{fontSize:11}} /><YAxis /><Tooltip /><Bar dataKey="件数" fill="#0F5132" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
         ) : <p className="text-center py-8 text-muted-foreground">データなし</p>}</CardContent>
       </Card>
     </div>

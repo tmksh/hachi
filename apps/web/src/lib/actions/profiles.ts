@@ -61,6 +61,8 @@ export async function updateCompany(input: {
   phone?: string;
   address?: string;
   postal_code?: string;
+  representative?: string;
+  invoice_number?: string;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -77,6 +79,8 @@ export async function updateCompany(input: {
     ...(input.phone !== undefined ? { phone: input.phone } : {}),
     ...(input.address !== undefined ? { address: input.address } : {}),
     ...(input.postal_code !== undefined ? { postal_code: input.postal_code } : {}),
+    ...(input.representative !== undefined ? { representative: input.representative } : {}),
+    ...(input.invoice_number !== undefined ? { invoice_number: input.invoice_number } : {}),
   };
 
   const updatePayload: Record<string, unknown> = { settings: newSettings };

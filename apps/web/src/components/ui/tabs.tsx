@@ -26,14 +26,13 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "rounded-xl p-1 group-data-[orientation=horizontal]/tabs:h-10 data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
+  "rounded-lg p-1 group-data-[orientation=horizontal]/tabs:h-10 data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
   {
     variants: {
       variant: {
         default:
-          "bg-white/72 border-none " +
-          "shadow-[0_1px_0_rgba(255,255,255,0.75),4px_4px_10px_rgba(168,182,210,0.28),-2px_-2px_6px_rgba(255,255,255,0.60)] " +
-          "dark:bg-[rgba(28,35,52,0.80)] dark:shadow-[5px_5px_12px_rgba(0,0,0,0.35),-3px_-3px_8px_rgba(255,255,255,0.04)]",
+          "bg-[#F3F4F6] border border-[rgba(0,0,0,0.07)] " +
+          "dark:bg-[rgba(255,255,255,0.06)] dark:border-[rgba(255,255,255,0.07)]",
         line: "gap-1 bg-transparent",
       },
     },
@@ -70,10 +69,10 @@ function TabsTrigger({
         "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground/55 hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-all group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-transparent dark:group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent",
         "data-[state=active]:text-primary data-[state=active]:font-semibold " +
-        "group-data-[variant=default]/tabs-list:data-[state=active]:bg-white/55 " +
-        "group-data-[variant=default]/tabs-list:data-[state=active]:shadow-[inset_2px_2px_5px_rgba(168,182,210,0.38),inset_-1px_-1px_3px_rgba(255,255,255,0.85)] " +
-        "dark:group-data-[variant=default]/tabs-list:data-[state=active]:bg-white/10 " +
-        "dark:group-data-[variant=default]/tabs-list:data-[state=active]:shadow-[inset_2px_2px_5px_rgba(0,0,0,0.30),inset_-1px_-1px_3px_rgba(255,255,255,0.05)]",
+        "group-data-[variant=default]/tabs-list:data-[state=active]:bg-white " +
+        "group-data-[variant=default]/tabs-list:data-[state=active]:shadow-[0_1px_3px_rgba(0,0,0,0.08)] " +
+        "dark:group-data-[variant=default]/tabs-list:data-[state=active]:bg-[#1F2937] " +
+        "dark:group-data-[variant=default]/tabs-list:data-[state=active]:shadow-[0_1px_3px_rgba(0,0,0,0.30)]",
         "after:bg-foreground after:absolute after:opacity-0 after:transition-opacity group-data-[orientation=horizontal]/tabs:after:inset-x-0 group-data-[orientation=horizontal]/tabs:after:bottom-[-5px] group-data-[orientation=horizontal]/tabs:after:h-0.5 group-data-[orientation=vertical]/tabs:after:inset-y-0 group-data-[orientation=vertical]/tabs:after:-right-1 group-data-[orientation=vertical]/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-100",
         className
       )}

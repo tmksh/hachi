@@ -86,6 +86,8 @@ export default function SettingsPage() {
   const [companyPhone, setCompanyPhone] = useState("");
   const [companyAddress, setCompanyAddress] = useState("");
   const [companyPostal, setCompanyPostal] = useState("");
+  const [companyRepresentative, setCompanyRepresentative] = useState("");
+  const [companyInvoiceNumber, setCompanyInvoiceNumber] = useState("");
   const [savingCompany, setSavingCompany] = useState(false);
 
   // パスワード変更
@@ -162,6 +164,8 @@ export default function SettingsPage() {
       setCompanyPhone(s?.phone ?? "");
       setCompanyAddress(s?.address ?? "");
       setCompanyPostal(s?.postal_code ?? "");
+      setCompanyRepresentative(s?.representative ?? "");
+      setCompanyInvoiceNumber(s?.invoice_number ?? "");
     }).catch(() => {});
   }, []);
 
@@ -185,11 +189,13 @@ export default function SettingsPage() {
   const handleSaveCompany = async () => {
     setSavingCompany(true);
     try {
-      const updated = await updateCompany({
+      const updated =       await updateCompany({
         name: companyName.trim() || undefined,
         phone: companyPhone,
         address: companyAddress,
         postal_code: companyPostal,
+        representative: companyRepresentative,
+        invoice_number: companyInvoiceNumber,
       });
       setCompany(updated);
       toast.success("会社情報を更新しました");
@@ -427,7 +433,14 @@ export default function SettingsPage() {
                           <Label>住所</Label>
                           <Input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} placeholder="東京都〇〇区〇〇 1-2-3" />
                         </div>
-                      </div>
+                        <div className="space-y-2">
+                          <Label>代表者名</Label>
+                          <Input value={companyRepresentative} onChange={(e) => setCompanyRepresentative(e.target.value)} placeholder="山田 太郎" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>インボイス登録番号</Label>
+                          <Input value={companyInvoiceNumber} onChange={(e) => setCompanyInvoiceNumber(e.target.value)} placeholder="T-XXXXXXXXXXXXXXX" />
+                        </div>                      </div>
                       <div className="flex justify-end">
                         <Button onClick={handleSaveCompany} disabled={savingCompany}>
                           <Save className="size-4 mr-1" />

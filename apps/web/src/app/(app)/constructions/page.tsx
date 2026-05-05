@@ -89,7 +89,7 @@ export default function ConstructionsPage() {
           { label: "着工前", val: rows.filter((r) => r.status === "preparing").length },
           { label: "完了", val: rows.filter((r) => r.status === "completed").length },
         ].map((k, i) => (
-          <Card key={i}>
+          <Card key={i} className="py-0">
             <CardContent className="pt-4 pb-3">
               <span className="text-xs text-muted-foreground">{k.label}</span>
               {loading ? <Skeleton className="h-8 w-16 mt-1" /> : <p className="text-2xl font-semibold">{k.val}</p>}

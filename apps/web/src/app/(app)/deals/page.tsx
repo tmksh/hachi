@@ -109,7 +109,7 @@ export default function DealsPage() {
           { label: "受注率",      val: `${convRate}%`,                                                  icon: TrendingUp },
           { label: "パイプライン", val: `${Math.round(pipelineValue/10000).toLocaleString()}万円`,      icon: BarChart3 },
         ].map((k, i) => (
-          <Card key={i}>
+          <Card key={i} className="py-0">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <k.icon className="size-5 text-primary" />

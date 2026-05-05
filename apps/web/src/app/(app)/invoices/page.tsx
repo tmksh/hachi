@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -70,10 +70,12 @@ export default function InvoicesPage() {
             { label: "送付済み（未入金）", val: `¥${Math.round(totalSent / 10000).toLocaleString()}万`, color: "text-blue-600" },
             { label: "下書き", val: `${draftCount}件`, color: "text-muted-foreground" },
           ].map((k, i) => (
-            <div key={i} className="rounded-xl border border-border bg-card px-4 py-3">
-              <p className="text-xs text-muted-foreground">{k.label}</p>
-              <p className={`text-lg font-semibold tabular-nums ${k.color}`}>{k.val}</p>
-            </div>
+            <Card key={i} className="py-0">
+              <CardContent className="pt-4 pb-3">
+                <p className="text-xs text-muted-foreground">{k.label}</p>
+                <p className={`text-lg font-semibold tabular-nums ${k.color}`}>{k.val}</p>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

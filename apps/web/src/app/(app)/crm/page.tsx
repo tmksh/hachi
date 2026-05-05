@@ -106,13 +106,7 @@ export default function CrmPage() {
               ))}
             </div>
           ) : (
-            <Card variant="inset">
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">
-                  顧客リスト
-                  <Badge className="ml-2 bg-primary/10 text-primary hover:bg-primary/10 text-[10px] h-4 px-1.5 font-normal">{filtered.length}</Badge>
-                </CardTitle>
-              </CardHeader>
+            <Card variant="inset" className="py-0">
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>

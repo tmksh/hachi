@@ -48,7 +48,7 @@ export default function QuotesPage() {
           { label: "受理", val: rows.filter(r => r.status === "accepted").length, icon: FileText },
           { label: "下書き", val: rows.filter(r => r.status === "draft").length, icon: FileText },
         ].map((k, i) => (
-          <Card key={i}><CardContent className="pt-4 pb-3"><div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">{k.label}</span><k.icon className="h-4 w-4 text-muted-foreground" /></div>{loading ? <Skeleton className="h-8 w-20" /> : <p className="text-2xl font-semibold tabular-nums">{k.val}</p>}</CardContent></Card>
+          <Card key={i} className="py-0"><CardContent className="pt-4 pb-3"><div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">{k.label}</span><k.icon className="h-4 w-4 text-muted-foreground" /></div>{loading ? <Skeleton className="h-8 w-20" /> : <p className="text-2xl font-semibold tabular-nums">{k.val}</p>}</CardContent></Card>
         ))}
       </div>
       <div className="relative max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" /></div>
