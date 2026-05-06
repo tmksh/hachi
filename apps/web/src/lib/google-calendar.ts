@@ -3,8 +3,8 @@ export type GoogleCalendarEvent = {
   summary?: string;
   description?: string;
   location?: string;
-  start: { dateTime?: string; date?: string };
-  end:   { dateTime?: string; date?: string };
+  start: { dateTime?: string; date?: string; timeZone?: string };
+  end:   { dateTime?: string; date?: string; timeZone?: string };
   colorId?: string;
   htmlLink?: string;
 };
@@ -37,6 +37,120 @@ export async function fetchGoogleCalendarEvents(
   }
 }
 
+/** Google Calendar にイベントを作成する */
+export async function createGoogleCalendarEvent(
+  accessToken: string,
+  event: {
+    title: string;
+    description?: string | null;
+    location?: string | null;
+    start_at: string;
+    end_at: string;
+    all_day?: boolean;
+  },
+): Promise<string | null> {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const body: Record<string, unknown> = {
+      summary: event.title,
+      description: event.description ?? undefined,
+      location: event.location ?? undefined,
+    };
+
+    if (event.all_day) {
+      body.start = { date: event.start_at.substring(0, 10) };
+      body.end   = { date: event.end_at.substring(0, 10) };
+    } else {
+      body.start = { dateTime: event.start_at, timeZone };
+      body.end   = { dateTime: event.end_at,   timeZone };
+    }
+
+    const res = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.id as string;
+  } catch {
+    return null;
+  }
+}
+
+/** Google Calendar のイベントを更新する */
+export async function updateGoogleCalendarEvent(
+  accessToken: string,
+  googleEventId: string,
+  event: {
+    title?: string;
+    description?: string | null;
+    location?: string | null;
+    start_at?: string;
+    end_at?: string;
+    all_day?: boolean;
+  },
+): Promise<boolean> {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const body: Record<string, unknown> = {};
+    if (event.title !== undefined) body.summary = event.title;
+    if (event.description !== undefined) body.description = event.description ?? undefined;
+    if (event.location !== undefined) body.location = event.location ?? undefined;
+    if (event.start_at !== undefined) {
+      body.start = event.all_day
+        ? { date: event.start_at.substring(0, 10) }
+        : { dateTime: event.start_at, timeZone };
+    }
+    if (event.end_at !== undefined) {
+      body.end = event.all_day
+        ? { date: event.end_at.substring(0, 10) }
+        : { dateTime: event.end_at, timeZone };
+    }
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Google Calendar のイベントを削除する */
+export async function deleteGoogleCalendarEvent(
+  accessToken: string,
+  googleEventId: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 /** Google Calendar イベントを表示用の共通型に変換 */
 export function mapGoogleEvent(gEv: GoogleCalendarEvent) {
   const allDay = !gEv.start.dateTime;
@@ -57,10 +171,11 @@ export function mapGoogleEvent(gEv: GoogleCalendarEvent) {
     customer_id: null,
     assigned_to: null,
     customer: null,
-    /* Google イベントであることを示すフラグ */
     _isGoogle: true as const,
     _htmlLink: gEv.htmlLink,
+    _googleId: gEv.id,
   };
 }
 
 export type MappedGoogleEvent = ReturnType<typeof mapGoogleEvent>;
+

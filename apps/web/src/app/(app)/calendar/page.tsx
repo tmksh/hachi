@@ -64,16 +64,24 @@ import {
   Link2,
   CheckCircle2,
   RefreshCw,
+  LogOut,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   getCalendarEvents,
   updateCalendarEvent,
   deleteCalendarEvent,
+  disconnectGoogleCalendar,
 } from "@/lib/actions/calendar";
 import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent } from "@/lib/google-calendar";
+import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/google-calendar";
 import { useAuth } from "@/hooks/use-auth";
 
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
@@ -144,16 +152,15 @@ export default function CalendarPage() {
   const [googleEvents, setGoogleEvents] = useState<MappedGoogleEvent[]>([]);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleAccountEmail, setGoogleAccountEmail] = useState<string | null>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
   const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeEvent, setActiveEvent] = useState<AnyEv | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const openEvent = useCallback((ev: AnyEv) => {
-    if ((ev as MappedGoogleEvent)._isGoogle && (ev as MappedGoogleEvent)._htmlLink) {
-      window.open((ev as MappedGoogleEvent)._htmlLink, "_blank");
-      return;
-    }
+    // Google イベントも含めダイアログで表示（外部遷移しない）
     setActiveEvent(ev);
   }, []);
   const refreshEvents = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -199,15 +206,32 @@ export default function CalendarPage() {
   /* Google Calendar イベント取得 */
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.provider_token) {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      let token: string | null = session?.provider_token ?? null;
+
+      if (!token) {
+        try {
+          const res = await fetch("/api/google-token");
+          if (res.ok) {
+            const data = await res.json();
+            token = data.access_token ?? null;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!token) {
         setGoogleConnected(false);
+        setGoogleToken(null);
         setGoogleEvents([]);
         return;
       }
+
       setGoogleConnected(true);
+      setGoogleToken(token);
       fetchGoogleCalendarEvents(
-        session.provider_token,
+        token,
         rangeStart.toISOString(),
         rangeEnd.toISOString(),
       ).then((gEvs) => setGoogleEvents(gEvs.map(mapGoogleEvent)));
@@ -245,6 +269,22 @@ export default function CalendarPage() {
     if (error) {
       toast.error("Google 連携に失敗しました");
       setConnectingGoogle(false);
+    }
+  }, []);
+
+  const disconnectGoogle = useCallback(async () => {
+    if (!confirm("Google カレンダーの連携を解除しますか？")) return;
+    setDisconnectingGoogle(true);
+    try {
+      await disconnectGoogleCalendar();
+      setGoogleConnected(false);
+      setGoogleEvents([]);
+      setGoogleAccountEmail(null);
+      toast.success("Google カレンダーの連携を解除しました");
+    } catch {
+      toast.error("解除に失敗しました");
+    } finally {
+      setDisconnectingGoogle(false);
     }
   }, []);
 
@@ -383,7 +423,9 @@ export default function CalendarPage() {
             googleConnected={googleConnected}
             googleAccountEmail={googleAccountEmail}
             connectingGoogle={connectingGoogle}
+            disconnectingGoogle={disconnectingGoogle}
             onConnectGoogle={connectGoogle}
+            onDisconnectGoogle={disconnectGoogle}
           />
 
           {/* Tasks panel (moved from right sidebar) */}
@@ -539,6 +581,7 @@ export default function CalendarPage() {
 
       <EventDialog
         event={activeEvent}
+        googleToken={googleToken}
         onOpenChange={(open) => {
           if (!open) setActiveEvent(null);
         }}
@@ -648,7 +691,9 @@ type ConnectedAccountsPanelProps = {
   googleConnected: boolean;
   googleAccountEmail: string | null;
   connectingGoogle: boolean;
+  disconnectingGoogle: boolean;
   onConnectGoogle: () => void;
+  onDisconnectGoogle: () => void;
 };
 
 function GoogleLogo({ className }: { className?: string }) {
@@ -666,7 +711,9 @@ function ConnectedAccountsPanel({
   googleConnected,
   googleAccountEmail,
   connectingGoogle,
+  disconnectingGoogle,
   onConnectGoogle,
+  onDisconnectGoogle,
 }: ConnectedAccountsPanelProps) {
   return (
     <Card>
@@ -688,19 +735,37 @@ function ConnectedAccountsPanel({
             </div>
           </div>
           {googleConnected ? (
-            <button
-              onClick={onConnectGoogle}
-              disabled={connectingGoogle}
-              title="再連携してトークンを更新"
-              className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
-            >
-              {connectingGoogle ? (
-                <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-2.5 w-2.5" />
-              )}
-              連携中
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  disabled={connectingGoogle || disconnectingGoogle}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  {connectingGoogle || disconnectingGoogle ? (
+                    <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                  )}
+                  連携中
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="text-xs">
+                <DropdownMenuItem
+                  className="text-[12px] gap-2"
+                  onClick={onConnectGoogle}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  再連携（トークン更新）
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-[12px] gap-2 text-destructive focus:text-destructive"
+                  onClick={onDisconnectGoogle}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  連携を解除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <button
               onClick={onConnectGoogle}
@@ -1278,11 +1343,13 @@ function DayView({
 /* ──────────────────── Event Dialog ──────────────────── */
 function EventDialog({
   event,
+  googleToken,
   onOpenChange,
   onSaved,
   onDeleted,
 }: {
   event: AnyEv | null;
+  googleToken: string | null;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
   onDeleted: () => void;
@@ -1327,15 +1394,32 @@ function EventDialog({
     }
     setSaving(true);
     try {
+      const start_at = `${startDate}T${startTime}:00`;
+      const end_at = `${endDate || startDate}T${endTime}:00`;
+
       await updateCalendarEvent(event.id, {
         title: title.trim(),
         description: description || null,
-        start_at: `${startDate}T${startTime}:00`,
-        end_at: `${endDate || startDate}T${endTime}:00`,
+        start_at,
+        end_at,
         all_day: allDay,
         category: (category || null) as CalendarEvent["category"],
         location: location || null,
       });
+
+      // Google Calendar にも反映（ローカルイベントで google_event_id がある場合）
+      const gId = (event as { google_event_id?: string }).google_event_id;
+      if (googleToken && gId) {
+        await updateGoogleCalendarEvent(googleToken, gId, {
+          title: title.trim(),
+          description: description || null,
+          location: location || null,
+          start_at,
+          end_at,
+          all_day: allDay,
+        });
+      }
+
       toast.success("予定を更新しました");
       onSaved();
     } catch {
@@ -1350,6 +1434,11 @@ function EventDialog({
     if (!confirm("この予定を削除しますか？")) return;
     setDeleting(true);
     try {
+      // Google Calendar にも反映
+      const gId = (event as { google_event_id?: string }).google_event_id;
+      if (googleToken && gId) {
+        await deleteGoogleCalendarEvent(googleToken, gId);
+      }
       await deleteCalendarEvent(event.id);
       toast.success("予定を削除しました");
       onDeleted();
@@ -1367,6 +1456,9 @@ function EventDialog({
       </Dialog>
     );
   }
+
+  const isGoogle = !!(event as MappedGoogleEvent)._isGoogle;
+  const htmlLink = (event as MappedGoogleEvent)._htmlLink;
 
   const startDt = parseISO(event.start_at);
   const endDt = event.end_at ? parseISO(event.end_at) : startDt;
@@ -1524,7 +1616,23 @@ function EventDialog({
         )}
 
         <DialogFooter className="gap-2 sm:justify-between">
-          {mode === "view" ? (
+          {isGoogle ? (
+            <div className="flex w-full items-center justify-between">
+              <div />
+              <div className="flex items-center gap-2">
+                {htmlLink && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={htmlLink} target="_blank" rel="noopener noreferrer">
+                      Google で開く
+                    </a>
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
+                  閉じる
+                </Button>
+              </div>
+            </div>
+          ) : mode === "view" ? (
             <>
               <Button
                 variant="ghost"

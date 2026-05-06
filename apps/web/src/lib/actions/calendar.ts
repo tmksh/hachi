@@ -3,6 +3,23 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CalendarEvent } from "@/lib/database.types";
 
+export async function disconnectGoogleCalendar() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      google_access_token: null,
+      google_refresh_token: null,
+      google_token_expires_at: null,
+    })
+    .eq("id", user.id);
+
+  if (error) throw error;
+}
+
 export async function getCalendarEvents(params?: { start?: string; end?: string }) {
   const supabase = await createClient();
   let query = supabase
