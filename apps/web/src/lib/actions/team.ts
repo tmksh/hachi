@@ -79,18 +79,17 @@ export async function listTeamMembers(): Promise<Profile[]> {
 }
 
 /**
- * メンバー招待メール送信。
+ * メンバー招待。
  *
- * Supabase が招待メールを自動送信する。受信者がリンクをクリックすると
- * /api/auth/accept-invite に遷移し、そこで profiles を作成する。
- *
- * user_metadata に company_id / role / display_name を埋め込むことで、
- * 招待受け入れ時にテナント情報を引き継げる。
+ * password が指定された場合は createUser で即座にアカウント作成し、
+ * 管理者が仮パスワードを別途共有する運用。
+ * password 未指定の場合は inviteUserByEmail でマジックリンクを送信。
  */
 export async function inviteTeamMember(input: {
   email: string;
   displayName: string;
   role: TeamRole;
+  password?: string;
 }): Promise<void> {
   const { companyId, actorRole } = await assertTenantAdmin();
   assertCanAssignRole(actorRole, input.role);
@@ -106,18 +105,50 @@ export async function inviteTeamMember(input: {
       ? `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? ""}`
       : "http://localhost:3000");
 
-  const { error } = await admin.auth.admin.inviteUserByEmail(
-    input.email.trim(),
-    {
-      redirectTo: `${appUrl}/api/auth/accept-invite`,
-      data: {
+  const userMeta = {
+    company_id: companyId,
+    role: input.role,
+    display_name: input.displayName.trim(),
+  };
+
+  if (input.password) {
+    // パスワード指定あり: 即時アカウント作成 & プロフィール登録
+    const { data, error } = await admin.auth.admin.createUser({
+      email: input.email.trim(),
+      password: input.password,
+      email_confirm: true,
+      user_metadata: userMeta,
+    });
+    if (error) throw error;
+
+    const userId = data.user.id;
+    const { data: existing } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!existing) {
+      const { error: profileError } = await admin.from("profiles").insert({
+        id: userId,
         company_id: companyId,
-        role: input.role,
         display_name: input.displayName.trim(),
+        email: input.email.trim(),
+        role: input.role,
+      });
+      if (profileError) throw profileError;
+    }
+  } else {
+    // パスワード未指定: マジックリンク招待メール
+    const { error } = await admin.auth.admin.inviteUserByEmail(
+      input.email.trim(),
+      {
+        redirectTo: `${appUrl}/api/auth/accept-invite`,
+        data: userMeta,
       },
-    },
-  );
-  if (error) throw error;
+    );
+    if (error) throw error;
+  }
 }
 
 /**

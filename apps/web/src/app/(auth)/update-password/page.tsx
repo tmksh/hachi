@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromInvite = searchParams.get("from") === "invite";
+
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -32,8 +35,8 @@ export default function UpdatePasswordPage() {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      toast.success("パスワードを変更しました");
-      router.replace("/dashboard");
+      toast.success("パスワードを設定しました");
+      router.replace(fromInvite ? "/onboarding" : "/dashboard");
     } catch (err: unknown) {
       toast.error("パスワードの変更に失敗しました", {
         description: err instanceof Error ? err.message : undefined,
@@ -53,13 +56,27 @@ export default function UpdatePasswordPage() {
             </div>
             <h1 className="text-2xl font-bold tracking-tight">BRIDGE</h1>
           </div>
-          <p className="text-sm text-muted-foreground">新しいパスワードを設定</p>
+          {fromInvite ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-center gap-2">
+                <KeyRound className="h-4 w-4 text-primary" />
+                <p className="text-base font-semibold">ようこそ！パスワードを設定してください</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                設定後、メールアドレスとパスワードでいつでもログインできます
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">新しいパスワードを設定</p>
+          )}
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">新しいパスワード</Label>
+              <Label htmlFor="password">
+                {fromInvite ? "パスワード（6文字以上）" : "新しいパスワード"}
+              </Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -100,7 +117,7 @@ export default function UpdatePasswordPage() {
               disabled={loading || !password || password !== confirm}
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              パスワードを変更する
+              {fromInvite ? "パスワードを設定してはじめる" : "パスワードを変更する"}
             </Button>
           </form>
         </CardContent>

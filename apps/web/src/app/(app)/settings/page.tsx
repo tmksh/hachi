@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { CrmMasterTab } from "@/components/settings/crm-master-tab";
+import { CraftsmenMasterTab } from "@/components/settings/craftsmen-master-tab";
 import {
   Select,
   SelectContent,
@@ -43,6 +45,8 @@ import {
   RefreshCw,
   Trash2,
   Send,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -113,6 +117,8 @@ export default function SettingsPage() {
   const [addSaving, setAddSaving] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [showInvitePassword, setShowInvitePassword] = useState(false);
   const [newRole, setNewRole] = useState<TeamRole>("employee");
   const [inviteSent, setInviteSent] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
@@ -236,6 +242,8 @@ export default function SettingsPage() {
   const openAddDialog = () => {
     setNewName("");
     setNewEmail("");
+    setInvitePassword("");
+    setShowInvitePassword(false);
     setNewRole("employee");
     setInviteSent(false);
     setAddOpen(true);
@@ -252,6 +260,7 @@ export default function SettingsPage() {
         email: newEmail.trim(),
         displayName: newName.trim(),
         role: newRole,
+        password: invitePassword.trim() || undefined,
       });
       setInviteSent(true);
       toast.success("招待メールを送信しました");
@@ -339,6 +348,12 @@ export default function SettingsPage() {
           )}
           <TabsTrigger value="security">セキュリティ</TabsTrigger>
           <TabsTrigger value="notifications">通知</TabsTrigger>
+          {canManageMembers && (
+            <TabsTrigger value="crm_master">CRMマスタ</TabsTrigger>
+          )}
+          {canManageMembers && (
+            <TabsTrigger value="craftsmen_master">職人マスタ</TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── プロフィール ─── */}
@@ -678,9 +693,9 @@ export default function SettingsPage() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>メンバーを招待</DialogTitle>
-              <DialogDescription>
-                招待メールを送信します。受け取ったメンバーはGoogleアカウントでログインし、カレンダー連携まで一度に完了できます。
-              </DialogDescription>
+            <DialogDescription>
+              招待メールを送信します。受け取ったメンバーはリンクをクリックしてパスワードを設定し、メール＋パスワードまたはGoogleアカウントでログインできます。
+            </DialogDescription>
             </DialogHeader>
 
             {inviteSent ? (
@@ -691,10 +706,11 @@ export default function SettingsPage() {
                     招待メールを送信しました
                   </div>
                   <p className="text-xs">
-                    <span className="font-medium">{newEmail}</span> に招待リンクを送信しました。
-                    受け取ったメンバーがリンクをクリックしてGoogleログインすると自動的に登録されます。
-                  </p>
-                </div>
+                    {invitePassword
+                      ? <>アカウントを作成しました。メールアドレス（<span className="font-medium">{newEmail}</span>）と設定したパスワードをメンバーに共有してください。</>
+                      : <><span className="font-medium">{newEmail}</span> に招待リンクを送信しました。リンクをクリックするとパスワード設定画面に進みます。</>
+                    }
+                  </p>                </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={openAddDialog}>
                     続けて招待する
@@ -724,7 +740,32 @@ export default function SettingsPage() {
                       placeholder="taro@example.com"
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      このメールアドレス宛に招待リンクを送信します。Googleアカウントと同じメアドを推奨します。
+                      このアドレス宛に招待リンクを送信します。クリック後にパスワードを設定してログインできます。
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      仮パスワード
+                      <span className="ml-1.5 text-muted-foreground font-normal">（任意）</span>
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type={showInvitePassword ? "text" : "password"}
+                        value={invitePassword}
+                        onChange={(e) => setInvitePassword(e.target.value)}
+                        placeholder="設定する場合は6文字以上"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowInvitePassword(!showInvitePassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showInvitePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      設定した場合、招待リンクなしで即時ログイン可能になります。パスワードは別途本人に共有してください。
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -838,6 +879,20 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── CRM マスタ ─── */}
+        {canManageMembers && (
+          <TabsContent value="crm_master" className="mt-4">
+            <CrmMasterTab />
+          </TabsContent>
+        )}
+
+        {/* ── 職人マスタ ─── */}
+        {canManageMembers && (
+          <TabsContent value="craftsmen_master" className="mt-4">
+            <CraftsmenMasterTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

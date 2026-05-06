@@ -3,6 +3,34 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Deal, DealActivity } from "@/lib/database.types";
 
+export async function getDealStages() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return [];
+  const { data } = await supabase
+    .from("deal_stages")
+    .select("*")
+    .eq("company_id", profile.company_id)
+    .order("sort_order");
+  return data ?? [];
+}
+
+export async function getLostReasons() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return [];
+  const { data } = await supabase
+    .from("lost_reasons")
+    .select("*")
+    .eq("company_id", profile.company_id)
+    .order("sort_order");
+  return data ?? [];
+}
+
 export async function getDeals() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -53,7 +81,7 @@ export async function createDeal(input: {
       company_id: profile.company_id,
       customer_id: input.customer_id,
       title: input.title,
-      stage: input.stage || "inquiry",
+      stage: input.stage || "lead",
       value: input.value || null,
       priority: input.priority || "medium",
       assigned_to: input.assigned_to || null,
@@ -94,4 +122,108 @@ export async function createDealActivity(dealId: string, input: { type: string; 
     .single();
   if (error) throw error;
   return data as DealActivity;
+}
+
+// ── CRM マスタ CRUD ─────────────────────────
+
+async function getCompanyId() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+  return { supabase, company_id: profile.company_id };
+}
+
+// 商談ステージ
+export async function createDealStage(input: { key: string; label: string; color?: string; sort_order?: number }) {
+  const { supabase, company_id } = await getCompanyId();
+  const { data, error } = await supabase.from("deal_stages").insert({ company_id, ...input }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDealStage(id: string, input: { label?: string; color?: string; sort_order?: number }) {
+  const { supabase } = await getCompanyId();
+  const { data, error } = await supabase.from("deal_stages").update(input).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteDealStage(id: string) {
+  const { supabase } = await getCompanyId();
+  const { error } = await supabase.from("deal_stages").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function reorderDealStages(items: { id: string; sort_order: number }[]) {
+  const { supabase } = await getCompanyId();
+  await Promise.all(items.map(({ id, sort_order }) =>
+    supabase.from("deal_stages").update({ sort_order }).eq("id", id)
+  ));
+}
+
+// 失注理由
+export async function createLostReason(label: string) {
+  const { supabase, company_id } = await getCompanyId();
+  const { data: existing } = await supabase.from("lost_reasons").select("sort_order").eq("company_id", company_id).order("sort_order", { ascending: false }).limit(1).single();
+  const { data, error } = await supabase.from("lost_reasons").insert({ company_id, label, sort_order: (existing?.sort_order ?? -1) + 1 }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteLostReason(id: string) {
+  const { supabase } = await getCompanyId();
+  const { error } = await supabase.from("lost_reasons").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// 紹介元
+export async function getLeadSources() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return [];
+  const { data } = await supabase.from("lead_sources").select("*").eq("company_id", profile.company_id).order("sort_order");
+  return data ?? [];
+}
+
+export async function createLeadSource(label: string) {
+  const { supabase, company_id } = await getCompanyId();
+  const { data: existing } = await supabase.from("lead_sources").select("sort_order").eq("company_id", company_id).order("sort_order", { ascending: false }).limit(1).single();
+  const { data, error } = await supabase.from("lead_sources").insert({ company_id, label, sort_order: (existing?.sort_order ?? -1) + 1 }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteLeadSource(id: string) {
+  const { supabase } = await getCompanyId();
+  const { error } = await supabase.from("lead_sources").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// 顧客タグ
+export async function getCustomerTagMasters() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return [];
+  const { data } = await supabase.from("customer_tag_masters").select("*").eq("company_id", profile.company_id).order("sort_order");
+  return data ?? [];
+}
+
+export async function createCustomerTagMaster(label: string) {
+  const { supabase, company_id } = await getCompanyId();
+  const { data: existing } = await supabase.from("customer_tag_masters").select("sort_order").eq("company_id", company_id).order("sort_order", { ascending: false }).limit(1).single();
+  const { data, error } = await supabase.from("customer_tag_masters").insert({ company_id, label, sort_order: (existing?.sort_order ?? -1) + 1 }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCustomerTagMaster(id: string) {
+  const { supabase } = await getCompanyId();
+  const { error } = await supabase.from("customer_tag_masters").delete().eq("id", id);
+  if (error) throw error;
 }

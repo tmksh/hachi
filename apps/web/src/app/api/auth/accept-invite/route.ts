@@ -61,6 +61,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // オンボーディングページへ（Google 連携を促す）
-  return NextResponse.redirect(`${origin}/onboarding`);
+  // パスワード設定ページへ（Google 連携は任意なので onboarding はその後）
+  return NextResponse.redirect(`${origin}/update-password?from=invite`);
 }

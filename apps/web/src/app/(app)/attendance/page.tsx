@@ -67,22 +67,22 @@ export default function AttendancePage() {
           <CardContent className="p-0">
             <div className="flex flex-col md:flex-row">
               {/* 時計エリア */}
-              <div className="flex flex-col items-center justify-center gap-4 p-8 flex-1 bg-gradient-to-br from-primary/5 to-transparent border-b md:border-b-0 md:border-r border-border/60">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 rounded-full transition-colors ${clockedIn ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/40"}`} />
-                  <span className={`text-sm font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
+              <div className="flex flex-col items-center justify-center gap-3 md:gap-4 py-5 px-4 md:p-8 flex-1 bg-gradient-to-br from-primary/5 to-transparent border-b md:border-b-0 md:border-r border-border/60">
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full transition-colors ${clockedIn ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/40"}`} />
+                  <span className={`text-xs font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
                     {clockedIn ? "勤務中" : "未出勤"}
                   </span>
                 </div>
-                <AnalogClock size={140} />
+                <AnalogClock size={110} />
                 <div className="text-center">
-                  <p className="text-3xl font-bold tabular-nums tracking-tight">{format(now, "HH:mm")}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{format(now, "yyyy年M月d日（EEE）", { locale: ja })}</p>
+                  <p className="text-2xl md:text-3xl font-bold tabular-nums tracking-tight">{format(now, "HH:mm")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{format(now, "yyyy年M月d日（EEE）", { locale: ja })}</p>
                 </div>
               </div>
               {/* 操作エリア */}
-              <div className="flex flex-col justify-center gap-3 p-8 md:w-64">
-                <p className="text-xs text-muted-foreground font-medium mb-1">打刻操作</p>
+              <div className="flex flex-col justify-center gap-2 md:gap-3 py-4 px-4 md:p-8 md:w-64">
+                <p className="text-xs text-muted-foreground font-medium">打刻操作</p>
                 <Button
                   onClick={handleClockIn}
                   disabled={clockedIn}

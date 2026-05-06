@@ -414,4 +414,9 @@
     box-shadow: none !important;
     transition: opacity 0.15s ease !important;
   }
+
+  /* ── Safe area utility ── */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }

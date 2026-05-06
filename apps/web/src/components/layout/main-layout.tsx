@@ -73,7 +73,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         </div>
       </motion.main>
       {/* Mobile */}
-      <main className="md:hidden pb-20">
+      <main className="md:hidden pb-32">
         {children}
       </main>
     </div>

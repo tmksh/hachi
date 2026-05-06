@@ -71,9 +71,9 @@ export function AnalogClock({ size = 88, className = "" }: AnalogClockProps) {
         })}
 
         {/* Hands */}
-        {hand(h, r * 0.46, 2.8, "#8a9cc0")}
-        {hand(m, r * 0.62, 2.2, "#6b7fa8")}
-        {hand(s, r * 0.70, 1.4, "var(--primary)")}
+        {hand(h, r * 0.46, 2.8, "#0F5132")}
+        {hand(m, r * 0.62, 2.2, "#1A7A52")}
+        {hand(s, r * 0.70, 1.4, "#2D9E6B")}
 
         {/* Center dot */}
         <circle cx={cx} cy={cy} r={3.5} fill="var(--primary)" />

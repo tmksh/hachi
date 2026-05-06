@@ -2,6 +2,39 @@
 
 import { createClient } from "@/lib/supabase/server";
 
+export async function getGmailAccount() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("email_accounts")
+    .select("id, email_address, last_sync_at, token_expires_at")
+    .eq("user_id", user.id)
+    .eq("provider", "gmail")
+    .single();
+
+  return data ?? null;
+}
+
+export async function disconnectGmailAccount() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("email_accounts")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("provider", "gmail");
+
+  if (error) throw error;
+}
+
 export async function getEmailThreads(folder?: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

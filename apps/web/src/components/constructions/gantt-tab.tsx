@@ -293,12 +293,21 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                       idx % 2 === 1 ? "bg-slate-50" : "bg-white"
                     )}
                     style={{ height: ROW_H }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#EFF6FF")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = idx % 2 === 1 ? "#F8FAFC" : "#FFFFFF")}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "#EFF6FF";
+                      const sticky = e.currentTarget.querySelector<HTMLElement>("[data-sticky-left]");
+                      if (sticky) sticky.style.backgroundColor = "#EFF6FF";
+                    }}
+                    onMouseLeave={e => {
+                      const bg = idx % 2 === 1 ? "#F8FAFC" : "#FFFFFF";
+                      e.currentTarget.style.backgroundColor = bg;
+                      const sticky = e.currentTarget.querySelector<HTMLElement>("[data-sticky-left]");
+                      if (sticky) sticky.style.backgroundColor = bg;
+                    }}
                   >
                     {/* 左固定セル */}
-                    <div className="sticky left-0 z-10 flex-shrink-0 flex border-r-2 border-border/60"
-                      style={{ width: LEFT_W, backgroundColor: "inherit" }}>
+                    <div data-sticky-left className="sticky left-0 z-20 flex-shrink-0 flex border-r-2 border-border/60"
+                      style={{ width: LEFT_W, backgroundColor: idx % 2 === 1 ? "#F8FAFC" : "#FFFFFF" }}>
                       {/* 工程名 */}
                       <div className="flex-1 flex items-center gap-2 px-3 min-w-0 border-r border-border/40">
                         <Checkbox

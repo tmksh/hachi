@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, Users, DollarSign, BarChart3, Plus, FileText } from "lucide-react";
-import { getDeals, updateDeal } from "@/lib/actions/deals";
+import { getDeals, updateDeal, getDealStages } from "@/lib/actions/deals";
 import { getProfiles } from "@/lib/actions/profiles";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
@@ -21,23 +21,13 @@ type DealRow = Deal & {
   assignee: { id: string; display_name: string } | null;
 };
 
-const STAGES: { key: Deal["stage"]; label: string; color: string }[] = [
-  { key: "inquiry",         label: "問い合わせ",   color: "bg-gray-100 dark:bg-gray-800" },
-  { key: "first_meeting",   label: "初回面談",     color: "bg-blue-50 dark:bg-blue-950/30" },
-  { key: "materials_sent",  label: "資料送付",     color: "bg-cyan-50 dark:bg-cyan-950/30" },
-  { key: "quote_submitted", label: "見積提出",     color: "bg-indigo-50 dark:bg-indigo-950/30" },
-  { key: "negotiation",     label: "交渉中",       color: "bg-yellow-50 dark:bg-yellow-950/30" },
-  { key: "closing",         label: "クロージング", color: "bg-orange-50 dark:bg-orange-950/30" },
-  { key: "won",             label: "受注",         color: "bg-green-50 dark:bg-green-950/30" },
-  { key: "lost",            label: "失注",         color: "bg-red-50 dark:bg-red-950/30" },
-];
-
-const QUOTE_STAGES: Deal["stage"][] = ["quote_submitted", "negotiation", "closing", "won"];
+type StageRow = { key: string; label: string; color: string; is_won: boolean; is_lost: boolean; sort_order: number };
 
 export default function DealsPage() {
   const router = useRouter();
   const [deals, setDeals]               = useState<DealRow[]>([]);
   const [profiles, setProfiles]         = useState<Profile[]>([]);
+  const [stages, setStages]             = useState<StageRow[]>([]);
   const [loading, setLoading]           = useState(true);
   const [draggedDeal, setDraggedDeal]   = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -52,6 +42,7 @@ export default function DealsPage() {
   useEffect(() => {
     fetchDeals();
     getProfiles().then(setProfiles).catch(() => {});
+    getDealStages().then(data => setStages(data as StageRow[])).catch(() => {});
   }, [fetchDeals]);
 
   const filteredDeals = assigneeFilter === "_all"
@@ -60,13 +51,18 @@ export default function DealsPage() {
       ? deals.filter((d) => !d.assignee)
       : deals.filter((d) => d.assignee?.id === assigneeFilter);
 
-  const totalAmount    = filteredDeals.reduce((s, d) => s + (d.value || 0), 0);
-  const wonDeals       = filteredDeals.filter(d => d.stage === "won");
-  const pipelineValue  = filteredDeals.filter(d => d.stage !== "won" && d.stage !== "lost").reduce((s, d) => s + (d.value || 0), 0);
-  const closedCount    = wonDeals.length + filteredDeals.filter(d => d.stage === "lost").length;
-  const convRate       = closedCount > 0 ? Math.round((wonDeals.length / closedCount) * 100) : 0;
+  const wonStageKeys  = stages.filter(s => s.is_won).map(s => s.key);
+  const lostStageKeys = stages.filter(s => s.is_lost).map(s => s.key);
 
-  const handleDrop = async (e: React.DragEvent, targetStage: Deal["stage"]) => {
+  const totalAmount   = filteredDeals.reduce((s, d) => s + (d.value || 0), 0);
+  const wonDeals      = filteredDeals.filter(d => wonStageKeys.includes(d.stage));
+  const pipelineValue = filteredDeals
+    .filter(d => !wonStageKeys.includes(d.stage) && !lostStageKeys.includes(d.stage))
+    .reduce((s, d) => s + (d.value || 0), 0);
+  const closedCount   = wonDeals.length + filteredDeals.filter(d => lostStageKeys.includes(d.stage)).length;
+  const convRate      = closedCount > 0 ? Math.round((wonDeals.length / closedCount) * 100) : 0;
+
+  const handleDrop = async (e: React.DragEvent, targetStage: string) => {
     e.preventDefault();
     setDragOverStage(null);
     if (!draggedDeal) return;
@@ -78,8 +74,8 @@ export default function DealsPage() {
 
     try {
       await updateDeal(draggedDeal, { stage: targetStage });
-      if (targetStage === "won") {
-        setWonDeal({ ...deal, stage: "won" });
+      if (wonStageKeys.includes(targetStage)) {
+        setWonDeal({ ...deal, stage: targetStage });
       }
     } catch {
       fetchDeals();
@@ -146,7 +142,7 @@ export default function DealsPage() {
 
       {/* カンバン */}
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {STAGES.map(stage => {
+        {stages.map(stage => {
           const stageDeals = filteredDeals.filter(d => d.stage === stage.key);
           return (
             <div
@@ -156,9 +152,15 @@ export default function DealsPage() {
               onDragLeave={() => setDragOverStage(null)}
               onDrop={e => handleDrop(e, stage.key)}
             >
-              <div className={`rounded-t-lg px-3 py-2 border border-b-0 border-white/60 dark:border-white/10 ${stage.color}`}>
+              <div
+                className="rounded-t-lg px-3 py-2 border border-b-0 border-white/60 dark:border-white/10"
+                style={{ backgroundColor: stage.color + "22" }}
+              >
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-sm">{stage.label}</h3>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                    <h3 className="font-semibold text-sm">{stage.label}</h3>
+                  </div>
                   <Badge variant="secondary" className="text-xs">{stageDeals.length}</Badge>
                 </div>
               </div>
@@ -186,8 +188,7 @@ export default function DealsPage() {
                             {deal.days_in_stage}日
                           </span>
                         </div>
-                        {/* 見積作成ボタン（quote_submitted 以降で表示） */}
-                        {QUOTE_STAGES.includes(deal.stage) && (
+                        {stage.is_won && (
                           <button
                             onClick={e => { e.stopPropagation(); router.push(`/quotes/new?${quoteParams.toString()}`); }}
                             className="w-full flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary border border-dashed border-border hover:border-primary rounded-lg py-1 transition-colors"
@@ -206,7 +207,7 @@ export default function DealsPage() {
       </div>
 
       {/* 商談追加ダイアログ */}
-      <AddDealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={fetchDeals} />
+      <AddDealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={fetchDeals} stages={stages} />
 
       {/* 受注ダイアログ */}
       {wonDeal && (

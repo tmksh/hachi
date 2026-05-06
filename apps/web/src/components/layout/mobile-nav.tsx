@@ -73,7 +73,7 @@ export function MobileNav() {
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
             className="fixed bottom-20 left-4 right-4 z-50 md:hidden"
           >
-            <div className="glass rounded-2xl p-3 shadow-xl">
+            <div className="bg-white dark:bg-[#1a1f2e] rounded-2xl p-3 shadow-2xl border border-border/60">
               <p className="px-2 pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 {visibleGroups.find((g) => g.key === openGroup)?.label}
               </p>
@@ -102,9 +102,8 @@ export function MobileNav() {
       </AnimatePresence>
 
       {/* Bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
-        <div className="glass border-t mx-2 mb-2 rounded-2xl">
-          <div className="flex items-center justify-around h-16 px-1">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden pb-safe bg-white/95 dark:bg-[#0f1117]/95 backdrop-blur-md border-t border-border/60">
+        <div className="flex items-center justify-around h-16 px-2">
             {visibleGroups.map((group) => {
               const Icon = GROUP_ICONS[group.key as keyof typeof GROUP_ICONS];
               const active = isGroupActive(group.key);
@@ -133,7 +132,6 @@ export function MobileNav() {
               );
             })}
           </div>
-        </div>
       </nav>
     </>
   );

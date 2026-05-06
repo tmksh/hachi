@@ -1,41 +1,120 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Star, Pencil } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Star, Pencil, RefreshCw, Mail, AlertCircle, CheckCircle2, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { getEmailThreads, getEmailThread, markThreadRead, toggleThreadStar } from "@/lib/actions/mail";
+import {
+  getEmailThreads,
+  getEmailThread,
+  markThreadRead,
+  toggleThreadStar,
+  getGmailAccount,
+  disconnectGmailAccount,
+} from "@/lib/actions/mail";
 import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mock";
 
 type Thread = Awaited<ReturnType<typeof getEmailThreads>>[number];
 type ThreadDetail = Awaited<ReturnType<typeof getEmailThread>>;
+type GmailAccount = Awaited<ReturnType<typeof getGmailAccount>>;
 
 const isMockId = (id: string) => id.startsWith("mock_");
 
 export default function MailPage() {
+  const searchParams = useSearchParams();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [selected, setSelected] = useState<ThreadDetail | null>(null);
+  const [gmailAccount, setGmailAccount] = useState<GmailAccount>(null);
+  const [useMock, setUseMock] = useState(false);
 
   useEffect(() => {
-    getEmailThreads()
-      .then((data) => {
-        if (!data || data.length === 0) {
-          setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
-        } else {
-          setThreads(data);
-        }
-      })
-      .catch(() => {
+    const connected = searchParams.get("gmail_connected");
+    const error = searchParams.get("gmail_error");
+    if (connected === "1") toast.success("Gmail を連携しました");
+    if (error) {
+      const msgs: Record<string, string> = {
+        access_denied: "アクセスが拒否されました",
+        token_exchange: "認証トークンの取得に失敗しました",
+        db_error: "アカウント情報の保存に失敗しました",
+        unknown: "不明なエラーが発生しました",
+      };
+      toast.error(msgs[error] ?? `エラー: ${error}`);
+    }
+  }, [searchParams]);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [account, data] = await Promise.all([
+        getGmailAccount(),
+        getEmailThreads().catch(() => []),
+      ]);
+      setGmailAccount(account);
+      if (!data || data.length === 0) {
         setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
-      })
-      .finally(() => setLoading(false));
+        setUseMock(true);
+      } else {
+        setThreads(data);
+        setUseMock(false);
+      }
+    } catch {
+      setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
+      setUseMock(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/gmail/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "同期に失敗しました");
+      } else {
+        toast.success(`${data.synced} 件の新着メールを取得しました`);
+        await loadData();
+      }
+    } catch {
+      toast.error("同期中にエラーが発生しました");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm("Gmail の連携を解除しますか？")) return;
+    try {
+      await disconnectGmailAccount();
+      toast.success("Gmail の連携を解除しました");
+      setGmailAccount(null);
+      setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
+      setUseMock(true);
+      setSelected(null);
+    } catch {
+      toast.error("連携解除に失敗しました");
+    }
+  };
 
   const selectThread = async (t: Thread) => {
     try {
@@ -70,38 +149,181 @@ export default function MailPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center justify-between"><h1 className="text-xl font-semibold">メール</h1><Link href="/mail/compose"><Button size="sm" className="gap-1.5"><Pencil className="h-4 w-4" />新規作成</Button></Link></div>
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
-        <Card className="overflow-hidden"><CardContent className="p-0">
-          {loading ? <div className="p-4 space-y-3">{Array.from({length:5}).map((_,i)=><Skeleton key={i} className="h-16" />)}</div> : threads.length === 0 ? <div className="p-8 text-center text-muted-foreground">メールはありません</div> : (
-            <div className="divide-y max-h-[600px] overflow-y-auto">
-              {threads.map(t => (
-                <div key={t.id} className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 ${selected?.id === t.id ? "bg-accent/30" : ""} ${!t.is_read ? "bg-primary/5" : ""}`} onClick={() => selectThread(t)}>
-                  <button onClick={e => { e.stopPropagation(); handleStar(t.id, t.is_starred); }}><Star className={`h-4 w-4 ${t.is_starred ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`} /></button>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm truncate ${!t.is_read ? "font-semibold" : ""}`}>{t.subject || "(件名なし)"}</p>
-                    <p className="text-xs text-muted-foreground truncate">{t.snippet}</p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{t.last_message_at ? format(parseISO(t.last_message_at), "M/d", { locale: ja }) : ""}</span>
-                </div>
-              ))}
-            </div>
+    <div className="p-4 md:p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">メール</h1>
+        <div className="flex items-center gap-2">
+          {gmailAccount ? (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span className="hidden md:inline max-w-[160px] truncate">
+                      {gmailAccount.email_address}
+                    </span>
+                    <span className="md:hidden">Gmail</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive gap-2"
+                    onClick={handleDisconnect}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    連携を解除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSync}
+                disabled={syncing}
+                className="gap-1.5"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "同期中..." : "同期"}
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              asChild
+              className="gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50"
+            >
+              <a href="/api/gmail/auth">
+                <Mail className="h-4 w-4" />
+                Gmail を連携
+              </a>
+            </Button>
           )}
-        </CardContent></Card>
-        <Card><CardContent className="p-5">
-          {selected ? (
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold">{selected.subject || "(件名なし)"}</h2>
-              {(selected.messages ?? []).map((msg: { id: string; from_name: string | null; from_address: string | null; received_at: string | null; body_text: string | null }) => (
-                <div key={msg.id} className="border rounded-lg p-4 space-y-2">
-                  <div className="flex justify-between text-sm"><span className="font-medium">{msg.from_name || msg.from_address || "-"}</span><span className="text-muted-foreground">{msg.received_at ? format(parseISO(msg.received_at), "M/d HH:mm", { locale: ja }) : ""}</span></div>
-                  <p className="text-sm whitespace-pre-wrap">{msg.body_text}</p>
-                </div>
-              ))}
-            </div>
-          ) : <div className="flex items-center justify-center h-64 text-muted-foreground">メールを選択してください</div>}
-        </CardContent></Card>
+          <Link href="/mail/compose">
+            <Button size="sm" className="gap-1.5">
+              <Pencil className="h-4 w-4" />
+              新規作成
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* No account banner */}
+      {!gmailAccount && !loading && (
+        <div className="flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>
+            Gmail が未連携です。「Gmail を連携」ボタンから Google アカウントを接続すると、
+            実際のメールが表示されます。
+          </span>
+        </div>
+      )}
+
+      {/* Mock data notice */}
+      {useMock && gmailAccount && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <RefreshCw className="h-4 w-4 shrink-0" />
+          <span>
+            Gmail が連携されました。「同期」ボタンを押してメールを取得してください。
+          </span>
+        </div>
+      )}
+
+      {/* Mail grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16" />
+                ))}
+              </div>
+            ) : threads.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">メールはありません</div>
+            ) : (
+              <div className="divide-y max-h-[600px] overflow-y-auto">
+                {threads.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors ${
+                      selected?.id === t.id ? "bg-accent/30" : ""
+                    } ${!t.is_read ? "bg-primary/5" : ""}`}
+                    onClick={() => selectThread(t)}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStar(t.id, t.is_starred);
+                      }}
+                    >
+                      <Star
+                        className={`h-4 w-4 ${
+                          t.is_starred ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+                        }`}
+                      />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className={`text-sm truncate flex-1 ${!t.is_read ? "font-semibold" : ""}`}>
+                          {t.subject || "(件名なし)"}
+                        </p>
+                        {!t.is_read && (
+                          <Badge variant="default" className="h-1.5 w-1.5 p-0 rounded-full bg-primary shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{t.snippet}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {t.last_message_at
+                        ? format(parseISO(t.last_message_at), "M/d", { locale: ja })
+                        : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            {selected ? (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">{selected.subject || "(件名なし)"}</h2>
+                {(selected.messages ?? []).map(
+                  (msg: {
+                    id: string;
+                    from_name: string | null;
+                    from_address: string | null;
+                    received_at: string | null;
+                    body_text: string | null;
+                  }) => (
+                    <div key={msg.id} className="border rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium">
+                          {msg.from_name || msg.from_address || "-"}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {msg.received_at
+                            ? format(parseISO(msg.received_at), "M/d HH:mm", { locale: ja })
+                            : ""}
+                        </span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{msg.body_text}</p>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+                <Mail className="h-8 w-8 opacity-30" />
+                <p>メールを選択してください</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

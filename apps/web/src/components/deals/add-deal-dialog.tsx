@@ -12,16 +12,8 @@ import {
 } from "@/components/ui/select";
 import { getCustomers } from "@/lib/actions/customers";
 import { createDeal } from "@/lib/actions/deals";
-import type { Deal } from "@/lib/database.types";
 
-const STAGES: { key: Deal["stage"]; label: string }[] = [
-  { key: "inquiry",        label: "問い合わせ" },
-  { key: "first_meeting",  label: "初回面談" },
-  { key: "materials_sent", label: "資料送付" },
-  { key: "quote_submitted",label: "見積提出" },
-  { key: "negotiation",    label: "交渉中" },
-  { key: "closing",        label: "クロージング" },
-];
+type StageRow = { key: string; label: string; sort_order: number };
 
 const PRIORITIES = [
   { key: "high",   label: "高" },
@@ -33,18 +25,26 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onCreated: () => void;
+  stages?: StageRow[];
 }
 
-export function AddDealDialog({ open, onOpenChange, onCreated }: Props) {
+export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Props) {
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [customerId, setCustomerId]           = useState("");
   const [title, setTitle]                     = useState("");
-  const [stage, setStage]                     = useState<Deal["stage"]>("inquiry");
+  const [stage, setStage]                     = useState("");
   const [value, setValue]                     = useState("");
   const [priority, setPriority]               = useState("medium");
   const [expectedClose, setExpectedClose]     = useState("");
   const [nextAction, setNextAction]           = useState("");
   const [saving, setSaving]                   = useState(false);
+
+  // ステージが読み込まれたら先頭をデフォルトに
+  useEffect(() => {
+    if (stages.length > 0 && !stage) {
+      setStage(stages[0].key);
+    }
+  }, [stages, stage]);
 
   useEffect(() => {
     if (open) {
@@ -53,7 +53,7 @@ export function AddDealDialog({ open, onOpenChange, onCreated }: Props) {
   }, [open]);
 
   function reset() {
-    setCustomerId(""); setTitle(""); setStage("inquiry");
+    setCustomerId(""); setTitle(""); setStage(stages[0]?.key ?? "");
     setValue(""); setPriority("medium"); setExpectedClose(""); setNextAction("");
   }
 
@@ -64,7 +64,7 @@ export function AddDealDialog({ open, onOpenChange, onCreated }: Props) {
       await createDeal({
         customer_id: customerId,
         title: title.trim(),
-        stage,
+        stage: stage || undefined,
         value: value ? Number(value) : undefined,
         priority,
         expected_close_date: expectedClose || undefined,
@@ -103,9 +103,11 @@ export function AddDealDialog({ open, onOpenChange, onCreated }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>ステージ</Label>
-              <Select value={stage} onValueChange={v => setStage(v as Deal["stage"])}>
+              <Select value={stage} onValueChange={setStage}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{STAGES.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
