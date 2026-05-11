@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
-export default function UpdatePasswordPage() {
+function UpdatePasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromInvite = searchParams.get("from") === "invite";
@@ -129,5 +129,13 @@ export default function UpdatePasswordPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function UpdatePasswordPage() {
+  return (
+    <Suspense fallback={<div className="w-full max-w-md px-4 animate-pulse"><div className="h-96 rounded-xl bg-muted" /></div>}>
+      <UpdatePasswordForm />
+    </Suspense>
   );
 }
