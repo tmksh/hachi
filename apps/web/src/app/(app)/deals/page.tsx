@@ -69,13 +69,14 @@ export default function DealsPage() {
     const deal = deals.find(d => d.id === draggedDeal);
     if (!deal || deal.stage === targetStage) { setDraggedDeal(null); return; }
 
-    setDeals(prev => prev.map(d => d.id === draggedDeal ? { ...d, stage: targetStage } : d));
+    const typedStage = targetStage as Deal["stage"];
+    setDeals(prev => prev.map(d => d.id === draggedDeal ? { ...d, stage: typedStage } : d));
     setDraggedDeal(null);
 
     try {
-      await updateDeal(draggedDeal, { stage: targetStage });
+      await updateDeal(draggedDeal, { stage: typedStage });
       if (wonStageKeys.includes(targetStage)) {
-        setWonDeal({ ...deal, stage: targetStage });
+        setWonDeal({ ...deal, stage: typedStage });
       }
     } catch {
       fetchDeals();
