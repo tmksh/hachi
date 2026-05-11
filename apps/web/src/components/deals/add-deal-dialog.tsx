@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { getCustomers } from "@/lib/actions/customers";
 import { createDeal } from "@/lib/actions/deals";
+import type { Deal } from "@/lib/database.types";
 
 type StageRow = { key: string; label: string; sort_order: number };
 
@@ -64,7 +65,7 @@ export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Pr
       await createDeal({
         customer_id: customerId,
         title: title.trim(),
-        stage: stage || undefined,
+        stage: (stage || undefined) as Deal["stage"] | undefined,
         value: value ? Number(value) : undefined,
         priority,
         expected_close_date: expectedClose || undefined,
