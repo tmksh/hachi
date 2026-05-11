@@ -21,7 +21,6 @@ import {
 import {
   BarChart3,
   Building2,
-  Users,
   ShieldCheck,
   LogOut,
   ArrowLeft,
@@ -31,7 +30,6 @@ import { useAuth } from "@/hooks/use-auth";
 const ADMIN_NAV = [
   { key: "bi", label: "全国加盟店BI", icon: BarChart3 },
   { key: "companies", label: "企業一覧", icon: Building2 },
-  { key: "users", label: "ユーザー一覧", icon: Users },
 ] as const;
 
 type TabKey = (typeof ADMIN_NAV)[number]["key"];

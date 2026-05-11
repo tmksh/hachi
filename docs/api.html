@@ -282,43 +282,51 @@
   <div class="sec">
     <div class="sec-eyebrow">Bidirectional Sync</div>
     <h2>双方向連携について</h2>
-    <p>「kintone でも BRIDGE でも登録・更新できて、両方に自動で反映したい」という双方向の同期は技術的には可能です。ただし、いくつか決めておくべきことがあります。</p>
+    <p>「kintone でも BRIDGE でも登録・更新できて、両方に自動で反映したい」という双方向の同期は技術的には可能です。ただし、運用ルールを先に定めることが設計の前提になります。</p>
 
     <div class="notice">
-      <strong>⚠ 双方向連携で事前に合意が必要な点</strong><br>
-      同じデータを両方のシステムで更新できる場合、「どちらの更新が正しいか」が競合するケースが発生します。たとえば BRIDGE で顧客の住所を変更した直後に kintone でも同じ顧客の住所を変更した場合、どちらを残すかをルールとして決めておく必要があります。
+      <strong>⚠ 競合（コンフリクト）について</strong><br>
+      同じデータを両方のシステムで同時に更新できる場合、「どちらが最新か」の衝突が起こりえます。<strong>「BRIDGE を正とする」か「更新日時が新しい方を優先する」か</strong>など、競合解決ルールを事前に合意しておくことがスムーズな実装につながります。
     </div>
 
     <div class="tbl-wrap">
       <table>
         <thead>
-          <tr><th>連携パターン</th><th>内容</th><th>難しさ</th><th>向いているケース</th></tr>
+          <tr><th>連携パターン</th><th>内容</th><th>実装コスト</th><th>向いているケース</th></tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>BRIDGE → 外部（一方向）</strong></td>
-            <td>BRIDGE が正のデータ。Webhook と外部API で外部に通知・読み取りさせる</td>
-            <td>低</td>
-            <td>BRIDGE をメインで使い、kintone / SF には読み取りのみさせたい場合</td>
+            <td><strong>BRIDGE → 外部（推奨）</strong></td>
+            <td>BRIDGE を「唯一の正」とし、Webhook で外部に通知・反映する</td>
+            <td>低 ✅</td>
+            <td>BRIDGE を中心に運用する場合。最もシンプルで堅牢な設計</td>
           </tr>
           <tr>
-            <td><strong>外部 → BRIDGE（一方向）</strong></td>
-            <td>kintone / SF が正のデータ。変更を BRIDGE に取り込む</td>
+            <td><strong>外部 → BRIDGE</strong></td>
+            <td>kintone / SF を正とし、変更を BRIDGE に取り込む</td>
             <td>中</td>
-            <td>既存の kintone / SF 運用を変えたくない場合</td>
+            <td>既存システムの運用を変えたくない移行期</td>
           </tr>
           <tr>
             <td><strong>双方向</strong></td>
             <td>どちらでも更新でき、自動で同期する</td>
             <td>高</td>
-            <td>両方のシステムを並行運用する過渡期など</td>
+            <td>2 システムを長期並走させる場合（競合解決ルール必須）</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <p>現時点では「どちらのシステムで登録するか」の運用ルールをまず決めていただくことで、一方向に絞れる可能性が高いです。双方向が必要な場合も対応できますが、設計コストが上がるため別途ご相談ください。</p>
-  </div>
+    <div class="card-grid" style="margin-top:1.5rem">
+      <div class="card">
+        <h3>🏆 推奨アーキテクチャ</h3>
+        <p>BRIDGE を「マスターデータの正」とする <strong>BRIDGE → 外部（一方向）</strong> が、最もシンプルかつ障害が少ない設計です。将来的に双方向が必要になった場合も、この土台があれば追加対応しやすくなります。</p>
+      </div>
+      <div class="card">
+        <h3>🔄 移行期の対応</h3>
+        <p>既存の kintone / SF を捨てられない移行期は、外部システムからの受信口（Inbound Webhook）を BRIDGE 側に設けることで、両方向に近い運用も実現できます。</p>
+      </div>
+    </div>
 
   <!-- ⑤ APIキー / セキュリティ -->
   <div class="sec">
@@ -346,28 +354,28 @@
   <div class="sec">
     <div class="sec-eyebrow">Phases</div>
     <h2>実装フェーズ</h2>
-    <p>外部連携の機能は段階的にリリースします。「土台を最初に作る」ことで、後のフェーズをスムーズに追加できます。</p>
+    <p>外部連携の機能は段階的にリリースします。フェーズ1で「壊れない土台」を作り、フェーズ2 以降は設定画面の操作だけで連携先を追加できる状態を目指します。</p>
 
     <div class="phase-list">
       <div class="phase-item">
         <div class="phase-num">1</div>
         <div class="phase-body">
-          <h3>フェーズ1（初期リリース時）<span class="tag tag-must" style="margin-left:.5rem">最初から設計</span></h3>
-          <p>DB のテーブル設計に API キー・Webhook 設定・配信履歴を含める。API URL を <code>/api/v1/</code> の形式で確保する。業務ロジックにイベント発火の仕組みを差し込んでおく。<br>→ この段階ではまだ外部から使えなくて OK。「後で壊れない土台」を作る。</p>
+          <h3>フェーズ1 ― 土台設計（初期リリース同時）<span class="tag tag-must" style="margin-left:.5rem">必須</span></h3>
+          <p>DB に <code>api_keys</code>・<code>webhook_endpoints</code>・<code>webhook_logs</code> テーブルを追加。API の URL は最初から <code>/api/v1/</code> の形式で確保。業務ロジックの各所にイベント発火フックを埋め込んでおく。<br>→ この段階では外部から呼ばれなくて OK。「後で壊れない土台」が目的。</p>
         </div>
       </div>
       <div class="phase-item">
         <div class="phase-num">2</div>
         <div class="phase-body">
-          <h3>フェーズ2（外部連携開始）<span class="tag tag-decide" style="margin-left:.5rem">要確認</span></h3>
-          <p>API キー発行の設定画面をリリース。主要モジュール（顧客・案件・見積）の外部向け API エンドポイントを公開。Webhook の配信と配信履歴画面を追加。<br>→ Zapier や自社スクリプトから BRIDGE のデータを取得・更新できる状態になる。</p>
+          <h3>フェーズ2 ― 外部 API 公開<span class="tag tag-decide" style="margin-left:.5rem">要確認</span></h3>
+          <p>設定画面から API キーを発行・管理できる UI をリリース。顧客・案件・見積の外部向けエンドポイントを公開。Webhook 配信と配信履歴画面を追加。<br>→ Zapier・n8n・自社スクリプトから BRIDGE のデータを取得・更新できる状態。</p>
         </div>
       </div>
       <div class="phase-item">
         <div class="phase-num">3</div>
         <div class="phase-body">
-          <h3>フェーズ3（個別システム連携）<span class="tag tag-later" style="margin-left:.5rem">フェーズ2以降</span></h3>
-          <p>kintone・Salesforce など具体的なシステムとの連携を実装。連携方向・対象データ・運用ルールを合意した上で着手。<br>→ kintone の API キーを設定画面に入力するだけで、データが自動同期される状態を目指す。</p>
+          <h3>フェーズ3 ― 個別システム連携<span class="tag tag-later" style="margin-left:.5rem">フェーズ2 以降</span></h3>
+          <p>kintone・Salesforce など具体的なシステムとのコネクタを実装。設定画面に kintone API トークンを入力するだけでデータが自動同期される状態を目指す。連携方向・対象データ・競合解決ルールを合意した上で着手。</p>
         </div>
       </div>
     </div>
