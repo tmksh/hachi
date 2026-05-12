@@ -99,6 +99,18 @@
     .notice { background: #fffbeb; border: 1px solid #fbd38d; border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1.5rem 0; font-size: .87rem; line-height: 1.75; }
     .notice strong { color: #b45309; }
 
+    /* QUOTE BOX (先方ご要望) */
+    .quote-box {
+      background: var(--accent-light); border-left: 4px solid var(--accent);
+      padding: 1.3rem 1.6rem; margin: 1.2rem 0 1.4rem;
+      font-size: .92rem; line-height: 1.95; color: #1f3a35; border-radius: 4px;
+    }
+    .quote-box strong { color: var(--accent-dark); }
+
+    /* TIP (緑のヒント) */
+    .tip { background: var(--accent-light); border: 1px solid #b2e8d8; border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1.5rem 0; font-size: .87rem; line-height: 1.75; }
+    .tip strong { color: var(--accent-dark); }
+
     /* TAG */
     .tag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-right: .3rem; }
     .tag-must { background: #fee2e2; color: #b91c1c; }
@@ -137,25 +149,25 @@
 
   <!-- ① 外部APIとWebhookとは -->
   <div class="sec">
-    <div class="sec-eyebrow">Basics</div>
-    <h2>外部 API と Webhook とは？</h2>
-    <p>まずこの2つの言葉を、できるだけわかりやすく説明します。</p>
+    <div class="sec-eyebrow">① What — Basics</div>
+    <h2>そもそも「外部 API」と「Webhook」って何？</h2>
+    <p>聞き慣れない言葉かもしれないので、まずはこの 2 つの言葉から、できるだけかみ砕いて説明します。両方とも「BRIDGE と他のシステムをつなぐパイプ」ですが、<strong>向きが逆</strong>です。</p>
 
     <div class="card-grid">
       <div class="card">
-        <h3>🔌 外部向け API</h3>
-        <p>「BRIDGE のデータを外から取り出したり、書き込んだりするための窓口」です。<br><br>
-        たとえば Salesforce や kintone、自社の基幹システムから <code>/api/v1/customers</code> という URL にアクセスすると、顧客データを取得・更新できます。ブラウザを使わなくても、他のシステムが直接 BRIDGE と話せるようになります。</p>
+        <h3>🔌 外部向け API（受け身の窓口）</h3>
+        <p>「BRIDGE のデータを、外から<strong>取りに来る</strong>ための窓口」です。<br><br>
+        たとえば kintone・Salesforce・Zapier・自社の基幹システムから <code>/api/v1/customers</code> という URL にアクセスすると、顧客データを取得・更新できます。ブラウザを使わなくても、他のシステムが直接 BRIDGE と話せるようになります。</p>
       </div>
       <div class="card">
-        <h3>📣 Webhook（ウェブフック）</h3>
-        <p>「BRIDGE 内で何かが起きたとき、自動で相手のシステムに通知する仕組み」です。<br><br>
-        たとえば「新しい顧客が登録されたら kintone に自動で通知する」「案件のステータスが変わったら Salesforce に即時反映する」ということが、ボタンを押さなくても自動で行われます。</p>
+        <h3>📣 Webhook（攻めの通知）</h3>
+        <p>「BRIDGE で何かが起きたときに、自動で<strong>相手に知らせに行く</strong>仕組み」です。<br><br>
+        たとえば「新しい顧客が登録されたら kintone に通知する」「案件のステータスが変わったら Salesforce に即時反映する」といった連携が、人の操作を介さず自動で行われます。</p>
       </div>
     </div>
 
     <div class="diagram">
-<pre>【外部向け API のイメージ】
+<pre>【外部向け API のイメージ — 相手から取りに来る】
 
   kintone / Salesforce                BRIDGE
   ／自社システム / Zapier              （このアプリ）
@@ -166,7 +178,7 @@
         │  ← データが返ってくる ───────────┘
         │   { "name": "田中建設", ... }
 
-【Webhook のイメージ】
+【Webhook のイメージ — こちらから知らせに行く】
 
   BRIDGE                          kintone / Salesforce
   （このアプリ）                    ／他システム
@@ -182,46 +194,183 @@
 
   <!-- ② なぜ最初から設計するのか -->
   <div class="sec">
-    <div class="sec-eyebrow">Design Policy</div>
-    <h2>なぜ最初の設計段階から対応するのか</h2>
-    <p>「後から追加すればいい」と思われがちですが、外部連携は後から付け足すと大変なことになります。理由は主に3つです。</p>
+    <div class="sec-eyebrow">② Why — Design Policy</div>
+    <h2>なぜ「最初から」設計しておく必要があるのか</h2>
+    <p>「必要になってから追加すればいい」と思われがちですが、外部連携は<strong>後から付け足すと既存機能を壊しやすい</strong>タイプの機能です。先方のご要望どおり初期設計に組み込んでおく理由は、主に次の 4 つです。</p>
 
     <div class="tbl-wrap">
       <table>
         <thead>
-          <tr><th>問題</th><th>後から追加した場合</th><th>最初から設計した場合</th></tr>
+          <tr><th>論点</th><th>後から追加した場合</th><th>最初から設計した場合</th></tr>
         </thead>
         <tbody>
           <tr>
-            <td>APIのURL設計</td>
-            <td>後から <code>/api/v1/</code> を追加すると、既存の連携が壊れる可能性がある</td>
+            <td>API の URL 設計</td>
+            <td>後から <code>/api/v1/</code> を追加すると、既存の画面用 URL と衝突する可能性がある</td>
             <td>最初から <code>/api/v1/</code> の形にしておくので将来の変更も安全</td>
           </tr>
           <tr>
             <td>データの変更通知</td>
-            <td>業務ロジックのあちこちを改修してWebhookの呼び出しを差し込む必要がある</td>
-            <td>最初から「何かが変更されたら通知する」仕組みを組み込んでおく</td>
+            <td>業務ロジックのあちこちを改修して Webhook の呼び出しを差し込む必要がある</td>
+            <td>最初から「何かが変わったら知らせる」フックを組み込んでおく</td>
           </tr>
           <tr>
-            <td>APIキー管理</td>
-            <td>後から専用テーブルを作ると既存データ構造との整合が難しい</td>
+            <td>API キー管理</td>
+            <td>後から専用テーブルを作ると、既存のデータ構造との整合が難しい</td>
             <td>最初からテーブル設計に含めるので、設定画面からすぐに発行できる</td>
           </tr>
           <tr>
             <td>囲い込みリスク</td>
-            <td>APIがないと「BRIDGE をやめたい」ときにデータを取り出せない</td>
-            <td>APIがあれば、いつでも他システムに移行できる（囲い込みなし）</td>
+            <td>API がないと「BRIDGE をやめたい」ときにデータを取り出せない</td>
+            <td>API があれば、いつでも他システムに移行できる（囲い込みなし）</td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <p style="margin-top:1rem">特に最後の<strong>「囲い込みリスク」</strong>は、先方が明確に懸念されているポイントです。API が用意されていれば、将来 BRIDGE 以外のシステムに乗り換えたくなったときも、データをエクスポートして移行する選択肢が残ります。これが <em>ベンダーロックイン回避</em> の本質です。</p>
   </div>
 
-  <!-- ③ 連携対象データ -->
+  <!-- ③ どう設計するか — 3つの柱 -->
   <div class="sec">
-    <div class="sec-eyebrow">Events</div>
-    <h2>連携できるデータとイベント一覧</h2>
-    <p>BRIDGE のすべてのモジュールが連携対象です。Webhook のイベント名は <code>モジュール名.アクション名</code> の形式で統一します。</p>
+    <div class="sec-eyebrow">③ How — 3 Pillars</div>
+    <h2>「最初から設計する」とは、具体的に何をするのか</h2>
+    <p>「外部連携前提の設計」は、思想や合言葉ではなく、<strong>初期リリースの中でやっておく具体的な作業の集まり</strong>です。中身を分解すると次の 3 つの柱になります。フェーズ 1（初期リリース）でやるのはこの 3 つです。</p>
+
+    <div class="phase-list">
+      <div class="phase-item">
+        <div class="phase-num">A</div>
+        <div class="phase-body">
+          <h3>URL を最初から <code>/api/v1/</code> の形にしておく</h3>
+          <p>画面用の URL と API 用の URL を最初から分けておきます（例：画面は <code>/customers</code>、API は <code>/api/v1/customers</code>）。<code>v1</code> が入っていることで、将来仕様が変わって <code>v2</code> を作るときも<strong>既存の連携を壊さずに新旧並走</strong>できます。Stripe・kintone・Zoho など、外部公開している API はすべてこの形です。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">B</div>
+        <div class="phase-body">
+          <h3>「何かが起きたら通知する」フックを業務ロジックに埋め込んでおく</h3>
+          <p>顧客作成・案件更新・請求発行などの処理に、<strong>「イベントを発火する仕組み」だけ</strong>最初から仕込んでおきます。フェーズ 1 ではまだ外部に通知しなくて OK。フックさえあれば、後から「kintone へ通知する」「Slack に流す」を<strong>業務ロジックを書き直さずに</strong>追加できます。これが「後から付け足すと大変」を回避する一番の肝です。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">C</div>
+        <div class="phase-body">
+          <h3>API キー・通知先・配信履歴のテーブルを DB に含めておく</h3>
+          <p><code>api_keys</code>（誰に発行したか）・<code>webhook_endpoints</code>（どこに通知するか）・<code>webhook_logs</code>（成功失敗の履歴）の 3 テーブルを最初からスキーマに含めます。Webhook 送信には <strong>HMAC 署名</strong>（Stripe と同じ方式）を付けて、受信側が「これは確かに BRIDGE から来た」と検証できるようにします。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <strong>💡 ここがポイント</strong><br>
+      この 3 つはすべて<strong>「土台」</strong>で、フェーズ 1 の時点では<strong>外部に公開する必要はありません</strong>。土台があるかないかで、フェーズ 2・3 で連携先を増やすときの工数が桁違いに変わります。先方のご要望「最初から設計しておいてほしい」の正体は、ほぼこの 3 点と言って差し支えありません。
+    </div>
+
+    <h3 style="margin-top:2rem;font-size:1.05rem">セキュリティの考え方（柱 C の補足）</h3>
+    <p>API キーは「外部システムが BRIDGE のドアを開けるための鍵」です。Zoho・kintone・Stripe と同じ仕組みで、次の 3 つを押さえます。</p>
+    <div class="card-grid">
+      <div class="card">
+        <h3>スコープ（権限）</h3>
+        <p>「顧客は読み取りのみ」「案件は読み書き可」のように、API キーごとに操作できる範囲を絞れます。外部システムに必要最小限の権限だけ渡せます。</p>
+      </div>
+      <div class="card">
+        <h3>用途別の複数キー</h3>
+        <p>「kintone 連携用」「Zapier 用」「自社スクリプト用」など、用途別にキーを発行できます。漏れたり不要になったキーはいつでも単独で無効化できます。</p>
+      </div>
+      <div class="card">
+        <h3>HMAC 署名検証</h3>
+        <p>Webhook の送信には HMAC 署名を付けます。受け取る側のシステムは署名を検証することで、なりすましや改ざんを防げます（Stripe と同じ方式）。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 連携の方向 -->
+  <div class="sec">
+    <div class="sec-eyebrow">④ Direction — One-way or Two-way</div>
+    <h2>連携の方向：一方向か、双方向か</h2>
+    <p>もうひとつ最初に決めておきたいのが、<strong>「データを更新できるのはどちらか」</strong>です。技術というより運用ルールの話ですが、ここの方針で設計コストが大きく変わります。</p>
+
+    <div class="notice">
+      <strong>⚠ 競合（コンフリクト）について</strong><br>
+      同じ顧客データを BRIDGE と kintone の両方で<strong>同時に</strong>更新できるようにすると、「どちらが最新か」の衝突が必ず起こります。<strong>「BRIDGE を正とする」か「更新日時が新しい方を優先する」か</strong>など、競合解決ルールを事前に合意しておくことがスムーズな実装の前提になります。
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>連携パターン</th><th>内容</th><th>実装コスト</th><th>向いているケース</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>BRIDGE → 外部（推奨）</strong></td>
+            <td>BRIDGE を「唯一の正」とし、Webhook で外部に通知・反映する</td>
+            <td>低 ✅</td>
+            <td>BRIDGE を中心に運用する場合。最もシンプルで堅牢な設計</td>
+          </tr>
+          <tr>
+            <td><strong>外部 → BRIDGE</strong></td>
+            <td>kintone / SF を正とし、変更を BRIDGE に取り込む</td>
+            <td>中</td>
+            <td>既存システムの運用を変えたくない移行期</td>
+          </tr>
+          <tr>
+            <td><strong>双方向</strong></td>
+            <td>どちらでも更新でき、自動で同期する</td>
+            <td>高</td>
+            <td>2 システムを長期並走させる場合（競合解決ルール必須）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-grid" style="margin-top:1.5rem">
+      <div class="card">
+        <h3>🏆 推奨</h3>
+        <p>BRIDGE を「マスターデータの正」とする <strong>BRIDGE → 外部（一方向）</strong> が、最もシンプルかつ障害が少ない設計です。Zoho・kintone も基本この発想です。将来双方向が必要になっても、この土台があれば追加対応しやすくなります。</p>
+      </div>
+      <div class="card">
+        <h3>🔄 移行期の対応</h3>
+        <p>既存の kintone / SF を捨てられない移行期は、外部システムからの受信口（Inbound Webhook）を BRIDGE 側に設けることで、両方向に近い運用も実現できます。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ 実装フェーズ -->
+  <div class="sec">
+    <div class="sec-eyebrow">⑤ When — Phases</div>
+    <h2>いつ何をやるか — 段階的なリリース</h2>
+    <p>外部連携の機能は、いきなり全部を作るのではなく段階的にリリースします。先方のご要望の核である<strong>「最初から設計しておく」はフェーズ 1 でカバー</strong>します。フェーズ 2 以降は、設定画面の操作だけで連携先を追加できる状態を目指します。</p>
+
+    <div class="phase-list">
+      <div class="phase-item">
+        <div class="phase-num">1</div>
+        <div class="phase-body">
+          <h3>フェーズ 1 ― 土台設計（初期リリース同時）<span class="tag tag-must" style="margin-left:.5rem">必須</span></h3>
+          <p>前章の <strong>3 つの柱（A・B・C）</strong> をすべて実装します。DB に <code>api_keys</code>・<code>webhook_endpoints</code>・<code>webhook_logs</code> テーブルを追加。API の URL を <code>/api/v1/</code> 形式で確保。業務ロジックの各所にイベント発火フックを埋め込み。<br>→ この段階では外部から呼ばれなくても OK。「<strong>後で壊れない土台</strong>」を作ることが目的です。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">2</div>
+        <div class="phase-body">
+          <h3>フェーズ 2 ― 外部 API 公開<span class="tag tag-decide" style="margin-left:.5rem">要確認</span></h3>
+          <p>設定画面から API キーを発行・管理できる UI をリリース。顧客・案件・見積などの外部向けエンドポイントを公開。Webhook 配信機能と、配信履歴を見られる画面を追加。<br>→ Zapier・n8n・自社スクリプトから BRIDGE のデータを取得・更新できる状態になります。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">3</div>
+        <div class="phase-body">
+          <h3>フェーズ 3 ― 個別システム連携<span class="tag tag-later" style="margin-left:.5rem">フェーズ 2 以降</span></h3>
+          <p>kintone・Salesforce など、具体的なシステムとの専用コネクタを実装。設定画面に kintone API トークンを入力するだけで自動同期される状態を目指します。連携方向・対象データ・競合解決ルールが合意できたものから着手します。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 連携できるデータ（参考） -->
+  <div class="sec">
+    <div class="sec-eyebrow">Reference — Events</div>
+    <h2>参考：連携できるデータとイベント一覧</h2>
+    <p>フェーズ 2 以降で連携対象となるイベントの一覧です。<strong>BRIDGE のすべてのモジュール</strong>が対象で、Webhook のイベント名は <code>モジュール名.アクション名</code> の形式で統一します。「どのデータを優先して連携するか」をご相談する際の参考にしてください。</p>
 
     <div class="event-grid">
       <div class="event-group">
@@ -278,114 +427,11 @@
     </div>
   </div>
 
-  <!-- ④ 双方向連携 -->
-  <div class="sec">
-    <div class="sec-eyebrow">Bidirectional Sync</div>
-    <h2>双方向連携について</h2>
-    <p>「kintone でも BRIDGE でも登録・更新できて、両方に自動で反映したい」という双方向の同期は技術的には可能です。ただし、運用ルールを先に定めることが設計の前提になります。</p>
-
-    <div class="notice">
-      <strong>⚠ 競合（コンフリクト）について</strong><br>
-      同じデータを両方のシステムで同時に更新できる場合、「どちらが最新か」の衝突が起こりえます。<strong>「BRIDGE を正とする」か「更新日時が新しい方を優先する」か</strong>など、競合解決ルールを事前に合意しておくことがスムーズな実装につながります。
-    </div>
-
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr><th>連携パターン</th><th>内容</th><th>実装コスト</th><th>向いているケース</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>BRIDGE → 外部（推奨）</strong></td>
-            <td>BRIDGE を「唯一の正」とし、Webhook で外部に通知・反映する</td>
-            <td>低 ✅</td>
-            <td>BRIDGE を中心に運用する場合。最もシンプルで堅牢な設計</td>
-          </tr>
-          <tr>
-            <td><strong>外部 → BRIDGE</strong></td>
-            <td>kintone / SF を正とし、変更を BRIDGE に取り込む</td>
-            <td>中</td>
-            <td>既存システムの運用を変えたくない移行期</td>
-          </tr>
-          <tr>
-            <td><strong>双方向</strong></td>
-            <td>どちらでも更新でき、自動で同期する</td>
-            <td>高</td>
-            <td>2 システムを長期並走させる場合（競合解決ルール必須）</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card-grid" style="margin-top:1.5rem">
-      <div class="card">
-        <h3>🏆 推奨アーキテクチャ</h3>
-        <p>BRIDGE を「マスターデータの正」とする <strong>BRIDGE → 外部（一方向）</strong> が、最もシンプルかつ障害が少ない設計です。将来的に双方向が必要になった場合も、この土台があれば追加対応しやすくなります。</p>
-      </div>
-      <div class="card">
-        <h3>🔄 移行期の対応</h3>
-        <p>既存の kintone / SF を捨てられない移行期は、外部システムからの受信口（Inbound Webhook）を BRIDGE 側に設けることで、両方向に近い運用も実現できます。</p>
-      </div>
-    </div>
-
-  <!-- ⑤ APIキー / セキュリティ -->
-  <div class="sec">
-    <div class="sec-eyebrow">Security</div>
-    <h2>API キーと権限管理</h2>
-    <p>外部 API を使うためには API キーが必要です。API キーは BRIDGE の設定画面から発行・管理できます。Stripe や kintone と同じ仕組みです。</p>
-
-    <div class="card-grid">
-      <div class="card">
-        <h3>スコープ（権限）</h3>
-        <p>「顧客データは読み取りのみ」「案件は読み書き可」のように、API キーごとに操作できる範囲を絞れます。外部システムに必要最小限の権限だけ渡せます。</p>
-      </div>
-      <div class="card">
-        <h3>複数キーの発行</h3>
-        <p>「kintone 連携用」「Zapier 用」「自社スクリプト用」などの用途別にキーを発行できます。不要になったキーはいつでも無効化できます。</p>
-      </div>
-      <div class="card">
-        <h3>Webhook 署名検証</h3>
-        <p>Webhook の送信には HMAC 署名を付けます。受け取る側のシステムは署名を検証することで、なりすましを防げます（Stripe と同じ方式です）。</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ⑥ 実装フェーズ -->
-  <div class="sec">
-    <div class="sec-eyebrow">Phases</div>
-    <h2>実装フェーズ</h2>
-    <p>外部連携の機能は段階的にリリースします。フェーズ1で「壊れない土台」を作り、フェーズ2 以降は設定画面の操作だけで連携先を追加できる状態を目指します。</p>
-
-    <div class="phase-list">
-      <div class="phase-item">
-        <div class="phase-num">1</div>
-        <div class="phase-body">
-          <h3>フェーズ1 ― 土台設計（初期リリース同時）<span class="tag tag-must" style="margin-left:.5rem">必須</span></h3>
-          <p>DB に <code>api_keys</code>・<code>webhook_endpoints</code>・<code>webhook_logs</code> テーブルを追加。API の URL は最初から <code>/api/v1/</code> の形式で確保。業務ロジックの各所にイベント発火フックを埋め込んでおく。<br>→ この段階では外部から呼ばれなくて OK。「後で壊れない土台」が目的。</p>
-        </div>
-      </div>
-      <div class="phase-item">
-        <div class="phase-num">2</div>
-        <div class="phase-body">
-          <h3>フェーズ2 ― 外部 API 公開<span class="tag tag-decide" style="margin-left:.5rem">要確認</span></h3>
-          <p>設定画面から API キーを発行・管理できる UI をリリース。顧客・案件・見積の外部向けエンドポイントを公開。Webhook 配信と配信履歴画面を追加。<br>→ Zapier・n8n・自社スクリプトから BRIDGE のデータを取得・更新できる状態。</p>
-        </div>
-      </div>
-      <div class="phase-item">
-        <div class="phase-num">3</div>
-        <div class="phase-body">
-          <h3>フェーズ3 ― 個別システム連携<span class="tag tag-later" style="margin-left:.5rem">フェーズ2 以降</span></h3>
-          <p>kintone・Salesforce など具体的なシステムとのコネクタを実装。設定画面に kintone API トークンを入力するだけでデータが自動同期される状態を目指す。連携方向・対象データ・競合解決ルールを合意した上で着手。</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ⑦ 確認事項 -->
   <div class="sec">
     <div class="sec-eyebrow">Next Steps</div>
-    <h2>今後の確認事項</h2>
-    <p>フェーズ2・3 の設計を進めるにあたり、以下について教えていただけると助かります。</p>
+    <h2>今後ご相談したいこと</h2>
+    <p>フェーズ 2・3 の設計を進めるにあたり、以下について教えていただけると助かります。<strong>フェーズ 1 の土台部分は、これらが決まる前から並行して進められます</strong>ので、ご安心ください。</p>
 
     <div class="tbl-wrap">
       <table>
@@ -416,7 +462,7 @@
           <tr>
             <td>⑤</td>
             <td>kintone：API トークンを発行できる管理者がいるか</td>
-            <td>こちらが kintone に書き込む際に先方での発行作業が必要なため</td>
+            <td>BRIDGE 側から kintone に書き込む際に、先方での発行作業が必要なため</td>
           </tr>
           <tr>
             <td>⑥</td>
