@@ -20,6 +20,29 @@ export async function disconnectGoogleCalendar() {
   if (error) throw error;
 }
 
+/** 同じ企業内でGoogle Calendarを連携しているメンバー一覧（自分以外） */
+export async function getCompanyMembersWithCalendar() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: myProfile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (!myProfile?.company_id) return [];
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, display_name, email")
+    .eq("company_id", myProfile.company_id)
+    .neq("id", user.id)
+    .not("google_access_token", "is", null);
+
+  return (data ?? []) as Array<{ id: string; display_name: string; email: string }>;
+}
+
 export async function getCalendarEvents(params?: { start?: string; end?: string }) {
   const supabase = await createClient();
   let query = supabase

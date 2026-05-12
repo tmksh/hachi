@@ -77,6 +77,7 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
   disconnectGoogleCalendar,
+  getCompanyMembersWithCalendar,
 } from "@/lib/actions/calendar";
 import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
@@ -85,8 +86,18 @@ import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent, upda
 import { useAuth } from "@/hooks/use-auth";
 
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
-type AnyEv = (Ev | MappedGoogleEvent) & { _isGoogle?: true; _htmlLink?: string };
+type AnyEv = (Ev | MappedGoogleEvent) & { _isGoogle?: true; _htmlLink?: string; _memberId?: string; _memberColor?: string };
 type View = "day" | "week" | "month";
+
+type MemberCalendar = {
+  id: string;
+  display_name: string;
+  email: string;
+  color: string;
+  checked: boolean;
+};
+
+const MEMBER_COLORS = ["#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316", "#14b8a6"];
 
 /* ─── Week-view time grid constants ─── */
 const PX_PER_MIN = 1.2;       // 1px per minute → 72px/hr
@@ -158,6 +169,10 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [activeEvent, setActiveEvent] = useState<AnyEv | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // チームカレンダー
+  const [memberCalendars, setMemberCalendars] = useState<MemberCalendar[]>([]);
+  const [memberEvents, setMemberEvents] = useState<Record<string, MappedGoogleEvent[]>>({});
 
   const openEvent = useCallback((ev: AnyEv) => {
     // Google イベントも含めダイアログで表示（外部遷移しない）
@@ -251,6 +266,69 @@ export default function CalendarPage() {
     });
   }, [reloadKey]);
 
+  /* Google Calendar連携しているチームメンバーを取得 */
+  useEffect(() => {
+    getCompanyMembersWithCalendar().then((members) => {
+      setMemberCalendars(
+        members.map((m, i) => ({
+          ...m,
+          color: MEMBER_COLORS[i % MEMBER_COLORS.length],
+          checked: false,
+        }))
+      );
+    });
+  }, [reloadKey]);
+
+  /* メンバーのGoogleカレンダーイベントを取得 */
+  const fetchMemberEvents = useCallback(async (memberId: string, start: string, end: string) => {
+    try {
+      const res = await fetch(
+        `/api/google-calendar/member-events?userId=${memberId}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.events ?? []).map(mapGoogleEvent) as MappedGoogleEvent[];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  /* チェック変更時にイベントを取得/削除 */
+  const toggleMemberCalendar = useCallback(async (memberId: string) => {
+    setMemberCalendars((prev) =>
+      prev.map((m) => (m.id === memberId ? { ...m, checked: !m.checked } : m))
+    );
+    const member = memberCalendars.find((m) => m.id === memberId);
+    if (!member) return;
+    if (!member.checked) {
+      // チェックON → イベント取得
+      const evs = await fetchMemberEvents(memberId, rangeStart.toISOString(), rangeEnd.toISOString());
+      setMemberEvents((prev) => ({ ...prev, [memberId]: evs }));
+    } else {
+      // チェックOFF → イベント削除
+      setMemberEvents((prev) => {
+        const next = { ...prev };
+        delete next[memberId];
+        return next;
+      });
+    }
+  }, [memberCalendars, fetchMemberEvents, rangeStart, rangeEnd]);
+
+  /* 表示期間変更時にチェック済みメンバーのイベントを再取得 */
+  useEffect(() => {
+    const checkedMembers = memberCalendars.filter((m) => m.checked);
+    if (checkedMembers.length === 0) return;
+    Promise.all(
+      checkedMembers.map(async (m) => {
+        const evs = await fetchMemberEvents(m.id, rangeStart.toISOString(), rangeEnd.toISOString());
+        return [m.id, evs] as [string, MappedGoogleEvent[]];
+      })
+    ).then((results) => {
+      setMemberEvents(Object.fromEntries(results));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeStart, rangeEnd]);
+
   /* Google 連携を開始 / 再連携 */
   const connectGoogle = useCallback(async () => {
     setConnectingGoogle(true);
@@ -291,8 +369,18 @@ export default function CalendarPage() {
   const visibleEvents = useMemo(() => {
     const local = events.filter((e) => !hiddenCats.has(e.category ?? ""));
     const goog  = hiddenCats.has("google") ? [] : googleEvents;
-    return [...local, ...goog] as AnyEv[];
-  }, [events, googleEvents, hiddenCats]);
+    // チームメンバーのイベントをマージ（メンバー色を付与）
+    const memberEvList: AnyEv[] = memberCalendars
+      .filter((m) => m.checked)
+      .flatMap((m) =>
+        (memberEvents[m.id] ?? []).map((ev) => ({
+          ...ev,
+          _memberId: m.id,
+          _memberColor: m.color,
+        } as AnyEv))
+      );
+    return [...local, ...goog, ...memberEvList] as AnyEv[];
+  }, [events, googleEvents, hiddenCats, memberCalendars, memberEvents]);
 
   const toggleCat = (c: string) => {
     setHiddenCats((prev) => {
@@ -427,6 +515,45 @@ export default function CalendarPage() {
             onConnectGoogle={connectGoogle}
             onDisconnectGoogle={disconnectGoogle}
           />
+
+          {/* Team members' calendars */}
+          {memberCalendars.length > 0 && (
+            <Card>
+              <CardContent className="py-3 px-4">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <svg className="h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                  <h3 className="text-xs font-semibold">チームカレンダー</h3>
+                </div>
+                <div className="space-y-1">
+                  {memberCalendars.map((m) => (
+                    <label
+                      key={m.id}
+                      className="flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-muted/40 transition-colors cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={m.checked}
+                        onCheckedChange={() => toggleMemberCalendar(m.id)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: m.color }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{m.display_name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{m.email}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tasks panel (moved from right sidebar) */}
           <Card>
@@ -906,9 +1033,20 @@ function MonthView({
                     }}
                     className={cn(
                       "block text-[10px] px-1.5 py-0.5 rounded truncate border text-left cursor-pointer hover:brightness-95 hover:shadow-sm",
-                      CAT_CHIP[ev.category ?? ""] ||
-                        "bg-muted text-foreground border-border"
+                      (ev as AnyEv)._memberColor
+                        ? ""
+                        : CAT_CHIP[ev.category ?? ""] ||
+                          "bg-muted text-foreground border-border"
                     )}
+                    style={
+                      (ev as AnyEv)._memberColor
+                        ? {
+                            backgroundColor: `${(ev as AnyEv)._memberColor}22`,
+                            color: (ev as AnyEv)._memberColor,
+                            borderColor: `${(ev as AnyEv)._memberColor}55`,
+                          }
+                        : undefined
+                    }
                   >
                     {!ev.all_day && (
                       <span className="tabular-nums mr-1 font-medium">
@@ -1199,16 +1337,24 @@ function WeekView({
                     const eMin = isDraggingThis ? dragging!.currentEnd   : toMin(endDt);
                     const top    = sMin * PX_PER_MIN;
                     const height = Math.max(20, (eMin - sMin) * PX_PER_MIN);
+                    const memberColor = (ev as AnyEv)._memberColor;
 
                     return (
                       <div
                         key={ev.id}
                         className={cn(
                           "absolute left-0.5 right-0.5 rounded border text-[10px] overflow-hidden z-10",
-                          CAT_CHIP[ev.category ?? ""] || "bg-muted text-foreground border-border",
+                          !memberColor && (CAT_CHIP[ev.category ?? ""] || "bg-muted text-foreground border-border"),
                           isDraggingThis ? "opacity-60 cursor-grabbing shadow-lg" : "cursor-grab hover:brightness-95 hover:shadow-sm",
                         )}
-                        style={{ top, height }}
+                        style={{
+                          top, height,
+                          ...(memberColor ? {
+                            backgroundColor: `${memberColor}22`,
+                            color: memberColor,
+                            borderColor: `${memberColor}55`,
+                          } : {}),
+                        }}
                         onMouseDown={(e) => {
                           isDraggingRef.current = false;
                           startDrag(e, ev, "move");
