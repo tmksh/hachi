@@ -111,8 +111,37 @@ export async function createBudget(
   return budget as Budget;
 }
 
-export async function updateBudget(id: string, input: Partial<Pick<Budget, "target_revenue" | "status" | "branch">>) {
+export async function updateBudget(
+  id: string,
+  input: Partial<Pick<Budget, "target_revenue" | "status" | "branch" | "fiscal_year">>,
+  items?: Array<{ category: BudgetItem["category"]; name: string; amount: number }>,
+) {
   const supabase = await createClient();
   const { error } = await supabase.from("budgets").update(input).eq("id", id);
+  if (error) throw error;
+
+  if (items) {
+    const { data: budget } = await supabase.from("budgets").select("company_id").eq("id", id).single();
+    if (!budget) throw new Error("Budget not found");
+    await supabase.from("budget_items").delete().eq("budget_id", id);
+    if (items.length > 0) {
+      await supabase.from("budget_items").insert(
+        items.map((item, i) => ({
+          company_id: budget.company_id,
+          budget_id: id,
+          category: item.category,
+          name: item.name,
+          amount: item.amount,
+          sort_order: i,
+        }))
+      );
+    }
+  }
+}
+
+export async function deleteBudget(id: string) {
+  const supabase = await createClient();
+  await supabase.from("budget_items").delete().eq("budget_id", id);
+  const { error } = await supabase.from("budgets").delete().eq("id", id);
   if (error) throw error;
 }

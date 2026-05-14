@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,7 +18,7 @@ import { getCustomers } from "@/lib/actions/customers";
 
 type LineItem = { name: string; quantity: number; unit: string; selling_price: number };
 
-export default function QuoteNewPage() {
+function QuoteNewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [saving, setSaving] = useState(false);
@@ -95,5 +95,13 @@ export default function QuoteNewPage() {
       </Card>
       <div className="flex justify-end gap-3 pb-6"><Link href="/quotes"><Button variant="outline">キャンセル</Button></Link><Button onClick={handleSave} disabled={saving}><Save className="size-4 mr-1" />{saving?"保存中...":"保存"}</Button></div>
     </div>
+  );
+}
+
+export default function QuoteNewPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6 text-sm text-muted-foreground">読み込み中...</div>}>
+      <QuoteNewPageContent />
+    </Suspense>
   );
 }

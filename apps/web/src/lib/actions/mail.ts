@@ -2,6 +2,34 @@
 
 import { createClient } from "@/lib/supabase/server";
 
+export type MailProvider = "gmail" | "imap" | "forward";
+
+export type EmailAccount = {
+  id: string;
+  provider: MailProvider;
+  email_address: string;
+  display_name: string | null;
+  last_sync_at: string | null;
+  token_expires_at: string | null;
+  forward_address: string | null;
+};
+
+export async function getEmailAccounts(): Promise<EmailAccount[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("email_accounts")
+    .select("id, provider, email_address, display_name, last_sync_at, token_expires_at, forward_address")
+    .eq("user_id", user.id)
+    .order("created_at");
+
+  return (data ?? []) as EmailAccount[];
+}
+
 export async function getGmailAccount() {
   const supabase = await createClient();
   const {
@@ -19,7 +47,7 @@ export async function getGmailAccount() {
   return data ?? null;
 }
 
-export async function disconnectGmailAccount() {
+export async function disconnectEmailAccount(provider: MailProvider) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,19 +58,26 @@ export async function disconnectGmailAccount() {
     .from("email_accounts")
     .delete()
     .eq("user_id", user.id)
-    .eq("provider", "gmail");
+    .eq("provider", provider);
 
   if (error) throw error;
 }
 
+/** 後方互換 */
+export async function disconnectGmailAccount() {
+  return disconnectEmailAccount("gmail");
+}
+
 export async function getEmailThreads(folder?: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
   let query = supabase
     .from("email_threads")
-    .select("*, account:email_accounts!email_threads_account_id_fkey(id, email_address)")
+    .select("*, account:email_accounts!email_threads_account_id_fkey(id, email_address, provider)")
     .order("last_message_at", { ascending: false });
 
   if (folder === "starred") {
@@ -90,12 +125,17 @@ export async function sendEmail(input: {
   body_html?: string;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
   if (!profile) throw new Error("Profile not found");
 
-  // Get user's email account
   const { data: account } = await supabase
     .from("email_accounts")
     .select("id, email_address")
@@ -105,7 +145,6 @@ export async function sendEmail(input: {
 
   if (!account) throw new Error("No email account configured");
 
-  // Create thread
   const { data: thread, error: threadError } = await supabase
     .from("email_threads")
     .insert({
@@ -120,23 +159,35 @@ export async function sendEmail(input: {
     .single();
   if (threadError) throw threadError;
 
-  // Create message
-  const { error: msgError } = await supabase
-    .from("email_messages")
-    .insert({
-      company_id: profile.company_id,
-      thread_id: thread.id,
-      from_address: account.email_address,
-      from_name: profile.company_id, // Will be resolved from profile
-      to_addresses: input.to,
-      cc_addresses: input.cc || [],
-      subject: input.subject,
-      body_text: input.body_text,
-      body_html: input.body_html || null,
-      direction: "outbound",
-      received_at: new Date().toISOString(),
-    });
+  const { error: msgError } = await supabase.from("email_messages").insert({
+    company_id: profile.company_id,
+    thread_id: thread.id,
+    from_address: account.email_address,
+    from_name: profile.company_id,
+    to_addresses: input.to,
+    cc_addresses: input.cc || [],
+    subject: input.subject,
+    body_text: input.body_text,
+    body_html: input.body_html || null,
+    direction: "outbound",
+    received_at: new Date().toISOString(),
+  });
   if (msgError) throw msgError;
 
   return thread;
+}
+
+export async function getMailSignature(): Promise<string> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return "";
+  return (user.user_metadata?.mail_signature as string) ?? "";
+}
+
+export async function saveMailSignature(signature: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({
+    data: { mail_signature: signature },
+  });
+  if (error) throw error;
 }

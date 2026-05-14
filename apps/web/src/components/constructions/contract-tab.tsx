@@ -3,15 +3,18 @@
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Plus, FileText, Pencil, Trash2, ChevronRight, Loader2,
   X, Download, RefreshCw, CheckCircle2, RotateCcw,
+  Calendar, CalendarRange, User, MapPin, Wallet,
+  Percent, CreditCard, Shield, AlignLeft, Hash, ToggleLeft,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   CONTRACT_TEMPLATES, type ContractTemplate, type FormValues,
@@ -147,6 +150,94 @@ export function ContractTab({ constructionId, initialDocs, ctx }: Props) {
       )}
 
       <TemplatePicker open={picker} onOpenChange={setPicker} onSelect={handleSelectTemplate} />
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────
+   フィールドごとのアイコンマッピング
+──────────────────────────────────────────── */
+function getFieldIcon(fieldName: string, fieldType: string): LucideIcon {
+  if (fieldType === "toggle") return ToggleLeft;
+  if (fieldType === "textarea") return AlignLeft;
+  if (fieldName.includes("date") || fieldName.includes("Date")) {
+    return fieldName.includes("start") || fieldName.includes("end") ? CalendarRange : Calendar;
+  }
+  if (fieldName.includes("amount") || fieldName.includes("price")) return Wallet;
+  if (fieldName.includes("tax")) return Percent;
+  if (fieldName.includes("payment")) return CreditCard;
+  if (fieldName.includes("warranty")) return Shield;
+  if (fieldName.includes("kou_name") || fieldName.includes("otsu_name")) return User;
+  if (fieldName.includes("address") || fieldName.includes("location")) return MapPin;
+  if (fieldName.includes("days") || fieldName.includes("years")) return Hash;
+  return FileText;
+}
+
+/* ────────────────────────────────────────────
+   カード型フォームフィールドコンポーネント
+──────────────────────────────────────────── */
+import type { TemplateField, FormValues as FV } from "@/lib/contract-templates";
+
+function ContractFormField({
+  field,
+  value,
+  onChange,
+}: {
+  field: TemplateField;
+  value: string | number | undefined;
+  onChange: (v: string | number) => void;
+}) {
+  const Icon = getFieldIcon(field.name, field.type);
+  const isToggle = field.type === "toggle";
+  const isChecked = isToggle ? (Number(value) !== 0) : false;
+
+  return (
+    <div className="rounded-xl border border-border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] overflow-hidden">
+      {/* ラベル行 */}
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground/70 flex-shrink-0" />
+        <span className="text-[11px] font-medium text-muted-foreground leading-none">
+          {field.label}
+          {field.required && <span className="text-red-500 ml-0.5">*</span>}
+        </span>
+        {field.synced && (
+          <span className="ml-1 text-[10px] text-blue-600 font-medium flex items-center gap-0.5">
+            <CalendarRange className="h-3 w-3" />
+            工程表連携中
+          </span>
+        )}
+        {isToggle && (
+          <div className="ml-auto flex items-center gap-2 pb-1">
+            <Switch
+              checked={isChecked}
+              onCheckedChange={v => onChange(v ? 1 : 0)}
+            />
+            <span className="text-xs text-muted-foreground">{isChecked ? "有効" : "無効"}</span>
+          </div>
+        )}
+      </div>
+      {/* 入力欄 */}
+      {!isToggle && (
+        <div className="px-3 pb-2.5">
+          {field.type === "textarea" ? (
+            <textarea
+              value={String(value ?? "")}
+              onChange={e => onChange(e.target.value)}
+              placeholder={field.placeholder}
+              rows={3}
+              className="w-full text-sm bg-transparent resize-none outline-none placeholder:text-muted-foreground/50 leading-relaxed"
+            />
+          ) : (
+            <input
+              type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+              value={String(value ?? "")}
+              onChange={e => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)}
+              placeholder={field.placeholder}
+              className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground/50"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -345,81 +436,62 @@ function ContractEditor({
   const st = STATUS_LABELS[status] ?? STATUS_LABELS.preparing;
 
   return (
-    <div className="-mx-4 md:-mx-6 -mt-4">
+    <div className="-mt-2">
       {/* ── ツールバー ── */}
-      <div className="sticky top-0 z-20 bg-white border-b border-border px-4 md:px-6 py-3 flex items-center gap-3 flex-wrap">
-        <button onClick={() => onClose()} className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+      <div className="sticky top-0 z-20 bg-white border border-border rounded-xl px-4 py-2.5 flex items-center gap-2 mb-3">
+        <button onClick={() => onClose()} className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 shrink-0">
           <X className="h-4 w-4" />戻る
         </button>
-        <div className="h-5 w-px bg-border" />
-        <h2 className="text-base font-semibold">{tpl.name}</h2>
-        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", st.cls)}>{st.label}</span>
-        {savedAt && <span className="text-[11px] text-muted-foreground">保存済み {savedAt}</span>}
+        <div className="h-5 w-px bg-border mx-1 shrink-0" />
+        <h2 className="text-sm font-semibold truncate">{tpl.name}</h2>
+        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0", st.cls)}>{st.label}</span>
+        {savedAt && <span className="text-[10px] text-muted-foreground shrink-0">保存済み {savedAt}</span>}
 
-        <div className="ml-auto flex items-center gap-1.5 flex-wrap">
-          <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={() => setPickerOpen(true)}>
-            <RefreshCw className="h-3.5 w-3.5" />テンプレート変更
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          {/* アイコンのみのサブアクション群 */}
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="テンプレート変更" onClick={() => setPickerOpen(true)}>
+            <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={handleSyncSchedule}>
-            <RotateCcw className="h-3.5 w-3.5" />工程表と同期
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="工程表と同期" onClick={handleSyncSchedule}>
+            <RotateCcw className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={handlePdfPrint}>
-            <Download className="h-3.5 w-3.5" />PDF出力
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="PDF出力" onClick={handlePdfPrint}>
+            <Download className="h-4 w-4" />
           </Button>
+          <div className="w-px h-5 bg-border mx-0.5" />
           {!isNew && (
-            <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={handleSaveOnly} disabled={saving}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}保存
+            <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5" onClick={handleSaveOnly} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}保存
             </Button>
           )}
-          <Button size="sm" className="text-xs gap-1.5 bg-green-600 hover:bg-green-700" onClick={handleConfirm} disabled={confirming}>
+          <Button size="sm" className="h-8 text-xs px-3 gap-1.5 bg-green-600 hover:bg-green-700" onClick={handleConfirm} disabled={confirming}>
             {confirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             確定する
           </Button>
-          <Button variant="ghost" size="sm" className="text-xs gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={handleDelete} disabled={deleting}>
-            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            削除
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" title="削除" onClick={handleDelete} disabled={deleting}>
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </Button>
         </div>
       </div>
 
       {/* ── 2カラムレイアウト ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 min-h-[calc(100vh-260px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-[calc(100vh-220px)] overflow-hidden rounded-xl border border-border">
         {/* 左：入力フォーム */}
-        <div className="border-r border-border bg-slate-50/30 px-4 md:px-6 py-5 overflow-y-auto">
-          <h3 className="text-sm font-semibold mb-4 text-muted-foreground">入力項目</h3>
-          <div className="space-y-3">
+        <div className="border-r border-border bg-slate-50/40 px-4 md:px-5 py-4 overflow-y-auto h-full">
+          <div className="space-y-2.5 max-w-[520px]">
             {tpl.fields.map(field => (
-              <div key={field.name} className="space-y-1.5">
-                <Label htmlFor={`f-${field.name}`} className="text-xs flex items-center gap-1">
-                  {field.label}
-                  {field.required && <span className="text-red-500">*</span>}
-                </Label>
-                {field.type === "textarea" ? (
-                  <Textarea
-                    id={`f-${field.name}`}
-                    value={String(form[field.name] ?? "")}
-                    onChange={e => set(field.name, e.target.value)}
-                    placeholder={field.placeholder}
-                    rows={3}
-                    className="text-sm bg-white"
-                  />
-                ) : (
-                  <Input
-                    id={`f-${field.name}`}
-                    type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-                    value={String(form[field.name] ?? "")}
-                    onChange={e => set(field.name, field.type === "number" ? Number(e.target.value) : e.target.value)}
-                    placeholder={field.placeholder}
-                    className="text-sm bg-white"
-                  />
-                )}
-              </div>
+              <ContractFormField
+                key={field.name}
+                field={field}
+                value={form[field.name]}
+                onChange={v => set(field.name, v)}
+              />
             ))}
           </div>
         </div>
 
         {/* 右：プレビュー */}
-        <div className="px-4 md:px-6 py-5 overflow-y-auto bg-muted/20">
+        <div className="px-4 md:px-6 py-5 overflow-y-auto bg-muted/20 h-full">
           <h3 className="text-sm font-semibold mb-4 text-muted-foreground">プレビュー</h3>
           <div className="bg-white rounded-xl border border-border shadow-sm p-8 md:p-10 max-w-[640px] mx-auto">
             <div

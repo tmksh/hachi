@@ -7,7 +7,7 @@
  *  - defaults(ctx): 初期値（construction/customer から自動入力）
  */
 
-export type FieldType = "text" | "textarea" | "date" | "number";
+export type FieldType = "text" | "textarea" | "date" | "number" | "toggle";
 
 export type TemplateField = {
   name: string;
@@ -15,6 +15,7 @@ export type TemplateField = {
   type: FieldType;
   placeholder?: string;
   required?: boolean;
+  synced?: boolean; // 工程表から自動連携されるフィールド
 };
 
 export type ContractTemplate = {
@@ -54,8 +55,11 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "work_location",   label: "工事場所",           type: "text",     placeholder: "工事を行う場所（甲の住所と同じ場合は空欄可）" },
       { name: "amount_excl_tax", label: "請負金額（税抜・円）", type: "number" },
       { name: "tax_rate",        label: "消費税率（%）",      type: "number" },
-      { name: "payment_terms",   label: "支払条件",           type: "textarea", placeholder: "契約時：30%、上棟時：30%、引渡時：40%" },
-      { name: "warranty",        label: "瑕疵担保期間",       type: "text",     placeholder: "2年" },
+      { name: "start_date",      label: "工期開始日",         type: "date",     synced: true },
+      { name: "end_date",        label: "工期終了日",         type: "date",     synced: true },
+      { name: "payment_terms",   label: "支払条件",           type: "textarea", placeholder: "着工時30%、上棟時30%、完成引渡時40%" },
+      { name: "warranty_years",  label: "瑕疵担保期間（年）", type: "number",   placeholder: "10" },
+      { name: "warranty_include",label: "瑕疵担保条項を含める", type: "toggle" },
       { name: "special_notes",   label: "特記事項",           type: "textarea", placeholder: "特記事項があればここに記入してください" },
     ],
   },
@@ -69,12 +73,14 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "kou_address",   label: "甲の住所",     type: "text",     required: true },
       { name: "otsu_name",     label: "受託者（乙）", type: "text",     required: true,  placeholder: "○○設計事務所" },
       { name: "otsu_address",  label: "乙の住所",     type: "text",     required: true },
-      { name: "work_name",     label: "業務名称",     type: "text",     required: true,  placeholder: "○○邸 設計監理業務" },
-      { name: "scope",         label: "業務範囲",     type: "textarea", placeholder: "・基本設計　・実施設計　・工事監理　など" },
+      { name: "work_name",     label: "業務名称",         type: "text",     required: true,  placeholder: "○○邸 設計監理業務" },
+      { name: "work_location", label: "対象建物所在地",   type: "text",     placeholder: "東京都世田谷区..." },
       { name: "amount_excl_tax", label: "業務報酬（税抜・円）", type: "number" },
-      { name: "tax_rate",      label: "消費税率（%）", type: "number" },
-      { name: "payment_terms", label: "支払条件",     type: "textarea", placeholder: "契約時：50%、業務完了時：50%" },
-      { name: "special_notes", label: "特記事項",     type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "tax_rate",      label: "消費税率（%）",   type: "number" },
+      { name: "start_date",    label: "業務開始日",       type: "date",     synced: true },
+      { name: "end_date",      label: "業務完了日",       type: "date",     synced: true },
+      { name: "scope",         label: "業務範囲",         type: "textarea", placeholder: "基本設計、実施設計、確認申請、工事監理" },
+      { name: "special_notes", label: "特記事項",         type: "textarea", placeholder: "特記事項があればここに記入してください" },
     ],
   },
   {
@@ -89,10 +95,11 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "otsu_address",    label: "乙の住所",       type: "text",     required: true },
       { name: "original_work",   label: "原契約工事名",   type: "text",     required: true },
       { name: "original_date",   label: "原契約締結日",   type: "date" },
-      { name: "change_summary",  label: "変更・追加内容", type: "textarea", required: true, placeholder: "・○○の追加\n・□□の仕様変更" },
+      { name: "work_name",       label: "工事名称",       type: "text",     required: true, placeholder: "○○邸 新築工事" },
+      { name: "change_summary",  label: "変更内容",       type: "textarea", required: true, placeholder: "・○○の追加\n・□□の仕様変更" },
       { name: "amount_excl_tax", label: "追加金額（税抜・円）", type: "number" },
       { name: "tax_rate",        label: "消費税率（%）",  type: "number" },
-      { name: "extension_days",  label: "工期延長日数",   type: "number",   placeholder: "延長なしの場合は0" },
+      { name: "end_date",        label: "変更後工期終了日", type: "date",   synced: true },
       { name: "special_notes",   label: "特記事項",       type: "textarea", placeholder: "特記事項があればここに記入してください" },
     ],
   },
@@ -118,6 +125,12 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
       case "work_location":
         v[f.name] = ctx.customer?.address ?? "";
         break;
+      case "start_date":
+        v[f.name] = ctx.construction?.start_date ?? "";
+        break;
+      case "end_date":
+        v[f.name] = ctx.construction?.end_date ?? "";
+        break;
       case "otsu_name":
         v[f.name] = "";
         break;
@@ -137,11 +150,17 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
       case "extension_days":
         v[f.name] = 0;
         break;
+      case "warranty_years":
+        v[f.name] = 10;
+        break;
+      case "warranty_include":
+        v[f.name] = 1;
+        break;
       case "special_notes":
         v[f.name] = "";
         break;
       default:
-        v[f.name] = (f.type === "number") ? 0 : "";
+        v[f.name] = (f.type === "number" || f.type === "toggle") ? 0 : "";
     }
   }
   return v;
@@ -168,13 +187,14 @@ function getNum(v: FormValues, k: string): number {
 }
 
 export function renderPreview(template: ContractTemplate, values: FormValues, ctx: RenderContext): string {
-  const period = ctx.construction
-    ? `${ctx.construction.start_date ?? "—"} ～ ${ctx.construction.end_date ?? "—"}`
-    : "—";
+  const startDate = getStr(values, "start_date") || ctx.construction?.start_date || "—";
+  const endDate   = getStr(values, "end_date")   || ctx.construction?.end_date   || "—";
+  const period    = `${startDate} ～ ${endDate}`;
 
   if (template.id === "construction_contract") {
     const amount = fmtAmount(getNum(values, "amount_excl_tax"), getNum(values, "tax_rate"));
-    const warranty = getStr(values, "warranty") || "2年";
+    const warrantyYears   = getNum(values, "warranty_years") || 10;
+    const warrantyInclude = getNum(values, "warranty_include") !== 0;
     const specialNotes = getStr(values, "special_notes");
     return `
 <div class="space-y-6 text-[13px] leading-relaxed">
@@ -200,10 +220,10 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p class="whitespace-pre-line">${getStr(values, "payment_terms") || "—"}</p>
   </div>
 
-  <div>
+  ${warrantyInclude ? `<div>
     <h3 class="font-bold mb-2">【第4条】瑕疵担保責任</h3>
-    <p>乙は、本工事の引渡し後${warranty}間、瑕疵担保責任を負うものとする。</p>
-  </div>
+    <p>乙は、本工事の引渡し後${warrantyYears}年間、瑕疵担保責任を負うものとする。</p>
+  </div>` : ""}
 
   <div>
     <h3 class="font-bold mb-2">【特記事項】</h3>
@@ -240,6 +260,7 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
   <div>
     <h3 class="font-bold mb-2">【第1条】業務概要</h3>
     <p>業務名称：${getStr(values, "work_name") || "—"}</p>
+    <p>対象建物所在地：${getStr(values, "work_location") || "—"}</p>
     <p>業務期間：${period}</p>
   </div>
 
@@ -286,21 +307,19 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
 
   if (template.id === "change_order") {
     const amount = fmtAmount(getNum(values, "amount_excl_tax"), getNum(values, "tax_rate"));
-    const ext = getNum(values, "extension_days");
     const specialNotes = getStr(values, "special_notes");
     return `
 <div class="space-y-6 text-[13px] leading-relaxed">
-  <h2 class="text-center text-xl font-bold tracking-wider mb-6">追加工事契約書</h2>
-  <p>${getStr(values, "kou_name") || "［甲］"}（以下「甲」という）と${getStr(values, "otsu_name") || "［乙］"}（以下「乙」という）は、以下のとおり追加工事契約を締結する。</p>
+  <h2 class="text-center text-xl font-bold tracking-wider mb-6">追加変更工事契約書</h2>
+  <p>${getStr(values, "kou_name") || "［甲］"}（以下「甲」という）と${getStr(values, "otsu_name") || "［乙］"}（以下「乙」という）は、________工事請負契約書（以下「原契約」という）に基づく下記工事について、追加変更契約を締結する。</p>
 
   <div>
-    <h3 class="font-bold mb-2">【第1条】原契約</h3>
-    <p>原契約工事名：${getStr(values, "original_work") || "—"}</p>
-    <p>原契約締結日：${getStr(values, "original_date") || "—"}</p>
+    <h3 class="font-bold mb-2">【第1条】工事名称</h3>
+    <p>${getStr(values, "work_name") || "—"}</p>
   </div>
 
   <div>
-    <h3 class="font-bold mb-2">【第2条】変更・追加内容</h3>
+    <h3 class="font-bold mb-2">【第2条】変更内容</h3>
     <p class="whitespace-pre-line">${getStr(values, "change_summary") || "—"}</p>
   </div>
 
@@ -308,12 +327,12 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <h3 class="font-bold mb-2">【第3条】追加請負代金</h3>
     <p>金 ${amount.excl} 円（税抜）</p>
     <p>消費税率：${amount.rate}%　消費税額：${amount.tax} 円</p>
-    <p class="font-semibold">合計追加金額：${amount.total} 円（税込）</p>
+    <p class="font-semibold">合計金額：${amount.total} 円（税込）</p>
   </div>
 
   <div>
-    <h3 class="font-bold mb-2">【第4条】工期</h3>
-    <p>${ext === 0 ? "原契約の工期に変更はない。" : `原契約の工期を ${ext} 日延長する。`}</p>
+    <h3 class="font-bold mb-2">【第4条】変更後工期</h3>
+    <p>変更後工期終了日：${endDate}</p>
   </div>
 
   <div>

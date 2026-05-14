@@ -5,12 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CrmMasterTab } from "@/components/settings/crm-master-tab";
 import { CraftsmenMasterTab } from "@/components/settings/craftsmen-master-tab";
+import { WorkflowTypesTab } from "@/components/settings/workflow-types-tab";
 import {
   Select,
   SelectContent,
@@ -47,10 +49,12 @@ import {
   Send,
   Eye,
   EyeOff,
+  Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { updateProfile, getCompany, updateCompany } from "@/lib/actions/profiles";
+import { getMailSignature, saveMailSignature } from "@/lib/actions/mail";
 import {
   listTeamMembers,
   inviteTeamMember,
@@ -61,6 +65,8 @@ import {
 } from "@/lib/actions/team";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Profile } from "@/lib/database.types";
+import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
+import { useCompanyPermissions, type CustomRole, type RolePermissions, DEFAULT_PERMISSIONS } from "@/hooks/use-company-permissions";
 
 const ROLE_LABEL: Record<TeamRole, string> = {
   owner: "オーナー",
@@ -93,6 +99,33 @@ export default function SettingsPage() {
   const [companyRepresentative, setCompanyRepresentative] = useState("");
   const [companyInvoiceNumber, setCompanyInvoiceNumber] = useState("");
   const [savingCompany, setSavingCompany] = useState(false);
+
+  // 署名
+  const [signature, setSignature] = useState("");
+  const [savingSignature, setSavingSignature] = useState(false);
+
+  // 勤怠設定
+  const [attStartTime, setAttStartTime] = useState("09:00");
+  const [attEndTime, setAttEndTime] = useState("18:00");
+  const [attBreakMinutes, setAttBreakMinutes] = useState("60");
+  const [attLeaveTypes, setAttLeaveTypes] = useState<string[]>([
+    "有給休暇", "夏季休暇", "慶弔休暇", "特別休暇",
+    "産前産後休暇", "育児休暇", "介護休暇", "病気休暇",
+    "代休", "振替休日", "半日休暇（午前）", "半日休暇（午後）",
+  ]);
+  const [attLeaveInput, setAttLeaveInput] = useState("");
+  const [savingAttendance, setSavingAttendance] = useState(false);
+
+  // 権限・ロール設定
+  const { refresh: refreshPerms } = useCompanyPermissions();
+  const [rolePerms, setRolePerms] = useState<RolePermissions>(DEFAULT_PERMISSIONS);
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
+  const [savingRolePerms, setSavingRolePerms] = useState(false);
+  const [addRoleOpen, setAddRoleOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleBase, setNewRoleBase] = useState<CustomRole["base_role"]>("employee");
+  const [newRoleColor, setNewRoleColor] = useState("slate");
 
   // パスワード変更
   const [currentPassword, setCurrentPassword] = useState("");
@@ -163,6 +196,10 @@ export default function SettingsPage() {
   }, [profile]);
 
   useEffect(() => {
+    getMailSignature().then((sig) => setSignature(sig)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     getCompany().then((c) => {
       setCompany(c);
       setCompanyName(c.name);
@@ -172,6 +209,20 @@ export default function SettingsPage() {
       setCompanyPostal(s?.postal_code ?? "");
       setCompanyRepresentative(s?.representative ?? "");
       setCompanyInvoiceNumber(s?.invoice_number ?? "");
+      const att = (c.settings as Record<string, Record<string, unknown>>)?.attendance_settings;
+      if (att) {
+        setAttStartTime((att.start_time as string) ?? "09:00");
+        setAttEndTime((att.end_time as string) ?? "18:00");
+        setAttBreakMinutes(String(att.break_minutes ?? "60"));
+        if (Array.isArray(att.leave_types)) setAttLeaveTypes(att.leave_types as string[]);
+      }
+      const cs = c.settings as Record<string, unknown>;
+      if (cs?.role_permissions) {
+        setRolePerms({ ...DEFAULT_PERMISSIONS, ...(cs.role_permissions as RolePermissions) });
+      }
+      if (Array.isArray(cs?.custom_roles)) {
+        setCustomRoles(cs.custom_roles as CustomRole[]);
+      }
     }).catch(() => {});
   }, []);
 
@@ -209,6 +260,108 @@ export default function SettingsPage() {
       toast.error("更新に失敗しました（owner/hq_admin 権限が必要です）");
     } finally {
       setSavingCompany(false);
+    }
+  };
+
+  const handleSaveSignature = async () => {
+    setSavingSignature(true);
+    try {
+      await saveMailSignature(signature);
+      toast.success("署名を保存しました");
+    } catch {
+      toast.error("保存に失敗しました");
+    } finally {
+      setSavingSignature(false);
+    }
+  };
+
+  const handleSaveRoleSettings = async () => {
+    setSavingRolePerms(true);
+    try {
+      // owner 列は常に全許可のため保存しない（読み取り専用）
+      const permsToSave: RolePermissions = {};
+      Object.entries(rolePerms).forEach(([key, roles]) => {
+        permsToSave[key] = roles.filter((r) => r !== "owner");
+      });
+      await updateCompany({ role_permissions: permsToSave, custom_roles: customRoles });
+      // localStorage も更新してサイドバーに即反映
+      localStorage.setItem("bridge_role_permissions", JSON.stringify(permsToSave));
+      localStorage.setItem("bridge_custom_roles", JSON.stringify(customRoles));
+      await refreshPerms();
+      toast.success("ロール・権限設定を保存しました");
+    } catch (e) {
+      toast.error("保存に失敗しました", { description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setSavingRolePerms(false);
+    }
+  };
+
+  const togglePerm = (featureKey: string, role: string) => {
+    if (role === "owner") return; // owner は変更不可
+    setRolePerms((prev) => {
+      const current = prev[featureKey] ?? [];
+      const next = current.includes(role)
+        ? current.filter((r) => r !== role)
+        : [...current, role];
+      // owner は必ず含める
+      if (!next.includes("owner")) next.unshift("owner");
+      return { ...prev, [featureKey]: next };
+    });
+  };
+
+  const handleAddOrUpdateCustomRole = () => {
+    if (!newRoleName.trim()) return;
+    if (editingRole) {
+      setCustomRoles((prev) =>
+        prev.map((r) => r.id === editingRole.id ? { ...r, name: newRoleName.trim(), base_role: newRoleBase, color: newRoleColor } : r)
+      );
+    } else {
+      const id = `cr_${Date.now()}`;
+      setCustomRoles((prev) => [...prev, { id, name: newRoleName.trim(), base_role: newRoleBase, color: newRoleColor }]);
+      // 新しいカスタムロールに base_role と同じ権限を初期付与
+      setRolePerms((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          if (next[key].includes(newRoleBase)) {
+            next[key] = [...next[key], id];
+          }
+        });
+        return next;
+      });
+    }
+    setAddRoleOpen(false);
+    setEditingRole(null);
+    setNewRoleName("");
+    setNewRoleBase("employee");
+    setNewRoleColor("slate");
+  };
+
+  const handleDeleteCustomRole = (id: string) => {
+    setCustomRoles((prev) => prev.filter((r) => r.id !== id));
+    setRolePerms((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        next[key] = next[key].filter((r) => r !== id);
+      });
+      return next;
+    });
+  };
+
+  const handleSaveAttendance = async () => {
+    try {
+      await updateCompany({
+        attendance_settings: {
+          start_time: attStartTime,
+          end_time: attEndTime,
+          break_minutes: Number(attBreakMinutes),
+          leave_types: attLeaveTypes,
+        } as Record<string, unknown>,
+      });
+      toast.success("勤怠設定を保存しました");
+    } catch {
+      toast.error("保存に失敗しました");
+    } finally {
+      setSavingAttendance(false);
     }
   };
 
@@ -263,10 +416,14 @@ export default function SettingsPage() {
         password: invitePassword.trim() || undefined,
       });
       setInviteSent(true);
-      toast.success("招待メールを送信しました");
+      toast.success(
+        invitePassword.trim()
+          ? "アカウントを作成しました"
+          : "招待メールを送信しました",
+      );
       await reloadMembers();
     } catch (e) {
-      toast.error("招待メールの送信に失敗しました", {
+      toast.error("メンバー追加に失敗しました", {
         description: e instanceof Error ? e.message : undefined,
       });
     } finally {
@@ -341,13 +498,19 @@ export default function SettingsPage() {
       <h1 className="text-xl font-semibold">設定</h1>
       <Tabs defaultValue="profile">
         <TabsList>
-          <TabsTrigger value="profile">プロフィール</TabsTrigger>
-          <TabsTrigger value="company">会社情報</TabsTrigger>
+          <TabsTrigger value="profile">アカウント</TabsTrigger>
           {canManageMembers && (
             <TabsTrigger value="members">メンバー管理</TabsTrigger>
           )}
           <TabsTrigger value="security">セキュリティ</TabsTrigger>
           <TabsTrigger value="notifications">通知</TabsTrigger>
+          <TabsTrigger value="mail_signature">メール署名</TabsTrigger>
+          {canManageMembers && (
+            <TabsTrigger value="attendance_settings">勤怠設定</TabsTrigger>
+          )}
+          {canManageMembers && (
+            <TabsTrigger value="workflow_types">ワークフロー</TabsTrigger>
+          )}
           {canManageMembers && (
             <TabsTrigger value="crm_master">CRMマスタ</TabsTrigger>
           )}
@@ -356,8 +519,9 @@ export default function SettingsPage() {
           )}
         </TabsList>
 
-        {/* ── プロフィール ─── */}
-        <TabsContent value="profile" className="mt-4">
+        {/* ── アカウント（プロフィール + 会社情報） ─── */}
+        <TabsContent value="profile" className="mt-4 space-y-4">
+          {/* 個人プロフィール */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">プロフィール</CardTitle>
@@ -397,10 +561,8 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* ── 会社情報 ─── */}
-        <TabsContent value="company" className="mt-4">
+          {/* 会社情報 */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -455,7 +617,8 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           <Label>インボイス登録番号</Label>
                           <Input value={companyInvoiceNumber} onChange={(e) => setCompanyInvoiceNumber(e.target.value)} placeholder="T-XXXXXXXXXXXXXXX" />
-                        </div>                      </div>
+                        </div>
+                      </div>
                       <div className="flex justify-end">
                         <Button onClick={handleSaveCompany} disabled={savingCompany}>
                           <Save className="size-4 mr-1" />
@@ -552,9 +715,13 @@ export default function SettingsPage() {
                         {members.map((m) => {
                           const isSelf = m.id === profile?.id;
                           const isOwner = m.role === "owner";
+                          const actorIsOwner = profile?.role === "owner";
+                          // 自分自身は編集不可
+                          // オーナーは他のオーナーも編集・削除できる（重複解消のため）
+                          // hq_admin は同格の hq_admin を編集できない
                           const canEditThis =
                             !isSelf &&
-                            !isOwner &&
+                            (actorIsOwner || !isOwner) &&
                             !(profile?.role === "hq_admin" && m.role === "hq_admin");
 
                           return (
@@ -580,7 +747,9 @@ export default function SettingsPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       {profile?.role === "owner" && (
-                                        <SelectItem value="hq_admin">本部管理者</SelectItem>
+                                        <>
+                                          <SelectItem value="hq_admin">本部管理者</SelectItem>
+                                        </>
                                       )}
                                       <SelectItem value="contractor_admin">施工店管理者</SelectItem>
                                       <SelectItem value="employee">社員</SelectItem>
@@ -628,6 +797,216 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* ── ロール・権限設定（インタラクティブ） ─── */}
+            <Card className="mt-4">
+              <CardHeader className="pb-3">
+                <div className="flex flex-row items-start justify-between gap-4 w-full">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-primary" />
+                      ロール・権限設定
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      クリックで各ロールの機能アクセスを切り替えられます。オーナーは変更不可です。
+                    </p>
+                  </div>
+                  {canManageMembers && (
+                    <Button size="sm" className="ml-auto shrink-0" onClick={handleSaveRoleSettings} disabled={savingRolePerms}>
+                      <Save className="size-4 mr-1" />
+                      {savingRolePerms ? "保存中..." : "権限を保存"}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* カスタムロール管理 */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">ロール一覧</p>
+                    {canManageMembers && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => { setEditingRole(null); setNewRoleName(""); setNewRoleBase("employee"); setNewRoleColor("slate"); setAddRoleOpen(true); }}>
+                        <UserPlus className="h-3.5 w-3.5" />
+                        ロールを追加
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["owner", "hq_admin", "contractor_admin", "employee"] as Role[]).map((role) => {
+                      const colors: Record<Role, string> = {
+                        owner: "border-amber-200 bg-amber-50 text-amber-800",
+                        hq_admin: "border-blue-200 bg-blue-50 text-blue-800",
+                        contractor_admin: "border-emerald-200 bg-emerald-50 text-emerald-800",
+                        employee: "border-slate-200 bg-slate-50 text-slate-800",
+                      };
+                      return (
+                        <div key={role} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colors[role]}`}>
+                          {ROLE_LABELS[role]}
+                          <span className="text-[10px] opacity-60">（システム）</span>
+                        </div>
+                      );
+                    })}
+                    {customRoles.map((cr) => {
+                      const colorMap: Record<string, string> = {
+                        slate: "border-slate-200 bg-slate-50 text-slate-700",
+                        blue: "border-blue-200 bg-blue-50 text-blue-700",
+                        emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        amber: "border-amber-200 bg-amber-50 text-amber-700",
+                        rose: "border-rose-200 bg-rose-50 text-rose-700",
+                        violet: "border-violet-200 bg-violet-50 text-violet-700",
+                      };
+                      return (
+                        <div key={cr.id} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colorMap[cr.color] ?? colorMap.slate}`}>
+                          {cr.name}
+                          <span className="text-[10px] opacity-60">({ROLE_LABELS[cr.base_role as Role]})</span>
+                          {canManageMembers && (
+                            <button className="ml-0.5 hover:text-foreground opacity-60 hover:opacity-100"
+                              onClick={() => { setEditingRole(cr); setNewRoleName(cr.name); setNewRoleBase(cr.base_role); setNewRoleColor(cr.color); setAddRoleOpen(true); }}>✎</button>
+                          )}
+                          {canManageMembers && (
+                            <button className="hover:text-destructive opacity-60 hover:opacity-100" onClick={() => handleDeleteCustomRole(cr.id)}>×</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 権限マトリクス（トグル式） */}
+                {(() => {
+                  const systemRoles: Role[] = ["hq_admin", "contractor_admin", "employee"];
+                  const allCols: Array<{ key: string; label: string; isOwner?: boolean; color: string }> = [
+                    { key: "owner", label: "オーナー", isOwner: true, color: "bg-amber-100 text-amber-800" },
+                    { key: "hq_admin", label: "本部管理者", color: "bg-blue-100 text-blue-800" },
+                    { key: "contractor_admin", label: "施工店管理者", color: "bg-emerald-100 text-emerald-800" },
+                    { key: "employee", label: "社員", color: "bg-slate-100 text-slate-800" },
+                    ...customRoles.map((cr) => {
+                      const colorMap: Record<string, string> = {
+                        slate: "bg-slate-100 text-slate-700",
+                        blue: "bg-blue-100 text-blue-700",
+                        emerald: "bg-emerald-100 text-emerald-700",
+                        amber: "bg-amber-100 text-amber-700",
+                        rose: "bg-rose-100 text-rose-700",
+                        violet: "bg-violet-100 text-violet-700",
+                      };
+                      return { key: cr.id, label: cr.name, color: colorMap[cr.color] ?? colorMap.slate };
+                    }),
+                  ];
+                  const featureRows = [
+                    ...NAV_GROUPS.flatMap((g, gi) =>
+                      g.items.map((item, idx) => ({ key: item.key, label: item.label, group: idx === 0 ? g.label : null, groupStart: idx === 0, gi }))
+                    ),
+                    { key: "settings_member", label: "メンバー管理", group: "設定・管理", groupStart: true, gi: 99 },
+                    { key: "settings_company", label: "会社情報編集", group: null, groupStart: false, gi: 99 },
+                    { key: "settings_attendance", label: "勤怠設定", group: null, groupStart: false, gi: 99 },
+                    { key: "settings_workflow", label: "ワークフロー設定", group: null, groupStart: false, gi: 99 },
+                    { key: "settings_crm", label: "CRM/職人マスタ", group: null, groupStart: false, gi: 99 },
+                  ];
+                  return (
+                    <div className="overflow-x-auto rounded-lg border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 text-xs text-muted-foreground">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium sticky left-0 bg-muted/40 z-10">機能</th>
+                            {allCols.map((col) => (
+                              <th key={col.key} className="text-center px-1.5 py-2 font-medium min-w-[80px]">
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${col.color}`}>{col.label}</span>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {featureRows.map((row) => (
+                            <tr key={row.key} className={`border-t ${row.groupStart ? "border-t-2 border-border" : ""} hover:bg-muted/20`}>
+                              <td className="px-3 py-1.5 sticky left-0 bg-background z-10 min-w-[160px]">
+                                {row.group && (
+                                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-0.5">{row.group}</span>
+                                )}
+                                <span className="text-sm">{row.label}</span>
+                              </td>
+                              {allCols.map((col) => {
+                                const has = (rolePerms[row.key] ?? []).includes(col.key) || col.isOwner;
+                                const editable = !col.isOwner && canManageMembers;
+                                return (
+                                  <td key={col.key} className="text-center px-1.5 py-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => editable && togglePerm(row.key, col.key)}
+                                      disabled={!editable}
+                                      title={editable ? (has ? "クリックして無効化" : "クリックして有効化") : "変更不可"}
+                                      className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all duration-150
+                                        ${has
+                                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                                          : "bg-muted text-muted-foreground hover:bg-muted/80"}
+                                        ${!editable ? "cursor-default" : "cursor-pointer"}
+                                      `}
+                                    >
+                                      {has ? "✓" : "—"}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                <p className="text-xs text-muted-foreground mt-2">
+                  ✓ = アクセス可能（クリックで切替）　— = アクセス不可　オーナーは常にフルアクセス
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* カスタムロール追加/編集 ダイアログ */}
+            <Dialog open={addRoleOpen} onOpenChange={(o) => { if (!o) { setAddRoleOpen(false); setEditingRole(null); } }}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>{editingRole ? "ロールを編集" : "カスタムロールを追加"}</DialogTitle>
+                  <DialogDescription>
+                    カスタムロールはシステムロールをベースに作られます。メンバー招待時に選択できます。
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">ロール名 *</Label>
+                    <Input value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} placeholder="例：現場監督" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">ベースロール（権限の基準）</Label>
+                    <Select value={newRoleBase} onValueChange={(v) => setNewRoleBase(v as CustomRole["base_role"])}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hq_admin">本部管理者</SelectItem>
+                        <SelectItem value="contractor_admin">施工店管理者</SelectItem>
+                        <SelectItem value="employee">社員</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">初期権限をベースロールからコピーします。マトリクスで個別調整できます。</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">カラー</Label>
+                    <div className="flex gap-1.5">
+                      {(["slate", "blue", "emerald", "amber", "rose", "violet"] as const).map((c) => {
+                        const bg: Record<string, string> = { slate: "bg-slate-400", blue: "bg-blue-500", emerald: "bg-emerald-500", amber: "bg-amber-500", rose: "bg-rose-500", violet: "bg-violet-500" };
+                        return (
+                          <button key={c} type="button" onClick={() => setNewRoleColor(c)}
+                            className={`w-6 h-6 rounded-full ${bg[c]} ${newRoleColor === c ? "ring-2 ring-offset-1 ring-foreground" : ""}`} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setAddRoleOpen(false); setEditingRole(null); }}>キャンセル</Button>
+                  <Button onClick={handleAddOrUpdateCustomRole} disabled={!newRoleName.trim()}>
+                    {editingRole ? "更新" : "追加"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
         )}
 
@@ -694,7 +1073,9 @@ export default function SettingsPage() {
             <DialogHeader>
               <DialogTitle>メンバーを招待</DialogTitle>
             <DialogDescription>
-              招待メールを送信します。受け取ったメンバーはリンクをクリックしてパスワードを設定し、メール＋パスワードまたはGoogleアカウントでログインできます。
+              {invitePassword.trim()
+                ? "仮パスワードを設定するとメールなしで即時アカウント作成します。パスワードは本人に直接共有してください。"
+                : "招待メールを送信します。受け取ったメンバーはリンクをクリックしてパスワードを設定し、ログインできます。"}
             </DialogDescription>
             </DialogHeader>
 
@@ -764,9 +1145,15 @@ export default function SettingsPage() {
                         {showInvitePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      設定した場合、招待リンクなしで即時ログイン可能になります。パスワードは別途本人に共有してください。
-                    </p>
+                    {invitePassword.trim() ? (
+                      <p className="text-[11px] text-amber-600 font-medium">
+                        ⚠ 招待メールは送信されません。パスワードを本人に直接お伝えください。
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        空欄のままにすると招待リンクをメール送信します。パスワードを入力した場合はメールなしで即時アカウント作成。
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">ロール *</Label>
@@ -893,6 +1280,165 @@ export default function SettingsPage() {
             <CraftsmenMasterTab />
           </TabsContent>
         )}
+
+        {/* ── メール署名 ─── */}
+        <TabsContent value="mail_signature" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Mail className="h-4 w-4 text-primary" />
+                メール署名
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                メール作成時に本文末尾へ自動で挿入される署名テンプレートです。
+              </p>
+              <div className="space-y-2">
+                <Label>署名</Label>
+                <Textarea
+                  rows={6}
+                  value={signature}
+                  onChange={(e) => setSignature(e.target.value)}
+                  placeholder={`────────────────────\n株式会社〇〇\n営業部　山田 太郎\nTel: 03-XXXX-XXXX\nMail: yamada@example.com\n────────────────────`}
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveSignature} disabled={savingSignature}>
+                  <Save className="size-4 mr-1" />
+                  {savingSignature ? "保存中..." : "署名を保存"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── 勤怠設定 ─── */}
+        {canManageMembers && (
+          <TabsContent value="attendance_settings" className="mt-4 space-y-4">
+
+            {/* 就業時間 */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">就業時間</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>始業時刻</Label>
+                    <Input
+                      type="time"
+                      value={attStartTime}
+                      onChange={(e) => setAttStartTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>終業時刻</Label>
+                    <Input
+                      type="time"
+                      value={attEndTime}
+                      onChange={(e) => setAttEndTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>休憩時間（分）</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={480}
+                      step={15}
+                      value={attBreakMinutes}
+                      onChange={(e) => setAttBreakMinutes(e.target.value)}
+                      placeholder="60"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  所定労働時間：{(() => {
+                    const start = attStartTime.split(":").map(Number);
+                    const end = attEndTime.split(":").map(Number);
+                    const total = (end[0] * 60 + end[1]) - (start[0] * 60 + start[1]) - Number(attBreakMinutes || 0);
+                    return total > 0 ? `${Math.floor(total / 60)}時間${total % 60 > 0 ? `${total % 60}分` : ""}` : "-";
+                  })()}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 休暇区分 */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">休暇区分</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {attLeaveTypes.map((lt) => (
+                    <span
+                      key={lt}
+                      className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1 text-sm"
+                    >
+                      {lt}
+                      <button
+                        type="button"
+                        onClick={() => setAttLeaveTypes((prev) => prev.filter((x) => x !== lt))}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={attLeaveInput}
+                    onChange={(e) => setAttLeaveInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && attLeaveInput.trim()) {
+                        e.preventDefault();
+                        if (!attLeaveTypes.includes(attLeaveInput.trim())) {
+                          setAttLeaveTypes((prev) => [...prev, attLeaveInput.trim()]);
+                        }
+                        setAttLeaveInput("");
+                      }
+                    }}
+                    placeholder="区分名を入力して Enter"
+                    className="max-w-xs"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (attLeaveInput.trim() && !attLeaveTypes.includes(attLeaveInput.trim())) {
+                        setAttLeaveTypes((prev) => [...prev, attLeaveInput.trim()]);
+                        setAttLeaveInput("");
+                      }
+                    }}
+                  >
+                    追加
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">勤怠入力時の区分選択肢として表示されます</p>
+              </CardContent>
+            </Card>
+
+
+            <div className="flex justify-start">
+              <Button onClick={handleSaveAttendance} disabled={savingAttendance}>
+                <Save className="size-4 mr-1" />
+                {savingAttendance ? "保存中..." : "保存"}
+              </Button>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* ── ワークフロー種別 ─── */}
+        {canManageMembers && (
+          <TabsContent value="workflow_types" className="mt-4">
+            <WorkflowTypesTab />
+          </TabsContent>
+        )}
+
       </Tabs>
     </div>
   );

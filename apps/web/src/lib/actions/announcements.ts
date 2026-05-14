@@ -107,6 +107,29 @@ export async function createAnnouncement(input: {
   return data as Announcement;
 }
 
+export async function updateAnnouncement(id: string, input: {
+  title?: string;
+  body?: string;
+  pinned?: boolean;
+  is_urgent?: boolean;
+  target_type?: Announcement["target_type"];
+  target_roles?: string[];
+  due_date?: string | null;
+}) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("announcements")
+    .update(input)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteAnnouncement(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("announcements").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function addAnnouncementComment(announcementId: string, message: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

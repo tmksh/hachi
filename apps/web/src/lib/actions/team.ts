@@ -119,7 +119,12 @@ export async function inviteTeamMember(input: {
       email_confirm: true,
       user_metadata: userMeta,
     });
-    if (error) throw error;
+    if (error) {
+      if ((error as { code?: string }).code === "email_exists") {
+        throw new Error("このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。");
+      }
+      throw new Error(error.message);
+    }
 
     const userId = data.user.id;
     const { data: existing } = await admin
@@ -147,7 +152,12 @@ export async function inviteTeamMember(input: {
         data: userMeta,
       },
     );
-    if (error) throw error;
+    if (error) {
+      if ((error as { code?: string }).code === "email_exists") {
+        throw new Error("このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。");
+      }
+      throw new Error(error.message);
+    }
   }
 }
 
@@ -172,7 +182,8 @@ export async function updateTeamMemberRole(userId: string, role: TeamRole) {
   if (!target || target.company_id !== companyId) {
     throw new Error("対象メンバーが自社に属していません");
   }
-  if (target.role === "owner") {
+  // owner は他の owner のロールを降格できる（重複オーナー解消のため）
+  if (target.role === "owner" && actorRole !== "owner") {
     throw new Error("オーナーのロールは変更できません");
   }
   if (actorRole === "hq_admin" && target.role === "hq_admin") {
@@ -206,14 +217,46 @@ export async function removeTeamMember(userId: string) {
   if (!target || target.company_id !== companyId) {
     throw new Error("対象メンバーが自社に属していません");
   }
-  if (target.role === "owner") {
-    throw new Error("オーナーは削除できません");
+  // owner は他の owner も削除できる（重複オーナー解消のため）
+  if (target.role === "owner" && actorRole !== "owner") {
+    throw new Error("オーナーの削除は別のオーナーのみ行えます");
   }
   if (actorRole === "hq_admin" && target.role === "hq_admin") {
     throw new Error("本部管理者は他の本部管理者を削除できません");
   }
 
-  // CASCADE で profiles も連鎖削除される
+  // FK 制約違反を回避するため、削除前に関連レコードをクリーンアップ
+  await Promise.all([
+    // nullable FK → NULL にセット
+    admin.from("customers").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("deals").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("deal_activities").update({ performed_by: null }).eq("performed_by", userId),
+    admin.from("todos").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("estimates").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("estimate_documents").update({ created_by: null }).eq("created_by", userId),
+    admin.from("contracts").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("constructions").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("construction_tasks").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("contractor_orders").update({ approved_by: null }).eq("approved_by", userId),
+    admin.from("attendance_entries").update({ modified_by: null }).eq("modified_by", userId),
+    admin.from("calendar_events").update({ assigned_to: null }).eq("assigned_to", userId),
+    admin.from("calendar_events").update({ created_by: null }).eq("created_by", userId),
+    admin.from("documents").update({ uploaded_by: null }).eq("uploaded_by", userId),
+    admin.from("invoices").update({ created_by: null }).eq("created_by", userId),
+    admin.from("budgets").update({ created_by: null }).eq("created_by", userId),
+    // ビジネスレコードの NOT NULL FK → null にセット（nullable 化前の互換）
+    admin.from("announcements").update({ author_id: null }).eq("author_id", userId),
+    admin.from("workflow_requests").update({ requester_id: null }).eq("requester_id", userId),
+    admin.from("workflow_steps").update({ approver_id: null }).eq("approver_id", userId),
+    // ユーザー固有レコードは削除
+    admin.from("attendance_comments").delete().eq("user_id", userId),
+    admin.from("announcement_reads").delete().eq("user_id", userId),
+    admin.from("announcement_comments").delete().eq("user_id", userId),
+    admin.from("workflow_comments").delete().eq("user_id", userId),
+    admin.from("email_accounts").delete().eq("user_id", userId),
+  ]);
+
+  // auth.users 削除 → profiles も CASCADE で削除される
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) throw error;
 }

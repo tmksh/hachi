@@ -450,7 +450,8 @@ export type Invoice = {
   subtotal: number;
   tax: number;
   total: number;
-  status: 'draft' | 'sent' | 'paid';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled';
+  notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

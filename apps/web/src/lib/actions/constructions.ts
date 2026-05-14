@@ -223,6 +223,14 @@ export async function createContractorOrder(input: {
   amount: number;
   craftsmanId?: string;
   notes?: string;
+  orderDate?: string;
+  startDate?: string;
+  endDate?: string;
+  completionDate?: string;
+  paymentDate?: string;
+  paymentCount?: string;
+  workContent?: string;
+  specialNotes?: string;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -240,6 +248,14 @@ export async function createContractorOrder(input: {
       amount: input.amount,
       status: "draft",
       notes: input.notes || null,
+      order_date: input.orderDate || null,
+      start_date: input.startDate || null,
+      end_date: input.endDate || null,
+      completion_date: input.completionDate || null,
+      payment_date: input.paymentDate || null,
+      payment_count: input.paymentCount || "1回",
+      work_content: input.workContent || null,
+      special_notes: input.specialNotes || null,
     })
     .select("*, craftsman:craftsmen(id, name)")
     .single();

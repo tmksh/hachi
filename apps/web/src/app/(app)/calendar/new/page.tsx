@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ async function getGoogleToken(): Promise<string | null> {
   }
 }
 
-export default function CalendarNewPage() {
+function CalendarNewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialDate = searchParams.get("date") ?? "";
@@ -186,5 +186,13 @@ export default function CalendarNewPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function CalendarNewPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6 text-sm text-muted-foreground">読み込み中...</div>}>
+      <CalendarNewPageContent />
+    </Suspense>
   );
 }

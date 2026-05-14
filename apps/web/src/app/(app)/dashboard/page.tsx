@@ -2,12 +2,13 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWidgets } from "@/hooks/use-widgets";
+import { useKpiColor } from "@/hooks/use-kpi-color";
 import { WidgetCustomizer } from "@/components/shared/widget-customizer";
 import {
   LogIn,
@@ -27,6 +28,55 @@ import { AnalogClock } from "@/components/shared/analog-clock";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
+function adjustHex(hex: string, factor: number): string {
+  const h = hex.replace("#", "");
+  const parse = (s: string) => Math.min(255, Math.max(0, Math.round(parseInt(s, 16) * factor)));
+  const r = parse(h.slice(0, 2));
+  const g = parse(h.slice(2, 4));
+  const b = parse(h.slice(4, 6));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
+function kpiBtnStyle(color: string): CSSProperties {
+  const light = adjustHex(color, 1.25);
+  const dark  = adjustHex(color, 0.55);
+  return { backgroundImage: `linear-gradient(to bottom, ${light}, ${dark})` };
+}
+
+const KPI_PRESETS = [
+  "#1a7a52", "#34d399", "#38bdf8", "#818cf8",
+  "#c084fc", "#fb7185", "#fb923c", "#fbbf24",
+  "#2dd4bf", "#60a5fa",
+];
+
+function KpiColorBar({ color, onChange }: { color: string; onChange: (c: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="hidden sm:flex items-center gap-1.5 bg-background/60 border border-border/50 rounded-lg px-2 py-1">
+      {KPI_PRESETS.map((c) => (
+        <button
+          key={c}
+          title={c}
+          onClick={() => onChange(c)}
+          className={`h-5 w-5 rounded-full transition-all duration-150 hover:scale-110 active:scale-95 ${color === c ? "ring-2 ring-offset-1 ring-foreground/40 scale-110" : ""}`}
+          style={{ background: c }}
+        />
+      ))}
+      {/* カスタムピッカー */}
+      <button
+        title="カスタムカラー"
+        onClick={() => inputRef.current?.click()}
+        className={`h-5 w-5 rounded-full bg-gradient-to-br from-pink-300 via-purple-300 to-blue-300 flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${!KPI_PRESETS.includes(color) ? "ring-2 ring-offset-1 ring-foreground/40 scale-110" : ""}`}
+      >
+        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 text-white drop-shadow" fill="currentColor">
+          <path d="M10.5 1.5a1.5 1.5 0 0 0-2.12 0L2.5 7.38A2 2 0 0 0 2 8.8V10h1.2a2 2 0 0 0 1.42-.59l5.88-5.88a1.5 1.5 0 0 0 0-2.03z" />
+        </svg>
+      </button>
+      <input ref={inputRef} type="color" className="sr-only" value={color} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
   if (n >= 10_000) return `¥${(n / 10_000).toFixed(0)}万`;
@@ -38,6 +88,7 @@ export default function DashboardPage() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const { widgets, hydrated, toggleVisible, moveUp, moveDown, reset } = useWidgets();
+  const { color: kpiColor, setColor: setKpiColor, reset: resetKpiColor } = useKpiColor();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -91,13 +142,19 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <WidgetCustomizer
-          widgets={widgets}
-          onToggle={toggleVisible}
-          onMoveUp={moveUp}
-          onMoveDown={moveDown}
-          onReset={reset}
-        />
+        <div className="flex items-center gap-2">
+          {/* KPI カラースウォッチ（ヘッダー行） */}
+          <KpiColorBar color={kpiColor} onChange={setKpiColor} />
+          <WidgetCustomizer
+            widgets={widgets}
+            onToggle={toggleVisible}
+            onMoveUp={moveUp}
+            onMoveDown={moveDown}
+            onReset={() => { reset(); resetKpiColor(); }}
+            kpiColor={kpiColor}
+            onKpiColorChange={setKpiColor}
+          />
+        </div>
       </div>
 
       {/* ── Row 1: KPI cards ────────────────────────────────── */}
@@ -138,7 +195,10 @@ export default function DashboardPage() {
                   <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                      <div className="neumorph-icon h-8 w-8">
+                      <div
+                        className="neumorph-icon h-8 w-8"
+                        style={{ background: kpiColor }}
+                      >
                         <kpi.icon className="h-4 w-4 text-white" />
                       </div>
                     </div>
@@ -192,7 +252,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" onClick={handleClockIn} disabled={clockedIn} className="gap-1.5 h-9 neumorph-btn-primary">
+                <Button size="sm" onClick={handleClockIn} disabled={clockedIn} className="gap-1.5 h-9 neumorph-btn-primary" style={kpiBtnStyle(kpiColor)}>
                   <LogIn className="h-3.5 w-3.5" />出勤
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleClockOut} disabled={!clockedIn} className="gap-1.5 h-9 neumorph-btn">

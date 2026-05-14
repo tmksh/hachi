@@ -135,9 +135,122 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
   }
 }
 
+export async function remandWorkflowStep(stepId: string, comment?: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workflow_steps")
+    .update({ status: "rejected", comment: comment || null, decided_at: new Date().toISOString() })
+    .eq("id", stepId);
+  if (error) throw error;
+
+  const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
+  if (step) {
+    await supabase
+      .from("workflow_requests")
+      .update({ status: "submitted", decided_at: null })
+      .eq("id", step.request_id);
+    // 後続ステップをリセット
+    await supabase
+      .from("workflow_steps")
+      .update({ status: "pending", decided_at: null, comment: null })
+      .eq("request_id", step.request_id)
+      .gt("step_order",
+        (await supabase.from("workflow_steps").select("step_order").eq("id", stepId).single()).data?.step_order ?? 0
+      );
+  }
+}
+
+export async function addWorkflowComment(requestId: string, body: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { error } = await supabase.from("workflow_comments").insert({
+    company_id: profile.company_id,
+    request_id: requestId,
+    user_id: user.id,
+    body,
+  });
+  if (error) throw error;
+}
+
 export async function getWorkflowTypes() {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("workflow_types").select("*").order("created_at");
+  const { data, error } = await supabase
+    .from("workflow_types")
+    .select("*")
+    .order("sort_order")
+    .order("created_at");
   if (error) throw error;
   return data;
 }
+
+export async function createWorkflowType(input: {
+  key: string;
+  name: string;
+  description?: string;
+  fields_schema?: FieldDef[];
+  approval_route?: ApprovalStep[];
+  deadline_days?: number;
+  sort_order?: number;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data, error } = await supabase
+    .from("workflow_types")
+    .insert({
+      company_id: profile.company_id,
+      key: input.key || input.name,
+      name: input.name,
+      description: input.description || null,
+      fields_schema: input.fields_schema || [],
+      approval_route: input.approval_route || [],
+      deadline_days: input.deadline_days || null,
+      sort_order: input.sort_order || 0,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWorkflowType(id: string, input: {
+  name?: string;
+  description?: string;
+  fields_schema?: FieldDef[];
+  approval_route?: ApprovalStep[];
+  deadline_days?: number;
+  sort_order?: number;
+}) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workflow_types")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteWorkflowType(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("workflow_types").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export type FieldDef = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "textarea" | "select";
+  required?: boolean;
+  options?: string[];
+};
+
+export type ApprovalStep = {
+  step_order: number;
+  approver_id: string;
+};

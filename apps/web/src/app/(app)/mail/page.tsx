@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -9,12 +9,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Star, Pencil, RefreshCw, Mail, AlertCircle, CheckCircle2, LogOut } from "lucide-react";
+import {
+  Star,
+  Pencil,
+  RefreshCw,
+  Mail,
+  AlertCircle,
+  CheckCircle2,
+  LogOut,
+  Plus,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
@@ -22,36 +32,61 @@ import {
   getEmailThread,
   markThreadRead,
   toggleThreadStar,
-  getGmailAccount,
-  disconnectGmailAccount,
+  getEmailAccounts,
+  disconnectEmailAccount,
+  type EmailAccount,
+  type MailProvider,
 } from "@/lib/actions/mail";
 import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mock";
+import { ConnectMailDialog } from "@/components/mail/connect-mail-dialog";
 
 type Thread = Awaited<ReturnType<typeof getEmailThreads>>[number];
 type ThreadDetail = Awaited<ReturnType<typeof getEmailThread>>;
-type GmailAccount = Awaited<ReturnType<typeof getGmailAccount>>;
 
 const isMockId = (id: string) => id.startsWith("mock_");
 
-export default function MailPage() {
+const PROVIDER_LABEL: Record<MailProvider, string> = {
+  gmail: "Gmail",
+  imap: "Xserver / IMAP",
+  forward: "手動フォワード",
+};
+
+const PROVIDER_COLOR: Record<MailProvider, string> = {
+  gmail: "bg-red-100 text-red-700",
+  imap: "bg-emerald-100 text-emerald-700",
+  forward: "bg-slate-100 text-slate-700",
+};
+
+const SYNC_ENDPOINT: Record<MailProvider, string | null> = {
+  gmail: "/api/gmail/sync",
+  imap: "/api/imap/sync",
+  forward: null,
+};
+
+function MailPageContent() {
   const searchParams = useSearchParams();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [selected, setSelected] = useState<ThreadDetail | null>(null);
-  const [gmailAccount, setGmailAccount] = useState<GmailAccount>(null);
+  const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [useMock, setUseMock] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
 
   useEffect(() => {
-    const connected = searchParams.get("gmail_connected");
-    const error = searchParams.get("gmail_error");
-    if (connected === "1") toast.success("Gmail を連携しました");
+    const connected = searchParams.get("mail_connected") ?? searchParams.get("gmail_connected");
+    const error = searchParams.get("mail_error") ?? searchParams.get("gmail_error");
+    if (connected) {
+      const labels: Record<string, string> = { "1": "Gmail", gmail: "Gmail" };
+      toast.success(`${labels[connected] ?? "メールサービス"} を連携しました`);
+    }
     if (error) {
       const msgs: Record<string, string> = {
         access_denied: "アクセスが拒否されました",
         token_exchange: "認証トークンの取得に失敗しました",
         db_error: "アカウント情報の保存に失敗しました",
         unknown: "不明なエラーが発生しました",
+        profile_not_found: "プロフィールが見つかりません",
       };
       toast.error(msgs[error] ?? `エラー: ${error}`);
     }
@@ -60,11 +95,11 @@ export default function MailPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [account, data] = await Promise.all([
-        getGmailAccount(),
+      const [accs, data] = await Promise.all([
+        getEmailAccounts(),
         getEmailThreads().catch(() => []),
       ]);
-      setGmailAccount(account);
+      setAccounts(accs);
       if (!data || data.length === 0) {
         setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
         setUseMock(true);
@@ -84,10 +119,16 @@ export default function MailPage() {
     loadData();
   }, [loadData]);
 
-  const handleSync = async () => {
+  const handleSync = async (provider?: MailProvider) => {
+    const targetProvider = provider ?? accounts[0]?.provider;
+    const endpoint = targetProvider ? SYNC_ENDPOINT[targetProvider] : null;
+    if (!endpoint) {
+      toast.info("手動フォワード方式はメールサーバー側で転送設定を行ってください");
+      return;
+    }
     setSyncing(true);
     try {
-      const res = await fetch("/api/gmail/sync", { method: "POST" });
+      const res = await fetch(endpoint, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "同期に失敗しました");
@@ -102,14 +143,12 @@ export default function MailPage() {
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!confirm("Gmail の連携を解除しますか？")) return;
+  const handleDisconnect = async (provider: MailProvider) => {
+    if (!confirm(`${PROVIDER_LABEL[provider]} の連携を解除しますか？`)) return;
     try {
-      await disconnectGmailAccount();
-      toast.success("Gmail の連携を解除しました");
-      setGmailAccount(null);
-      setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
-      setUseMock(true);
+      await disconnectEmailAccount(provider);
+      toast.success(`${PROVIDER_LABEL[provider]} の連携を解除しました`);
+      await loadData();
       setSelected(null);
     } catch {
       toast.error("連携解除に失敗しました");
@@ -148,58 +187,80 @@ export default function MailPage() {
     } catch {}
   };
 
+  const hasAccounts = accounts.length > 0;
+
   return (
     <div className="p-4 md:p-6 space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">メール</h1>
         <div className="flex items-center gap-2">
-          {gmailAccount ? (
-            <>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" className="gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span className="hidden md:inline max-w-[160px] truncate">
-                      {gmailAccount.email_address}
-                    </span>
-                    <span className="md:hidden">Gmail</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive gap-2"
-                    onClick={handleDisconnect}
+          {accounts.map((acc) => (
+            <DropdownMenu key={acc.id}>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span className="hidden md:inline max-w-[140px] truncate">
+                    {acc.provider === "forward" ? "手動フォワード" : acc.email_address}
+                  </span>
+                  <Badge
+                    variant="secondary"
+                    className={`text-[10px] px-1.5 py-0 ml-0.5 ${PROVIDER_COLOR[acc.provider]}`}
                   >
-                    <LogOut className="h-4 w-4" />
-                    連携を解除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSync}
-                disabled={syncing}
-                className="gap-1.5"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-                {syncing ? "同期中..." : "同期"}
-              </Button>
-            </>
-          ) : (
+                    {PROVIDER_LABEL[acc.provider]}
+                  </Badge>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {acc.provider !== "forward" && (
+                  <>
+                    <DropdownMenuItem
+                      className="gap-2 text-sm"
+                      onClick={() => handleSync(acc.provider)}
+                      disabled={syncing}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+                      同期
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive gap-2"
+                  onClick={() => handleDisconnect(acc.provider)}
+                >
+                  <LogOut className="h-4 w-4" />
+                  連携を解除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ))}
+
+          {hasAccounts && accounts.some((a) => a.provider !== "forward") && (
             <Button
               size="sm"
               variant="outline"
-              asChild
-              className="gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50"
+              onClick={() => handleSync()}
+              disabled={syncing}
+              className="gap-1.5"
             >
-              <a href="/api/gmail/auth">
-                <Mail className="h-4 w-4" />
-                Gmail を連携
-              </a>
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "同期中..." : "同期"}
             </Button>
           )}
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setConnectOpen(true)}
+            className="gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50"
+          >
+            {hasAccounts ? (
+              <><Plus className="h-4 w-4" />追加</>
+            ) : (
+              <><Mail className="h-4 w-4" />メールを連携</>
+            )}
+          </Button>
+
           <Link href="/mail/compose">
             <Button size="sm" className="gap-1.5">
               <Pencil className="h-4 w-4" />
@@ -209,28 +270,22 @@ export default function MailPage() {
         </div>
       </div>
 
-      {/* No account banner */}
-      {!gmailAccount && !loading && (
+      {!hasAccounts && !loading && (
         <div className="flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>
-            Gmail が未連携です。「Gmail を連携」ボタンから Google アカウントを接続すると、
-            実際のメールが表示されます。
+            メールサービスが未連携です。「メールを連携」ボタンから Gmail・Xserver 等を接続してください。
           </span>
         </div>
       )}
 
-      {/* Mock data notice */}
-      {useMock && gmailAccount && (
+      {useMock && hasAccounts && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           <RefreshCw className="h-4 w-4 shrink-0" />
-          <span>
-            Gmail が連携されました。「同期」ボタンを押してメールを取得してください。
-          </span>
+          <span>連携しました。「同期」ボタンを押してメールを取得してください。</span>
         </div>
       )}
 
-      {/* Mail grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
         <Card className="overflow-hidden">
           <CardContent className="p-0">
@@ -260,7 +315,9 @@ export default function MailPage() {
                     >
                       <Star
                         className={`h-4 w-4 ${
-                          t.is_starred ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+                          t.is_starred
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-muted-foreground"
                         }`}
                       />
                     </button>
@@ -270,7 +327,10 @@ export default function MailPage() {
                           {t.subject || "(件名なし)"}
                         </p>
                         {!t.is_read && (
-                          <Badge variant="default" className="h-1.5 w-1.5 p-0 rounded-full bg-primary shrink-0" />
+                          <Badge
+                            variant="default"
+                            className="h-1.5 w-1.5 p-0 rounded-full bg-primary shrink-0"
+                          />
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{t.snippet}</p>
@@ -325,6 +385,27 @@ export default function MailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConnectMailDialog
+        open={connectOpen}
+        onOpenChange={setConnectOpen}
+        onConnected={loadData}
+      />
     </div>
+  );
+}
+
+export default function MailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 md:p-6 space-y-4">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-[600px]" />
+        </div>
+      }
+    >
+      <MailPageContent />
+    </Suspense>
   );
 }

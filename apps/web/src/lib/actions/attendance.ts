@@ -102,6 +102,15 @@ export async function rejectAttendance(id: string) {
   if (error) throw error;
 }
 
+export async function updateLeaveType(id: string, leaveType: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("attendance_entries")
+    .update({ leave_type: leaveType, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function getTodayAttendance() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

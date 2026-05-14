@@ -35,6 +35,11 @@ import {
   updateContractorOrder,
   seedContractorOrders,
 } from "@/lib/actions/constructions";
+import { getCraftsmen } from "@/lib/actions/craftsmen";
+import type { Craftsman } from "@/lib/database.types";
+import { createInvoiceFromConstruction } from "@/lib/actions/invoices";
+import { useRouter } from "next/navigation";
+import { Receipt } from "lucide-react";
 import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
@@ -244,13 +249,47 @@ const ORDER_STATUS_MAP = {
   rejected:  { label: "差戻し",   cls: "bg-red-100 text-red-600" },
 } as const;
 
-function OrdersTab({ constructionId, initialOrders }: { constructionId: string; initialOrders: Order[] }) {
+const PAYMENT_COUNT_OPTIONS = ["1回", "2回", "3回", "4回", "6回", "12回", "その他"];
+
+function OrdersTab({ constructionId, initialOrders, constructionStartDate, constructionEndDate }: {
+  constructionId: string;
+  initialOrders: Order[];
+  constructionStartDate?: string | null;
+  constructionEndDate?: string | null;
+}) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [dialog, setDialog] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: "", amount: "", craftsmanId: "", notes: "", status: "draft" });
+  const [craftsmen, setCraftsmen] = useState<Craftsman[]>([]);
+  const [form, setForm] = useState({
+    title: "",
+    amount: "",
+    craftsmanId: "",
+    notes: "",
+    orderDate: new Date().toISOString().split("T")[0],
+    startDate: constructionStartDate ?? "",
+    endDate: constructionEndDate ?? "",
+    completionDate: constructionEndDate ?? "",
+    paymentDate: "",
+    paymentCount: "1回",
+    workContent: "",
+    specialNotes: "",
+  });
   const [saving, setSaving] = useState(false);
+
+  const openDialog = () => {
+    setForm(f => ({
+      ...f,
+      startDate: constructionStartDate ?? "",
+      endDate: constructionEndDate ?? "",
+      completionDate: constructionEndDate ?? "",
+    }));
+    setDialog(true);
+    if (craftsmen.length === 0) {
+      getCraftsmen().then(setCraftsmen).catch(() => {});
+    }
+  };
 
   async function handleSeed() {
     setSeeding(true);
@@ -270,10 +309,31 @@ function OrdersTab({ constructionId, initialOrders }: { constructionId: string; 
         amount: Number(form.amount),
         craftsmanId: form.craftsmanId || undefined,
         notes: form.notes || undefined,
+        orderDate: form.orderDate || undefined,
+        startDate: form.startDate || undefined,
+        endDate: form.endDate || undefined,
+        completionDate: form.completionDate || undefined,
+        paymentDate: form.paymentDate || undefined,
+        paymentCount: form.paymentCount || undefined,
+        workContent: form.workContent || undefined,
+        specialNotes: form.specialNotes || undefined,
       });
       setOrders(prev => [created as Order, ...prev]);
       setDialog(false);
-      setForm({ title: "", amount: "", craftsmanId: "", notes: "", status: "draft" });
+      setForm({
+        title: "",
+        amount: "",
+        craftsmanId: "",
+        notes: "",
+        orderDate: new Date().toISOString().split("T")[0],
+        startDate: constructionStartDate ?? "",
+        endDate: constructionEndDate ?? "",
+        completionDate: constructionEndDate ?? "",
+        paymentDate: "",
+        paymentCount: "1回",
+        workContent: "",
+        specialNotes: "",
+      });
     } catch (e) { console.error(e); } finally { setSaving(false); }
   }
 
@@ -315,7 +375,7 @@ function OrdersTab({ constructionId, initialOrders }: { constructionId: string; 
               サンプルデータを追加
             </Button>
           )}
-          <Button size="sm" className="gap-1.5 text-xs" onClick={() => setDialog(true)}>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={openDialog}>
             <Plus className="h-3.5 w-3.5" />発注書を追加
           </Button>
         </div>
@@ -406,26 +466,108 @@ function OrdersTab({ constructionId, initialOrders }: { constructionId: string; 
 
       {/* 発注書追加ダイアログ */}
       <Dialog open={dialog} onOpenChange={setDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>発注書を追加</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>発注書を追加</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 space-y-4 py-2 pr-1">
+            {/* 件名 */}
             <div className="space-y-1.5">
               <Label>件名 <span className="text-red-500">*</span></Label>
               <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="例: 基礎工事 下請発注" autoFocus />
             </div>
+
+            {/* 発注先業者 */}
             <div className="space-y-1.5">
-              <Label>発注金額（円） <span className="text-red-500">*</span></Label>
+              <Label>発注先業者</Label>
+              <Select
+                value={form.craftsmanId || "__none__"}
+                onValueChange={v => setForm(f => ({ ...f, craftsmanId: v === "__none__" ? "" : v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="業者を選択" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">指定なし</SelectItem>
+                  {craftsmen.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 発注日 */}
+            <div className="space-y-1.5">
+              <Label>発注日</Label>
+              <Input type="date" value={form.orderDate} onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))} />
+            </div>
+
+            {/* 工期 */}
+            <div className="space-y-1.5">
+              <Label>工期（開始日〜終了日）</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+                <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+              </div>
+            </div>
+
+            {/* 完了予定日 / 支払予定日 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>完了予定日</Label>
+                <Input type="date" value={form.completionDate} onChange={e => setForm(f => ({ ...f, completionDate: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>支払予定日</Label>
+                <Input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} />
+              </div>
+            </div>
+
+            {/* 支払回数 */}
+            <div className="space-y-1.5">
+              <Label>支払回数</Label>
+              <Select value={form.paymentCount} onValueChange={v => setForm(f => ({ ...f, paymentCount: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_COUNT_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 工事内容 */}
+            <div className="space-y-1.5">
+              <Label>工事内容</Label>
+              <Textarea value={form.workContent} onChange={e => setForm(f => ({ ...f, workContent: e.target.value }))}
+                placeholder="発注する工事の内容を記入" rows={3} />
+            </div>
+
+            {/* 発注金額 */}
+            <div className="space-y-1.5">
+              <Label>発注金額（税抜・円） <span className="text-red-500">*</span></Label>
               <Input type="number" min={0} value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                 placeholder="1200000" />
+              {form.amount && (
+                <p className="text-xs text-muted-foreground">
+                  消費税（10%）: ¥{Math.round(Number(form.amount) * 0.1).toLocaleString()} &nbsp;／&nbsp;
+                  合計: ¥{Math.round(Number(form.amount) * 1.1).toLocaleString()}
+                </p>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label>備考</Label>
-              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="備考・注意事項" rows={2} />
+
+            {/* 備考 / 特記事項 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>備考</Label>
+                <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="備考・注意事項" rows={2} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>特記事項</Label>
+                <Textarea value={form.specialNotes} onChange={e => setForm(f => ({ ...f, specialNotes: e.target.value }))}
+                  placeholder="特記事項" rows={2} />
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 pt-2">
             <Button variant="outline" onClick={() => setDialog(false)}>キャンセル</Button>
             <Button onClick={handleAdd} disabled={saving || !form.title.trim() || !form.amount}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
@@ -458,10 +600,23 @@ type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[numbe
 
 export default function ConstructionDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const [data, setData] = useState<Detail | null>(null);
   const [docs, setDocs] = useState<ContractDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+
+  const handleCreateInvoice = async () => {
+    if (!id) return;
+    setCreatingInvoice(true);
+    try {
+      const invoice = await createInvoiceFromConstruction(id as string);
+      toast.success("請求書を作成しました");
+      router.push(`/invoices/${invoice.id}`);
+    } catch { toast.error("請求書の作成に失敗しました"); }
+    finally { setCreatingInvoice(false); }
+  };
 
   const reload = () => {
     if (id) getConstruction(id as string).then(setData).catch(() => {});
@@ -518,6 +673,15 @@ export default function ConstructionDetailPage() {
             <h1 className="text-xl font-semibold mt-1.5">{data.title}</h1>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={handleCreateInvoice}
+              disabled={creatingInvoice}
+            >
+              <Receipt className="h-4 w-4" />{creatingInvoice ? "作成中..." : "請求書を作成"}
+            </Button>
             {isCompletable && (
               <Button size="sm" variant="outline" className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50" onClick={() => setCompleteOpen(true)}>
                 <CheckCircle2 className="h-4 w-4" />完了にする
@@ -617,6 +781,8 @@ export default function ConstructionDetailPage() {
           <OrdersTab
             constructionId={id as string}
             initialOrders={data.orders as Order[]}
+            constructionStartDate={data.start_date}
+            constructionEndDate={data.end_date}
           />
         </TabsContent>
 

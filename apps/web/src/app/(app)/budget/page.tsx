@@ -1,14 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getBudgets } from "@/lib/actions/budgets";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { getBudgets, deleteBudget, updateBudget } from "@/lib/actions/budgets";
+import { BudgetEditDialog } from "@/components/budget/budget-edit-dialog";
 import { cn } from "@/lib/utils";
+import type { Budget, BudgetItem } from "@/lib/database.types";
 
 type BudgetRow = Awaited<ReturnType<typeof getBudgets>>[number];
 
@@ -18,12 +27,48 @@ function pct(n: number) { return `${n.toFixed(1)}%`; }
 export default function BudgetPage() {
   const [budgets, setBudgets] = useState<BudgetRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<(Budget & { items?: BudgetItem[] }) | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BudgetRow | null>(null);
 
-  useEffect(() => { getBudgets().then(setBudgets).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const load = useCallback(() => {
+    setLoading(true);
+    getBudgets().then(setBudgets).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleEdit = (b: BudgetRow) => {
+    setEditing(b as Budget & { items?: BudgetItem[] });
+    setDialogOpen(true);
+  };
+  const handleNew = () => { setEditing(null); setDialogOpen(true); };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteBudget(deleteTarget.id);
+      toast.success("削除しました");
+      setDeleteTarget(null);
+      load();
+    } catch { toast.error("削除に失敗しました"); }
+  };
+
+  const handleApprove = async (b: BudgetRow) => {
+    try {
+      await updateBudget(b.id, { status: b.status === "approved" ? "draft" : "approved" });
+      toast.success(b.status === "approved" ? "下書きに戻しました" : "承認しました");
+      load();
+    } catch { toast.error("失敗しました"); }
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <PageHeader title="予算管理" description="年度予算の策定と実績管理" />
+      <PageHeader title="予算管理" description="年度予算の策定と実績管理">
+        <Button size="sm" onClick={handleNew} className="gap-1.5">
+          <Plus className="h-4 w-4" />予算を策定
+        </Button>
+      </PageHeader>
       {loading ? (
         <div className="space-y-3">{Array.from({length:2}).map((_,i)=><Skeleton key={i} className="h-64" />)}</div>
       ) : budgets.length === 0 ? (
@@ -38,12 +83,25 @@ export default function BudgetPage() {
             const achieveRate = planRevenue > 0 ? Math.min((act.revenue / planRevenue) * 100, 100) : 0;
 
             return (
-              <Card key={b.id}>
+              <Card key={b.id} className="group">
                 <CardHeader className="pb-3 flex-row items-center justify-between">
-                  <CardTitle className="text-base">{b.fiscal_year}年度 {b.branch && `(${b.branch})`}</CardTitle>
-                  <Badge variant={b.status === "approved" ? "default" : "secondary"}>
-                    {b.status === "approved" ? "承認済" : "下書き"}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">{b.fiscal_year}年度 {b.branch && `(${b.branch})`}</CardTitle>
+                    <Badge variant={b.status === "approved" ? "default" : "secondary"}>
+                      {b.status === "approved" ? "承認済" : "下書き"}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button size="sm" variant="outline" onClick={() => handleApprove(b)} className="h-7 text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3" />{b.status === "approved" ? "下書きに戻す" : "承認"}
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-7" onClick={() => handleEdit(b)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => setDeleteTarget(b)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
                   {/* 実績サマリー */}
@@ -111,6 +169,26 @@ export default function BudgetPage() {
           })}
         </div>
       )}
+
+      <BudgetEditDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        existing={editing}
+        onSaved={load}
+      />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteTarget?.fiscal_year}年度の予算を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>関連する予算明細も削除されます。実績データには影響しません。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">削除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

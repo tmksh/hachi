@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, canAccessNavItem, ROLE_LABELS } from "@/lib/constants";
+import { useKpiColor } from "@/hooks/use-kpi-color";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -55,6 +57,15 @@ import { getNotifications, markAnnouncementAsRead, type Notification } from "@/l
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+
+/** hex カラーにアルファ値を付与した rgba 文字列を返す */
+function hexAlpha(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 const GROUP_ICONS = {
   dashboard: LayoutDashboard,
@@ -110,13 +121,21 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
     return group?.items.some((item) => isActive(item.href)) ?? false;
   };
 
+  const { user } = useAuth();
+  const { color: kpiColor } = useKpiColor();
+  const { canAccess: canAccessCustom } = useCompanyPermissions();
+
   /** ロールでフィルタされたナビグループ */
   const visibleGroups = NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter(
-        (item) => !profile?.role || canAccessNavItem(item.key, profile.role),
-      ),
+      items: group.items.filter((item) => {
+        if (!profile?.role) return true;
+        // システムロール制限チェック
+        if (!canAccessNavItem(item.key, profile.role)) return false;
+        // カスタム権限チェック（会社設定で上書き可能）
+        return canAccessCustom(item.key, [profile.role]);
+      }),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -124,7 +143,12 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
     setOpenGroup((prev) => (prev === key ? null : key));
   };
 
-  const { user } = useAuth();
+  /** アクティブな背景色（薄め） */
+  const activeBg  = hexAlpha(kpiColor, 0.12);
+  /** アクティブテキスト色 */
+  const activeClr = kpiColor;
+  /** アクティブ塗りつぶし（サブアイテム） */
+  const activeFill = kpiColor;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -173,15 +197,16 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                       className={cn(
                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
                         "hover:bg-accent/60",
-                        active ? "text-primary" : "text-muted-foreground"
                       )}
+                      style={active ? { color: activeClr } : undefined}
                     >
                       <span className="shrink-0 relative">
                         {Icon && <Icon className="h-5 w-5" />}
                         {active && (
                           <motion.div
                             layoutId="sidebar-active"
-                            className="absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-primary"
+                            className="absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full"
+                            style={{ backgroundColor: activeClr }}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                           />
                         )}
@@ -213,9 +238,12 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                                 className={cn(
                                   "flex items-center px-3 py-1.5 rounded-lg text-sm transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis",
                                   isActive(item.href)
-                                    ? "bg-primary text-primary-foreground font-medium shadow-sm"
+                                    ? "font-medium shadow-sm"
                                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                                 )}
+                                style={isActive(item.href)
+                                  ? { backgroundColor: activeFill, color: "white" }
+                                  : undefined}
                               >
                                 {item.label}
                               </Link>
@@ -233,14 +261,16 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                         className={cn(
                           "relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200",
                           "hover:bg-accent/60",
-                          active ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                          !active && "text-muted-foreground"
                         )}
+                        style={active ? { backgroundColor: activeBg, color: activeClr } : undefined}
                       >
                         {Icon && <Icon className="h-5 w-5" />}
                         {active && (
                           <motion.div
                             layoutId="sidebar-active"
-                            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full bg-primary"
+                            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full"
+                            style={{ backgroundColor: activeClr }}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                           />
                         )}
@@ -258,9 +288,12 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block",
                               isActive(item.href)
-                                ? "bg-primary text-primary-foreground font-medium"
+                                ? "font-medium"
                                 : "hover:bg-accent text-foreground"
                             )}
+                            style={isActive(item.href)
+                              ? { backgroundColor: activeFill, color: "white" }
+                              : undefined}
                           >
                             {item.label}
                           </Link>
@@ -502,13 +535,17 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                   }}
                   className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
                 >
-                  <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : "bg-primary/10"}`}>
+                  <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : ""}`}
+                    style={(!n.type || (n.type !== "workflow" && n.type !== "calendar" && !n.is_urgent)) ? { backgroundColor: hexAlpha(kpiColor, 0.12) } : undefined}
+                  >
                     {n.type === "workflow" ? (
                       <FileText className={`h-4 w-4 text-amber-600`} />
                     ) : n.type === "calendar" ? (
                       <CalendarDays className="h-4 w-4 text-sky-600" />
                     ) : (
-                      <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : "text-primary"}`} />
+                      <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : ""}`}
+                        style={!n.is_urgent ? { color: kpiColor } : undefined}
+                      />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
