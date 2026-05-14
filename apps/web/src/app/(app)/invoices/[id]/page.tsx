@@ -60,7 +60,7 @@ export default function InvoiceDetailPage() {
         setDueDate(d.due_date ?? "");
         setPaymentTerms(d.payment_terms ?? "");
         setNotes(d.notes ?? "");
-        setItems((d.items ?? []).map(it => ({
+        setItems((d.items ?? []).map((it: { description: string; quantity: number | string; unit_price: number | string }) => ({
           description: it.description,
           quantity: Number(it.quantity),
           unit_price: Number(it.unit_price),
@@ -260,7 +260,7 @@ export default function InvoiceDetailPage() {
                   <TableCell className="text-right tabular-nums">¥{(it.quantity * it.unit_price).toLocaleString()}</TableCell>
                   <TableCell><Button size="icon" variant="ghost" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                 </TableRow>
-              )) : (data.items ?? []).map((it) => (
+              )) : (data.items ?? []).map((it: { id: string; description: string; quantity: number | string; unit_price: number | string; amount: number | string }) => (
                 <TableRow key={it.id}>
                   <TableCell>{it.description}</TableCell>
                   <TableCell className="text-right tabular-nums">{it.quantity}</TableCell>

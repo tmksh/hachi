@@ -102,7 +102,7 @@ export function WorkflowTypesTab() {
     fs.forEach((f, i) => { if (f.options) optMap[i] = f.options.join("\n"); });
     setSelectOptionsInput(optMap);
     const ar = ((t as WfType & { approval_route?: { approver_id: string }[] }).approval_route ?? []);
-    setApproverIds(ar.map(s => s.approver_id));
+    setApproverIds(ar.map((s: { approver_id: string }) => s.approver_id));
     setDialogOpen(true);
   };
 

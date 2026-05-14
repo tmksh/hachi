@@ -64,7 +64,15 @@ export async function POST() {
 
         if (existing) continue;
 
-        const parsed = await simpleParser(msg.source);
+        if (!msg.source) continue;
+        const parsed = (await simpleParser(msg.source)) as unknown as {
+          subject?: string;
+          from?: { value?: Array<{ address?: string; name?: string }> };
+          to?: { value?: Array<{ address?: string; name?: string }> };
+          date?: Date;
+          text?: string;
+          html?: string | false;
+        };
         const subject = parsed.subject ?? "(件名なし)";
         const fromAddr = Array.isArray(parsed.from?.value)
           ? (parsed.from?.value[0]?.address ?? "")
@@ -73,7 +81,7 @@ export async function POST() {
           ? (parsed.from?.value[0]?.name ?? "")
           : "";
         const receivedAt = (parsed.date ?? new Date()).toISOString();
-        const isRead = msg.flags.has("\\Seen");
+        const isRead = msg.flags?.has("\\Seen") ?? false;
 
         const { data: newThread, error: threadErr } = await admin
           .from("email_threads")
@@ -98,7 +106,7 @@ export async function POST() {
           external_message_id: uid,
           from_address: fromAddr,
           from_name: fromName,
-          to_addresses: (parsed.to as { value: { address: string }[] } | undefined)?.value ?? [],
+          to_addresses: parsed.to?.value ?? [],
           subject,
           snippet: (parsed.text ?? "").substring(0, 200),
           body_text: parsed.text ?? "",

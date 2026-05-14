@@ -140,16 +140,23 @@ export async function getNotifications(): Promise<Notification[]> {
   }));
 
   // 自分の申請への差戻し通知
-  type RemandStep = { id: string; request_id: string; decided_at: string | null; comment: string | null; workflow_requests: { title: string } | { title: string }[] };
-  const remandNotifs: Notification[] = (remandedSteps || []).map((s) => {
-    const req = Array.isArray((s as RemandStep).workflow_requests) ? (s as RemandStep).workflow_requests[0] : (s as RemandStep).workflow_requests;
+  type RemandStep = {
+    id: string;
+    request_id: string;
+    decided_at: string | null;
+    comment: string | null;
+    workflow_requests: { title: string } | { title: string }[];
+  };
+  const remandNotifs: Notification[] = ((remandedSteps as RemandStep[] | null) ?? []).map((s) => {
+    const wfr = s.workflow_requests;
+    const req = Array.isArray(wfr) ? wfr[0] : wfr;
     return {
       id: `wf_remand_${s.id}`,
       type: "workflow" as const,
-      title: `差戻しされました: ${(req as { title: string }).title}`,
-      body: (s as RemandStep).comment ?? undefined,
+      title: `差戻しされました: ${req?.title ?? ""}`,
+      body: s.comment ?? undefined,
       href: `/workflow/${s.request_id}`,
-      created_at: (s as RemandStep).decided_at ?? s.id,
+      created_at: s.decided_at ?? s.id,
       is_urgent: true,
     };
   });
