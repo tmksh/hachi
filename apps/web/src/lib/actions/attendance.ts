@@ -3,6 +3,16 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceEntry } from "@/lib/database.types";
 
+/** JST の YYYY-MM-DD を返す */
+function getTodayJST(): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()).replace(/\//g, "-");
+}
+
 export async function getAttendanceEntries(params?: { userId?: string; month?: string }) {
   const supabase = await createClient();
   let query = supabase
@@ -32,14 +42,19 @@ export async function clockIn() {
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayJST();
 
   const { data: existing } = await supabase
     .from("attendance_entries")
-    .select("id")
+    .select("id, leave_type")
     .eq("user_id", user.id)
     .eq("work_date", today)
     .maybeSingle();
+
+  // 終日休暇として登録されている日は出勤打刻不可
+  if (existing?.leave_type && !["none", "morning_leave", "afternoon_leave", "半日休暇（午前）", "半日休暇（午後）"].includes(existing.leave_type)) {
+    throw new Error("本日は休暇として登録されています。出勤打刻するには休暇区分を解除してください。");
+  }
 
   if (existing) {
     const { data, error } = await supabase
@@ -59,6 +74,7 @@ export async function clockIn() {
       user_id: user.id,
       work_date: today,
       clock_in_at: new Date().toISOString(),
+      status: "pending",
     })
     .select()
     .single();
@@ -71,13 +87,71 @@ export async function clockOut() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayJST();
+
+  const { data: existing } = await supabase
+    .from("attendance_entries")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("work_date", today)
+    .maybeSingle();
+
+  if (!existing) throw new Error("本日の出勤記録が見つかりません");
 
   const { data, error } = await supabase
     .from("attendance_entries")
     .update({ clock_out_at: new Date().toISOString() })
+    .eq("id", existing.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as AttendanceEntry;
+}
+
+/**
+ * 終日休暇として記録（打刻なし）
+ * 既に出勤打刻がある場合はエラー。同じ日に再度呼ばれた場合は leave_type のみ上書き。
+ */
+export async function recordLeaveDay(leaveType: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const today = getTodayJST();
+
+  const { data: existing } = await supabase
+    .from("attendance_entries")
+    .select("id, clock_in_at")
     .eq("user_id", user.id)
     .eq("work_date", today)
+    .maybeSingle();
+
+  if (existing?.clock_in_at) {
+    throw new Error("本日は既に出勤打刻があります。休暇に切り替えるには管理者にご相談ください。");
+  }
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("attendance_entries")
+      .update({ leave_type: leaveType, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as AttendanceEntry;
+  }
+
+  const { data, error } = await supabase
+    .from("attendance_entries")
+    .insert({
+      company_id: profile.company_id,
+      user_id: user.id,
+      work_date: today,
+      leave_type: leaveType,
+      status: "pending",
+    })
     .select()
     .single();
   if (error) throw error;
@@ -115,7 +189,7 @@ export async function getTodayAttendance() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayJST();
   const { data } = await supabase
     .from("attendance_entries")
     .select("*")

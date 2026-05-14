@@ -93,7 +93,10 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
-    getNotifications().then(setNotifications).catch(() => {});
+    const fetch = () => getNotifications().then(setNotifications).catch(() => {});
+    void fetch();
+    const timer = setInterval(fetch, 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   // デバウンスグローバル検索

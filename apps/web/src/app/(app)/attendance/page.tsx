@@ -10,10 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
-import { LogIn, LogOut, Check, X, ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { LogIn, LogOut, Check, X, ChevronLeft, ChevronRight, Clock, Sun, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { getAttendanceEntries, clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType } from "@/lib/actions/attendance";
+import { getAttendanceEntries, clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType, recordLeaveDay } from "@/lib/actions/attendance";
 import { getCompany } from "@/lib/actions/profiles";
 import { AnalogClock } from "@/components/shared/analog-clock";
 
@@ -42,6 +42,14 @@ function calcScheduledMins(startTime: string, endTime: string, breakMins: number
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
   return Math.max(0, (eh * 60 + em) - (sh * 60 + sm) - breakMins);
+}
+
+/** 終日休暇 (打刻不要) かを判定。半日休暇は「打刻あり」扱い。 */
+function isFullDayLeave(leaveType: string): boolean {
+  if (leaveType === "none" || !leaveType) return false;
+  if (leaveType.includes("半日")) return false;
+  if (leaveType === "morning_leave" || leaveType === "afternoon_leave") return false;
+  return true;
 }
 
 export default function AttendancePage() {
@@ -93,8 +101,8 @@ export default function AttendancePage() {
     getAttendanceEntries({ month }).then(data => {
       setEntries(data as Entry[]);
       if (isCurrentMonth) {
-        const today = format(new Date(), "yyyy-MM-dd");
-        const todayEntry = data.find((e: Entry) => e.work_date === today && e.user_id === user?.id);
+        const todayJST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/\//g, "-");
+        const todayEntry = data.find((e: Entry) => e.work_date === todayJST && e.user_id === user?.id);
         if (todayEntry?.clock_in_at && !todayEntry?.clock_out_at) {
           setClockedIn(true);
           setSelectedLeaveType(todayEntry.leave_type ?? "none");
@@ -113,22 +121,36 @@ export default function AttendancePage() {
       setClockedIn(true);
       toast.success("出勤しました");
       load();
-    } catch { toast.error("出勤に失敗"); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "出勤に失敗しました");
+    }
   };
 
   const handleClockOut = async () => {
     try {
       // 退勤前に休暇区分を反映
       if (selectedLeaveType !== "none") {
-        const today = format(new Date(), "yyyy-MM-dd");
-        const todayEntry = entries.find(e => e.work_date === today && e.user_id === user?.id);
+        const todayJST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/\//g, "-");
+        const todayEntry = entries.find(e => e.work_date === todayJST && e.user_id === user?.id);
         if (todayEntry) await updateLeaveType(todayEntry.id, selectedLeaveType);
       }
       await clockOut();
       setClockedIn(false);
       toast.success("退勤しました");
       load();
-    } catch { toast.error("退勤に失敗"); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "退勤に失敗しました");
+    }
+  };
+
+  const handleRecordLeave = async () => {
+    try {
+      await recordLeaveDay(selectedLeaveType);
+      toast.success(`${selectedLeaveType}として記録しました`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "休暇の記録に失敗しました");
+    }
   };
 
   const handleApprove = async (id: string) => {
@@ -137,6 +159,11 @@ export default function AttendancePage() {
   const handleReject = async (id: string) => {
     try { await rejectAttendance(id); toast.success("却下しました"); load(); } catch { toast.error("失敗"); }
   };
+
+  const todayJST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/\//g, "-");
+  const todayEntry = entries.find(e => e.work_date === todayJST && e.user_id === user?.id);
+  const isOnLeaveToday = !!todayEntry?.leave_type && isFullDayLeave(todayEntry.leave_type);
+  const isLeaveModeSelected = isFullDayLeave(selectedLeaveType);
 
   const myEntries = entries.filter(e => e.user_id === user?.id);
   const totalDays = myEntries.length;
@@ -189,8 +216,8 @@ export default function AttendancePage() {
               <div className="flex flex-col justify-center gap-3 py-4 px-4 md:p-8 md:w-72">
                 <p className="text-xs text-muted-foreground font-medium">打刻操作</p>
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">休暇区分</p>
-                  <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType}>
+                  <p className="text-xs text-muted-foreground">勤務区分</p>
+                  <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType} disabled={isOnLeaveToday}>
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue />
                     </SelectTrigger>
@@ -201,12 +228,34 @@ export default function AttendancePage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleClockIn} disabled={clockedIn} size="lg" className="gap-2 w-full">
-                  <LogIn className="h-5 w-5" />出勤
-                </Button>
-                <Button variant="outline" onClick={handleClockOut} disabled={!clockedIn} size="lg" className="gap-2 w-full">
-                  <LogOut className="h-5 w-5" />退勤
-                </Button>
+
+                {isOnLeaveToday ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center gap-2 dark:bg-amber-950/30 dark:border-amber-900">
+                    <Sun className="h-4 w-4 text-amber-600 shrink-0" />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400">本日は休暇です</p>
+                      <p className="text-[11px] text-amber-600/80 dark:text-amber-500/80">{todayEntry?.leave_type}</p>
+                    </div>
+                  </div>
+                ) : isLeaveModeSelected ? (
+                  <>
+                    <Button onClick={handleRecordLeave} size="lg" className="gap-2 w-full">
+                      <Coffee className="h-5 w-5" />本日を休暇として記録
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground text-center px-2">
+                      終日休暇のため打刻不要です。記録後は管理者の承認待ちになります。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Button onClick={handleClockIn} disabled={clockedIn} size="lg" className="gap-2 w-full">
+                      <LogIn className="h-5 w-5" />出勤
+                    </Button>
+                    <Button variant="outline" onClick={handleClockOut} disabled={!clockedIn} size="lg" className="gap-2 w-full">
+                      <LogOut className="h-5 w-5" />退勤
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
@@ -293,27 +342,38 @@ export default function AttendancePage() {
                       </TableRow>
                     )
                   : entries.map((e) => {
+                      const isLeave = !!e.leave_type && isFullDayLeave(e.leave_type);
                       const worked = e.clock_in_at && e.clock_out_at
                         ? calcWorkMinutes(e.clock_in_at, e.clock_out_at, attSettings.break_minutes ?? 60)
                         : null;
                       const overtime = worked !== null ? Math.max(0, worked - scheduledMins) : null;
                       return (
-                        <TableRow key={e.id} className="glass-row">
+                        <TableRow key={e.id} className={`glass-row ${isLeave ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
                           <TableCell className="text-sm tabular-nums">{e.work_date}</TableCell>
                           {isAdmin && <TableCell className="text-sm">{(e as Entry & { user?: { display_name: string } }).user?.display_name ?? "-"}</TableCell>}
-                          <TableCell className="text-sm tabular-nums">{e.clock_in_at ? format(parseISO(e.clock_in_at), "HH:mm") : "-"}</TableCell>
-                          <TableCell className="text-sm tabular-nums">{e.clock_out_at ? format(parseISO(e.clock_out_at), "HH:mm") : "-"}</TableCell>
-                          <TableCell className="text-sm tabular-nums">{worked !== null ? minutesToHM(worked) : "-"}</TableCell>
                           <TableCell className="text-sm tabular-nums">
-                            {overtime !== null && overtime > 0
+                            {isLeave ? <span className="text-amber-600 text-xs">休暇</span> : e.clock_in_at ? format(parseISO(e.clock_in_at), "HH:mm") : "-"}
+                          </TableCell>
+                          <TableCell className="text-sm tabular-nums">
+                            {isLeave ? <span className="text-amber-600 text-xs">休暇</span> : e.clock_out_at ? format(parseISO(e.clock_out_at), "HH:mm") : "-"}
+                          </TableCell>
+                          <TableCell className="text-sm tabular-nums">{isLeave ? <span className="text-muted-foreground">-</span> : worked !== null ? minutesToHM(worked) : "-"}</TableCell>
+                          <TableCell className="text-sm tabular-nums">
+                            {isLeave ? <span className="text-muted-foreground">-</span> : overtime !== null && overtime > 0
                               ? <span className="text-amber-600 font-medium">{minutesToHM(overtime)}</span>
                               : <span className="text-muted-foreground">-</span>
                             }
                           </TableCell>
                           <TableCell>
-                            <span className="text-xs text-muted-foreground">
-                              {e.leave_type && e.leave_type !== "none" ? e.leave_type : "-"}
-                            </span>
+                            {isLeave ? (
+                              <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 border-0 hover:bg-amber-100">
+                                {e.leave_type}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {e.leave_type && e.leave_type !== "none" ? e.leave_type : "-"}
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge className={

@@ -23,6 +23,7 @@ export async function getNotifications(): Promise<Notification[]> {
   // TODO フェーズ2: 直近7日のみに戻す。現在はテスト用に1ヶ月前〜1週間後の予定を通知として表示。
   const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const in7daysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const { data: selfProfile } = await supabase
     .from("profiles")
@@ -36,6 +37,8 @@ export async function getNotifications(): Promise<Notification[]> {
     { data: announcements },
     { data: pendingSteps },
     { data: upcomingEvents },
+    { data: decidedRequests },
+    { data: remandedSteps },
   ] = await Promise.all([
     supabase.from("announcement_reads").select("announcement_id").eq("user_id", user.id),
     supabase
@@ -50,6 +53,25 @@ export async function getNotifications(): Promise<Notification[]> {
       .gte("start_at", oneMonthAgo.toISOString())
       .lte("start_at", in7days.toISOString())
       .order("start_at", { ascending: false })
+      .limit(10),
+    // 自分の申請が承認済 or 却下された（7日以内）
+    supabase
+      .from("workflow_requests")
+      .select("id, title, status, decided_at")
+      .eq("requester_id", user.id)
+      .in("status", ["approved", "rejected"])
+      .gte("decided_at", in7daysAgo.toISOString())
+      .order("decided_at", { ascending: false })
+      .limit(10),
+    // 自分の申請が差戻しされた（7日以内に step が rejected になり、申請全体は submitted に戻った）
+    supabase
+      .from("workflow_steps")
+      .select("id, request_id, decided_at, comment, workflow_requests!inner(title, requester_id, status)")
+      .eq("workflow_requests.requester_id", user.id)
+      .eq("workflow_requests.status", "submitted")
+      .eq("status", "rejected")
+      .gte("decided_at", in7daysAgo.toISOString())
+      .order("decided_at", { ascending: false })
       .limit(10),
   ]);
 
@@ -107,7 +129,32 @@ export async function getNotifications(): Promise<Notification[]> {
     };
   });
 
-  return [...announcementNotifs, ...workflowNotifs, ...calendarNotifs]
+  // 自分の申請への結果通知（承認済・却下）
+  const decidedNotifs: Notification[] = (decidedRequests || []).map((r) => ({
+    id: `wf_decided_${r.id}`,
+    type: "workflow" as const,
+    title: r.status === "approved" ? `承認されました: ${r.title}` : `却下されました: ${r.title}`,
+    href: `/workflow/${r.id}`,
+    created_at: r.decided_at ?? r.id,
+    is_urgent: r.status === "rejected",
+  }));
+
+  // 自分の申請への差戻し通知
+  type RemandStep = { id: string; request_id: string; decided_at: string | null; comment: string | null; workflow_requests: { title: string } | { title: string }[] };
+  const remandNotifs: Notification[] = (remandedSteps || []).map((s) => {
+    const req = Array.isArray((s as RemandStep).workflow_requests) ? (s as RemandStep).workflow_requests[0] : (s as RemandStep).workflow_requests;
+    return {
+      id: `wf_remand_${s.id}`,
+      type: "workflow" as const,
+      title: `差戻しされました: ${(req as { title: string }).title}`,
+      body: (s as RemandStep).comment ?? undefined,
+      href: `/workflow/${s.request_id}`,
+      created_at: (s as RemandStep).decided_at ?? s.id,
+      is_urgent: true,
+    };
+  });
+
+  return [...announcementNotifs, ...workflowNotifs, ...decidedNotifs, ...remandNotifs, ...calendarNotifs]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 20);
 }
