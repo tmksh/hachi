@@ -19,6 +19,9 @@ import {
   HardHat,
   BarChart3,
   ExternalLink,
+  Sparkles,
+  Check,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -264,57 +267,130 @@ export default function DashboardPage() {
         )}
 
         {/* AI Focus / Todos */}
-        {isVisible("ai-focus") && (
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-sm font-semibold">今日のフォーカス</CardTitle>
-              <Link href="/bi">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded text-primary hover:bg-primary/10 transition-colors">
-                  <ExternalLink className="h-4 w-4" />
-                </span>
-              </Link>
-            </CardHeader>
-            <CardContent className="h-full flex flex-col justify-between py-4 px-5 gap-4">
-              <div className="flex items-start gap-3">
-                <div>
-                  <span className="text-xs text-muted-foreground leading-relaxed block">
-                    {loading ? (
-                      <Skeleton className="h-3 w-48" />
-                    ) : (
-                      <>
-                        今日は<span className="text-primary font-semibold">{data?.todos.length ?? 0}件</span>の対応を優先してください。
-                      </>
-                    )}
+        {isVisible("ai-focus") && (() => {
+          const todos = data?.todos ?? [];
+          const visibleTodos = todos.slice(0, 5);
+          const totalCount = todos.length;
+          const urgentCount = todos.filter((t) => t.priority === "high" && t.status !== "completed").length;
+          return (
+            <Card className="overflow-hidden relative">
+              {/* Decorative gradient */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-primary/[0.05] to-transparent"
+              />
+              <CardHeader className="relative">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/15">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
                   </span>
+                  <CardTitle className="text-sm font-semibold">今日のフォーカス</CardTitle>
                 </div>
-              </div>
-              <div className="space-y-2">
+                <Link href="/bi">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded text-primary hover:bg-primary/10 transition-colors">
+                    <ExternalLink className="h-4 w-4" />
+                  </span>
+                </Link>
+              </CardHeader>
+              <CardContent className="relative h-full flex flex-col py-4 px-5 gap-4">
+                {/* Summary */}
                 {loading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <Skeleton className="h-4 w-4 rounded-full" />
-                      <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-10 w-full" />
+                ) : totalCount > 0 ? (
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-bold tabular-nums leading-none text-foreground">
+                        {totalCount}
+                      </span>
+                      <span className="text-xs text-muted-foreground">件のタスク</span>
                     </div>
-                  ))
-                ) : data?.todos.length ? (
-                  data.todos.slice(0, 5).map((todo) => (
-                    <div key={todo.id} className="flex items-center gap-2.5">
-                      <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${todo.status === "completed" ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
-                        {todo.status === "completed" && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    {urgentCount > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 bg-rose-50 border border-rose-200/70 px-2 py-0.5 rounded-full">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                        急ぎ {urgentCount}件
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Todo list */}
+                <div className="flex-1 -mx-1 space-y-0.5">
+                  {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 px-2 py-2">
+                        <Skeleton className="h-4 w-4 rounded-full" />
+                        <Skeleton className="h-3 w-40" />
                       </div>
-                      <span className={`text-xs flex-1 ${todo.status === "completed" ? "line-through text-muted-foreground" : ""}`}>{todo.title}</span>
-                      {todo.priority === "high" && todo.status !== "completed" && (
-                        <Badge className="text-[9px] h-4 px-1 bg-rose-100 text-rose-600 hover:bg-rose-100">急</Badge>
-                      )}
+                    ))
+                  ) : visibleTodos.length ? (
+                    visibleTodos.map((todo) => {
+                      const isCompleted = todo.status === "completed";
+                      const isUrgent = todo.priority === "high" && !isCompleted;
+                      return (
+                        <div
+                          key={todo.id}
+                          className={`group relative flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors ${
+                            isUrgent ? "hover:bg-rose-50/50" : "hover:bg-muted/50"
+                          }`}
+                        >
+                          {/* Urgency accent bar */}
+                          {isUrgent && (
+                            <span
+                              aria-hidden
+                              className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-rose-400"
+                            />
+                          )}
+                          {/* Checkbox */}
+                          <div
+                            className={`relative h-4 w-4 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                              isCompleted
+                                ? "bg-primary border-2 border-primary"
+                                : "border-2 border-muted-foreground/30 group-hover:border-primary/60"
+                            }`}
+                          >
+                            {isCompleted && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                          </div>
+                          {/* Title */}
+                          <span
+                            className={`text-xs flex-1 truncate ${
+                              isCompleted ? "line-through text-muted-foreground" : "text-foreground"
+                            }`}
+                          >
+                            {todo.title}
+                          </span>
+                          {/* Priority badge */}
+                          {isUrgent && (
+                            <span className="text-[10px] font-semibold tracking-wider text-rose-600 bg-rose-100/80 px-1.5 py-0.5 rounded-full shrink-0">
+                              急
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                      <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center ring-4 ring-emerald-50/50">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      </div>
+                      <p className="text-xs font-medium text-foreground">今日のタスクは完了しました</p>
+                      <p className="text-[11px] text-muted-foreground">お疲れさまです</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">タスクはありません</p>
+                  )}
+                </div>
+
+                {/* Footer hint when more todos exist */}
+                {!loading && totalCount > visibleTodos.length && (
+                  <Link
+                    href="/bi"
+                    className="text-[11px] text-muted-foreground hover:text-primary transition-colors text-center"
+                  >
+                    残り {totalCount - visibleTodos.length} 件 →
+                  </Link>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* Workflow */}
         {isVisible("workflow") && (
