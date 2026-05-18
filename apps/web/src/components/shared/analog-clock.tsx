@@ -5,9 +5,20 @@ import { useState, useEffect } from "react";
 interface AnalogClockProps {
   size?: number;
   className?: string;
+  hourColor?: string;
+  minuteColor?: string;
+  secondColor?: string;
+  centerColor?: string;
 }
 
-export function AnalogClock({ size = 88, className = "" }: AnalogClockProps) {
+export function AnalogClock({
+  size = 88,
+  className = "",
+  hourColor = "#0F5132",
+  minuteColor = "#1A7A52",
+  secondColor = "#2D9E6B",
+  centerColor = "var(--primary)",
+}: AnalogClockProps) {
   const [time, setTime] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -71,12 +82,12 @@ export function AnalogClock({ size = 88, className = "" }: AnalogClockProps) {
         })}
 
         {/* Hands */}
-        {hand(h, r * 0.46, 2.8, "#0F5132")}
-        {hand(m, r * 0.62, 2.2, "#1A7A52")}
-        {hand(s, r * 0.70, 1.4, "#2D9E6B")}
+        {hand(h, r * 0.46, 2.8, hourColor)}
+        {hand(m, r * 0.62, 2.2, minuteColor)}
+        {hand(s, r * 0.70, 1.4, secondColor)}
 
         {/* Center dot */}
-        <circle cx={cx} cy={cy} r={3.5} fill="var(--primary)" />
+        <circle cx={cx} cy={cy} r={3.5} fill={centerColor} />
         <circle cx={cx} cy={cy} r={1.5} fill="white" />
       </svg>
     </div>

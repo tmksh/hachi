@@ -199,7 +199,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                       onClick={() => toggleGroup(group.key)}
                       className={cn(
                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
-                        "hover:bg-accent/60",
+                        "hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50",
                       )}
                       style={active ? { color: activeClr } : undefined}
                     >
@@ -242,7 +242,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                                   "flex items-center px-3 py-1.5 rounded-lg text-sm transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis",
                                   isActive(item.href)
                                     ? "font-medium shadow-sm"
-                                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                                    : "text-muted-foreground hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50 hover:text-foreground"
                                 )}
                                 style={isActive(item.href)
                                   ? { backgroundColor: activeFill, color: "white" }
@@ -263,7 +263,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                       <button
                         className={cn(
                           "relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200",
-                          "hover:bg-accent/60",
+                          "hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50",
                           !active && "text-muted-foreground"
                         )}
                         style={active ? { backgroundColor: activeBg, color: activeClr } : undefined}
