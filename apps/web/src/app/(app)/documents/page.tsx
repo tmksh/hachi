@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
-import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil } from "lucide-react";
+import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import {
   getDocuments, createDocument, deleteDocument,
