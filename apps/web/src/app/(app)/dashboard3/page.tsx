@@ -359,7 +359,7 @@ export default function Dashboard3Page() {
                 <Tooltip
                   cursor={{ fill: "#f8fafc" }}
                   contentStyle={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
-                  formatter={(v: number) => [`¥${v}万`]}
+                  formatter={(v) => `¥${v}万`}
                 />
                 <Bar dataKey="パイプライン" fill="#d4d4d8" radius={[4, 4, 0, 0]} maxBarSize={36} />
                 <Bar dataKey="受注額" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={36} />
