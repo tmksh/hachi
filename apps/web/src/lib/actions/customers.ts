@@ -66,7 +66,7 @@ export async function deleteCustomer(id: string) {
 export async function getCustomerRelated(customerId: string) {
   const supabase = await createClient();
   const [dealsRes, estimatesRes, contractsRes, constructionsRes] = await Promise.all([
-    supabase.from("deals").select("id, title, stage, value, status, created_at").eq("customer_id", customerId).order("created_at", { ascending: false }),
+    supabase.from("deals").select("id, title, stage, value, created_at").eq("customer_id", customerId).order("created_at", { ascending: false }),
     supabase.from("estimates").select("id, estimate_no, title, total_amount, status, created_at").eq("customer_id", customerId).order("created_at", { ascending: false }),
     supabase.from("contracts").select("id, contract_no, title, amount, status, contract_date").eq("customer_id", customerId).order("created_at", { ascending: false }),
     supabase.from("constructions").select("id, title, status, start_date, end_date, progress_pct").eq("customer_id", customerId).order("created_at", { ascending: false }),

@@ -3,6 +3,67 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Document } from "@/lib/database.types";
 
+// ── ドキュメントカテゴリ ─────────────────────────────────────────────
+
+export type DocCategory = { id: string; key: string; label: string; sort_order: number };
+
+async function getCompanyId() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+  return { supabase, company_id: profile.company_id };
+}
+
+export async function getDocumentCategories(): Promise<DocCategory[]> {
+  const { supabase, company_id } = await getCompanyId();
+  const { data, error } = await supabase
+    .from("document_categories")
+    .select("id, key, label, sort_order")
+    .eq("company_id", company_id)
+    .order("sort_order");
+  if (error) throw error;
+  return (data ?? []) as DocCategory[];
+}
+
+export async function createDocumentCategory(label: string) {
+  const { supabase, company_id } = await getCompanyId();
+  const key = `cat_${Date.now()}`;
+  const { data: existing } = await supabase
+    .from("document_categories")
+    .select("sort_order")
+    .eq("company_id", company_id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+  const { data, error } = await supabase
+    .from("document_categories")
+    .insert({ company_id, key, label, sort_order: (existing?.sort_order ?? -1) + 1 })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as DocCategory;
+}
+
+export async function updateDocumentCategory(id: string, label: string) {
+  const { supabase } = await getCompanyId();
+  const { data, error } = await supabase
+    .from("document_categories")
+    .update({ label })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as DocCategory;
+}
+
+export async function deleteDocumentCategory(id: string) {
+  const { supabase } = await getCompanyId();
+  const { error } = await supabase.from("document_categories").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function getDocuments(category?: string) {
   const supabase = await createClient();
   let query = supabase

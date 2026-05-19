@@ -3,16 +3,17 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripHorizontal } from "lucide-react";
 
 export const MIN_CARD_W = 180;
+export const MIN_CARD_H = 100;
 
 export interface SortableWidgetProps {
   id: string;
   widthPx?: number;
   height?: number;
-  onResize: (id: string, w: number, h: number) => void;
-  onResizeWidth: (id: string, w: number) => void;
+  onResize: (id: string, widthPx: number, height: number) => void;
+  onResizeWidth: (id: string, widthPx: number) => void;
   onInitWidths: (updates: Record<string, number>) => void;
   children: React.ReactNode;
 }
@@ -45,6 +46,7 @@ export function SortableWidget({
     [setNodeRef],
   );
 
+  // ── ピクセル単位の自由リサイズ（スナップなし） ──
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -53,64 +55,31 @@ export function SortableWidget({
     const grid = card?.closest("[data-widget-grid]") as HTMLElement | null;
     if (!card || !grid) return;
 
-    const cardRect = card.getBoundingClientRect();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startH = height ?? cardRect.height;
-
-    // --- 全カードの px 幅を初期化（初回リサイズ時のみ）---
-    const allEls = Array.from(
-      grid.querySelectorAll("[data-widget-id]"),
-    ) as HTMLElement[];
+    // 全カードの現在の DOM 幅を保存（初回リサイズ時の幅確定）
+    const allEls = Array.from(grid.querySelectorAll("[data-widget-id]")) as HTMLElement[];
     const initMap: Record<string, number> = {};
     allEls.forEach((el) => {
-      const wid = el.dataset.widgetId;
-      if (wid) initMap[wid] = Math.round(el.getBoundingClientRect().width);
+      if (el.dataset.widgetId) initMap[el.dataset.widgetId] = Math.round(el.getBoundingClientRect().width);
     });
     onInitWidths(initMap);
 
-    // 同行カードを特定（top 座標 ±8px 以内）
-    const sameRow = allEls
-      .filter(
-        (el) =>
-          Math.abs(el.getBoundingClientRect().top - cardRect.top) < 8,
-      )
-      .sort(
-        (a, b) =>
-          a.getBoundingClientRect().left - b.getBoundingClientRect().left,
-      );
-
-    const myIdx = sameRow.findIndex((el) => el.dataset.widgetId === id);
-    const nextEl = sameRow[myIdx + 1] ?? null;
-    const nextId = nextEl?.dataset.widgetId ?? null;
-
+    const cardRect = card.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
     const startW = cardRect.width;
-    const startNextW = nextEl?.getBoundingClientRect().width ?? 0;
+    const startH = height ?? cardRect.height;
 
     let rafId = 0;
-
     const onMove = (ev: MouseEvent) => {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
-
-        const maxDx = nextEl ? startNextW - MIN_CARD_W : Infinity;
-        const minDx = -(startW - MIN_CARD_W);
-        const cdx = Math.max(minDx, Math.min(maxDx, dx));
-
-        onResize(
-          id,
-          Math.round(startW + cdx),
-          Math.max(120, Math.round(startH + dy)),
-        );
-
-        if (nextEl && nextId) {
-          onResizeWidth(nextId, Math.round(startNextW - cdx));
-        }
+        const nextW = Math.max(MIN_CARD_W, Math.round(startW + dx));
+        const nextH = Math.max(MIN_CARD_H, Math.round(startH + dy));
+        onResize(id, nextW, nextH);
       });
     };
-
     const onUp = () => {
       cancelAnimationFrame(rafId);
       document.body.style.cursor = "";
@@ -118,7 +87,7 @@ export function SortableWidget({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-
+    void onResizeWidth;
     document.body.style.cursor = "nwse-resize";
     document.body.style.userSelect = "none";
     window.addEventListener("mousemove", onMove);
@@ -133,35 +102,42 @@ export function SortableWidget({
         transform: CSS.Transform.toString(transform),
         transition,
         zIndex: isDragging ? 50 : undefined,
-        opacity: isDragging ? 0.7 : 1,
+        opacity: isDragging ? 0.45 : 1,
         flex: widthPx ? `0 0 ${widthPx}px` : "1 1 calc(33.333% - 11px)",
         width: widthPx ? `${widthPx}px` : undefined,
         minWidth: `${MIN_CARD_W}px`,
         ...(height ? { height } : {}),
+        boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.12)" : undefined,
       }}
       {...attributes}
       className="relative group/drag"
     >
-      {/* ドラッグハンドル */}
+      {/* ドラッグ用ハンドル：カード上端中央のバー（ホバー時のみ表示） */}
       <div
         {...listeners}
-        className="absolute top-[12px] left-1.5 z-20 p-0.5 rounded cursor-grab active:cursor-grabbing text-muted-foreground/20 opacity-0 group-hover/drag:opacity-100 hover:text-muted-foreground/50 transition-all touch-none select-none"
-        title="ドラッグして並び替え"
+        className={`absolute top-0 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center
+                    h-5 w-14 rounded-b-md
+                    bg-foreground/10 hover:bg-foreground/20
+                    text-foreground/60 hover:text-foreground/90
+                    cursor-grab active:cursor-grabbing
+                    opacity-0 group-hover/drag:opacity-100
+                    transition-opacity duration-150 touch-none select-none`}
+        title="ドラッグして縦横に並び替え"
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <GripHorizontal className="h-3 w-3" />
       </div>
 
-      {/* リサイズハンドル（右下） */}
+      {/* リサイズハンドル（右下、ホバーで濃く表示） */}
       <div
         onMouseDown={handleResizeMouseDown}
-        className="absolute bottom-1.5 right-1.5 z-20 w-5 h-5 flex items-center justify-center opacity-0 group-hover/drag:opacity-100 cursor-nwse-resize transition-opacity rounded hover:bg-black/5"
-        title="ドラッグしてサイズ変更"
+        className="absolute bottom-1.5 right-1.5 z-20 w-5 h-5 flex items-center justify-center opacity-40 group-hover/drag:opacity-100 cursor-nwse-resize transition-opacity rounded hover:bg-foreground/10"
+        title="ドラッグして自由にサイズ変更"
       >
-        <svg viewBox="0 0 10 10" className="w-3 h-3 text-muted-foreground/40">
+        <svg viewBox="0 0 10 10" className="w-3 h-3 text-muted-foreground">
           <path
             d="M9 1L1 9M5.5 1L1 5.5M9 4.5L4.5 9"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.6"
             strokeLinecap="round"
           />
         </svg>

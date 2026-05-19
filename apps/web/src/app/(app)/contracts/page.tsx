@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Search, Plus, FileSignature, TrendingUp } from "lucide-react";
-import { getContracts } from "@/lib/actions/contracts";
+import { Search, Plus, FileSignature, TrendingUp, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { getContracts, deleteContract } from "@/lib/actions/contracts";
 
 type ContractRow = Awaited<ReturnType<typeof getContracts>>[number];
 
@@ -24,8 +25,19 @@ export default function ContractsListPage() {
   const [tab, setTab] = useState("all");
   const [rows, setRows] = useState<ContractRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<ContractRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { getContracts().then(setRows).catch(() => {}).finally(() => setLoading(false)); }, []);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteContract(deleteTarget.id);
+      setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
+    } catch { /* ignore */ } finally { setDeleting(false); setDeleteTarget(null); }
+  };
 
   const filtered = rows.filter((c) => {
     const q = search.toLowerCase();
@@ -57,22 +69,40 @@ export default function ContractsListPage() {
         <TabsList><TabsTrigger value="all">すべて</TabsTrigger><TabsTrigger value="active">有効</TabsTrigger><TabsTrigger value="preparing">準備中</TabsTrigger><TabsTrigger value="completed">完了</TabsTrigger></TabsList>
         <TabsContent value={tab} className="mt-4">
           <Card variant="inset"><div className="overflow-x-auto">
-            <Table><TableHeader><TableRow><TableHead>契約番号</TableHead><TableHead>顧客名</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>契約日</TableHead><TableHead>ステータス</TableHead></TableRow></TableHeader>
+            <Table><TableHeader><TableRow><TableHead>契約番号</TableHead><TableHead>顧客名</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>契約日</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
             <TableBody>
-              {loading ? Array.from({length:5}).map((_,i)=><TableRow key={i}><TableCell><Skeleton className="h-4 w-24"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-4 w-32"/></TableCell><TableCell><Skeleton className="h-4 w-16"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-5 w-16"/></TableCell></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(c => (
-                <TableRow key={c.id} className="cursor-pointer hover:bg-accent/50" onClick={() => router.push(`/contracts/${c.id}`)}>
+              {loading ? Array.from({length:5}).map((_,i)=><TableRow key={i}><TableCell><Skeleton className="h-4 w-24"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-4 w-32"/></TableCell><TableCell><Skeleton className="h-4 w-16"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-5 w-16"/></TableCell><TableCell /></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(c => (
+                <TableRow key={c.id} className="cursor-pointer hover:bg-accent/50 group" onClick={() => router.push(`/contracts/${c.id}`)}>
                   <TableCell><Link href={`/contracts/${c.id}`} className="font-medium text-primary hover:underline">{c.contract_no}</Link></TableCell>
                   <TableCell>{c.customer?.name ?? "-"}</TableCell>
                   <TableCell className="text-sm">{c.title}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(c.amount ?? 0)}</TableCell>
                   <TableCell className="text-sm">{c.contract_date ?? "-"}</TableCell>
                   <TableCell><StatusBadge status={c.status} /></TableCell>
+                  <TableCell>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                      onClick={e => { e.stopPropagation(); setDeleteTarget(c); }}
+                    ><Trash2 className="h-3.5 w-3.5" /></button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody></Table>
           </div></Card>
         </TabsContent>
       </Tabs>
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>契約を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>「{deleteTarget?.contract_no} {deleteTarget?.title}」を削除します。この操作は取り消せません。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDelete} disabled={deleting}>削除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

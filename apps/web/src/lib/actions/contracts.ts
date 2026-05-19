@@ -73,3 +73,9 @@ export async function updateContract(id: string, input: Partial<Omit<Contract, "
   if (error) throw error;
   return data as Contract;
 }
+
+export async function deleteContract(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("contracts").delete().eq("id", id);
+  if (error) throw error;
+}

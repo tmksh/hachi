@@ -13,8 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Search, Plus, HardHat, ArrowUpDown } from "lucide-react";
-import { getConstructions } from "@/lib/actions/constructions";
+import { Search, Plus, HardHat, ArrowUpDown, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { getConstructions, deleteConstruction } from "@/lib/actions/constructions";
 import { getProfiles } from "@/lib/actions/profiles";
 import type { Profile } from "@/lib/database.types";
 
@@ -38,6 +39,17 @@ export default function ConstructionsPage() {
   const [tab, setTab] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("_all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteConstruction(deleteTarget.id);
+      setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
+    } catch { /* ignore */ } finally { setDeleting(false); setDeleteTarget(null); }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -165,7 +177,7 @@ export default function ConstructionsPage() {
               {filtered.map((r) => (
                 <Card
                   key={r.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className="cursor-pointer hover:shadow-md transition-shadow group/card"
                   onClick={() => router.push(`/constructions/${r.id}`)}
                 >
                   <CardContent className="p-5">
@@ -182,6 +194,10 @@ export default function ConstructionsPage() {
                       <div className="flex items-center gap-2">
                         <StatusBadge status={r.status} />
                         <span className="text-sm font-semibold tabular-nums">{r.progress}%</span>
+                        <button
+                          className="opacity-0 group-hover/card:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                          onClick={e => { e.stopPropagation(); setDeleteTarget(r); }}
+                        ><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     </div>
                     <Progress value={r.progress} className="h-2" />
@@ -205,6 +221,18 @@ export default function ConstructionsPage() {
           )}
         </TabsContent>
       </Tabs>
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>工事を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>「{deleteTarget?.construction_no} {deleteTarget?.title}」を削除します。タスク・下請け発注も含めて削除されます。この操作は取り消せません。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDelete} disabled={deleting}>削除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

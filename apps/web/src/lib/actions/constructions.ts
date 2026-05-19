@@ -106,6 +106,14 @@ export async function updateConstruction(id: string, input: Partial<Omit<Constru
   return data as Construction;
 }
 
+export async function deleteConstruction(id: string) {
+  const supabase = await createClient();
+  await supabase.from("construction_tasks").delete().eq("construction_id", id);
+  await supabase.from("contractor_orders").delete().eq("construction_id", id);
+  const { error } = await supabase.from("constructions").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function createConstructionTask(constructionId: string, input: { name: string; start_date?: string; end_date?: string; assigned_to?: string; description?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

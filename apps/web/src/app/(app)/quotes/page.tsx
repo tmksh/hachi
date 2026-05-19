@@ -11,8 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Search, Plus, TrendingUp, FileText } from "lucide-react";
-import { getEstimates } from "@/lib/actions/estimates";
+import { Search, Plus, TrendingUp, FileText, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { getEstimates, deleteEstimate } from "@/lib/actions/estimates";
 
 type Row = Awaited<ReturnType<typeof getEstimates>>[number];
 
@@ -24,8 +25,19 @@ export default function QuotesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { getEstimates().then(setRows).catch(() => {}).finally(() => setLoading(false)); }, []);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteEstimate(deleteTarget.id);
+      setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
+    } catch { /* ignore */ } finally { setDeleting(false); setDeleteTarget(null); }
+  };
 
   const filtered = rows.filter(r => {
     const q = search.toLowerCase();
@@ -56,15 +68,21 @@ export default function QuotesPage() {
         <TabsList><TabsTrigger value="all">すべて</TabsTrigger><TabsTrigger value="draft">下書き</TabsTrigger><TabsTrigger value="sent">送付済</TabsTrigger><TabsTrigger value="accepted">受理</TabsTrigger><TabsTrigger value="rejected">却下</TabsTrigger></TabsList>
         <TabsContent value={tab} className="mt-4">
           <Card variant="inset"><div className="overflow-x-auto">
-            <Table><TableHeader><TableRow><TableHead>見積番号</TableHead><TableHead>件名</TableHead><TableHead>顧客</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead></TableRow></TableHeader>
+            <Table><TableHeader><TableRow><TableHead>見積番号</TableHead><TableHead>件名</TableHead><TableHead>顧客</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
               <TableBody>
-                {loading ? Array.from({length:5}).map((_,i)=><TableRow key={i}><TableCell><Skeleton className="h-4 w-24"/></TableCell><TableCell><Skeleton className="h-4 w-32"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-4 w-16"/></TableCell><TableCell><Skeleton className="h-5 w-16"/></TableCell></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
-                  <TableRow key={r.id} className="cursor-pointer hover:bg-accent/50" onClick={() => router.push(`/quotes/${r.id}`)}>
+                {loading ? Array.from({length:5}).map((_,i)=><TableRow key={i}><TableCell><Skeleton className="h-4 w-24"/></TableCell><TableCell><Skeleton className="h-4 w-32"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-4 w-16"/></TableCell><TableCell><Skeleton className="h-5 w-16"/></TableCell><TableCell /></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
+                  <TableRow key={r.id} className="cursor-pointer hover:bg-accent/50 group" onClick={() => router.push(`/quotes/${r.id}`)}>
                     <TableCell><Link href={`/quotes/${r.id}`} className="font-medium text-primary hover:underline">{r.estimate_no}</Link></TableCell>
                     <TableCell>{r.title ?? "-"}</TableCell>
                     <TableCell>{r.customer?.name ?? "-"}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{fmt(r.total ?? 0)}</TableCell>
                     <TableCell><StatusBadge status={r.status} /></TableCell>
+                    <TableCell>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                        onClick={e => { e.stopPropagation(); setDeleteTarget(r); }}
+                      ><Trash2 className="h-3.5 w-3.5" /></button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -72,6 +90,18 @@ export default function QuotesPage() {
           </div></Card>
         </TabsContent>
       </Tabs>
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>見積を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>「{deleteTarget?.estimate_no}」を削除します。この操作は取り消せません。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={handleDelete} disabled={deleting}>削除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

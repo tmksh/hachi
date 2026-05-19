@@ -15,14 +15,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
-import { Search, Trash2, FileText, Upload, Download } from "lucide-react";
+import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, GripVertical, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { getDocuments, createDocument, deleteDocument } from "@/lib/actions/documents";
+import {
+  getDocuments, createDocument, deleteDocument,
+  getDocumentCategories, createDocumentCategory,
+  updateDocumentCategory, deleteDocumentCategory,
+  type DocCategory,
+} from "@/lib/actions/documents";
 import { createClient } from "@/lib/supabase/client";
 
 type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
-const CAT_LABELS: Record<string, string> = { rules: "規程", hr: "人事", accounting: "経理", safety: "安全", other: "その他" };
 const STORAGE_BUCKET = "documents";
 
 function formatSize(bytes: number) {
@@ -37,19 +42,46 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
 
+  // カテゴリ
+  const [categories, setCategories] = useState<DocCategory[]>([]);
+  const [catLoading, setCatLoading] = useState(true);
+
+  // アップロード
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadName, setUploadName] = useState("");
-  const [uploadCategory, setUploadCategory] = useState("other");
+  const [uploadCategory, setUploadCategory] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Doc | null>(null);
 
+  // カテゴリ設定ダイアログ
+  const [catOpen, setCatOpen] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState("");
+  const [addingCat, setAddingCat] = useState(false);
+  const [editingCat, setEditingCat] = useState<DocCategory | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [deleteCatTarget, setDeleteCatTarget] = useState<DocCategory | null>(null);
+
+  const loadCategories = async () => {
+    setCatLoading(true);
+    try {
+      const cats = await getDocumentCategories();
+      setCategories(cats);
+      if (!uploadCategory && cats.length > 0) setUploadCategory(cats[0].key);
+    } catch { /* empty */ } finally { setCatLoading(false); }
+  };
+
   const load = () => {
     setLoading(true);
     getDocuments(tab === "all" ? undefined : tab).then(setDocs).catch(() => {}).finally(() => setLoading(false));
   };
+
+  useEffect(() => { loadCategories(); }, []);
   useEffect(load, [tab]);
+
+  // カテゴリラベルをkeyから引く
+  const catLabel = (key: string) => categories.find(c => c.key === key)?.label ?? key;
 
   const handleDelete = async (id: string) => {
     try { await deleteDocument(id); toast.success("削除しました"); setDeleteTarget(null); load(); } catch { toast.error("失敗"); }
@@ -66,7 +98,7 @@ export default function DocumentsPage() {
 
       await createDocument({
         name: uploadName.trim(),
-        category: uploadCategory as Doc["category"],
+        category: (uploadCategory || undefined) as Doc["category"],
         description: uploadDescription.trim() || undefined,
         storage_path: path,
         file_name: uploadFile.name,
@@ -76,7 +108,7 @@ export default function DocumentsPage() {
 
       toast.success("アップロードしました");
       setUploadOpen(false);
-      setUploadName(""); setUploadCategory("other"); setUploadDescription(""); setUploadFile(null);
+      setUploadName(""); setUploadDescription(""); setUploadFile(null);
       load();
     } catch (e: unknown) {
       toast.error(`アップロード失敗: ${e instanceof Error ? e.message : "不明なエラー"}`);
@@ -99,6 +131,38 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleAddCategory = async () => {
+    if (!newCatLabel.trim()) return;
+    setAddingCat(true);
+    try {
+      await createDocumentCategory(newCatLabel.trim());
+      setNewCatLabel("");
+      await loadCategories();
+      toast.success("カテゴリを追加しました");
+    } catch { toast.error("追加に失敗しました"); } finally { setAddingCat(false); }
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editingCat || !editLabel.trim()) return;
+    try {
+      await updateDocumentCategory(editingCat.id, editLabel.trim());
+      setEditingCat(null);
+      await loadCategories();
+      toast.success("更新しました");
+    } catch { toast.error("更新に失敗しました"); }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deleteCatTarget) return;
+    try {
+      await deleteDocumentCategory(deleteCatTarget.id);
+      setDeleteCatTarget(null);
+      if (tab === deleteCatTarget.key) setTab("all");
+      await loadCategories();
+      toast.success("削除しました");
+    } catch { toast.error("削除に失敗しました"); }
+  };
+
   const filtered = docs.filter(d => {
     const q = search.toLowerCase();
     return !q || d.name.toLowerCase().includes(q) || d.file_name.toLowerCase().includes(q);
@@ -107,16 +171,26 @@ export default function DocumentsPage() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader title="文書管理" description="社内文書の管理">
-        <Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4 mr-1" />アップロード</Button>
+        <Button variant="outline" size="sm" onClick={() => setCatOpen(true)}>
+          <Settings2 className="h-4 w-4 mr-1" />カテゴリ設定
+        </Button>
+        <Button size="sm" onClick={() => setUploadOpen(true)}>
+          <Upload className="h-4 w-4 mr-1" />アップロード
+        </Button>
       </PageHeader>
+
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
       </div>
+
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="all">すべて</TabsTrigger>
-          {Object.entries(CAT_LABELS).map(([k, v]) => <TabsTrigger key={k} value={k}>{v}</TabsTrigger>)}
+          {catLoading
+            ? <TabsTrigger value="_loading" disabled>読込中...</TabsTrigger>
+            : categories.map(c => <TabsTrigger key={c.key} value={c.key}>{c.label}</TabsTrigger>)
+          }
         </TabsList>
         <TabsContent value={tab} className="mt-4">
           <Card variant="inset">
@@ -137,12 +211,7 @@ export default function DocumentsPage() {
                   {loading
                     ? Array.from({ length: 4 }).map((_, i) => (
                         <TableRow key={i}>
-                          <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
                           <TableCell></TableCell>
                         </TableRow>
                       ))
@@ -154,7 +223,9 @@ export default function DocumentsPage() {
                             <div className="flex items-center gap-2"><FileText className="h-4 w-4 text-muted-foreground" />{d.name}</div>
                           </TableCell>
                           <TableCell className="text-sm">{d.file_name}</TableCell>
-                          <TableCell>{d.category ? <Badge variant="outline" className="text-xs">{CAT_LABELS[d.category] || d.category}</Badge> : "-"}</TableCell>
+                          <TableCell>
+                            {d.category ? <Badge variant="outline" className="text-xs">{catLabel(d.category)}</Badge> : "-"}
+                          </TableCell>
                           <TableCell className="text-sm">{formatSize(d.size ?? 0)}</TableCell>
                           <TableCell className="text-sm">{d.uploader?.display_name ?? "-"}</TableCell>
                           <TableCell className="text-sm">{format(parseISO(d.created_at), "yyyy/MM/dd", { locale: ja })}</TableCell>
@@ -177,6 +248,7 @@ export default function DocumentsPage() {
         </TabsContent>
       </Tabs>
 
+      {/* アップロードダイアログ */}
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>文書をアップロード</DialogTitle></DialogHeader>
@@ -188,9 +260,9 @@ export default function DocumentsPage() {
             <div className="space-y-2">
               <Label>カテゴリ</Label>
               <Select value={uploadCategory} onValueChange={setUploadCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="カテゴリを選択" /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(CAT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  {categories.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -213,7 +285,89 @@ export default function DocumentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 削除確認ダイアログ */}
+      {/* カテゴリ設定ダイアログ */}
+      <Dialog open={catOpen} onOpenChange={setCatOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />カテゴリ設定
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* カテゴリ一覧 */}
+            <div className="space-y-1">
+              {catLoading ? (
+                <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : categories.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">カテゴリなし</p>
+              ) : (
+                categories.map(cat => (
+                  <div key={cat.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background hover:bg-muted/30 group">
+                    <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    {editingCat?.id === cat.id ? (
+                      <>
+                        <Input
+                          autoFocus
+                          value={editLabel}
+                          onChange={e => setEditLabel(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") handleUpdateCategory(); if (e.key === "Escape") setEditingCat(null); }}
+                          className="h-7 text-sm flex-1"
+                        />
+                        <Button size="sm" className="h-7 text-xs" onClick={handleUpdateCategory}>保存</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingCat(null)}>取消</Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 text-sm font-medium">{cat.label}</span>
+                        <span className="text-[11px] text-muted-foreground font-mono opacity-0 group-hover:opacity-100 transition-opacity">{cat.key}</span>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => { setEditingCat(cat); setEditLabel(cat.label); }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteCatTarget(cat)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <Separator />
+
+            {/* 追加フォーム */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="新しいカテゴリ名"
+                value={newCatLabel}
+                onChange={e => setNewCatLabel(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleAddCategory(); }}
+                className="flex-1"
+              />
+              <Button size="sm" onClick={handleAddCategory} disabled={addingCat || !newCatLabel.trim()}>
+                <Plus className="h-4 w-4 mr-1" />追加
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCatOpen(false)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 文書削除確認ダイアログ */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -227,6 +381,27 @@ export default function DocumentsPage() {
             <AlertDialogAction
               className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               onClick={() => deleteTarget && handleDelete(deleteTarget.id)}
+            >
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* カテゴリ削除確認ダイアログ */}
+      <AlertDialog open={!!deleteCatTarget} onOpenChange={(v) => { if (!v) setDeleteCatTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>カテゴリを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{deleteCatTarget?.label}」を削除します。このカテゴリに登録された文書のカテゴリは空になります。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              onClick={handleDeleteCategory}
             >
               削除する
             </AlertDialogAction>

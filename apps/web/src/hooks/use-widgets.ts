@@ -8,21 +8,27 @@ export interface WidgetConfig {
   label: string;
   visible: boolean;
   order: number;
+  /** ピクセル単位の幅（未設定なら 1/3 列を占める） */
   widthPx?: number;
+  /** ピクセル単位の高さ（未設定ならコンテンツに追従） */
   height?: number;
+  /** @deprecated 旧グリッド版の互換用 */
+  colSpan?: number;
+  /** @deprecated 旧グリッド版の互換用 */
+  rowSpan?: number;
 }
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
-  { id: "ai-focus",       label: "AIフォーカス",   visible: true,  order: 0 },
-  { id: "attendance",     label: "勤怠",           visible: true,  order: 1 },
-  { id: "mail",           label: "メール",          visible: true,  order: 2 },
-  { id: "workflow",       label: "ワークフロー",    visible: true,  order: 3 },
-  { id: "kpi",            label: "KPI指標",         visible: true,  order: 4 },
-  { id: "customers",      label: "最近の顧客",      visible: true,  order: 5 },
-  { id: "constructions",  label: "進行中の工事",    visible: true,  order: 6 },
+  { id: "ai-focus",       label: "AIフォーカス",     visible: true,  order: 0 },
+  { id: "attendance",     label: "勤怠",             visible: true,  order: 1 },
+  { id: "mail",           label: "メール",            visible: true,  order: 2 },
+  { id: "workflow",       label: "ワークフロー",      visible: true,  order: 3 },
+  { id: "kpi",            label: "KPI指標",           visible: true,  order: 4 },
+  { id: "trend",          label: "売上トレンド",      visible: true,  order: 5 },
+  { id: "customers",      label: "最近の顧客",        visible: true,  order: 6 },
+  { id: "constructions",  label: "進行中の工事",      visible: true,  order: 7 },
 ];
 
-// localStorage キーはユーザーIDを含まないが、ログイン前の即時表示用として残す
 const STORAGE_KEY = "dashboard-widgets-v1";
 
 function mergeWithDefaults(stored: WidgetConfig[]): WidgetConfig[] {
@@ -47,8 +53,9 @@ export function useWidgets() {
   const [widgets, setWidgets] = useState<WidgetConfig[]>(DEFAULT_WIDGETS);
   const [hydrated, setHydrated] = useState(false);
 
-  // DB への保存をデバウンスするため ref でタイマー管理
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ハイドレーション完了後の変更のみ永続化するためのフラグ
+  const skipPersistRef = useRef(true);
 
   // 起動時: まず localStorage で即時表示 → DB から上書き
   useEffect(() => {
@@ -59,99 +66,86 @@ export function useWidgets() {
       if (dbWidgets && dbWidgets.length > 0) {
         const merged = mergeWithDefaults(dbWidgets);
         setWidgets(merged);
-        // DB の値を localStorage にも反映
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       }
       setHydrated(true);
+      skipPersistRef.current = false;
     }).catch(() => {
-      // DB 取得失敗時は localStorage のまま継続
       setHydrated(true);
+      skipPersistRef.current = false;
     });
   }, []);
 
-  /** localStorage + DB (debounced) に保存 */
-  const save = useCallback((next: WidgetConfig[]) => {
-    setWidgets(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  // widgets が変化したら localStorage + DB に自動保存（ハイドレーション後のみ）
+  useEffect(() => {
+    if (skipPersistRef.current) return;
 
-    // 500ms デバウンス: 連続操作（ドラッグ中など）でも最後の値だけ DB に送る
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets));
+
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveDashboardSettings(next).catch(() => {});
+      saveDashboardSettings(widgets).catch(() => {});
     }, 500);
-  }, []);
+  }, [widgets]);
 
   const toggleVisible = useCallback((id: string) => {
-    setWidgets((prev) => {
-      const next = prev.map((w) =>
-        w.id === id ? { ...w, visible: !w.visible } : w
-      );
-      save(next);
-      return next;
-    });
-  }, [save]);
+    setWidgets((prev) =>
+      prev.map((w) => w.id === id ? { ...w, visible: !w.visible } : w)
+    );
+  }, []);
 
   const moveUp = useCallback((id: string) => {
     setWidgets((prev) => {
       const sorted = [...prev].sort((a, b) => a.order - b.order);
       const idx = sorted.findIndex((w) => w.id === id);
       if (idx <= 0) return prev;
-      const next = sorted.map((w, i) => {
+      return sorted.map((w, i) => {
         if (i === idx - 1) return { ...w, order: sorted[idx].order };
         if (i === idx)     return { ...w, order: sorted[idx - 1].order };
         return w;
       });
-      save(next);
-      return next;
     });
-  }, [save]);
+  }, []);
 
   const moveDown = useCallback((id: string) => {
     setWidgets((prev) => {
       const sorted = [...prev].sort((a, b) => a.order - b.order);
       const idx = sorted.findIndex((w) => w.id === id);
       if (idx >= sorted.length - 1) return prev;
-      const next = sorted.map((w, i) => {
+      return sorted.map((w, i) => {
         if (i === idx)     return { ...w, order: sorted[idx + 1].order };
         if (i === idx + 1) return { ...w, order: sorted[idx].order };
         return w;
       });
-      save(next);
-      return next;
     });
-  }, [save]);
+  }, []);
 
+  /** ピクセル単位で width / height を自由設定（スナップなし） */
   const resizeWidget = useCallback((id: string, widthPx: number, height: number) => {
-    setWidgets((prev) => {
-      const next = prev.map((w) =>
-        w.id === id ? { ...w, widthPx, height } : w
-      );
-      save(next);
-      return next;
-    });
-  }, [save]);
+    setWidgets((prev) =>
+      prev.map((w) =>
+        w.id === id
+          ? { ...w, widthPx: Math.max(160, Math.round(widthPx)), height: Math.max(100, Math.round(height)) }
+          : w,
+      ),
+    );
+  }, []);
 
   const setWidgetWidth = useCallback((id: string, widthPx: number) => {
-    setWidgets((prev) => {
-      const next = prev.map((w) =>
-        w.id === id ? { ...w, widthPx } : w
-      );
-      save(next);
-      return next;
-    });
-  }, [save]);
+    setWidgets((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, widthPx: Math.max(160, Math.round(widthPx)) } : w)),
+    );
+  }, []);
 
   const initWidths = useCallback((updates: Record<string, number>) => {
-    setWidgets((prev) => {
-      const next = prev.map((w) =>
+    setWidgets((prev) =>
+      prev.map((w) =>
         updates[w.id] !== undefined && w.widthPx === undefined
           ? { ...w, widthPx: updates[w.id] }
-          : w
-      );
-      save(next);
-      return next;
-    });
-  }, [save]);
+          : w,
+      ),
+    );
+  }, []);
 
   const reorder = useCallback((activeId: string, overId: string) => {
     setWidgets((prev) => {
@@ -162,15 +156,13 @@ export function useWidgets() {
       const next = [...sorted];
       const [moved] = next.splice(activeIdx, 1);
       next.splice(overIdx, 0, moved);
-      const reassigned = next.map((w, i) => ({ ...w, order: i }));
-      save(reassigned);
-      return reassigned;
+      return next.map((w, i) => ({ ...w, order: i }));
     });
-  }, [save]);
+  }, []);
 
   const reset = useCallback(() => {
-    save(DEFAULT_WIDGETS);
-  }, [save]);
+    setWidgets(DEFAULT_WIDGETS);
+  }, []);
 
   const sorted = [...widgets].sort((a, b) => a.order - b.order);
 

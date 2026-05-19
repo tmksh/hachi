@@ -144,3 +144,11 @@ export async function updateEstimate(
     if (error) throw error;
   }
 }
+
+export async function deleteEstimate(id: string) {
+  const supabase = await createClient();
+  await supabase.from("estimate_items").delete().eq("estimate_id", id);
+  await supabase.from("estimate_categories").delete().eq("estimate_id", id);
+  const { error } = await supabase.from("estimates").delete().eq("id", id);
+  if (error) throw error;
+}

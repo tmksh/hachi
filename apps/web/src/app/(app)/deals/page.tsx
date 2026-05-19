@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, Users, DollarSign, BarChart3, Plus, FileText } from "lucide-react";
-import { getDeals, updateDeal, getDealStages } from "@/lib/actions/deals";
+import { TrendingUp, Users, DollarSign, BarChart3, Plus, FileText, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { getDeals, updateDeal, getDealStages, deleteDeal } from "@/lib/actions/deals";
 import { getProfiles } from "@/lib/actions/profiles";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
@@ -34,6 +36,8 @@ export default function DealsPage() {
   const [addOpen, setAddOpen]           = useState(false);
   const [wonDeal, setWonDeal]           = useState<DealRow | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState("_all");
+  const [deleteTarget, setDeleteTarget] = useState<DealRow | null>(null);
+  const [deleting, setDeleting]         = useState(false);
 
   const fetchDeals = useCallback(async () => {
     try { const d = await getDeals(); setDeals(d as DealRow[]); } catch {} finally { setLoading(false); }
@@ -61,6 +65,18 @@ export default function DealsPage() {
     .reduce((s, d) => s + (d.value || 0), 0);
   const closedCount   = wonDeals.length + filteredDeals.filter(d => lostStageKeys.includes(d.stage)).length;
   const convRate      = closedCount > 0 ? Math.round((wonDeals.length / closedCount) * 100) : 0;
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteDeal(deleteTarget.id);
+      setDeals(prev => prev.filter(d => d.id !== deleteTarget.id));
+    } catch { /* ignore */ } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   const handleDrop = async (e: React.DragEvent, targetStage: string) => {
     e.preventDefault();
@@ -179,7 +195,31 @@ export default function DealsPage() {
                       className={`cursor-grab active:cursor-grabbing group/card ${draggedDeal === deal.id ? "opacity-50" : ""}`}
                     >
                       <CardContent className="p-3 space-y-2">
-                        <p className="font-medium text-sm">{deal.title}</p>
+                        <div className="flex items-start justify-between gap-1">
+                          <p className="font-medium text-sm flex-1 min-w-0">{deal.title}</p>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="opacity-0 group-hover/card:opacity-100 h-6 w-6 rounded flex items-center justify-center hover:bg-muted transition-opacity shrink-0"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-36">
+                              <DropdownMenuItem onClick={e => { e.stopPropagation(); router.push(`/crm/${deal.customer_id}`); }}>
+                                <Pencil className="h-3.5 w-3.5 mr-2" />顧客詳細
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={e => { e.stopPropagation(); setDeleteTarget(deal); }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-2" />削除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           {deal.customer?.company_name || deal.customer?.name || "-"}
                         </p>
@@ -218,6 +258,28 @@ export default function DealsPage() {
           deal={wonDeal}
         />
       )}
+
+      {/* 削除確認 */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>商談を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{deleteTarget?.title}」を削除します。この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

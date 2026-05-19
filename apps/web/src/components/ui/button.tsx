@@ -21,17 +21,17 @@ const buttonVariants = cva(
           "focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 " +
           "active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.20)] active:translate-y-0",
         outline:
-          "bg-white text-foreground border border-input " +
-          "shadow-[0_1px_2px_rgba(0,0,0,0.06)] " +
-          "hover:bg-gray-50 hover:border-gray-300 hover:-translate-y-px hover:shadow-[0_2px_5px_rgba(0,0,0,0.08)] " +
+          "bg-white text-foreground border border-[rgba(0,0,0,0.10)] " +
+          "shadow-[0_1px_2px_rgba(0,0,0,0.04)] " +
+          "hover:bg-gray-50 hover:border-[rgba(0,0,0,0.18)] hover:-translate-y-px hover:shadow-[0_2px_5px_rgba(0,0,0,0.07)] " +
           "active:bg-gray-100 active:translate-y-0 active:shadow-none " +
-          "dark:bg-white/8 dark:border-white/10 dark:text-foreground dark:hover:bg-white/14 dark:hover:border-white/18",
+          "dark:bg-white/8 dark:border-white/8 dark:text-foreground dark:hover:bg-white/14 dark:hover:border-white/14",
         secondary:
-          "bg-gray-100 text-gray-800 border border-gray-200 " +
-          "shadow-[0_1px_2px_rgba(0,0,0,0.05)] " +
-          "hover:bg-gray-200 hover:border-gray-300 hover:-translate-y-px hover:shadow-[0_2px_5px_rgba(0,0,0,0.08)] " +
+          "bg-gray-100 text-gray-800 border border-gray-100 " +
+          "shadow-[0_1px_2px_rgba(0,0,0,0.04)] " +
+          "hover:bg-gray-200 hover:border-gray-200 hover:-translate-y-px hover:shadow-[0_2px_5px_rgba(0,0,0,0.07)] " +
           "active:bg-gray-200 active:translate-y-0 active:shadow-none " +
-          "dark:bg-white/8 dark:text-foreground dark:border-white/10 dark:hover:bg-white/14",
+          "dark:bg-white/8 dark:text-foreground dark:border-white/8 dark:hover:bg-white/14",
         ghost:
           "text-foreground hover:bg-gray-100 hover:text-foreground active:bg-gray-200 " +
           "dark:hover:bg-white/8 dark:active:bg-white/12",

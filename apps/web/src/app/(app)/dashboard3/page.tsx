@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart,
@@ -35,7 +35,7 @@ import { SortableWidget } from "@/components/shared/sortable-widget";
 import { useWidgets } from "@/hooks/use-widgets";
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   type DragEndEvent,
   PointerSensor,
   TouchSensor,
@@ -64,6 +64,30 @@ const MONTHLY_DATA = [
 
 const ACCENT = "#18181b";
 
+/** カードの空きスペースに合わせて自動でサイズが変わるアナログ時計 */
+function ResponsiveClock() {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState(76);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const rect = entries[0].contentRect;
+      const next = Math.max(48, Math.min(220, Math.floor(Math.min(rect.width, rect.height))));
+      setSize(next);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
+      <AnalogClock size={size} />
+    </div>
+  );
+}
+
 export default function Dashboard3Page() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
@@ -78,10 +102,10 @@ export default function Dashboard3Page() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  function handleDragEnd(event: DragEndEvent) {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) reorder(String(active.id), String(over.id));
-  }
+  }, [reorder]);
 
   useEffect(() => {
     getDashboardData()
@@ -131,13 +155,15 @@ export default function Dashboard3Page() {
       case "attendance":
         return !isVisible("attendance") ? null : (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between shrink-0">
               <span className="text-xs font-bold text-slate-700">勤怠打刻</span>
               <Link href="/attendance"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-slate-600 transition-colors" /></Link>
             </div>
-            <div className="flex items-center gap-4">
-              <AnalogClock size={76} />
-              <div className="flex flex-col gap-1 flex-1">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3">
+              <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+                <ResponsiveClock />
+              </div>
+              <div className="flex flex-col items-center gap-1 shrink-0">
                 <p className="text-xl font-black tabular-nums text-slate-900 leading-none">{format(now, "HH:mm")}</p>
                 <div className="flex items-center gap-1.5">
                   <span className={`h-1.5 w-1.5 rounded-full shrink-0 transition-all ${clockedIn ? "bg-zinc-800" : "bg-slate-300"}`} />
@@ -148,14 +174,14 @@ export default function Dashboard3Page() {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 shrink-0">
               <button onClick={handleClockIn} disabled={clockedIn}
-                className="h-8 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                className="h-9 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white"
                 style={{ background: clockedIn ? "#d4d4d8" : ACCENT }}>
                 <LogIn className="h-3 w-3" />出勤
               </button>
               <button onClick={handleClockOut} disabled={!clockedIn}
-                className="h-8 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200 text-slate-600 hover:bg-slate-50">
+                className="h-9 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200 text-slate-600 hover:bg-slate-50">
                 <LogOut className="h-3 w-3" />退勤
               </button>
             </div>
@@ -301,6 +327,36 @@ export default function Dashboard3Page() {
           </div>
         );
 
+      case "trend":
+        return !isVisible("trend") ? null : (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col gap-4 h-full">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">売上トレンド</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">直近7ヶ月 / 受注額・パイプライン（万円）</p>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm inline-block bg-zinc-900" />受注額</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm inline-block bg-zinc-300" />パイプライン</span>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={MONTHLY_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: "#f8fafc" }}
+                  contentStyle={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
+                  formatter={(v: number) => [`¥${v}万`, undefined]}
+                />
+                <Bar dataKey="パイプライン" fill="#d4d4d8" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="受注額" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={36} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        );
+
       case "constructions":
         return !isVisible("constructions") ? null : (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col gap-3 h-full">
@@ -378,36 +434,8 @@ export default function Dashboard3Page() {
         ))}
       </div>
 
-      {/* Chart (fixed, not sortable) */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">売上トレンド</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">直近7ヶ月 / 受注額・パイプライン（万円）</p>
-          </div>
-          <div className="flex items-center gap-3 text-[11px] text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm inline-block bg-zinc-900" />受注額</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm inline-block bg-zinc-300" />パイプライン</span>
-          </div>
-        </div>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={MONTHLY_DATA} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-            <Tooltip
-              cursor={{ fill: "#f8fafc" }}
-              contentStyle={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }}
-              formatter={(v: number) => [`¥${v}万`, undefined]}
-            />
-            <Bar dataKey="パイプライン" fill="#d4d4d8" radius={[4, 4, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="受注額" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={36} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
       {/* Sortable widget grid */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
         <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
           <div data-widget-grid className="flex flex-wrap gap-4">
             {sortableIds.map((id) => {

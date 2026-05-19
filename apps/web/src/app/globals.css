@@ -106,8 +106,8 @@
   --accent: oklch(0.93 0.04 152);
   --accent-foreground: oklch(0.28 0.08 152);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.006 240);
-  --input: oklch(0.91 0.006 240);
+  --border: oklch(0.94 0.003 240);
+  --input: oklch(0.94 0.003 240);
   --ring: oklch(0.35 0.10 152);
   /* Chart colors — analogous green palette (H: 115–190) */
   --chart-1: oklch(0.35 0.10 152); /* dark forest green */
@@ -193,7 +193,7 @@
 */
 @layer base {
   * {
-    @apply border-border/60 outline-ring/50;
+    @apply border-border/50 outline-ring/50;
   }
   body {
     @apply text-foreground;
@@ -226,8 +226,8 @@
   /* ── Primary card (tables, charts, main panels) ── */
   .frost-card {
     background: #FFFFFF;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.2s ease;
   }
   .frost-card:hover {
@@ -245,7 +245,7 @@
   /* ── Inset / sunken card (list views, tables) ── */
   .frost-card-inset {
     background: #F8F9FA;
-    border: 1px solid rgba(0, 0, 0, 0.07);
+    border: 1px solid rgba(0, 0, 0, 0.05);
     box-shadow: none;
     transition: none;
   }
@@ -258,8 +258,8 @@
   /* ── Stat / small widget card ── */
   .stat-card {
     background: #FFFFFF;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.2s ease;
   }
   .stat-card:hover {
@@ -289,15 +289,15 @@
   /* ── Input ── */
   .glass-input {
     background: #FFFFFF !important;
-    border-color: rgba(0, 0, 0, 0.15) !important;
+    border-color: rgba(0, 0, 0, 0.09) !important;
   }
   .glass-input:focus, .glass-input:focus-within {
     background: #FFFFFF !important;
-    border-color: rgba(0, 0, 0, 0.25) !important;
+    border-color: rgba(0, 0, 0, 0.18) !important;
   }
   .dark .glass-input {
     background: #1F2937 !important;
-    border-color: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
   }
   .dark .glass-input:focus, .dark .glass-input:focus-within {
     background: #243040 !important;

@@ -90,6 +90,56 @@
     .status-partial { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
     .status-phase2 { background: #fff7e6; color: #b45309; border: 1px solid #fbd38d; }
 
+    /* SCHEDULE */
+    .schedule-outer { background: #fff; border-bottom: 1px solid var(--border); padding: 2.5rem 2rem; }
+    .schedule-inner { max-width: 1100px; margin: 0 auto; }
+    .schedule-eyebrow { font-size: .68rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 1.2rem; }
+    .schedule-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.5rem; }
+    .timeline { display: flex; gap: 0; overflow-x: auto; padding-bottom: .5rem; }
+    .tl-item { flex: 1; min-width: 160px; position: relative; padding: 0 1rem 1.5rem 0; }
+    .tl-item:not(:last-child)::after {
+      content: '';
+      position: absolute; top: 10px; right: 0; left: 1.5rem;
+      height: 2px; background: var(--border); z-index: 0;
+    }
+    .tl-dot {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); border: 3px solid #fff;
+      box-shadow: 0 0 0 2px var(--accent);
+      margin-bottom: .75rem; position: relative; z-index: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tl-dot-done { background: #d1d5db; box-shadow: 0 0 0 2px #d1d5db; }
+    .tl-dot-release { background: #1a7a52; box-shadow: 0 0 0 2px #1a7a52; }
+    .tl-dot svg { width: 10px; height: 10px; stroke: #fff; fill: none; stroke-width: 2.5; }
+    .tl-date { font-size: .72rem; font-weight: 700; color: var(--accent-dark); margin-bottom: .2rem; font-family: 'IBM Plex Mono', monospace; }
+    .tl-label { font-size: .88rem; font-weight: 700; margin-bottom: .25rem; }
+    .tl-desc { font-size: .76rem; color: var(--muted); line-height: 1.5; }
+    .tl-badge { display: inline-block; font-size: .65rem; font-weight: 700; padding: 1px 7px; border-radius: 4px; margin-top: .35rem; }
+    .tl-badge-done { background: #f3f4f6; color: #6b7280; }
+    .tl-badge-now { background: var(--accent-light); color: var(--accent-dark); border: 1px solid #b2e8d8; }
+    .tl-badge-release { background: #1a7a52; color: #fff; }
+
+    /* EXTERNAL */
+    .ext-outer { background: #f7f8fa; border-bottom: 1px solid var(--border); padding: 2.5rem 2rem; }
+    .ext-inner { max-width: 1100px; margin: 0 auto; }
+    .ext-eyebrow { font-size: .68rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 1.2rem; }
+    .ext-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 1.5rem; }
+    .ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+    .ext-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.4rem;
+      display: flex; flex-direction: column; gap: .6rem;
+      transition: box-shadow .2s;
+    }
+    .ext-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.07); }
+    .ext-icon { font-size: 1.4rem; line-height: 1; }
+    .ext-name { font-size: .92rem; font-weight: 700; }
+    .ext-desc { font-size: .8rem; color: var(--muted); line-height: 1.55; }
+    .ext-status { font-size: .68rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; align-self: flex-start; }
+    .ext-status-done { background: var(--accent-light); color: var(--accent-dark); border: 1px solid #b2e8d8; }
+    .ext-status-optional { background: #fff7e6; color: #b45309; border: 1px solid #fbd38d; }
+    .ext-status-phase2 { background: #f3f4f6; color: #6b7280; border: 1px solid var(--border); }
+
     /* LEGEND */
     .legend { max-width: 1100px; margin: 0 auto; padding: .8rem 2rem 2.5rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
     .legend-label { font-size: .78rem; font-weight: 700; color: var(--muted); }
@@ -130,6 +180,68 @@
   </div>
 </div>
 
+<!-- ── SCHEDULE ── -->
+<div class="schedule-outer">
+  <div class="schedule-inner">
+    <div class="schedule-eyebrow">Release Schedule</div>
+    <div class="schedule-title">リリーススケジュール</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot tl-dot-done">
+          <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+        </div>
+        <div class="tl-date">2026年5月</div>
+        <div class="tl-label">コア機能実装</div>
+        <div class="tl-desc">CRM・工事・請求・BI・ポータルの主要機能をひととおり実装完了</div>
+        <span class="tl-badge tl-badge-done">完了</span>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot">
+          <svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3" fill="#fff"/></svg>
+        </div>
+        <div class="tl-date">6月初旬</div>
+        <div class="tl-label">デザイン確定</div>
+        <div class="tl-desc">UI/UX レビューを完了しデザインを固める。カラーシステム・コンポーネント仕様を確定</div>
+        <span class="tl-badge tl-badge-now">進行中</span>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot">
+          <svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3" fill="#fff"/></svg>
+        </div>
+        <div class="tl-date">6月20日ごろ</div>
+        <div class="tl-label">機能実装完了</div>
+        <div class="tl-desc">BI 実績データ連携・未実装 CRUD・外部連携の接続など残機能をすべて完了</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot">
+          <svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3" fill="#fff"/></svg>
+        </div>
+        <div class="tl-date">6月21日〜7月20日</div>
+        <div class="tl-label">動作確認・QA</div>
+        <div class="tl-desc">エンドツーエンドの動作確認・実データでのテスト・バグ修正・パフォーマンス改善</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot">
+          <svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="3" fill="#fff"/></svg>
+        </div>
+        <div class="tl-date">7月21日〜7月31日</div>
+        <div class="tl-label">予備期間（10日間）</div>
+        <div class="tl-desc">最終調整・未解決バグ対応・リリース準備のバッファ</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot tl-dot-release">
+          <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+        </div>
+        <div class="tl-date">2026年7月末</div>
+        <div class="tl-label">本番リリース</div>
+        <div class="tl-desc">フェーズ1 正式リリース。顧客テナントへの展開開始</div>
+        <span class="tl-badge tl-badge-release">TARGET</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FILTER ── -->
 <div class="filter-outer">
   <div class="filter-inner">
     <button class="filter-btn active" onclick="filter('all',this)">すべて</button>
@@ -282,11 +394,11 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">メール連携</div>
-      <div class="feat-desc">Gmail と連携してメールをシステム内で送受信。スレッド管理・スター管理・添付ファイル対応。顧客と紐付けて閲覧可能。</div>
+      <div class="feat-desc">Gmail と連携してメールをシステム内で送受信。スレッド管理・スター管理・添付ファイル対応。顧客と紐付けて閲覧可能。Gmail OAuth 接続が必要（未連携時はサンプル表示）。</div>
       <div class="feat-tags"><span class="feat-tag">Gmail 連携</span><span class="feat-tag">スレッド管理</span><span class="feat-tag">顧客紐付け</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
-        <span class="status-chip status-done">実装済み</span>
+        <span class="status-chip status-partial">部分実装</span>
       </div>
     </div>
 
@@ -350,11 +462,11 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">BI ダッシュボード</div>
-      <div class="feat-desc">受注額・粗利・案件数など経営 KPI をグラフで可視化。月次トレンド・部門別比較・前期対比などのレポートを提供します。</div>
-      <div class="feat-tags"><span class="feat-tag">KPI 管理</span><span class="feat-tag">グラフ表示</span><span class="feat-tag">月次トレンド</span></div>
+      <div class="feat-desc">経営 KPI（売上・粗利・営業利益）をグラフで可視化。期首設定・部門別目標・月次推移・円形達成率チャートに対応。目標設定は DB 連携済み、実績グラフは工事/請求からの集計接続が6月完了予定。</div>
+      <div class="feat-tags"><span class="feat-tag">KPI 管理</span><span class="feat-tag">P&L ウォーターフォール</span><span class="feat-tag">達成率円グラフ</span><span class="feat-tag">カラーカスタマイズ</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
-        <span class="status-chip status-done">実装済み</span>
+        <span class="status-chip status-partial">部分実装</span>
       </div>
     </div>
 
@@ -391,6 +503,73 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- ── EXTERNAL INTEGRATIONS ── -->
+<div class="ext-outer">
+  <div class="ext-inner">
+    <div class="ext-eyebrow">External Integrations</div>
+    <div class="ext-title">外部連携</div>
+    <div class="ext-grid">
+
+      <div class="ext-card">
+        <div class="ext-icon">🔐</div>
+        <div class="ext-name">Supabase Auth</div>
+        <div class="ext-desc">メール＋パスワード認証。JWT トークン管理・セッション維持・パスワードリセット対応。RLS でテナント分離。</div>
+        <span class="ext-status ext-status-done">稼働中</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">🗄️</div>
+        <div class="ext-name">Supabase Database</div>
+        <div class="ext-desc">PostgreSQL をバックエンドとして使用。30+ テーブル・RLS ポリシー・マイグレーション管理。リアルタイムサブスクリプション対応。</div>
+        <span class="ext-status ext-status-done">稼働中</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">📦</div>
+        <div class="ext-name">Supabase Storage</div>
+        <div class="ext-desc">文書管理・クリエイティブ素材のファイル保存。バケット単位で RLS 制御。アップロード・署名付き URL 発行・削除に対応。</div>
+        <span class="ext-status ext-status-done">稼働中</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">📧</div>
+        <div class="ext-name">Gmail API (OAuth 2.0)</div>
+        <div class="ext-desc">Gmail アカウントと OAuth 連携。受信スレッド取得・メール送信・スター管理をシステム内で操作。アカウント接続後は自動同期。</div>
+        <span class="ext-status ext-status-optional">要OAuth設定</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">📅</div>
+        <div class="ext-name">Google Calendar API</div>
+        <div class="ext-desc">Google カレンダーと双方向同期。システム内で作成したイベントを Google カレンダーに反映。カレンダー ID を設定で指定。</div>
+        <span class="ext-status ext-status-optional">要OAuth設定</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">🤖</div>
+        <div class="ext-name">AI スコアリング（予定）</div>
+        <div class="ext-desc">顧客・商談の成約確率を AI で自動スコアリング。行動ログ・商談履歴をもとに確度を予測し、優先対応をサポート。</div>
+        <span class="ext-status ext-status-phase2">フェーズ2予定</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">📊</div>
+        <div class="ext-name">SNS API（予定）</div>
+        <div class="ext-desc">Instagram Graph API・Twitter/X API と連携。投稿パフォーマンス・フォロワー推移・エンゲージメントをダッシュボードで可視化。</div>
+        <span class="ext-status ext-status-phase2">フェーズ2予定</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-icon">📬</div>
+        <div class="ext-name">メール配信 API（予定）</div>
+        <div class="ext-desc">SendGrid / Amazon SES と連携した一斉配信。テンプレート管理・配信予約・開封率トラッキングに対応予定。</div>
+        <span class="ext-status ext-status-phase2">フェーズ2予定</span>
+      </div>
+
+    </div>
   </div>
 </div>
 

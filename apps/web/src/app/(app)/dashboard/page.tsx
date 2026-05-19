@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import { AnalogClock } from "@/components/shared/analog-clock";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   type DragEndEvent,
   PointerSensor,
   TouchSensor,
@@ -102,12 +102,12 @@ export default function DashboardPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  function handleDragEnd(event: DragEndEvent) {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
       reorder(String(active.id), String(over.id));
     }
-  }
+  }, [reorder]);
 
   useEffect(() => {
     getDashboardData()
@@ -521,12 +521,9 @@ export default function DashboardPage() {
           .map((w) => w.id);
 
         return (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
             <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-              <div
-                data-widget-grid
-                className="flex flex-wrap gap-4"
-              >
+              <div data-widget-grid className="flex flex-wrap gap-4">
                 {sortableIds.map((id) => {
                   const card = renderCard(id);
                   if (!card) return null;

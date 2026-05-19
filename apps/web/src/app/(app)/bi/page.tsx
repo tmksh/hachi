@@ -1,348 +1,663 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/shared/page-header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
   LayoutDashboard,
-  PieChart,
-  BarChart3,
+  PieChart as PieIcon,
   Info,
-  ArrowRight,
+  Settings2,
+  ArrowUpRight,
+  ArrowDownRight,
+  MoreHorizontal,
 } from "lucide-react";
 import {
-  ComposedChart,
   Bar,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip as RTooltip,
   ResponsiveContainer,
-  ReferenceLine,
   Legend,
-  RadialBarChart,
-  RadialBar,
+  Cell,
+  BarChart,
+  LabelList,
+  ReferenceLine,
+  AreaChart,
+  Area,
 } from "recharts";
+import { getBiSettings } from "@/lib/actions/bi";
+import type { BiAnnualSettings } from "@/lib/actions/bi";
+import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
 
-// ── サンプルデータ（PDF UIイメージ準拠） ──────────────────────────────
-const COMPANY_SUMMARY = {
-  fiscalYear: "R8年度",
-  targetRevenue: 10000,
-  actualRevenue: 2850,
-  grossProfit: 826,
-  grossProfitRate: 29.0,
-  overheadBudget: -1200,
-  grossProfitTotal: -374,
-  grossProfitTotalRate: -13.1,
-  sgaBudget: -600,
-  operatingProfit: -974,
-  operatingProfitRate: -34.2,
-};
-
-const DEPARTMENTS = [
-  { name: "一般住宅", label: "A部門", revenue: 1200, target: 4000, grossProfitRate: 22.2, grossProfit: 267, sga: -253, operatingProfit: 14 },
-  { name: "新築",     label: "B部門", revenue: 800,  target: 3000, grossProfitRate: 38.3, grossProfit: 306, sga: -168, operatingProfit: 138 },
-  { name: "公共工事", label: "C部門", revenue: 550,  target: 2000, grossProfitRate: 14.7, grossProfit: 81,  sga: -116, operatingProfit: -35 },
-  { name: "リフォーム",label:"D部門", revenue: 300,  target: 1000, grossProfitRate: 30.5, grossProfit: 92,  sga: -63,  operatingProfit: 28 },
+// ── サンプルデータ ────────────────────────────────────────────────────
+const SAMPLE_DEPT_ACTUALS = [
+  { name: "一般住宅",  label: "A部門", revenue: 1200, grossProfit: 267 },
+  { name: "新築",      label: "B部門", revenue: 800,  grossProfit: 306 },
+  { name: "公共工事",  label: "C部門", revenue: 550,  grossProfit: 81  },
+  { name: "リフォーム", label: "D部門", revenue: 300, grossProfit: 92  },
 ];
 
-const MONTHLY_DATA = [
-  { month: "4月",  revenue: 420, grossProfit: 122, overhead: -100, grossProfitTotal: 22,  cumulative: 22  },
-  { month: "5月",  revenue: 380, grossProfit: 110, overhead: -100, grossProfitTotal: 10,  cumulative: 32  },
-  { month: "6月",  revenue: 250, grossProfit: 72,  overhead: -100, grossProfitTotal: -28, cumulative: 4   },
-  { month: "7月",  revenue: 600, grossProfit: 174, overhead: -100, grossProfitTotal: 74,  cumulative: 78  },
-  { month: "8月",  revenue: 520, grossProfit: 151, overhead: -100, grossProfitTotal: 51,  cumulative: 129 },
-  { month: "9月",  revenue: 680, grossProfit: 197, overhead: -100, grossProfitTotal: 97,  cumulative: 226 },
-  { month: "10月", revenue: null, grossProfit: null, overhead: null, grossProfitTotal: null, cumulative: null, forecast: true },
-  { month: "11月", revenue: null, grossProfit: null, overhead: null, grossProfitTotal: null, cumulative: null, forecast: true },
-  { month: "12月", revenue: null, grossProfit: null, overhead: null, grossProfitTotal: null, cumulative: null, forecast: true },
-  { month: "1月",  revenue: null, grossProfit: null, overhead: null, grossProfitTotal: null, cumulative: null, forecast: true },
-  { month: "2月",  revenue: null, grossProfit: null, overhead: null, grossProfitTotal: null, cumulative: null, forecast: true },
-  { month: "3月",  revenue: null, grossProfit: null, overhead: null, grossProfitTotal: null, cumulative: null, forecast: true },
+const SAMPLE_MONTHLY = [
+  { month: "4月",  revenue: 480, grossProfit: 130 },
+  { month: "5月",  revenue: 520, grossProfit: 142 },
+  { month: "6月",  revenue: 610, grossProfit: 160 },
+  { month: "7月",  revenue: 580, grossProfit: 152 },
+  { month: "8月",  revenue: 660, grossProfit: 178 },
+  { month: "9月",  revenue: 720, grossProfit: 190 },
+  { month: "10月", revenue: 690, grossProfit: 182 },
+  { month: "11月", revenue: 780, grossProfit: 210 },
+  { month: "12月", revenue: 820, grossProfit: 218 },
+  { month: "1月",  revenue: 760, grossProfit: 198 },
+  { month: "2月",  revenue: 700, grossProfit: 184 },
+  { month: "3月",  revenue: 880, grossProfit: 235 },
 ];
 
-const DEPT_COLORS: Record<string, string> = {
-  "一般住宅": "#0F5132",
-  "新築":     "#1A7A52",
-  "公共工事": "#4DB88A",
-  "リフォーム":"#7DCFAA",
+const FORECAST = {
+  contracted:  { revenue: 7200, grossProfit: 2088 },
+  prospective: { revenue: 8500, grossProfit: 2465 },
 };
 
-// ── ユーティリティ ──────────────────────────────────────────────────
-function achievementRate(actual: number, target: number) {
-  return Math.round((actual / target) * 1000) / 10;
-}
-
-function TrendIcon({ val }: { val: number }) {
-  if (val > 0) return <TrendingUp className="h-4 w-4 text-emerald-500" />;
-  if (val < 0) return <TrendingDown className="h-4 w-4 text-red-500" />;
-  return <Minus className="h-4 w-4 text-muted-foreground" />;
-}
-
-function ValueBadge({ val }: { val: number }) {
-  const isNeg = val < 0;
-  return (
-    <span className={isNeg ? "text-red-500" : "text-foreground"}>
-      {isNeg ? `▲¥${Math.abs(val).toLocaleString()}万` : `¥${val.toLocaleString()}万`}
-    </span>
-  );
-}
-
-// ── P&L フロー行 ───────────────────────────────────────────────────
-function PlRow({ label, value, isDeduction, isBold, indent }: {
-  label: string; value: number; isDeduction?: boolean; isBold?: boolean; indent?: boolean;
+// ── 円形プログレス ────────────────────────────────────────────────────
+function CircularProgress({
+  value,        // 0-100
+  size = 120,
+  strokeWidth = 10,
+  color,
+  label,
+  actual,
+  target,
+}: {
+  value: number;
+  size?: number;
+  strokeWidth?: number;
+  color: string;
+  label: string;
+  actual: string;
+  target: string;
 }) {
-  const isNeg = value < 0;
-  return (
-    <div className={`flex items-center justify-between py-2 border-b border-border/40 last:border-0 ${isBold ? "font-semibold" : ""}`}>
-      <span className={`text-sm ${indent ? "pl-4 text-muted-foreground" : ""}`}>
-        {isDeduction && <span className="text-muted-foreground mr-1.5">−</span>}
-        {label}
-      </span>
-      <span className={`text-sm tabular-nums ${isNeg ? "text-red-500" : ""}`}>
-        {isNeg ? `▲¥${Math.abs(value).toLocaleString()}万` : `¥${value.toLocaleString()}万`}
-      </span>
-    </div>
-  );
-}
+  const r = (size - strokeWidth) / 2;
+  const circ = 2 * Math.PI * r;
+  const capped = Math.min(value, 100);
+  const offset = circ - (capped / 100) * circ;
+  const cx = size / 2;
+  const cy = size / 2;
 
-// ── 達成率ゲージ（ラジアルバー） ────────────────────────────────────
-function AchievementGauge({ rate }: { rate: number }) {
-  const data = [{ value: Math.min(rate, 100), fill: rate >= 50 ? "#0F5132" : rate >= 30 ? "#f59e0b" : "#ef4444" }];
   return (
-    <div className="relative flex items-center justify-center">
-      <RadialBarChart
-        width={120}
-        height={120}
-        cx={60}
-        cy={60}
-        innerRadius={40}
-        outerRadius={55}
-        startAngle={90}
-        endAngle={-270}
-        data={data}
-      >
-        <RadialBar dataKey="value" background={{ fill: "#f3f4f6" }} cornerRadius={6} />
-      </RadialBarChart>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold tabular-nums">{rate}%</span>
-        <span className="text-[10px] text-muted-foreground">達成率</span>
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+          <defs>
+            <linearGradient id={`cg-${label}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={color} stopOpacity={1} />
+            </linearGradient>
+          </defs>
+          {/* 背景トラック */}
+          <circle
+            cx={cx} cy={cy} r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            className="text-muted/50"
+          />
+          {/* プログレス */}
+          <circle
+            cx={cx} cy={cy} r={r}
+            fill="none"
+            stroke={`url(#cg-${label})`}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          />
+        </svg>
+        {/* 中央テキスト */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-bold tabular-nums leading-none" style={{ color }}>
+            {Math.round(capped)}%
+          </span>
+          <span className="text-[10px] text-muted-foreground mt-0.5">達成</span>
+        </div>
+      </div>
+      <div className="text-center">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="text-sm font-bold tabular-nums">{actual}</p>
+        <p className="text-[10px] text-muted-foreground">目標 {target}</p>
       </div>
     </div>
   );
 }
 
-// ── KPIミニカード ──────────────────────────────────────────────────
-function MiniKpi({ label, main, sub, color }: {
-  label: string; main: React.ReactNode; sub?: string; color?: string;
-}) {
+// ── アクセントカラー選択肢 ────────────────────────────────────────────
+const ACCENT_COLORS = [
+  { key: "emerald", color: "#10b981", label: "グリーン" },
+  { key: "blue",    color: "#3b82f6", label: "ブルー"   },
+  { key: "sky",     color: "#0ea5e9", label: "スカイ"   },
+  { key: "teal",    color: "#14b8a6", label: "ティール" },
+  { key: "violet",  color: "#8b5cf6", label: "バイオレット" },
+  { key: "rose",    color: "#f43f5e", label: "ローズ"   },
+  { key: "amber",   color: "#f59e0b", label: "アンバー" },
+  { key: "black",   color: "#18181b", label: "ブラック" },
+];
+
+// ── ユーティリティ ────────────────────────────────────────────────────
+function r1(v: number) { return Math.round(v * 10) / 10; }
+function pct(part: number, whole: number) { return whole > 0 ? r1((part / whole) * 100) : 0; }
+function fmtMan(v: number) { return `¥${Math.abs(v).toLocaleString()}万`; }
+function fmtSigned(v: number) { return v < 0 ? `▲${fmtMan(v)}` : fmtMan(v); }
+
+// ── カラーパレット ────────────────────────────────────────────────────
+function KpiColorBar({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
-    <div className={`rounded-xl border bg-card px-3 py-2 flex flex-col gap-0 border-l-4`} style={{ borderLeftColor: color ?? "#e5e7eb" }}>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="text-xl font-bold tabular-nums tracking-tight">{main}</p>
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-    </div>
-  );
-}
-
-// ── メインコンポーネント ────────────────────────────────────────────
-export default function BiDashboardPage() {
-  const [showTheoretical, setShowTheoretical] = useState(true);
-  const [selectedDept, setSelectedDept] = useState("全社");
-
-  const s = COMPANY_SUMMARY;
-  const achieveRate = achievementRate(s.actualRevenue, s.targetRevenue);
-
-  return (
-    <div className="p-4 md:p-6 space-y-5">
-      <div className="flex items-start justify-between">
-        <PageHeader
-          title="BIダッシュボード"
-          description={`${s.fiscalYear} — 経営指標の可視化（期首予算 ¥${s.targetRevenue.toLocaleString()}万）`}
+    <div className="hidden sm:flex items-center gap-1.5 bg-background/60 border border-border/50 rounded-lg px-2 py-1">
+      {ACCENT_COLORS.map(({ key, color, label }) => (
+        <button
+          key={key}
+          title={label}
+          onClick={() => onChange(color)}
+          className="w-4 h-4 rounded-full border-2 transition-transform hover:scale-110"
+          style={{
+            backgroundColor: color,
+            borderColor: value === color ? "#fff" : "transparent",
+            boxShadow: value === color ? `0 0 0 2px ${color}` : "none",
+          }}
         />
-        <Badge variant="outline" className="text-xs mt-1 shrink-0">サンプルデータ</Badge>
+      ))}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// KPIカード（大）
+// ────────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, sub, delta, deltaPositive, negative, sparkData, accentColor }: {
+  label: string;
+  value: string;
+  sub?: string;
+  delta?: string;
+  deltaPositive?: boolean;
+  negative?: boolean;
+  sparkData?: number[];
+  accentColor: string;
+}) {
+  const data = (sparkData ?? []).map((v, i) => ({ i, v }));
+  const positiveColor = accentColor;
+  const negativeColor = "#8b5cf6";
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          {delta && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[11px] font-semibold"
+              style={{ color: deltaPositive ? positiveColor : negativeColor }}
+            >
+              {deltaPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              {delta}
+            </span>
+          )}
+        </div>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p
+              className="text-2xl font-bold tabular-nums tracking-tight leading-none"
+              style={{ color: negative ? negativeColor : "var(--foreground)" }}
+            >
+              {value}
+            </p>
+            {sub && <p className="text-[11px] text-muted-foreground mt-1.5">{sub}</p>}
+          </div>
+          {data.length > 0 && (
+            <div className="w-20 h-10 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id={`g-${label}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor={negative ? negativeColor : positiveColor} stopOpacity={0.25} />
+                      <stop offset="100%" stopColor={negative ? negativeColor : positiveColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="v" stroke={negative ? negativeColor : positiveColor} strokeWidth={1.5} fill={`url(#g-${label})`} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// メイン
+// ────────────────────────────────────────────────────────────────────
+export default function BiDashboardPage() {
+  const router = useRouter();
+  const [showTheoretical, setShowTheoretical] = useState(true);
+  const [settings, setSettings] = useState<BiAnnualSettings | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [accentColor, setAccentColor] = useState("#10b981");
+  const fiscalYear = getCurrentFiscalYear();
+
+  useEffect(() => {
+    getBiSettings(fiscalYear)
+      .then((s) => { setSettings(s); setSettingsLoaded(true); })
+      .catch(() => setSettingsLoaded(true));
+  }, [fiscalYear]);
+
+  // ── 設定値 ──
+  const targetRevenue  = settings?.target_revenue       ?? 10000;
+  const overheadBudget = settings?.overhead_budget      ?? 1200;
+  const sgaBudget      = settings?.sga_budget           ?? 600;
+  const targetGp       = settings?.target_gross_profit  ?? Math.round(targetRevenue * 0.29);
+
+  const deptTargetMap: Record<string, number> = {};
+  if (settings?.department_targets?.length) {
+    settings.department_targets.forEach((d) => { deptTargetMap[d.department_name] = d.target_revenue; });
+  } else {
+    [4000, 3000, 2000, 1000].forEach((t, i) => { deptTargetMap[DEFAULT_DEPARTMENTS[i]] = t; });
+  }
+
+  // ── 全社集計（§3.2） ──
+  const totalRevenue     = SAMPLE_DEPT_ACTUALS.reduce((s, d) => s + d.revenue, 0);
+  const totalGrossProfit = SAMPLE_DEPT_ACTUALS.reduce((s, d) => s + d.grossProfit, 0);
+  const grossProfitRate  = pct(totalGrossProfit, totalRevenue);
+  const achieveRateTotal = pct(totalRevenue, targetRevenue);
+  const grossProfitTotal = totalGrossProfit - overheadBudget;
+  const gptRate          = pct(grossProfitTotal, totalRevenue);
+  const operatingProfit  = grossProfitTotal - sgaBudget;
+  const opRate           = pct(operatingProfit, totalRevenue);
+
+  const hasDbSettings = settingsLoaded && settings !== null;
+
+  // ── P&L ウォーターフォールデータ ──
+  const plData = [
+    { name: "売上",       value: totalRevenue,     fill: "#18181b" },
+    { name: "粗利額",     value: totalGrossProfit, fill: "#71717a" },
+    { name: "製造間接費", value: -overheadBudget,  fill: "#8b5cf6" },
+    { name: "売上総利益", value: grossProfitTotal, fill: grossProfitTotal >= 0 ? "#18181b" : "#8b5cf6" },
+    { name: "販管費",     value: -sgaBudget,       fill: "#8b5cf6" },
+    { name: "営業利益",   value: operatingProfit,  fill: operatingProfit >= 0 ? "#18181b" : "#8b5cf6" },
+  ];
+
+  return (
+    <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">
+
+      {/* ────────── ページヘッダー ────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">BIダッシュボード</h1>
+          <p className="text-sm text-muted-foreground mt-1">{fiscalYearLabel(fiscalYear)} ・ 経営指標の可視化</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <KpiColorBar value={accentColor} onChange={setAccentColor} />
+          <Badge variant="outline" className="text-xs">サンプルデータ</Badge>
+          {hasDbSettings && <Badge variant="secondary" className="text-xs">設定済</Badge>}
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => router.push("/bi/settings")}>
+            <Settings2 className="h-3.5 w-3.5" />期首設定
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="summary">
-        <TabsList className="w-full sm:w-auto">
+      <Tabs defaultValue="summary" className="space-y-6">
+        <TabsList>
           <TabsTrigger value="summary" className="gap-1.5">
-            <LayoutDashboard className="h-3.5 w-3.5" />
-            全社サマリー
+            <LayoutDashboard className="h-3.5 w-3.5" />全社サマリー
           </TabsTrigger>
           <TabsTrigger value="dept" className="gap-1.5">
-            <PieChart className="h-3.5 w-3.5" />
-            部門別
-          </TabsTrigger>
-          <TabsTrigger value="monthly" className="gap-1.5">
-            <BarChart3 className="h-3.5 w-3.5" />
-            月別推移
+            <PieIcon className="h-3.5 w-3.5" />部門別
           </TabsTrigger>
         </TabsList>
 
         {/* ══════════════════════════════════════════════
-            タブ1：全社サマリー
+            全社サマリー（§6.2）
         ══════════════════════════════════════════════ */}
-        <TabsContent value="summary" className="space-y-4 mt-4">
+        <TabsContent value="summary" className="space-y-6 mt-0">
 
-          {/* 達成率ゲージ + KPI 横並び */}
-          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4">
-            {/* 左：ゲージ + 売上 */}
-            <Card className="flex items-center gap-5 px-6 py-4">
-              <AchievementGauge rate={achieveRate} />
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">売上実績 / 年間目標</p>
-                <p className="text-3xl font-bold tabular-nums">
-                  ¥{s.actualRevenue.toLocaleString()}万
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  / ¥{s.targetRevenue.toLocaleString()}万
-                </p>
-                <div className="mt-2 h-2 w-48 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.min(achieveRate, 100)}%` }}
-                  />
-                </div>
-              </div>
-            </Card>
-
-            {/* 右：KPIミニカード */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <MiniKpi
-                label="粗利率"
-                main={`${s.grossProfitRate.toFixed(1)}%`}
-                sub="完了工事平均"
-                color="#0F5132"
-              />
-              <MiniKpi
-                label="粗利額"
-                main={`¥${s.grossProfit.toLocaleString()}万`}
-                sub="部門粗利の合計"
-                color="#1A7A52"
-              />
-              <MiniKpi
-                label="売上総利益"
-                main={<ValueBadge val={s.grossProfitTotal} />}
-                sub={`率 ${s.grossProfitTotalRate}%`}
-                color={s.grossProfitTotal < 0 ? "#ef4444" : "#0F5132"}
-              />
-              <MiniKpi
-                label="販管費予算"
-                main={`▲¥${Math.abs(s.sgaBudget).toLocaleString()}万`}
-                sub="期首固定値"
-                color="#e5e7eb"
-              />
-              <MiniKpi
-                label="営業利益"
-                main={<ValueBadge val={s.operatingProfit} />}
-                sub={`率 ${s.operatingProfitRate}%`}
-                color={s.operatingProfit < 0 ? "#ef4444" : "#0F5132"}
-              />
-              <MiniKpi
-                label="製造間接費"
-                main={`▲¥${Math.abs(s.overheadBudget).toLocaleString()}万`}
-                sub="期首固定値"
-                color="#e5e7eb"
-              />
-            </div>
+          {/* ──── 1段目：KPI 4枚 ──── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard
+              label="売上実績"
+              value={fmtMan(totalRevenue)}
+              sub={`目標 ${fmtMan(targetRevenue)} ・ 達成率 ${achieveRateTotal}%`}
+              delta={`${achieveRateTotal}%`}
+              deltaPositive={achieveRateTotal >= 50}
+              sparkData={[40, 55, 48, 62, 70, 68, 85]}
+              accentColor={accentColor}
+            />
+            <KpiCard
+              label="粗利率"
+              value={`${grossProfitRate}%`}
+              sub={`粗利額 ${fmtMan(totalGrossProfit)}`}
+              delta="+1.2pt"
+              deltaPositive
+              sparkData={[22, 24, 23, 25, 26, 26, 26]}
+              accentColor={accentColor}
+            />
+            <KpiCard
+              label="売上総利益"
+              value={fmtSigned(grossProfitTotal)}
+              sub={`売上比 ${r1(Math.abs(gptRate))}% ・ 期首予算控除後`}
+              delta={`${r1(Math.abs(gptRate))}%`}
+              deltaPositive={grossProfitTotal >= 0}
+              negative={grossProfitTotal < 0}
+              sparkData={[-80, -60, -55, -50, -45, -47, -45]}
+              accentColor={accentColor}
+            />
+            <KpiCard
+              label="営業利益"
+              value={fmtSigned(operatingProfit)}
+              sub={`売上比 ${r1(Math.abs(opRate))}% ・ 販管費控除後`}
+              delta={`${r1(Math.abs(opRate))}%`}
+              deltaPositive={operatingProfit >= 0}
+              negative={operatingProfit < 0}
+              sparkData={[-100, -90, -85, -90, -100, -105, -105]}
+              accentColor={accentColor}
+            />
           </div>
 
-          {/* P&L フロー */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                損益フロー
-                <span className="text-xs font-normal text-muted-foreground">（{s.fiscalYear} 期首予算 ¥{s.targetRevenue.toLocaleString()}万）</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-start">
-                {/* フロー */}
-                <div className="flex-1 min-w-0">
-                  <PlRow label="全社売上（実績）" value={s.actualRevenue} isBold />
-                  <PlRow label="全社粗利額" value={s.grossProfit} indent />
-                  <PlRow label="予算配賦（製造間接費）" value={s.overheadBudget} isDeduction indent />
-                  <PlRow label="売上総利益" value={s.grossProfitTotal} isBold />
-                  <PlRow label="販管費予算" value={s.sgaBudget} isDeduction indent />
-                  <PlRow label="営業利益" value={s.operatingProfit} isBold />
-                </div>
-                {/* ビジュアルバー */}
-                <div className="shrink-0 space-y-2 w-full sm:w-56">
-                  {[
-                    { label: "売上", val: s.actualRevenue, max: s.targetRevenue, color: "#0F5132" },
-                    { label: "粗利", val: s.grossProfit,   max: s.targetRevenue, color: "#1A7A52" },
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <div className="flex justify-between text-[11px] text-muted-foreground mb-0.5">
-                        <span>{item.label}</span>
-                        <span>¥{item.val.toLocaleString()}万</span>
-                      </div>
-                      <div className="h-3 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${Math.min((item.val / item.max) * 100, 100)}%`,
-                            background: item.color,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-[10px] text-muted-foreground pt-1">対年間目標比較</p>
-                </div>
-              </div>
+          {/* ──── 2段目：P&Lフロー / 目標vs実績 ──── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
 
-              <div className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg p-2.5">
-                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
-                期中の売上総利益がマイナスになるのは<strong>仕様です</strong>。粗利の積み上げが製造間接費に達するまで赤字表示となり、損益分岐点までの距離を可視化します。
+            {/* P&L ウォーターフォール */}
+            <Card className="lg:col-span-2 flex flex-col">
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+                <div>
+                  <CardTitle className="text-base font-semibold">損益フロー（P&L）</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">売上 → 粗利 → 売上総利益 → 営業利益</p>
+                </div>
+                <Button variant="ghost" size="icon" className="h-7 w-7 -mr-1 -mt-1">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="pb-4 flex-1 flex flex-col">
+                <ResponsiveContainer width="100%" height="100%" minHeight={260}>
+                  <BarChart data={plData} margin={{ top: 24, right: 12, bottom: 4, left: 0 }} barSize={44}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} unit="万" axisLine={false} tickLine={false} width={50} />
+                    <RTooltip
+                      formatter={(v) => [`${Number(v) < 0 ? "▲" : ""}¥${Math.abs(Number(v)).toLocaleString()}万`, ""]}
+                      contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
+                    />
+                    <ReferenceLine y={0} stroke="#cbd5e1" strokeWidth={1} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {plData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                      <LabelList
+                        dataKey="value"
+                        position="top"
+                        style={{ fontSize: 10, fontWeight: 600, fill: "#475569" }}
+                        formatter={(v: number) => `${v < 0 ? "▲" : ""}${Math.abs(v).toLocaleString()}`}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* 目標 vs 実績（円グラフ） */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold">目標 vs 実績</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">期首予算との対比</p>
+              </CardHeader>
+              <CardContent className="pb-5">
+                {/* 円グラフ 2つ並べる */}
+                <div className="flex items-center justify-around py-3">
+                  <CircularProgress
+                    value={pct(totalRevenue, targetRevenue)}
+                    size={130}
+                    strokeWidth={11}
+                    color={accentColor}
+                    label="売上"
+                    actual={`¥${totalRevenue.toLocaleString()}万`}
+                    target={`¥${targetRevenue.toLocaleString()}万`}
+                  />
+                  <CircularProgress
+                    value={pct(totalGrossProfit, targetGp)}
+                    size={130}
+                    strokeWidth={11}
+                    color={accentColor}
+                    label="粗利額"
+                    actual={`¥${totalGrossProfit.toLocaleString()}万`}
+                    target={`¥${targetGp.toLocaleString()}万`}
+                  />
+                </div>
+
+                {/* 固定費サマリー */}
+                <div className="mt-3 rounded-xl bg-muted/40 p-3 space-y-2.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">固定費控除</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-violet-400 shrink-0" />
+                      <span className="text-xs text-muted-foreground">製造間接費</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-violet-500">▲¥{overheadBudget.toLocaleString()}万</span>
+                      <span className="text-[10px] text-muted-foreground ml-1.5">/ 月{Math.round(overheadBudget/12).toLocaleString()}万</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-violet-300 shrink-0" />
+                      <span className="text-xs text-muted-foreground">販管費予算</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-violet-500">▲¥{sgaBudget.toLocaleString()}万</span>
+                      <span className="text-[10px] text-muted-foreground ml-1.5">/ 月{Math.round(sgaBudget/12).toLocaleString()}万</span>
+                    </div>
+                  </div>
+                  {/* 達成率まとめバー */}
+                  <div className="pt-1.5 border-t border-border/40">
+                    <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                      <span>売上達成率</span>
+                      <span style={{ color: accentColor }} className="font-bold">{pct(totalRevenue, targetRevenue)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(pct(totalRevenue, targetRevenue), 100)}%`, background: accentColor }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ──── 3段目：月別推移（§6.3） ──── */}
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+              <div>
+                <CardTitle className="text-base font-semibold">月別推移</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">売上 / 粗利 / 売上総利益（按分後）の推移</p>
+              </div>
+              <div className="inline-flex items-center rounded-md border border-border bg-background p-0.5 text-[11px]">
+                <button className="px-2.5 py-1 rounded-sm text-muted-foreground hover:text-foreground transition">月次</button>
+                <button className="px-2.5 py-1 rounded-sm text-muted-foreground hover:text-foreground transition">四半期</button>
+                <button className="px-2.5 py-1 rounded-sm bg-foreground text-background font-medium">年次</button>
+              </div>
+            </CardHeader>
+            <CardContent className="pb-5">
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart
+                  data={SAMPLE_MONTHLY.map((m) => ({
+                    ...m,
+                    売上: m.revenue,
+                    粗利: m.grossProfit,
+                    売上総利益: m.grossProfit - Math.round(overheadBudget / 12),
+                  }))}
+                  margin={{ top: 12, right: 16, bottom: 0, left: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="grad-revenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#8b5cf6" stopOpacity={0.55} />
+                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="grad-gp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#a78bfa" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="#a78bfa" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="grad-gpt" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#c4b5fd" stopOpacity={0.55} />
+                      <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} padding={{ left: 8, right: 8 }} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} unit="万" axisLine={false} tickLine={false} width={50} />
+                  <RTooltip
+                    formatter={(v, n) => [`${Number(v) < 0 ? "▲" : ""}¥${Math.abs(Number(v)).toLocaleString()}万`, n]}
+                    contentStyle={{ fontSize: 12, borderRadius: 10, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}
+                    cursor={{ stroke: "#cbd5e1", strokeWidth: 1, strokeDasharray: "3 3" }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
+                    iconType="circle"
+                    iconSize={8}
+                    formatter={(v) => <span className="text-muted-foreground ml-1 mr-3">{v}</span>}
+                  />
+                  <Area type="monotone" dataKey="売上"       stroke="#8b5cf6" strokeWidth={2}   fill="url(#grad-revenue)" />
+                  <Area type="monotone" dataKey="粗利"       stroke="#a78bfa" strokeWidth={1.8} fill="url(#grad-gp)" />
+                  <Area type="monotone" dataKey="売上総利益" stroke="#c4b5fd" strokeWidth={1.8} fill="url(#grad-gpt)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* ──── 4段目：着地予測（§6.4） ──── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">着地予測（期末見込み）</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">期首予算 / 契約済 / A見込含 の3パターン比較</p>
+            </CardHeader>
+            <CardContent className="px-0 pb-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-xs">
+                      <th className="text-left  px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">指標</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">期首予算</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">着地（契約済）</th>
+                      <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">着地（A見込含）</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const rows = [
+                        { label: "全社売上",   budget: targetRevenue, c: FORECAST.contracted.revenue,     p: FORECAST.prospective.revenue,     showRate: false },
+                        { label: "粗利額",     budget: targetGp,      c: FORECAST.contracted.grossProfit, p: FORECAST.prospective.grossProfit, showRate: true,  base: { budget: targetRevenue, c: FORECAST.contracted.revenue, p: FORECAST.prospective.revenue } },
+                        { label: "売上総利益", budget: targetGp - overheadBudget, c: FORECAST.contracted.grossProfit - overheadBudget, p: FORECAST.prospective.grossProfit - overheadBudget, showRate: true, base: { budget: targetRevenue, c: FORECAST.contracted.revenue, p: FORECAST.prospective.revenue } },
+                        { label: "営業利益",   budget: targetGp - overheadBudget - sgaBudget, c: FORECAST.contracted.grossProfit - overheadBudget - sgaBudget, p: FORECAST.prospective.grossProfit - overheadBudget - sgaBudget, showRate: true, base: { budget: targetRevenue, c: FORECAST.contracted.revenue, p: FORECAST.prospective.revenue } },
+                      ];
+                      return rows.map((row, idx) => {
+                        const cell = (val: number, rate?: number) => (
+                          <div>
+                            <span
+                              className="text-sm font-semibold tabular-nums"
+                              style={{ color: val < 0 ? "#8b5cf6" : "var(--foreground)" }}
+                            >{fmtSigned(val)}</span>
+                            {rate !== undefined && (
+                              <span className="text-[11px] text-muted-foreground ml-1.5">
+                                (<span style={{ color: val >= 0 ? accentColor : "#8b5cf6" }}>{r1(Math.abs(rate))}%</span>)
+                              </span>
+                            )}
+                          </div>
+                        );
+                        return (
+                          <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="px-5 py-3 font-medium">{row.label}</td>
+                            <td className="text-right px-4 py-3">{cell(row.budget, row.showRate && row.base ? pct(row.budget, row.base.budget) : undefined)}</td>
+                            <td className="text-right px-4 py-3">{cell(row.c,      row.showRate && row.base ? pct(row.c,      row.base.c)      : undefined)}</td>
+                            <td className="text-right px-5 py-3">{cell(row.p,      row.showRate && row.base ? pct(row.p,      row.base.p)      : undefined)}</td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                    <tr className="bg-muted/40 border-t-2">
+                      <td className="px-5 py-3 text-xs font-medium text-muted-foreground">売上達成率</td>
+                      <td className="text-right px-4 py-3 text-sm font-bold">100%</td>
+                      <td className="text-right px-4 py-3 text-sm font-bold">{pct(FORECAST.contracted.revenue, targetRevenue)}%</td>
+                      <td className="text-right px-5 py-3 text-sm font-bold">{pct(FORECAST.prospective.revenue, targetRevenue)}%</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
+
+          {/* 注記 */}
+          <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 border border-border/50 rounded-lg p-3.5">
+            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              売上総利益のマイナスは<strong className="text-foreground">仕様です</strong>。粗利の積み上げが製造間接費（年額 ¥{overheadBudget.toLocaleString()}万）を超えるまで赤字表示となり、損益分岐点までの距離を示します。
+            </span>
+          </div>
         </TabsContent>
 
         {/* ══════════════════════════════════════════════
-            タブ2：部門別
+            部門別（§6.1）
         ══════════════════════════════════════════════ */}
-        <TabsContent value="dept" className="space-y-4 mt-4">
+        <TabsContent value="dept" className="space-y-6 mt-0">
 
-          {/* 部門別KPIカード */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {DEPARTMENTS.map((d) => {
-              const rate = achievementRate(d.revenue, d.target);
+          {/* 部門 KPI カード */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {SAMPLE_DEPT_ACTUALS.map((d, i) => {
+              const target = deptTargetMap[d.name] ?? 1000;
+              const rate   = pct(d.revenue, target);
+              const gpRate = pct(d.grossProfit, d.revenue);
+              const deptSga = totalRevenue > 0 ? Math.round(sgaBudget * (d.revenue / totalRevenue)) : 0;
+              const deptOp  = d.grossProfit - deptSga;
               return (
                 <Card key={d.name}>
-                  <CardContent className="pt-3 pb-3 px-4">
-                    <div className="mb-2">
-                      <p className="text-xs text-muted-foreground">{d.label}</p>
-                      <p className="font-semibold text-sm">{d.name}</p>
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">{d.label}</p>
+                        <p className="text-sm font-semibold">{d.name}</p>
+                      </div>
+                      <span
+                        className="text-[11px] font-bold px-2 py-0.5 rounded-md"
+                        style={rate >= 30
+                          ? { backgroundColor: accentColor, color: "#fff" }
+                          : { backgroundColor: "#f5f3ff", color: "#7c3aed" }
+                        }
+                      >
+                        {rate}%
+                      </span>
                     </div>
-                    <p className="text-xl font-bold tabular-nums">¥{d.revenue.toLocaleString()}万</p>
-                    <p className="text-[11px] text-muted-foreground">目標 ¥{d.target.toLocaleString()}万</p>
-                    <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.min(rate, 100)}%`,
-                          background: DEPT_COLORS[d.name],
-                        }}
-                      />
+                    <p className="text-2xl font-bold tabular-nums tracking-tight">¥{d.revenue.toLocaleString()}万</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 mb-3">目標 ¥{target.toLocaleString()}万</p>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(rate, 100)}%`, backgroundColor: accentColor }} />
                     </div>
-                    <div className="mt-2 flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">粗利率</span>
-                      <span className="font-medium">{d.grossProfitRate.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-muted-foreground">粗利額</span>
-                      <span className="font-medium">¥{d.grossProfit.toLocaleString()}万</span>
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground">粗利率</span>
+                        <span className="font-semibold">{gpRate}%</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground">粗利額</span>
+                        <span className="font-semibold">¥{d.grossProfit.toLocaleString()}万</span>
+                      </div>
+                      {showTheoretical && (
+                        <div className="flex justify-between text-[11px] pt-1 border-t border-border/40">
+                          <span className="text-muted-foreground">営業利益(理論)</span>
+                          <span
+                            className="font-semibold"
+                            style={{ color: deptOp < 0 ? "#8b5cf6" : accentColor }}
+                          >{fmtSigned(deptOp)}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -350,45 +665,48 @@ export default function BiDashboardPage() {
             })}
           </div>
 
-          {/* 部門比較バーグラフ */}
+          {/* 部門比較グラフ */}
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">部門別 売上・粗利比較</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">部門別 売上・粗利比較</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">目標と実績の対比</p>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={240}>
-                <ComposedChart
-                  data={DEPARTMENTS.map(d => ({
+            <CardContent className="pb-5">
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart
+                  data={SAMPLE_DEPT_ACTUALS.map((d) => ({
                     name: d.name,
+                    目標: deptTargetMap[d.name] ?? 1000,
                     売上: d.revenue,
                     粗利: d.grossProfit,
-                    目標: d.target,
                   }))}
-                  margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+                  margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
+                  barCategoryGap="25%"
                 >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 11 }} unit="万" />
-                  <RTooltip formatter={(v) => [`¥${Number(v).toLocaleString()}万`]} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="目標" fill="#e5e7eb" radius={[3, 3, 0, 0]} name="目標" />
-                  <Bar dataKey="売上" fill="#0F5132" radius={[3, 3, 0, 0]} name="売上" />
-                  <Bar dataKey="粗利" fill="#4DB88A" radius={[3, 3, 0, 0]} name="粗利" />
-                </ComposedChart>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} unit="万" axisLine={false} tickLine={false} width={50} />
+                  <RTooltip formatter={(v) => [`¥${Number(v).toLocaleString()}万`]} contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="circle" iconSize={8} />
+                  <Bar dataKey="目標" fill="#e5e7eb" radius={[3,3,0,0]} />
+                  <Bar dataKey="売上" fill="#18181b" radius={[3,3,0,0]} />
+                  <Bar dataKey="粗利" fill="#a1a1aa" radius={[3,3,0,0]} />
+                </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* 部門別テーブル（詳細） */}
+          {/* 部門別詳細テーブル */}
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <CardTitle className="text-sm font-semibold">部門別詳細テーブル</CardTitle>
+                <div>
+                  <CardTitle className="text-base font-semibold">部門別詳細</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">部門ごとの達成率・粗利率・営業利益（理論値）</p>
+                </div>
                 <div className="flex items-center gap-2">
                   <Switch id="theoretical" checked={showTheoretical} onCheckedChange={setShowTheoretical} />
-                  <Label htmlFor="theoretical" className="text-xs text-muted-foreground cursor-pointer">
-                    理論値（販管費・営業利益）を表示
-                  </Label>
+                  <Label htmlFor="theoretical" className="text-xs text-muted-foreground cursor-pointer">理論値を表示</Label>
                 </div>
               </div>
             </CardHeader>
@@ -397,224 +715,76 @@ export default function BiDashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">部門</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">売上 / 目標</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">達成率</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利率</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利額</th>
+                      <th className="text-left  px-5 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">部門</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">売上 / 目標</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">達成率</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利率</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利額</th>
                       {showTheoretical && <>
-                        <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                          販管費 <span className="opacity-60 text-[10px]">理論値</span>
-                        </th>
-                        <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                          営業利益 <span className="opacity-60 text-[10px]">理論値</span>
-                        </th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">販管費 <span className="opacity-50">理論</span></th>
+                        <th className="text-right px-5 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">営業利益 <span className="opacity-50">理論</span></th>
                       </>}
                     </tr>
                   </thead>
                   <tbody>
-                    {DEPARTMENTS.map((d, i) => {
-                      const rate = achievementRate(d.revenue, d.target);
+                    {SAMPLE_DEPT_ACTUALS.map((d, i) => {
+                      const target  = deptTargetMap[d.name] ?? 1000;
+                      const rate    = pct(d.revenue, target);
+                      const gpRate  = pct(d.grossProfit, d.revenue);
+                      const deptSga = totalRevenue > 0 ? Math.round(sgaBudget * (d.revenue / totalRevenue)) : 0;
+                      const deptOp  = d.grossProfit - deptSga;
                       return (
                         <tr key={i} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: DEPT_COLORS[d.name] }} />
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-2 h-2 rounded-full bg-foreground" style={{ opacity: 1 - i * 0.18 }} />
                               <div>
                                 <div className="font-medium">{d.name}</div>
-                                <div className="text-xs text-muted-foreground">{d.label}</div>
+                                <div className="text-[11px] text-muted-foreground">{d.label}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="text-right px-3 py-3 tabular-nums">
+                          <td className="text-right px-4 py-3.5 tabular-nums">
                             <span className="font-semibold">¥{d.revenue.toLocaleString()}万</span>
-                            <span className="text-muted-foreground text-xs"> / ¥{d.target.toLocaleString()}万</span>
+                            <span className="text-muted-foreground text-xs"> / ¥{target.toLocaleString()}万</span>
                           </td>
-                          <td className="text-right px-3 py-3">
-                            <div className={`font-medium ${rate >= 30 ? "text-emerald-600" : "text-amber-600"}`}>{rate}%</div>
-                            <div className="mt-1 h-1.5 w-14 ml-auto rounded-full bg-muted overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width: `${Math.min(rate,100)}%`, background: rate>=30?"#10b981":"#f59e0b" }} />
+                          <td className="text-right px-4 py-3.5">
+                            <div className="inline-flex flex-col items-end gap-1">
+                              <span className="font-semibold" style={{ color: rate >= 30 ? accentColor : "#d97706" }}>{rate}%</span>
+                              <div className="h-1 w-14 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(rate,100)}%`, backgroundColor: accentColor }} />
+                              </div>
                             </div>
                           </td>
-                          <td className="text-right px-3 py-3 tabular-nums text-muted-foreground">{d.grossProfitRate.toFixed(1)}%</td>
-                          <td className="text-right px-3 py-3 tabular-nums font-semibold">¥{d.grossProfit.toLocaleString()}万</td>
+                          <td className="text-right px-4 py-3.5 tabular-nums text-muted-foreground">{gpRate}%</td>
+                          <td className="text-right px-4 py-3.5 tabular-nums font-semibold">¥{d.grossProfit.toLocaleString()}万</td>
                           {showTheoretical && <>
-                            <td className="text-right px-3 py-3 tabular-nums text-red-500 text-xs">▲¥{Math.abs(d.sga).toLocaleString()}万</td>
-                            <td className={`text-right px-4 py-3 tabular-nums font-semibold ${d.operatingProfit<0?"text-red-500":"text-emerald-600"}`}>
-                              {d.operatingProfit<0?`▲¥${Math.abs(d.operatingProfit).toLocaleString()}万`:`¥${d.operatingProfit.toLocaleString()}万`}
-                            </td>
+                            <td className="text-right px-4 py-3.5 tabular-nums text-violet-500 text-xs">▲¥{deptSga.toLocaleString()}万</td>
+                            <td className="text-right px-5 py-3.5 tabular-nums font-semibold" style={{ color: deptOp < 0 ? "#8b5cf6" : accentColor }}>{fmtSigned(deptOp)}</td>
                           </>}
                         </tr>
                       );
                     })}
-                    <tr className="bg-muted/30 border-t-2 font-semibold">
-                      <td className="px-4 py-2.5 text-sm">合計</td>
-                      <td className="text-right px-3 py-2.5 tabular-nums text-sm">
-                        ¥{s.actualRevenue.toLocaleString()}万
-                        <span className="text-muted-foreground font-normal text-xs"> / ¥{s.targetRevenue.toLocaleString()}万</span>
+                    <tr className="bg-muted/40 border-t-2 font-semibold">
+                      <td className="px-5 py-3">全社合計</td>
+                      <td className="text-right px-4 py-3 tabular-nums">
+                        ¥{totalRevenue.toLocaleString()}万
+                        <span className="text-muted-foreground font-normal text-xs"> / ¥{targetRevenue.toLocaleString()}万</span>
                       </td>
-                      <td className="text-right px-3 py-2.5 text-sm text-amber-600">{achieveRate}%</td>
-                      <td className="text-right px-3 py-2.5 tabular-nums text-sm text-muted-foreground">{s.grossProfitRate.toFixed(1)}%</td>
-                      <td className="text-right px-3 py-2.5 tabular-nums text-sm">¥{s.grossProfit.toLocaleString()}万</td>
+                      <td className="text-right px-4 py-3">{achieveRateTotal}%</td>
+                      <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{grossProfitRate}%</td>
+                      <td className="text-right px-4 py-3 tabular-nums">¥{totalGrossProfit.toLocaleString()}万</td>
                       {showTheoretical && <>
-                        <td className="text-right px-3 py-2.5 tabular-nums text-sm text-red-500">▲¥{Math.abs(s.sgaBudget).toLocaleString()}万</td>
-                        <td className="text-right px-4 py-2.5 tabular-nums text-sm text-emerald-600">
-                          ¥{DEPARTMENTS.reduce((sum,d)=>sum+d.operatingProfit,0).toLocaleString()}万
-                        </td>
+                        <td className="text-right px-4 py-3 tabular-nums text-violet-500">▲¥{sgaBudget.toLocaleString()}万</td>
+                        <td className="text-right px-5 py-3 tabular-nums font-semibold" style={{ color: operatingProfit < 0 ? "#8b5cf6" : accentColor }}>{fmtSigned(operatingProfit)}</td>
                       </>}
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p className="px-4 pb-3 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
+              <p className="px-5 pb-4 pt-3 text-[11px] text-muted-foreground flex items-start gap-1.5">
                 <Info className="h-3 w-3 shrink-0 mt-0.5" />
-                販管費・営業利益は売上構成比による按分で算出した理論値です。製造間接費は全社レベルで一括控除します。
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ══════════════════════════════════════════════
-            タブ3：月別推移
-        ══════════════════════════════════════════════ */}
-        <TabsContent value="monthly" className="space-y-4 mt-4">
-
-          {/* 部門切り替え */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground shrink-0">表示：</span>
-            {["全社", ...DEPARTMENTS.map(d => d.name)].map(name => (
-              <button
-                key={name}
-                onClick={() => setSelectedDept(name)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  selectedDept === name
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-
-          {/* 月別サマリー（実績6ヶ月） */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {MONTHLY_DATA.filter(m => m.revenue != null).map((m, i) => (
-              <div key={i} className="shrink-0 flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5">
-                <span className="text-xs font-medium text-muted-foreground w-8">{m.month}</span>
-                <span className="text-sm font-bold tabular-nums">¥{m.revenue}万</span>
-                <span className={`text-xs tabular-nums ${m.grossProfitTotal! < 0 ? "text-red-500" : "text-emerald-600"}`}>
-                  {m.grossProfitTotal! < 0 ? `▲${Math.abs(m.grossProfitTotal!)}万` : `+${m.grossProfitTotal!}万`}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* グラフ */}
-          <Card>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-primary" />
-                月別推移（{selectedDept}）
-                <span className="ml-auto text-[11px] text-muted-foreground font-normal flex items-center gap-1">
-                  10月以降
-                  <ArrowRight className="h-3 w-3" />
-                  着地予測エリア
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart data={MONTHLY_DATA} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                  {/* 着地予測エリア（薄いグレー背景） */}
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} unit="万" />
-                  <RTooltip
-                    formatter={(value, name) =>
-                      value == null ? ["―", name] : [`¥${Number(value).toLocaleString()}万`, name]
-                    }
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <ReferenceLine y={0} stroke="#d1d5db" strokeWidth={1.5} />
-                  <Bar dataKey="revenue" name="売上" fill="#0F5132" radius={[3,3,0,0]} opacity={0.85} />
-                  <Bar dataKey="grossProfit" name="粗利額" fill="#4DB88A" radius={[3,3,0,0]} opacity={0.85} />
-                  <Line
-                    type="monotone"
-                    dataKey="cumulative"
-                    name="売上総利益（累計）"
-                    stroke="#f59e0b"
-                    strokeWidth={2.5}
-                    dot={{ r: 4, fill: "#f59e0b", strokeWidth: 0 }}
-                    connectNulls={false}
-                    strokeDasharray="5 3"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* 月別テーブル */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">月別明細</CardTitle>
-            </CardHeader>
-            <CardContent className="px-0 pb-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">月</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">売上（実績）</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">粗利額</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">月別予算配賦</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">売上総利益</th>
-                      <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">累計</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MONTHLY_DATA.map((row, i) => {
-                      const isForecast = row.forecast;
-                      return (
-                        <tr key={i} className={`border-b last:border-0 transition-colors ${isForecast ? "bg-muted/10 text-muted-foreground" : "hover:bg-muted/20"}`}>
-                          <td className="px-4 py-2.5 font-medium">
-                            {row.month}
-                            {isForecast && (
-                              <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">予測</span>
-                            )}
-                          </td>
-                          <td className="text-right px-3 py-2.5 tabular-nums">
-                            {row.revenue != null ? `¥${row.revenue.toLocaleString()}万` : "―"}
-                          </td>
-                          <td className="text-right px-3 py-2.5 tabular-nums">
-                            {row.grossProfit != null ? `¥${row.grossProfit.toLocaleString()}万` : "―"}
-                          </td>
-                          <td className="text-right px-3 py-2.5 tabular-nums text-red-500 text-xs">
-                            {row.overhead != null ? `▲¥${Math.abs(row.overhead).toLocaleString()}万` : "―"}
-                          </td>
-                          <td className={`text-right px-3 py-2.5 tabular-nums font-medium ${row.grossProfitTotal != null && row.grossProfitTotal < 0 ? "text-red-500" : ""}`}>
-                            {row.grossProfitTotal != null
-                              ? row.grossProfitTotal < 0
-                                ? `▲¥${Math.abs(row.grossProfitTotal).toLocaleString()}万`
-                                : `¥${row.grossProfitTotal.toLocaleString()}万`
-                              : "―"}
-                          </td>
-                          <td className={`text-right px-4 py-2.5 tabular-nums font-semibold ${row.cumulative != null && row.cumulative < 0 ? "text-red-500" : row.cumulative != null ? "text-emerald-600" : ""}`}>
-                            {row.cumulative != null
-                              ? row.cumulative < 0
-                                ? `▲¥${Math.abs(row.cumulative).toLocaleString()}万`
-                                : `¥${row.cumulative.toLocaleString()}万`
-                              : "―"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="px-4 pb-3 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
-                <Info className="h-3 w-3 shrink-0 mt-0.5" />
-                全社の月別予算配賦は年額 ÷ 12で均等按分。部門ビュー切替時は当月売上構成比による動的按分に切り替わります。
+                販管費・営業利益は売上構成比による按分で算出した理論値です（§3.1）。製造間接費は全社レベルで一括控除します。
               </p>
             </CardContent>
           </Card>

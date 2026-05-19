@@ -101,6 +101,12 @@ export async function updateDeal(id: string, input: Partial<Omit<Deal, "id" | "c
   return data as Deal;
 }
 
+export async function deleteDeal(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("deals").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function createDealActivity(dealId: string, input: { type: string; title: string; description?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
