@@ -467,6 +467,28 @@
       </div>
     </div>
 
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">外部向け REST API</div>
+      <div class="feat-desc">BRIDGE のデータを外部システムから取得するための REST API 窓口。Bearer トークン認証で会社単位にアクセスを制御。案件・工事・見積・請求書・CRM などの主要リソースを JSON で返すエンドポイントを提供。kintone・Salesforce など既存システムとのデータ同期を想定した設計。詳細は <a href="api.html">API 仕様書</a> を参照。</div>
+      <div class="feat-tags"><span class="feat-tag">REST API</span><span class="feat-tag">Bearer 認証</span><span class="feat-tag">JSON</span><span class="feat-tag">kintone 連携想定</span></div>
+      <div class="feat-footer">
+        <div class="feat-roles"><span class="role-chip">管理者</span></div>
+        <span class="status-chip status-partial">設計済み・実装予定</span>
+      </div>
+    </div>
+
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">Webhook（アウトバウンド通知）</div>
+      <div class="feat-desc">BRIDGE 内のイベント（案件ステータス変更・見積承認・工事完了など）を外部 URL にリアルタイムで POST 通知する仕組み。管理者がエンドポイント URL とトリガーイベントを設定画面で登録。Slack・LINE WORKS・Zapier・Make などへの通知連携を想定。ペイロードは JSON 形式。詳細は <a href="api.html">API 仕様書</a> を参照。</div>
+      <div class="feat-tags"><span class="feat-tag">Webhook</span><span class="feat-tag">POST 通知</span><span class="feat-tag">Slack 連携想定</span><span class="feat-tag">Zapier / Make 対応</span></div>
+      <div class="feat-footer">
+        <div class="feat-roles"><span class="role-chip">管理者</span></div>
+        <span class="status-chip status-partial">設計済み・実装予定</span>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -510,6 +532,18 @@
         <div class="ext-name">Google Calendar API</div>
         <div class="ext-desc">Google カレンダーと双方向同期。システム内で作成したイベントを Google カレンダーに反映。カレンダー ID を設定で指定。</div>
         <span class="ext-status ext-status-optional">要OAuth設定</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-name">外部向け REST API</div>
+        <div class="ext-desc">Bearer トークン認証で BRIDGE のデータを外部から取得可能。案件・工事・見積・請求書・CRM の主要リソースを JSON 形式で提供。kintone・Salesforce など既存システムとの同期を想定した設計。</div>
+        <span class="ext-status ext-status-optional">設計済み・実装予定</span>
+      </div>
+
+      <div class="ext-card">
+        <div class="ext-name">Webhook（アウトバウンド）</div>
+        <div class="ext-desc">案件ステータス変更・見積承認・工事完了などのイベントを外部 URL に POST 通知。管理者がエンドポイントとトリガーを設定。Slack・LINE WORKS・Zapier・Make との連携を想定。</div>
+        <span class="ext-status ext-status-optional">設計済み・実装予定</span>
       </div>
 
 
