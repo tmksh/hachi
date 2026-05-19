@@ -396,7 +396,7 @@ export default function BiDashboardPage() {
                         dataKey="value"
                         position="top"
                         style={{ fontSize: 10, fontWeight: 600, fill: "#475569" }}
-                        formatter={(v: number) => `${v < 0 ? "▲" : ""}${Math.abs(v).toLocaleString()}`}
+                        formatter={(v: unknown) => { const n = Number(v); return `${n < 0 ? "▲" : ""}${Math.abs(n).toLocaleString()}`; }}
                       />
                     </Bar>
                   </BarChart>
