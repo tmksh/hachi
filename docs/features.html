@@ -91,61 +91,28 @@
     .status-phase2 { background: #fff7e6; color: #b45309; border: 1px solid #fbd38d; }
 
     /* SCHEDULE */
-    .schedule-outer { background: #f7f8fa; border-bottom: 1px solid var(--border); padding: 3rem 2rem; }
+    .schedule-outer { background: #fff; border-bottom: 1px solid var(--border); padding: 2.5rem 2rem; }
     .schedule-inner { max-width: 1100px; margin: 0 auto; }
-    .schedule-header { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; }
     .schedule-eyebrow { font-size: .68rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .14em; text-transform: uppercase; margin-bottom: .4rem; }
-    .schedule-title { font-size: 1.3rem; font-weight: 800; }
-    .schedule-progress-wrap { text-align: right; }
-    .schedule-progress-label { font-size: .72rem; color: var(--muted); margin-bottom: .3rem; }
-    .schedule-progress-bar { width: 200px; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
-    .schedule-progress-fill { height: 100%; width: 25%; background: linear-gradient(90deg, var(--accent-dark), #22c55e); border-radius: 99px; transition: width .6s ease; }
-
-    /* horizontal rail */
-    .timeline-rail { position: relative; display: grid; grid-template-columns: repeat(7,1fr); gap: 0; }
-    .timeline-rail::before {
-      content: ''; position: absolute;
-      top: 18px; left: 0; right: 0; height: 2px;
-      background: var(--border); z-index: 0;
+    .schedule-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 1.6rem; }
+    .tl-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: .6rem; }
+    .tl-card {
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: .85rem 1rem; background: #fafafa;
+      border-top: 3px solid var(--border);
     }
-    .timeline-rail::after {
-      content: ''; position: absolute;
-      top: 18px; left: 0; width: 17%; height: 2px;
-      background: linear-gradient(90deg, var(--accent-dark), var(--accent)); z-index: 1;
-    }
-
-    .tl-item { position: relative; padding-top: 0; z-index: 2; }
-    .tl-dot-wrap { display: flex; align-items: center; justify-content: flex-start; margin-bottom: 1rem; padding-left: 0; }
-    .tl-dot {
-      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: .7rem; font-weight: 800;
-      border: 2.5px solid var(--border); background: #fff;
-      box-shadow: 0 1px 4px rgba(0,0,0,.06);
-      color: #9ca3af;
-    }
-    .tl-dot-done { background: #6b7280; border-color: #6b7280; color: #fff; }
-    .tl-dot-now { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 4px rgba(26,122,82,.15); }
-    .tl-dot-release { background: #111827; border-color: #111827; color: #fff; }
-    .tl-dot svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; }
-
-    .tl-body { padding-right: 1rem; }
-    .tl-date { font-size: .72rem; font-weight: 700; color: var(--accent-dark); margin-bottom: .25rem; font-family: 'IBM Plex Mono', monospace; }
-    .tl-label { font-size: .9rem; font-weight: 700; margin-bottom: .3rem; color: #111; }
-    .tl-desc { font-size: .75rem; color: var(--muted); line-height: 1.55; }
-    .tl-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-top: .4rem; }
-    .tl-badge-done { background: #f3f4f6; color: #6b7280; }
-    .tl-badge-now { background: var(--accent-light); color: var(--accent-dark); border: 1px solid #a7f3d0; }
-    .tl-badge-target { background: #111827; color: #fff; }
-    .tl-badge-deadline { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-    .tl-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .7; }
-    .tl-dot-deadline { background: #ea580c; border-color: #ea580c; color: #fff; }
-    @media (max-width: 700px) {
-      .timeline-rail { grid-template-columns: 1fr 1fr; gap: 1.2rem; }
-      .timeline-rail::before, .timeline-rail::after { display: none; }
-      .tl-dot-wrap { margin-bottom: .6rem; }
-      .schedule-progress-bar { width: 140px; }
-    }
+    .tl-card-done { border-top-color: #9ca3af; background: #f9fafb; }
+    .tl-card-now  { border-top-color: var(--accent); background: #f0fdf8; }
+    .tl-card-dead { border-top-color: #f97316; background: #fff8f4; }
+    .tl-card-rel  { border-top-color: #111827; background: #f8fafc; }
+    .tl-date { font-size: .7rem; font-weight: 700; color: #6b7280; margin-bottom: .3rem; font-family: 'IBM Plex Mono', monospace; }
+    .tl-label { font-size: .85rem; font-weight: 700; color: #111; line-height: 1.3; }
+    .tl-status { display: inline-block; font-size: .62rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-top: .45rem; }
+    .tl-s-done { background: #f3f4f6; color: #6b7280; }
+    .tl-s-now   { background: var(--accent-light); color: var(--accent-dark); }
+    .tl-s-dead  { background: #fff7ed; color: #c2410c; }
+    .tl-s-rel   { background: #111827; color: #fff; }
+    @media (max-width: 700px) { .tl-row { grid-template-columns: 1fr 1fr; } }
 
     /* EXTERNAL */
     .ext-outer { background: #f7f8fa; border-bottom: 1px solid var(--border); padding: 2.5rem 2rem; }
@@ -185,131 +152,54 @@
   <span class="nav-logo">BRIDGE</span>
   <div class="nav-links">
     <a href="index.html">仕様書</a>
-    <a href="index.html#lead-flow">リードフロー</a>
-    <a href="index.html#cost">工事原価管理</a>
-    <a href="index.html#kickoff-input">導入準備</a>
     <a href="features.html" class="active">機能一覧</a>
-    <a href="api.html">外部連携</a>
   </div>
 </nav>
 
 <div class="hero">
-  <div class="hero-inner">
+  <div class="hero-inner" style="text-align:center;">
     <div class="hero-eyebrow">Feature List</div>
     <h1>機能一覧</h1>
-    <p class="hero-desc">建設業向けに設計された統合業務管理システム。フロントから現場まで、すべての業務をカバーします。</p>
-    <div class="hero-stats">
-      <div><div class="stat-num">20+</div><div class="stat-label">機能モジュール</div></div>
-      <div><div class="stat-num">4</div><div class="stat-label">ロール権限</div></div>
-      <div><div class="stat-num">30+</div><div class="stat-label">DB テーブル</div></div>
-      <div><div class="stat-num">100%</div><div class="stat-label">日本語対応</div></div>
-    </div>
   </div>
 </div>
 
 <!-- ── SCHEDULE ── -->
 <div class="schedule-outer">
   <div class="schedule-inner">
-    <div class="schedule-header">
-      <div>
-        <div class="schedule-eyebrow">Release Schedule</div>
-        <div class="schedule-title">リリーススケジュール</div>
+    <div class="schedule-eyebrow">Release Schedule</div>
+    <div class="schedule-title">リリーススケジュール</div>
+    <div class="tl-row">
+      <div class="tl-card tl-card-done">
+        <div class="tl-date">2026年5月</div>
+        <div class="tl-label">コア機能実装</div>
+        <span class="tl-status tl-s-done">完了</span>
       </div>
-      <div class="schedule-progress-wrap">
-        <div class="schedule-progress-label">全体進捗 — フェーズ1 / 2026年7月末リリース目標</div>
-        <div class="schedule-progress-bar"><div class="schedule-progress-fill"></div></div>
+      <div class="tl-card tl-card-now">
+        <div class="tl-date">6月初旬</div>
+        <div class="tl-label">デザイン確定</div>
+        <span class="tl-status tl-s-now">進行中</span>
       </div>
-    </div>
-
-    <div class="timeline-rail">
-      <!-- 1 完了 -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot tl-dot-done">
-            <svg viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3"/></svg>
-          </div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">2026年5月</div>
-          <div class="tl-label">コア機能実装</div>
-          <div class="tl-desc">CRM・工事・請求・BI・ポータルの主要機能をひととおり実装完了</div>
-          <span class="tl-badge tl-badge-done">完了</span>
-        </div>
+      <div class="tl-card tl-card-dead">
+        <div class="tl-date">6月12日</div>
+        <div class="tl-label">準備物受付終了</div>
+        <span class="tl-status tl-s-dead">DEADLINE</span>
       </div>
-      <!-- 2 進行中 -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot tl-dot-now">
-            <svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="currentColor"/></svg>
-          </div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">6月初旬</div>
-          <div class="tl-label">デザイン確定</div>
-          <div class="tl-desc">UI/UX レビュー完了・カラーシステム・コンポーネント仕様を確定</div>
-          <span class="tl-badge tl-badge-now">進行中</span>
-        </div>
+      <div class="tl-card">
+        <div class="tl-date">6月30日</div>
+        <div class="tl-label">機能実装完了</div>
       </div>
-      <!-- 3 締切 -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot tl-dot-deadline">
-            <svg viewBox="0 0 14 14"><line x1="7" y1="3" x2="7" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="7" cy="10.5" r="1.2" fill="currentColor"/></svg>
-          </div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">6月12日</div>
-          <div class="tl-label">準備物受付終了</div>
-          <div class="tl-desc">社員名簿・顧客データ・各種フォーマットなど導入準備物の提出期限</div>
-          <span class="tl-badge tl-badge-deadline">DEADLINE</span>
-        </div>
+      <div class="tl-card">
+        <div class="tl-date">7月1日〜20日</div>
+        <div class="tl-label">動作確認・QA</div>
       </div>
-      <!-- 4 -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot">4</div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">6月20日ごろ</div>
-          <div class="tl-label">機能実装完了</div>
-          <div class="tl-desc">BI 実績連携・未実装 CRUD・外部連携など残機能をすべて完了</div>
-        </div>
+      <div class="tl-card">
+        <div class="tl-date">7月21日〜31日</div>
+        <div class="tl-label">予備期間</div>
       </div>
-      <!-- 5 -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot">5</div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">6/21〜7/20</div>
-          <div class="tl-label">動作確認・QA</div>
-          <div class="tl-desc">E2E テスト・実データ検証・バグ修正・パフォーマンス改善（30日間）</div>
-        </div>
-      </div>
-      <!-- 6 -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot">6</div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">7/21〜7/31</div>
-          <div class="tl-label">予備期間</div>
-          <div class="tl-desc">最終調整・未解決バグ対応・リリース準備バッファ（10日間）</div>
-        </div>
-      </div>
-      <!-- 6 リリース -->
-      <div class="tl-item">
-        <div class="tl-dot-wrap">
-          <div class="tl-dot tl-dot-release">
-            <svg viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3"/></svg>
-          </div>
-        </div>
-        <div class="tl-body">
-          <div class="tl-date">2026年7月末</div>
-          <div class="tl-label">本番リリース</div>
-          <div class="tl-desc">フェーズ1 正式リリース。顧客テナントへの展開開始</div>
-          <span class="tl-badge tl-badge-target">TARGET</span>
-        </div>
+      <div class="tl-card tl-card-rel">
+        <div class="tl-date">2026年7月末</div>
+        <div class="tl-label">本番リリース</div>
+        <span class="tl-status tl-s-rel">TARGET</span>
       </div>
     </div>
   </div>
