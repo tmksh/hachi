@@ -212,8 +212,8 @@
     <button class="filter-btn" onclick="filter('crm',this)">CRM・リード</button>
     <button class="filter-btn" onclick="filter('production',this)">工事・生産</button>
     <button class="filter-btn" onclick="filter('portal',this)">ポータル</button>
-    <button class="filter-btn" onclick="filter('marketing',this)">マーケティング</button>
     <button class="filter-btn" onclick="filter('system',this)">システム</button>
+    <button class="filter-btn" onclick="filter('integration',this)">外部連携</button>
   </div>
 </div>
 
@@ -223,9 +223,9 @@
     <!-- CRM -->
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
-      <div class="feat-title">顧客・商談管理</div>
-      <div class="feat-desc">顧客情報の登録・編集・検索。商談ステージ管理、AI スコア、タグ管理に対応。担当者アサインや活動履歴も記録できます。</div>
-      <div class="feat-tags"><span class="feat-tag">顧客登録</span><span class="feat-tag">タグ管理</span><span class="feat-tag">AI スコア</span><span class="feat-tag">担当者管理</span></div>
+      <div class="feat-title">顧客管理</div>
+      <div class="feat-desc">顧客の登録・編集・検索・削除。法人／個人タブ切替、カード／テーブル表示切替。担当者アサイン、獲得ソース・ステータス記録。顧客詳細から関連する商談・見積・契約・工事を一覧確認できます。タグはマスタ設定済み（顧客フォームでの付与は今後対応）。</div>
+      <div class="feat-tags"><span class="feat-tag">登録・編集・削除</span><span class="feat-tag">担当者アサイン</span><span class="feat-tag">獲得ソース管理</span><span class="feat-tag">関連データ参照</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -234,9 +234,9 @@
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
-      <div class="feat-title">パイプライン管理</div>
-      <div class="feat-desc">商談をカンバン形式で管理。問合せ → 初回面談 → 見積提出 → 成約まで、ステージごとに進捗を可視化します。</div>
-      <div class="feat-tags"><span class="feat-tag">カンバン</span><span class="feat-tag">ステージ管理</span><span class="feat-tag">成約確率</span></div>
+      <div class="feat-title">商談パイプライン</div>
+      <div class="feat-desc">商談をカンバン形式で管理。ドラッグ&amp;ドロップでステージ変更、DB に即時反映。担当者フィルタ・商談数／総額／受注率の KPI バー表示。「受注」ステージへ移動すると受注確定ダイアログが表示され、見積作成または工事登録へ誘導。商談の追加・編集・削除に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">カンバン D&amp;D</span><span class="feat-tag">受注率 KPI</span><span class="feat-tag">受注確定フロー</span><span class="feat-tag">担当者フィルタ</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -246,8 +246,8 @@
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">見積管理</div>
-      <div class="feat-desc">見積書の作成・発行・送付管理。明細行・カテゴリ・原価・粗利の自動計算に対応。PDF 出力も可能です。</div>
-      <div class="feat-tags"><span class="feat-tag">見積書作成</span><span class="feat-tag">粗利計算</span><span class="feat-tag">PDF 出力</span></div>
+      <div class="feat-desc">見積書の作成・編集・削除・ステータス管理（下書き／送付済み／受理／却下）。明細行と粗利・粗利率をリアルタイム自動計算。商談からの顧客・金額引き継ぎに対応。見積詳細から契約・工事への連携も可能。</div>
+      <div class="feat-tags"><span class="feat-tag">明細行 CRUD</span><span class="feat-tag">粗利・粗利率計算</span><span class="feat-tag">ステータス管理</span><span class="feat-tag">商談連携</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -257,8 +257,8 @@
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">職人管理</div>
-      <div class="feat-desc">協力業者・職人の登録と専門分野・ランク管理。報告率や稼働プロジェクト数でパフォーマンスを評価します。</div>
-      <div class="feat-tags"><span class="feat-tag">職人登録</span><span class="feat-tag">ランク管理</span><span class="feat-tag">稼働状況</span></div>
+      <div class="feat-desc">協力業者・職人の登録・編集・削除。専門分野・ランク（A/B/C）・資格を管理。カード／リスト表示切替、専門分野フィルタ。詳細ページで進行中案件数・累計受注額を表示。下請発注と連携して工事への紐付けが可能。</div>
+      <div class="feat-tags"><span class="feat-tag">登録・編集・削除</span><span class="feat-tag">専門分野・ランク</span><span class="feat-tag">稼働案件数</span><span class="feat-tag">工事下請連携</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -269,8 +269,8 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">契約管理</div>
-      <div class="feat-desc">工事契約書の登録・ステータス管理。見積書と紐付けて契約日・着工日・完工日・金額を一元管理します。</div>
-      <div class="feat-tags"><span class="feat-tag">契約書管理</span><span class="feat-tag">見積紐付け</span><span class="feat-tag">進捗管理</span></div>
+      <div class="feat-desc">工事契約の登録・編集・削除・ステータス管理（下書き／締結済み／完了／解除）。顧客・見積との紐付け、契約金額・契約日・着工日・完工日・担当者を管理。契約一覧で金額サマリーを表示。</div>
+      <div class="feat-tags"><span class="feat-tag">契約 CRUD</span><span class="feat-tag">見積紐付け</span><span class="feat-tag">工期管理</span><span class="feat-tag">金額サマリー</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -280,8 +280,8 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">工事管理</div>
-      <div class="feat-desc">工事現場ごとの進捗・コスト・作業員数を管理。タスク分解・ガントチャート・下請け発注も一元管理できます。</div>
-      <div class="feat-tags"><span class="feat-tag">進捗管理</span><span class="feat-tag">コスト管理</span><span class="feat-tag">タスク分解</span><span class="feat-tag">下請け発注</span></div>
+      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細画面は「概要／ガント／原価／下請発注／書類」タブ構成。ガントチャートでタスクの期間を視覚管理、職人への下請発注（発注ステータス管理）、契約書 PDF 印刷、工事から請求書を自動生成。削除時は関連タスク・下請発注も同時削除。</div>
+      <div class="feat-tags"><span class="feat-tag">ガントチャート</span><span class="feat-tag">原価・コスト管理</span><span class="feat-tag">下請発注</span><span class="feat-tag">請求書自動生成</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -291,8 +291,8 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">請求管理</div>
-      <div class="feat-desc">請求書の作成・送付・入金管理。工事と紐付けて請求書を自動生成し、支払い状況をリアルタイム追跡します。</div>
-      <div class="feat-tags"><span class="feat-tag">請求書作成</span><span class="feat-tag">入金管理</span><span class="feat-tag">消費税計算</span></div>
+      <div class="feat-desc">請求書の作成・明細編集・消費税計算・ステータス管理（下書き／送付済み／入金済み／キャンセル）。工事詳細から請求書を自動生成する機能を搭載。一覧で入金サマリーを表示。ブラウザ印刷に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">明細編集・消費税計算</span><span class="feat-tag">工事からの自動生成</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -302,8 +302,8 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">予算管理</div>
-      <div class="feat-desc">年度別予算の策定と実績対比。売上・原価・間接費を部門別に管理し、経営判断をサポートします。</div>
-      <div class="feat-tags"><span class="feat-tag">年度予算</span><span class="feat-tag">実績対比</span><span class="feat-tag">部門別管理</span></div>
+      <div class="feat-desc">年度予算の策定・承認・削除。完了工事データから売上・粗利の実績を自動集計し、計画対実績を達成率で表示。複数年度の比較に対応。予算は承認/下書き戻しのワークフロー付き。</div>
+      <div class="feat-tags"><span class="feat-tag">年度予算策定</span><span class="feat-tag">完了工事から実績集計</span><span class="feat-tag">達成率表示</span><span class="feat-tag">承認フロー</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者のみ</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -314,8 +314,8 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">勤怠管理</div>
-      <div class="feat-desc">ワンクリックで出退勤打刻。アナログ時計 UI でリアルタイム表示。管理者は全スタッフの勤怠を確認・承認できます。</div>
-      <div class="feat-tags"><span class="feat-tag">出退勤打刻</span><span class="feat-tag">承認フロー</span><span class="feat-tag">月次レポート</span><span class="feat-tag">休暇種別</span></div>
+      <div class="feat-desc">アナログ時計 UI でワンクリック出退勤打刻。休暇区分（有給・特休・半日等）の選択に対応。月次一覧で出勤日数・実労働時間・残業時間・承認済日数を集計表示。管理者は全スタッフの勤怠を確認・承認・却下可能。所定時刻・休憩・休暇種別は会社設定で管理。</div>
+      <div class="feat-tags"><span class="feat-tag">出退勤打刻</span><span class="feat-tag">休暇区分管理</span><span class="feat-tag">月次集計</span><span class="feat-tag">管理者承認</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -325,8 +325,8 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">ワークフロー</div>
-      <div class="feat-desc">経費申請・休暇申請・購入申請を電子化。申請 → 承認フロー → 完了まで、ステータスをリアルタイムで追跡できます。</div>
-      <div class="feat-tags"><span class="feat-tag">経費申請</span><span class="feat-tag">休暇申請</span><span class="feat-tag">購入申請</span><span class="feat-tag">承認フロー</span></div>
+      <div class="feat-desc">申請種別（稟議書・経費・休暇・購入など）と承認ルートを設定画面でカスタマイズ可能。申請フォームは種別ごとのカスタムフィールドを動的に表示。多段承認・却下・差戻し・コメント機能あり。ステータスは申請中／承認済み／却下でリアルタイム追跡。</div>
+      <div class="feat-tags"><span class="feat-tag">カスタム申請種別</span><span class="feat-tag">多段承認ルート</span><span class="feat-tag">動的フォーム</span><span class="feat-tag">コメント機能</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -336,8 +336,8 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">社内回覧板</div>
-      <div class="feat-desc">お知らせ・社内通達を電子回覧。緊急フラグ・既読管理・部署別配信に対応。未読通知をリアルタイム表示します。</div>
-      <div class="feat-tags"><span class="feat-tag">既読管理</span><span class="feat-tag">緊急通知</span><span class="feat-tag">部署別配信</span></div>
+      <div class="feat-desc">お知らせ・社内通達の投稿・編集・削除。緊急フラグ・ピン留め・ロール別配信に対応。閲覧時に自動既読記録、コメント機能あり。キーワード・日付・緊急/ピン留めフィルタで検索可能。未読件数はヘッダーバッジでリアルタイム表示。</div>
+      <div class="feat-tags"><span class="feat-tag">緊急・ピン留め</span><span class="feat-tag">ロール別配信</span><span class="feat-tag">自動既読管理</span><span class="feat-tag">コメント</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -347,8 +347,8 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">カレンダー</div>
-      <div class="feat-desc">月次・週次カレンダーで予定を管理。工事・商談・施設・設備カテゴリで色分けし、Google カレンダー連携にも対応。</div>
-      <div class="feat-tags"><span class="feat-tag">月次表示</span><span class="feat-tag">カテゴリ色分け</span><span class="feat-tag">Google 連携</span></div>
+      <div class="feat-desc">日／週／月表示で社内予定を管理。イベントの作成・編集・削除に対応。メンバーごとに色分けしてオーバーレイ表示。Google カレンダーと OAuth 連携（設定時）することで双方向同期が可能。未連携時は DB イベントのみ表示。</div>
+      <div class="feat-tags"><span class="feat-tag">日・週・月表示</span><span class="feat-tag">メンバー色分け</span><span class="feat-tag">Google カレンダー連携</span><span class="feat-tag">双方向同期</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -358,8 +358,8 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">メール連携</div>
-      <div class="feat-desc">Gmail と連携してメールをシステム内で送受信。スレッド管理・スター管理・添付ファイル対応。顧客と紐付けて閲覧可能。Gmail OAuth 接続が必要（未連携時はサンプル表示）。</div>
-      <div class="feat-tags"><span class="feat-tag">Gmail 連携</span><span class="feat-tag">スレッド管理</span><span class="feat-tag">顧客紐付け</span></div>
+      <div class="feat-desc">Gmail OAuth / IMAP / 手動フォワードで受信スレッドを同期。スレッド一覧・既読・スター管理、メール送信・返信に対応。メールアカウントは設定画面で接続・切断。未連携時はサンプルスレッドを表示（接続後に実データへ切替）。</div>
+      <div class="feat-tags"><span class="feat-tag">Gmail OAuth 連携</span><span class="feat-tag">受信スレッド同期</span><span class="feat-tag">送信・返信</span><span class="feat-tag">スター管理</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-partial">部分実装</span>
@@ -369,56 +369,11 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">文書管理</div>
-      <div class="feat-desc">社内文書をクラウドで一元管理。就業規則・経理帳票・安全書類などをカテゴリ別に整理し、ファイルのアップロード・ダウンロードに対応。</div>
-      <div class="feat-tags"><span class="feat-tag">ファイル管理</span><span class="feat-tag">カテゴリ分類</span><span class="feat-tag">検索対応</span></div>
+      <div class="feat-desc">社内文書を Supabase Storage でクラウド管理。設定画面でカテゴリを追加・編集・削除でき、カテゴリタブでファイルを分類。キーワード検索、アップロード（日本語ファイル名含む）・ダウンロード・削除に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">クラウドストレージ</span><span class="feat-tag">カテゴリ管理</span><span class="feat-tag">アップロード・ダウンロード</span><span class="feat-tag">キーワード検索</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-done">実装済み</span>
-      </div>
-    </div>
-
-    <!-- MARKETING (フェーズ2で公開予定・現在はメニュー非表示) -->
-    <div class="feat-card" data-cat="marketing">
-      <div class="feat-cat">マーケティング</div>
-      <div class="feat-title">メール配信</div>
-      <div class="feat-desc">顧客リストへのメルマガ一斉配信。配信リスト作成・テンプレート管理・配信予約・開封率トラッキングに対応予定。※フェーズ2で公開予定。</div>
-      <div class="feat-tags"><span class="feat-tag">一斉配信</span><span class="feat-tag">テンプレート</span><span class="feat-tag">開封率</span></div>
-      <div class="feat-footer">
-        <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者のみ</span></div>
-        <span class="status-chip status-phase2">フェーズ2予定</span>
-      </div>
-    </div>
-
-    <div class="feat-card" data-cat="marketing">
-      <div class="feat-cat">マーケティング</div>
-      <div class="feat-title">SNS インサイト</div>
-      <div class="feat-desc">SNS のフォロワー数・エンゲージメント・インプレッションを一元管理。投稿パフォーマンスを視覚的に分析します。※フェーズ2で公開予定。</div>
-      <div class="feat-tags"><span class="feat-tag">Instagram</span><span class="feat-tag">Twitter/X</span><span class="feat-tag">分析</span></div>
-      <div class="feat-footer">
-        <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者のみ</span></div>
-        <span class="status-chip status-phase2">フェーズ2予定</span>
-      </div>
-    </div>
-
-    <div class="feat-card" data-cat="marketing">
-      <div class="feat-cat">マーケティング</div>
-      <div class="feat-title">ROI 分析</div>
-      <div class="feat-desc">マーケティング施策ごとの投資対効果を可視化。チャネル別の集客数・コスト・成約率を比較分析できます。※フェーズ2で公開予定。</div>
-      <div class="feat-tags"><span class="feat-tag">ROI 計算</span><span class="feat-tag">チャネル分析</span><span class="feat-tag">コスト対比</span></div>
-      <div class="feat-footer">
-        <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者のみ</span></div>
-        <span class="status-chip status-phase2">フェーズ2予定</span>
-      </div>
-    </div>
-
-    <div class="feat-card" data-cat="marketing">
-      <div class="feat-cat">マーケティング</div>
-      <div class="feat-title">クリエイティブ管理</div>
-      <div class="feat-desc">バナー・チラシ・動画などのクリエイティブ素材をアップロード・管理。Supabase Storage に保存し、ダウンロード共有できます。※フェーズ2で公開予定。</div>
-      <div class="feat-tags"><span class="feat-tag">ファイル管理</span><span class="feat-tag">クラウド保存</span><span class="feat-tag">共有機能</span></div>
-      <div class="feat-footer">
-        <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者のみ</span></div>
-        <span class="status-chip status-phase2">フェーズ2予定</span>
       </div>
     </div>
 
@@ -426,8 +381,8 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">BI ダッシュボード</div>
-      <div class="feat-desc">経営 KPI（売上・粗利・営業利益）をグラフで可視化。期首設定・部門別目標・月次推移・円形達成率チャートに対応。目標設定は DB 連携済み、実績グラフは工事/請求からの集計接続が6月完了予定。</div>
-      <div class="feat-tags"><span class="feat-tag">KPI 管理</span><span class="feat-tag">P&L ウォーターフォール</span><span class="feat-tag">達成率円グラフ</span><span class="feat-tag">カラーカスタマイズ</span></div>
+      <div class="feat-desc">経営 KPI（売上・粗利・営業利益）の目標 vs 実績を円形達成率チャートで表示。P&amp;L ウォーターフォール・月次推移・部門別チャートに対応。期首目標・部門別目標・間接費内訳の設定は DB 連携済み。実績グラフは現状サンプルデータ表示（工事・請求からの集計接続は6月末完了予定）。</div>
+      <div class="feat-tags"><span class="feat-tag">目標 vs 実績（円グラフ）</span><span class="feat-tag">P&amp;L ウォーターフォール</span><span class="feat-tag">部門別 KPI</span><span class="feat-tag">期首設定 DB 連携</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip">オーナー</span><span class="role-chip">本部管理者</span><span class="role-chip">施工店管理者</span></div>
         <span class="status-chip status-partial">部分実装</span>
@@ -437,8 +392,8 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">ロールベース権限管理</div>
-      <div class="feat-desc">オーナー・本部管理者・施工店管理者・社員の4段階ロール制御。ページアクセス・メニュー表示・データ閲覧をすべてロールで制限します。</div>
-      <div class="feat-tags"><span class="feat-tag">RBAC</span><span class="feat-tag">RLS</span><span class="feat-tag">ルート保護</span><span class="feat-tag">メニュー制御</span></div>
+      <div class="feat-desc">オーナー・本部管理者・施工店管理者・社員の4段階ロール。Next.js Middleware でルートを保護し、Supabase RLS でデータレベルのアクセス制御を二重実施。メニュー表示・ページアクセス・データ閲覧がロールごとに自動制限される。カスタムロール権限も設定で追加可能。</div>
+      <div class="feat-tags"><span class="feat-tag">4段階ロール</span><span class="feat-tag">RLS + Middleware 二重制御</span><span class="feat-tag">ルート保護</span><span class="feat-tag">カスタムロール</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール（権限差あり）</span></div>
         <span class="status-chip status-done">実装済み</span>
@@ -447,23 +402,68 @@
 
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
-      <div class="feat-title">リアルタイム通知</div>
-      <div class="feat-desc">未読のお知らせ・承認依頼をベルアイコンで通知。クリックで既読にし、バッジカウントをリアルタイムで更新します。</div>
-      <div class="feat-tags"><span class="feat-tag">未読バッジ</span><span class="feat-tag">既読管理</span><span class="feat-tag">ワークフロー通知</span></div>
+      <div class="feat-title">通知・設定</div>
+      <div class="feat-desc">未読のお知らせ・承認待ちワークフローをヘッダーのベルバッジで通知（60秒間隔更新）。クリックで既読化。設定タブはプロフィール・会社情報・メンバー招待・パスワード変更・通知 ON/OFF・メール署名・勤怠設定・ワークフロー種別・CRM／職人マスタの管理を提供。</div>
+      <div class="feat-tags"><span class="feat-tag">未読バッジ通知</span><span class="feat-tag">通知 ON/OFF 設定</span><span class="feat-tag">メンバー招待・ロール変更</span><span class="feat-tag">各種マスタ管理</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
         <span class="status-chip status-done">実装済み</span>
       </div>
     </div>
 
-    <div class="feat-card" data-cat="system">
-      <div class="feat-cat">システム</div>
-      <div class="feat-title">設定・プロフィール</div>
-      <div class="feat-desc">ユーザープロフィール・会社情報・通知設定を管理。通知設定は Supabase user_metadata に永続保存されます。</div>
-      <div class="feat-tags"><span class="feat-tag">プロフィール編集</span><span class="feat-tag">通知設定</span><span class="feat-tag">会社情報</span></div>
+    <!-- INTEGRATION -->
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">Supabase Auth</div>
+      <div class="feat-desc">メール＋パスワード認証。JWT トークンを Cookie に保存してセッション維持。パスワードリセット対応。Supabase RLS と連携してテナント（会社）ごとにデータを完全分離。</div>
+      <div class="feat-tags"><span class="feat-tag">JWT 認証</span><span class="feat-tag">セッション管理</span><span class="feat-tag">テナント分離</span></div>
       <div class="feat-footer">
         <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
-        <span class="status-chip status-done">実装済み</span>
+        <span class="status-chip status-done">稼働中</span>
+      </div>
+    </div>
+
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">Supabase Database</div>
+      <div class="feat-desc">PostgreSQL 15 をバックエンドとして使用。30 以上のテーブルに RLS ポリシーを適用し、company_id 単位でマルチテナントを実現。マイグレーション管理・リアルタイムサブスクリプションに対応。</div>
+      <div class="feat-tags"><span class="feat-tag">PostgreSQL 15</span><span class="feat-tag">RLS ポリシー</span><span class="feat-tag">リアルタイム同期</span></div>
+      <div class="feat-footer">
+        <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
+        <span class="status-chip status-done">稼働中</span>
+      </div>
+    </div>
+
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">Supabase Storage</div>
+      <div class="feat-desc">文書管理のファイルを Supabase Storage に保存。バケット単位で RLS 制御し、会社ごとにファイルを分離。アップロード・署名付き URL 発行・削除に対応。日本語ファイル名はサニタイズ処理して保存。</div>
+      <div class="feat-tags"><span class="feat-tag">クラウドストレージ</span><span class="feat-tag">RLS バケット制御</span><span class="feat-tag">署名付き URL</span></div>
+      <div class="feat-footer">
+        <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
+        <span class="status-chip status-done">稼働中</span>
+      </div>
+    </div>
+
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">Gmail API（OAuth 2.0）</div>
+      <div class="feat-desc">Gmail アカウントと OAuth 連携。受信スレッドの取得・既読管理・スター・メール送信をシステム内で操作。設定画面でアカウント接続・切断・IMAP 設定が可能。calendar.readonly スコープの Google 審査（2〜6週間）が連携の前提。</div>
+      <div class="feat-tags"><span class="feat-tag">Gmail OAuth</span><span class="feat-tag">受信スレッド取得</span><span class="feat-tag">メール送信</span><span class="feat-tag">要 OAuth 設定</span></div>
+      <div class="feat-footer">
+        <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
+        <span class="status-chip status-partial">要 OAuth 設定</span>
+      </div>
+    </div>
+
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">Google Calendar API</div>
+      <div class="feat-desc">Google カレンダーと双方向同期。システム内で作成・編集したイベントを Google カレンダーへ反映。カレンダー ID は設定で指定。OAuth 未接続時は DB イベントのみ表示。Google の OAuth アプリ審査（calendar.readonly は機密スコープ）が必要。</div>
+      <div class="feat-tags"><span class="feat-tag">双方向同期</span><span class="feat-tag">カレンダー ID 設定</span><span class="feat-tag">要 OAuth 審査</span></div>
+      <div class="feat-footer">
+        <div class="feat-roles"><span class="role-chip role-chip-all">全ロール</span></div>
+        <span class="status-chip status-partial">要 OAuth 設定</span>
       </div>
     </div>
 
@@ -512,26 +512,6 @@
         <span class="ext-status ext-status-optional">要OAuth設定</span>
       </div>
 
-      <div class="ext-card">
-
-        <div class="ext-name">AI スコアリング（予定）</div>
-        <div class="ext-desc">顧客・商談の成約確率を AI で自動スコアリング。行動ログ・商談履歴をもとに確度を予測し、優先対応をサポート。</div>
-        <span class="ext-status ext-status-phase2">フェーズ2予定</span>
-      </div>
-
-      <div class="ext-card">
-
-        <div class="ext-name">SNS API（予定）</div>
-        <div class="ext-desc">Instagram Graph API・Twitter/X API と連携。投稿パフォーマンス・フォロワー推移・エンゲージメントをダッシュボードで可視化。</div>
-        <span class="ext-status ext-status-phase2">フェーズ2予定</span>
-      </div>
-
-      <div class="ext-card">
-
-        <div class="ext-name">メール配信 API（予定）</div>
-        <div class="ext-desc">SendGrid / Amazon SES と連携した一斉配信。テンプレート管理・配信予約・開封率トラッキングに対応予定。</div>
-        <span class="ext-status ext-status-phase2">フェーズ2予定</span>
-      </div>
 
     </div>
   </div>
