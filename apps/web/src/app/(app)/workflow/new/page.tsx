@@ -111,16 +111,24 @@ export default function WorkflowNewPage() {
               <Select value={typeId} onValueChange={handleTypeChange}>
                 <SelectTrigger><SelectValue placeholder="種別を選択してください" /></SelectTrigger>
                 <SelectContent>
-                  {types.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
+                  {(() => {
+                    const groups: Record<string, WfType[]> = {};
+                    types.forEach(t => {
+                      const cat = (t as WfType & { description?: string }).description || "その他";
+                      if (!groups[cat]) groups[cat] = [];
+                      groups[cat].push(t);
+                    });
+                    return Object.entries(groups).map(([cat, items]) => (
+                      <div key={cat}>
+                        <div className="px-2 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{cat}</div>
+                        {items.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        ))}
+                      </div>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
-              {selectedType && (selectedType as WfType & { description?: string }).description && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  {(selectedType as WfType & { description?: string }).description}
-                </p>
-              )}
             </CardContent>
           </Card>
 

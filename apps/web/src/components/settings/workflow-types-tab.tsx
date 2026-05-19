@@ -32,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, GripVertical, X } from "lucide-react";
+import { Plus, Trash2, GripVertical, X } from "lucide-react";
 import {
   getWorkflowTypes,
   createWorkflowType,
@@ -63,6 +63,7 @@ export function WorkflowTypesTab() {
   const [editing, setEditing] = useState<WfType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WfType | null>(null);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("");
 
   // Form state
   const [name, setName] = useState("");
@@ -175,54 +176,76 @@ export function WorkflowTypesTab() {
             申請種別がまだありません。「種別を追加」から作成してください。
           </CardContent>
         </Card>
-      ) : (
-        <div className="space-y-1.5">
-          {types.map(t => {
-            const fs = ((t as WfType & { fields_schema?: FieldDef[] }).fields_schema ?? []) as FieldDef[];
-            const ar = ((t as WfType & { approval_route?: { approver_id: string }[] }).approval_route ?? []);
-            const desc = (t as WfType & { description?: string }).description;
-            const ddDays = (t as WfType & { deadline_days?: number }).deadline_days;
-            return (
-              <Card key={t.id} className="group">
-                <CardContent className="flex items-center justify-between gap-2 py-2 px-3">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <GripVertical className="size-3.5 text-muted-foreground shrink-0" />
-                    <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-                      <p className="font-medium text-sm shrink-0">{t.name}</p>
-                      {desc && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{desc}</p>}
-                      <div className="flex flex-wrap gap-1">
-                        {fs.length > 0 && (
-                          <Badge variant="secondary" className="text-[10px] font-normal h-4 px-1.5">
-                            入力 {fs.length}件
-                          </Badge>
-                        )}
-                        {ar.length > 0 && (
-                          <Badge variant="secondary" className="text-[10px] font-normal h-4 px-1.5">
-                            承認 {ar.length}step
-                          </Badge>
-                        )}
-                        {ddDays && (
-                          <Badge variant="secondary" className="text-[10px] font-normal h-4 px-1.5">
-                            {ddDays}日
-                          </Badge>
-                        )}
+      ) : (() => {
+        const groups: Record<string, WfType[]> = {};
+        types.forEach(t => {
+          const cat = (t as WfType & { description?: string }).description || "その他";
+          if (!groups[cat]) groups[cat] = [];
+          groups[cat].push(t);
+        });
+        const cats = Object.keys(groups);
+        const currentTab = activeTab && cats.includes(activeTab) ? activeTab : cats[0];
+
+        const renderTypeList = (items: WfType[]) => (
+          <div className="space-y-1 mt-3">
+            {items.map(t => {
+              const fs = ((t as WfType & { fields_schema?: FieldDef[] }).fields_schema ?? []) as FieldDef[];
+              const ar = ((t as WfType & { approval_route?: { approver_id: string }[] }).approval_route ?? []);
+              const ddDays = (t as WfType & { deadline_days?: number }).deadline_days;
+              return (
+                <Card key={t.id} className="group cursor-pointer hover:bg-muted/40 transition-colors" onClick={() => openEdit(t)}>
+                  <CardContent className="flex items-center justify-between gap-2 py-2 px-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <GripVertical className="size-3.5 text-muted-foreground shrink-0" />
+                      <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                        <p className="font-medium text-sm shrink-0">{t.name}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {fs.length > 0 && (
+                            <Badge variant="secondary" className="text-[10px] font-normal h-4 px-1.5">入力 {fs.length}件</Badge>
+                          )}
+                          {ar.length > 0 && (
+                            <Badge variant="secondary" className="text-[10px] font-normal h-4 px-1.5">承認 {ar.length}step</Badge>
+                          )}
+                          {ddDays && (
+                            <Badge variant="secondary" className="text-[10px] font-normal h-4 px-1.5">{ddDays}日</Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <Button size="icon" variant="ghost" className="size-6" onClick={() => openEdit(t)}>
-                      <Pencil className="size-3" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="size-6 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(t)}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={e => { e.stopPropagation(); setDeleteTarget(t); }}
+                    >
                       <Trash2 className="size-3" />
                     </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        );
+
+        return (
+          <div>
+            <Select value={currentTab} onValueChange={setActiveTab}>
+              <SelectTrigger className="h-8 text-sm w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {cats.map(cat => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                    <span className="ml-1.5 text-[11px] text-muted-foreground">({groups[cat].length})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {renderTypeList(groups[currentTab] ?? [])}
+          </div>
+        );
+      })()}
 
       {/* 作成 / 編集ダイアログ */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -240,8 +263,19 @@ export function WorkflowTypesTab() {
                   <Input value={name} onChange={e => setName(e.target.value)} placeholder="例: 稟議書、経費精算、有給申請" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>説明</Label>
-                  <Textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="この申請種別の用途や注意事項" />
+                  <Label>カテゴリ</Label>
+                  <p className="text-[11px] text-muted-foreground">一覧でのグループ見出しになります</p>
+                  <Input
+                    list="category-suggestions"
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="例: 稟議・業務依頼系、人事・労務関連"
+                  />
+                  <datalist id="category-suggestions">
+                    {Array.from(new Set(types.map(t => (t as WfType & { description?: string }).description).filter(Boolean))).map(cat => (
+                      <option key={cat} value={cat!} />
+                    ))}
+                  </datalist>
                 </div>
                 <div className="space-y-1.5">
                   <Label>承認期限（日）</Label>

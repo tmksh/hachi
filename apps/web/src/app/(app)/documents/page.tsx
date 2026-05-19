@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
-import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, GripVertical, Pencil } from "lucide-react";
+import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
   getDocuments, createDocument, deleteDocument,
@@ -92,7 +91,9 @@ export default function DocumentsPage() {
     setUploading(true);
     try {
       const supabase = createClient();
-      const path = `documents/${Date.now()}_${uploadFile.name}`;
+      const ext = uploadFile.name.split(".").pop() ?? "bin";
+      const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "");
+      const path = `documents/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
       const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, uploadFile);
       if (storageError) throw storageError;
 
@@ -265,10 +266,6 @@ export default function DocumentsPage() {
                   {categories.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>説明</Label>
-              <Textarea rows={3} value={uploadDescription} onChange={e => setUploadDescription(e.target.value)} placeholder="説明（任意）" />
             </div>
             <div className="space-y-2">
               <Label>ファイル *</Label>

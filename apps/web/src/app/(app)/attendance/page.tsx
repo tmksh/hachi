@@ -187,36 +187,36 @@ export default function AttendancePage() {
     <div className="p-4 md:p-6 space-y-6">
       <PageHeader title="勤怠管理" description="出退勤の管理と記録" />
 
-      {/* 打刻カード */}
-      {isCurrentMonth && (
-        <Card className="overflow-hidden py-0">
-          <CardContent className="p-0">
-            <div className="flex flex-col md:flex-row">
-              {/* 時計エリア */}
-              <div className="flex flex-col items-center justify-center gap-3 md:gap-4 py-5 px-4 md:p-8 flex-1 bg-gradient-to-br from-primary/5 to-transparent border-b md:border-b-0 md:border-r border-border/60">
-                <div className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full transition-colors ${clockedIn ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/40"}`} />
-                  <span className={`text-xs font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
-                    {clockedIn ? "勤務中" : "未出勤"}
-                  </span>
-                </div>
-                <AnalogClock size={110} />
-                <div className="text-center">
-                  <p className="text-2xl md:text-3xl font-bold tabular-nums tracking-tight">{format(now, "HH:mm")}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{format(now, "yyyy年M月d日（EEE）", { locale: ja })}</p>
-                </div>
-                {/* 所定時間インジケーター */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>所定 {attSettings.start_time} – {attSettings.end_time}</span>
+      {/* 打刻カード＋月次サマリー */}
+      <Card className="overflow-hidden py-0">
+        <CardContent className="p-0">
+          <div className="flex flex-col md:flex-row">
+            {/* 時計エリア */}
+            {isCurrentMonth && (
+              <div className="flex items-center gap-4 px-5 py-4 bg-gradient-to-br from-primary/5 to-transparent border-b md:border-b-0 md:border-r border-border/60 md:w-auto md:shrink-0">
+                <AnalogClock size={72} />
+                <div className="flex flex-col gap-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${clockedIn ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/40"}`} />
+                    <span className={`text-xs font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
+                      {clockedIn ? "勤務中" : "未出勤"}
+                    </span>
+                  </div>
+                  <p className="text-2xl font-bold tabular-nums tracking-tight leading-none">{format(now, "HH:mm")}</p>
+                  <p className="text-xs text-muted-foreground">{format(now, "yyyy年M月d日（EEE）", { locale: ja })}</p>
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span>所定 {attSettings.start_time} – {attSettings.end_time}</span>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* 操作エリア */}
-              <div className="flex flex-col justify-center gap-3 py-4 px-4 md:p-8 md:w-72">
-                <p className="text-xs text-muted-foreground font-medium">打刻操作</p>
+            {/* 操作エリア */}
+            {isCurrentMonth && (
+              <div className="flex flex-col justify-center gap-2.5 px-5 py-4 border-b md:border-b-0 md:border-r border-border/60 md:w-64 shrink-0">
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">勤務区分</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">勤務区分</p>
                   <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType} disabled={isOnLeaveToday}>
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue />
@@ -230,62 +230,53 @@ export default function AttendancePage() {
                 </div>
 
                 {isOnLeaveToday ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-center gap-2 dark:bg-amber-950/30 dark:border-amber-900">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-center gap-2 dark:bg-amber-950/30 dark:border-amber-900">
                     <Sun className="h-4 w-4 text-amber-600 shrink-0" />
-                    <div className="space-y-0.5">
+                    <div>
                       <p className="text-xs font-medium text-amber-700 dark:text-amber-400">本日は休暇です</p>
-                      <p className="text-[11px] text-amber-600/80 dark:text-amber-500/80">{todayEntry?.leave_type}</p>
+                      <p className="text-[11px] text-amber-600/80">{todayEntry?.leave_type}</p>
                     </div>
                   </div>
                 ) : isLeaveModeSelected ? (
-                  <>
-                    <Button onClick={handleRecordLeave} size="lg" className="gap-2 w-full">
-                      <Coffee className="h-5 w-5" />本日を休暇として記録
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground text-center px-2">
-                      終日休暇のため打刻不要です。記録後は管理者の承認待ちになります。
-                    </p>
-                  </>
+                  <Button onClick={handleRecordLeave} size="sm" className="gap-1.5 w-full">
+                    <Coffee className="h-4 w-4" />休暇として記録
+                  </Button>
                 ) : (
-                  <>
-                    <Button onClick={handleClockIn} disabled={clockedIn} size="lg" className="gap-2 w-full">
-                      <LogIn className="h-5 w-5" />出勤
+                  <div className="flex gap-2">
+                    <Button onClick={handleClockIn} disabled={clockedIn} size="sm" className="gap-1.5 flex-1">
+                      <LogIn className="h-4 w-4" />出勤
                     </Button>
-                    <Button variant="outline" onClick={handleClockOut} disabled={!clockedIn} size="lg" className="gap-2 w-full">
-                      <LogOut className="h-5 w-5" />退勤
+                    <Button variant="outline" onClick={handleClockOut} disabled={!clockedIn} size="sm" className="gap-1.5 flex-1">
+                      <LogOut className="h-4 w-4" />退勤
                     </Button>
-                  </>
+                  </div>
                 )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            )}
 
-      {/* 月次サマリー */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "出勤日数", value: `${totalDays}日` },
-          { label: "承認済", value: `${approvedDays}日`, highlight: true },
-          { label: "実労働時間", value: minutesToHM(totalWorkMins) },
-          { label: "残業時間", value: minutesToHM(totalOvertimeMins), warn: totalOvertimeMins > 0 },
-        ].map(({ label, value, highlight, warn }) => (
-          <Card key={label} variant="inset">
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className={`text-lg font-bold tabular-nums mt-0.5 ${highlight ? "text-emerald-600" : warn ? "text-amber-600" : ""}`}>
-                {value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            {/* 月次サマリー（2×2グリッド） */}
+            <div className="grid grid-cols-2 gap-px flex-1 bg-border/40">
+              {[
+                { label: "出勤日数",    value: `${totalDays}日`,                 cls: "" },
+                { label: "承認済",      value: `${approvedDays}日`,              cls: "text-emerald-600" },
+                { label: "実労働時間",  value: minutesToHM(totalWorkMins),       cls: "" },
+                { label: "残業時間",    value: minutesToHM(totalOvertimeMins),   cls: totalOvertimeMins > 0 ? "text-amber-600" : "" },
+              ].map(({ label, value, cls }) => (
+                <div key={label} className="bg-card px-5 py-4 flex flex-col justify-center">
+                  <p className="text-[11px] text-muted-foreground font-medium">{label}</p>
+                  <p className={`text-xl font-bold tabular-nums mt-0.5 ${cls}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 勤怠記録 */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">勤怠記録</h2>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 ml-auto">
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => subMonths(d, 1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
