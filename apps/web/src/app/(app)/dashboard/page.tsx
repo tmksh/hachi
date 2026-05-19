@@ -276,12 +276,8 @@ export default function DashboardPage() {
             case "ai-focus":
               return !isVisible("ai-focus") ? null : (
                 <Card className="overflow-hidden relative h-full">
-                  <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-primary/[0.05] to-transparent" />
                   <CardHeader className="relative">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/15">
-                        <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      </span>
                       <CardTitle className="text-sm font-semibold">今日のフォーカス</CardTitle>
                     </div>
                     <Link href="/bi">

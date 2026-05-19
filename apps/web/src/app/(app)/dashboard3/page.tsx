@@ -1,5 +1,16 @@
 "use client";
 
+const AVATAR_COLORS = [
+  "bg-violet-500", "bg-blue-500", "bg-cyan-500", "bg-teal-500",
+  "bg-emerald-500", "bg-amber-500", "bg-orange-500", "bg-rose-500",
+  "bg-pink-500", "bg-indigo-500",
+];
+function avatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -311,7 +322,7 @@ export default function Dashboard3Page() {
               )) : data?.recentCustomers.length ? data.recentCustomers.map((customer) => (
                 <Link key={customer.id} href={`/crm/${customer.id}`}
                   className="flex items-center gap-3 py-2 hover:bg-slate-50 -mx-1 px-1 rounded-xl transition-colors group">
-                  <div className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold bg-zinc-900">
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold ${avatarColor(customer.name)}`}>
                     {customer.name.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">

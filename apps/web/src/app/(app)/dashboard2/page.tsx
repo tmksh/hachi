@@ -1,5 +1,16 @@
 "use client";
 
+const AVATAR_COLORS = [
+  "bg-violet-500", "bg-blue-500", "bg-cyan-500", "bg-teal-500",
+  "bg-emerald-500", "bg-amber-500", "bg-orange-500", "bg-rose-500",
+  "bg-pink-500", "bg-indigo-500",
+];
+function avatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useState, useEffect, useCallback } from "react";
@@ -114,7 +125,7 @@ export default function Dashboard2Page() {
               <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">勤怠打刻</span>
               <Link href="/attendance"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
             </div>
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 pt-4">
               <AnalogClock size={120} hourColor="#18181b" minuteColor="#27272a" secondColor="#71717a" centerColor="#18181b" />
               <p className="text-xl font-bold tabular-nums tracking-tight text-zinc-900 leading-none">{format(now, "HH:mm")}</p>
               <div className="flex items-center gap-3">
@@ -166,9 +177,6 @@ export default function Dashboard2Page() {
                 return (
                   <div key={todo.id} className={`flex items-center gap-3 py-2.5 px-1 cursor-pointer group hover:bg-zinc-50 rounded transition-colors ${isUrgent ? "hover:bg-rose-50/40" : ""}`}>
                     <span className="text-[10px] tabular-nums text-zinc-300 w-4 shrink-0 font-mono leading-none">{String(idx + 1).padStart(2, "0")}</span>
-                    <div className={`h-3.5 w-3.5 rounded-sm border shrink-0 flex items-center justify-center transition-colors ${isCompleted ? "bg-zinc-900 border-zinc-900" : "border-zinc-300 group-hover:border-zinc-500"}`}>
-                      {isCompleted && <Check className="h-2 w-2 text-white" strokeWidth={3} />}
-                    </div>
                     <span className={`text-xs flex-1 truncate ${isCompleted ? "line-through text-zinc-300" : "text-zinc-700"}`}>{todo.title}</span>
                     {isUrgent && <span className="text-[9px] font-bold text-rose-500 border border-rose-200 rounded px-1 shrink-0">急</span>}
                   </div>
@@ -265,7 +273,7 @@ export default function Dashboard2Page() {
               )) : data?.recentCustomers.length ? data.recentCustomers.map((customer) => (
                 <Link key={customer.id} href={`/crm/${customer.id}`}
                   className="py-2.5 flex items-center gap-3 group hover:bg-zinc-50 -mx-2 px-2 rounded transition-colors">
-                  <div className="h-8 w-8 rounded-md bg-zinc-900 flex items-center justify-center shrink-0">
+                  <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${avatarColor(customer.name)}`}>
                     <span className="text-xs font-bold text-white">{customer.name.charAt(0)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
