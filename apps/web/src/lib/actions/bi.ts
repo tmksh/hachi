@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentFiscalYear } from "@/lib/bi-utils";
 
 // ── 型定義 ────────────────────────────────────────────────────────────
 export type BiOverheadItem = {
