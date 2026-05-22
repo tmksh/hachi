@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { Customer } from "@/lib/database.types";
+import { dispatchWebhook } from "@/lib/webhooks";
 
 export async function getCustomers() {
   const supabase = await createClient();
@@ -39,6 +40,12 @@ export async function createCustomer(input: Omit<Customer, "id" | "company_id" |
     .select()
     .single();
   if (error) throw error;
+  void dispatchWebhook(profile.company_id, "customer.created", {
+    id: data.id,
+    name: data.name,
+    company_name: data.company_name,
+    status: data.status,
+  });
   return data as Customer;
 }
 
@@ -48,19 +55,29 @@ export async function updateCustomer(id: string, input: Partial<Omit<Customer, "
     .from("customers")
     .update(input)
     .eq("id", id)
-    .select()
+    .select("*, company_id")
     .single();
   if (error) throw error;
+  void dispatchWebhook(data.company_id, "customer.updated", {
+    id: data.id,
+    name: data.name,
+    status: data.status,
+    tags: data.tags,
+  });
   return data as Customer;
 }
 
 export async function deleteCustomer(id: string) {
   const supabase = await createClient();
+  const { data: existing } = await supabase.from("customers").select("company_id, name").eq("id", id).single();
   const { error } = await supabase
     .from("customers")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+  if (existing) {
+    void dispatchWebhook(existing.company_id, "customer.deleted", { id, name: existing.name });
+  }
 }
 
 export async function getCustomerRelated(customerId: string) {

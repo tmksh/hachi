@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type { Invoice, InvoiceItem } from "@/lib/database.types";
 
 export async function getInvoices() {
@@ -33,8 +34,41 @@ export async function getInvoice(id: string) {
 
 export async function updateInvoiceStatus(id: string, status: "draft" | "sent" | "paid" | "cancelled") {
   const supabase = await createClient();
-  const { error } = await supabase.from("invoices").update({ status }).eq("id", id);
+  const { data: before } = await supabase
+    .from("invoices")
+    .select("status, company_id, invoice_no, total, recipient")
+    .eq("id", id)
+    .single();
+
+  const patch: { status: typeof status; paid_at?: string | null } = { status };
+  if (status === "paid") {
+    patch.paid_at = new Date().toISOString();
+  } else if (before?.status === "paid") {
+    patch.paid_at = null;
+  }
+
+  const { data, error } = await supabase.from("invoices").update(patch).eq("id", id).select().single();
   if (error) throw error;
+
+  if (before && before.status !== status) {
+    if (status === "sent") {
+      void dispatchWebhook(data.company_id, "invoice.issued", {
+        id: data.id,
+        invoice_no: data.invoice_no,
+        total: data.total,
+        recipient: data.recipient,
+      });
+    }
+    if (status === "paid") {
+      void dispatchWebhook(data.company_id, "invoice.paid", {
+        id: data.id,
+        invoice_no: data.invoice_no,
+        total: data.total,
+        recipient: data.recipient,
+        paid_at: data.paid_at,
+      });
+    }
+  }
 }
 
 export async function updateInvoice(

@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { getDeals, updateDeal, getDealStages, deleteDeal } from "@/lib/actions/deals";
 import { getProfiles } from "@/lib/actions/profiles";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
+import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
 import type { Deal } from "@/lib/database.types";
 import type { Profile } from "@/lib/database.types";
@@ -34,6 +35,7 @@ export default function DealsPage() {
   const [draggedDeal, setDraggedDeal]   = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [addOpen, setAddOpen]           = useState(false);
+  const [editDeal, setEditDeal]         = useState<DealRow | null>(null);
   const [wonDeal, setWonDeal]           = useState<DealRow | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState("_all");
   const [deleteTarget, setDeleteTarget] = useState<DealRow | null>(null);
@@ -207,6 +209,9 @@ export default function DealsPage() {
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-36">
+                              <DropdownMenuItem onClick={e => { e.stopPropagation(); setEditDeal(deal); }}>
+                                <Pencil className="h-3.5 w-3.5 mr-2" />編集
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={e => { e.stopPropagation(); router.push(`/crm/${deal.customer_id}`); }}>
                                 <Pencil className="h-3.5 w-3.5 mr-2" />顧客詳細
                               </DropdownMenuItem>
@@ -249,6 +254,14 @@ export default function DealsPage() {
 
       {/* 商談追加ダイアログ */}
       <AddDealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={fetchDeals} stages={stages} />
+
+      <EditDealDialog
+        open={editDeal !== null}
+        onOpenChange={(v) => { if (!v) setEditDeal(null); }}
+        deal={editDeal}
+        stages={stages}
+        onUpdated={fetchDeals}
+      />
 
       {/* 受注ダイアログ */}
       {wonDeal && (

@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Save } from "lucide-react";
 import { getCustomer, updateCustomer } from "@/lib/actions/customers";
 import { getProfiles } from "@/lib/actions/profiles";
+import { getCustomerTagMasters } from "@/lib/actions/deals";
+import { Badge } from "@/components/ui/badge";
 
 export default function CrmEditPage() {
   const { id } = useParams();
@@ -30,13 +32,20 @@ export default function CrmEditPage() {
   const [status, setStatus] = useState("active");
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
+  const [tagMasters, setTagMasters] = useState<{ id: string; label: string }[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const toggleTag = (label: string) => {
+    setSelectedTags(prev => prev.includes(label) ? prev.filter(t => t !== label) : [...prev, label]);
+  };
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getCustomer(id as string), getProfiles()])
-      .then(([c, p]) => {
+    Promise.all([getCustomer(id as string), getProfiles(), getCustomerTagMasters()])
+      .then(([c, p, tags]) => {
         setProfiles(p.map(x => ({id:x.id,display_name:x.display_name})));
-        setName(c.name); setCompanyName(c.company_name ?? ""); setEmail(c.email ?? ""); setPhone(c.phone ?? ""); setAddress(c.address ?? ""); setSource(c.source ?? ""); setStatus(c.status); setAssignedTo(c.assigned_to ?? ""); setNotes(c.notes ?? "");
+        setTagMasters(tags);
+        setName(c.name); setCompanyName(c.company_name ?? ""); setEmail(c.email ?? ""); setPhone(c.phone ?? ""); setAddress(c.address ?? ""); setSource(c.source ?? ""); setStatus(c.status); setAssignedTo(c.assigned_to ?? ""); setNotes(c.notes ?? ""); setSelectedTags(c.tags ?? []);
       }).catch(() => toast.error("取得に失敗")).finally(() => setLoading(false));
   }, [id]);
 
@@ -44,7 +53,7 @@ export default function CrmEditPage() {
     if (!name.trim()) { toast.error("名前を入力してください"); return; }
     setSaving(true);
     try {
-      await updateCustomer(id as string, { name: name.trim(), company_name: companyName || null, email: email || null, phone: phone || null, address: address || null, source: source || null, status, assigned_to: assignedTo || null, notes: notes || null });
+      await updateCustomer(id as string, { name: name.trim(), company_name: companyName || null, email: email || null, phone: phone || null, address: address || null, source: source || null, status, assigned_to: assignedTo || null, tags: selectedTags, notes: notes || null });
       toast.success("更新しました"); router.push(`/crm/${id}`);
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
@@ -65,6 +74,18 @@ export default function CrmEditPage() {
             <div className="space-y-2"><Label>ソース</Label><Input value={source} onChange={e=>setSource(e.target.value)} /></div>
             <div className="space-y-2"><Label>ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">アクティブ</SelectItem><SelectItem value="inactive">非アクティブ</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>担当者</Label><Select value={assignedTo} onValueChange={setAssignedTo}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{profiles.map(p=><SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>タグ</Label>
+              <div className="flex flex-wrap gap-2 min-h-9">
+                {tagMasters.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">設定画面でタグマスタを登録してください</p>
+                ) : tagMasters.map(tag => (
+                  <button key={tag.id} type="button" onClick={() => toggleTag(tag.label)}>
+                    <Badge variant={selectedTags.includes(tag.label) ? "default" : "outline"}>{tag.label}</Badge>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="space-y-2"><Label>備考</Label><Textarea rows={4} value={notes} onChange={e=>setNotes(e.target.value)} /></div>
         </CardContent>

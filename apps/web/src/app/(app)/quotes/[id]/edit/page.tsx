@@ -27,6 +27,7 @@ export default function QuoteEditPage() {
   const [customerId, setCustomerId] = useState("");
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState("draft");
   const [items, setItems] = useState<LineItem[]>([]);
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export default function QuoteEditPage() {
     Promise.all([getEstimate(id as string), getCustomers()])
       .then(([est, c]) => {
         setCustomers(c.map(x => ({id:x.id,name:x.name})));
-        setCustomerId(est.customer_id ?? ""); setTitle(est.title ?? ""); setNotes(est.notes ?? "");
+        setCustomerId(est.customer_id ?? ""); setTitle(est.title ?? ""); setNotes(est.notes ?? ""); setStatus(est.status ?? "draft");
         setItems(est.items.length > 0 ? est.items.map(i => ({ name: i.name, quantity: i.quantity, unit: i.unit ?? "式", selling_price: i.selling_price })) : [{ name: "", quantity: 1, unit: "式", selling_price: 0 }]);
       }).catch(() => toast.error("取得に失敗")).finally(() => setLoading(false));
   }, [id]);
@@ -54,7 +55,7 @@ export default function QuoteEditPage() {
         cost_price: 0, cost_amount: 0, selling_price: item.selling_price, selling_amount: item.quantity * item.selling_price,
         gross_profit: item.quantity * item.selling_price, gross_profit_rate: 100, sort_order: 0, notes: null, category_id: null,
       }));
-      await updateEstimate(id as string, { title: title.trim(), customer_id: customerId || undefined, notes: notes || undefined }, estimateItems);
+      await updateEstimate(id as string, { title: title.trim(), customer_id: customerId || undefined, notes: notes || undefined, status: status as "draft" | "sent" | "accepted" | "rejected" }, estimateItems);
       toast.success("更新しました"); router.push(`/quotes/${id}`);
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
@@ -69,6 +70,7 @@ export default function QuoteEditPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2"><Label>件名 *</Label><Input value={title} onChange={e=>setTitle(e.target.value)} /></div>
             <div className="space-y-2"><Label>顧客</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{customers.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">下書き</SelectItem><SelectItem value="sent">送付済み</SelectItem><SelectItem value="accepted">受理</SelectItem><SelectItem value="rejected">却下</SelectItem></SelectContent></Select></div>
           </div>
           <div className="space-y-2"><Label>備考</Label><Textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} /></div>
         </CardContent>

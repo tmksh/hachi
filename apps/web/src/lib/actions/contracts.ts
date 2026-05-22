@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type { Contract } from "@/lib/database.types";
 
 export async function getContracts() {
@@ -64,13 +65,37 @@ export async function createContract(input: {
     .select()
     .single();
   if (error) throw error;
+
+  void dispatchWebhook(profile.company_id, "contract.created", {
+    id: data.id,
+    contract_no: data.contract_no,
+    title: data.title,
+    amount: data.amount,
+    status: data.status,
+  });
+
   return data as Contract;
 }
 
 export async function updateContract(id: string, input: Partial<Omit<Contract, "id" | "company_id" | "contract_no" | "created_at" | "updated_at">>) {
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("contracts")
+    .select("status, company_id, title, contract_no, amount")
+    .eq("id", id)
+    .single();
   const { data, error } = await supabase.from("contracts").update(input).eq("id", id).select().single();
   if (error) throw error;
+
+  if (before && input.status && before.status !== input.status && input.status === "contracted") {
+    void dispatchWebhook(data.company_id, "contract.signed", {
+      id: data.id,
+      contract_no: data.contract_no,
+      title: data.title,
+      amount: data.amount,
+    });
+  }
+
   return data as Contract;
 }
 

@@ -44,6 +44,7 @@ import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { ContractTab } from "@/components/constructions/contract-tab";
+import { useAuth } from "@/hooks/use-auth";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 
 type Detail = Awaited<ReturnType<typeof getConstruction>>;
@@ -601,6 +602,7 @@ type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[numbe
 export default function ConstructionDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { profile } = useAuth();
   const [data, setData] = useState<Detail | null>(null);
   const [docs, setDocs] = useState<ContractDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -774,6 +776,8 @@ export default function ConstructionDetailPage() {
           <CostBudgetTab
             constructionId={id as string}
             contractAmount={contract?.amount ?? data.order_amount ?? undefined}
+            initialOrders={data.orders as Order[]}
+            authorName={profile?.display_name ?? "ユーザー"}
           />
         </TabsContent>
 

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
 import { getConstruction, updateConstruction } from "@/lib/actions/constructions";
+import { getBiDepartmentNames } from "@/lib/actions/bi";
 
 const STATUS_OPTIONS = [{value:"preparing",label:"着工前"},{value:"in_progress",label:"施工中"},{value:"completed",label:"完工"},{value:"suspended",label:"中断"},{value:"delayed",label:"遅延"}];
 
@@ -27,16 +28,31 @@ export default function ConstructionEditPage() {
   const [orderAmount, setOrderAmount] = useState("");
   const [budgetCost, setBudgetCost] = useState("");
   const [progress, setProgress] = useState("0");
+  const [departmentName, setDepartmentName] = useState("");
+  const [departments, setDepartments] = useState<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
-    getConstruction(id as string).then(c => { setTitle(c.title); setStatus(c.status); setStartDate(c.start_date ?? ""); setEndDate(c.end_date ?? ""); setOrderAmount(c.order_amount ? String(c.order_amount) : ""); setBudgetCost(c.budget_cost ? String(c.budget_cost) : ""); setProgress(String(c.progress ?? 0)); }).catch(() => toast.error("取得に失敗")).finally(() => setLoading(false));
+    Promise.all([getConstruction(id as string), getBiDepartmentNames()])
+      .then(([c, depts]) => {
+        setTitle(c.title);
+        setStatus(c.status);
+        setStartDate(c.start_date ?? "");
+        setEndDate(c.end_date ?? "");
+        setOrderAmount(c.order_amount ? String(c.order_amount) : "");
+        setBudgetCost(c.budget_cost ? String(c.budget_cost) : "");
+        setProgress(String(c.progress ?? 0));
+        setDepartmentName(c.department_name ?? "");
+        setDepartments(depts);
+      })
+      .catch(() => toast.error("取得に失敗"))
+      .finally(() => setLoading(false));
   }, [id]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateConstruction(id as string, { title, status: status as "preparing"|"in_progress"|"completed"|"suspended"|"delayed", start_date: startDate || null, end_date: endDate || null, order_amount: orderAmount ? Number(orderAmount) : 0, budget_cost: budgetCost ? Number(budgetCost) : 0, progress: Number(progress) });
+      await updateConstruction(id as string, { title, status: status as "preparing"|"in_progress"|"completed"|"suspended"|"delayed", start_date: startDate || null, end_date: endDate || null, order_amount: orderAmount ? Number(orderAmount) : 0, budget_cost: budgetCost ? Number(budgetCost) : 0, progress: Number(progress), department_name: departmentName || null });
       toast.success("更新しました"); router.push(`/constructions/${id}`);
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
@@ -50,6 +66,7 @@ export default function ConstructionEditPage() {
         <CardContent className="space-y-4"><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2 sm:col-span-2"><Label>工事名</Label><Input value={title} onChange={e=>setTitle(e.target.value)} /></div>
           <div className="space-y-2"><Label>ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STATUS_OPTIONS.map(s=><SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><Label>部門（BI集計）</Label><Select value={departmentName || "_none"} onValueChange={(v) => setDepartmentName(v === "_none" ? "" : v)}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="_none">未設定</SelectItem>{departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>進捗 (%)</Label><Input type="number" min={0} max={100} value={progress} onChange={e=>setProgress(e.target.value)} /></div>
           <div className="space-y-2"><Label>着工日</Label><Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
           <div className="space-y-2"><Label>竣工日</Label><Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>

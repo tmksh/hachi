@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CrmMasterTab } from "@/components/settings/crm-master-tab";
 import { CraftsmenMasterTab } from "@/components/settings/craftsmen-master-tab";
+import { IntegrationsTab } from "@/components/settings/integrations-tab";
+import { AppIntegrationsTab } from "@/components/settings/app-integrations-tab";
 import { WorkflowTypesTab } from "@/components/settings/workflow-types-tab";
 import {
   Select,
@@ -516,6 +518,12 @@ export default function SettingsPage() {
           )}
           {canManageMembers && (
             <TabsTrigger value="craftsmen_master">職人マスタ</TabsTrigger>
+          )}
+          {canManageMembers && (
+            <TabsTrigger value="app_integrations">アプリ連携</TabsTrigger>
+          )}
+          {canManageMembers && (
+            <TabsTrigger value="integrations">API/Webhook</TabsTrigger>
           )}
         </TabsList>
 
@@ -1278,6 +1286,18 @@ export default function SettingsPage() {
         {canManageMembers && (
           <TabsContent value="craftsmen_master" className="mt-4">
             <CraftsmenMasterTab />
+          </TabsContent>
+        )}
+
+        {canManageMembers && (
+          <TabsContent value="app_integrations" className="mt-4">
+            <AppIntegrationsTab />
+          </TabsContent>
+        )}
+
+        {canManageMembers && (
+          <TabsContent value="integrations" className="mt-4">
+            <IntegrationsTab />
           </TabsContent>
         )}
 

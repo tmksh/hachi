@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
 import { createConstruction } from "@/lib/actions/constructions";
+import { getBiDepartmentNames } from "@/lib/actions/bi";
 import { getCustomers } from "@/lib/actions/customers";
 import { getContracts } from "@/lib/actions/contracts";
 import { getProfiles } from "@/lib/actions/profiles";
@@ -31,10 +32,17 @@ function ConstructionNewPageContent() {
   const [endDate, setEndDate] = useState("");
   const [orderAmount, setOrderAmount] = useState(searchParams.get("order_amount") ?? "");
   const [budgetCost, setBudgetCost] = useState("");
+  const [departmentName, setDepartmentName] = useState("");
+  const [departments, setDepartments] = useState<string[]>([]);
 
   useEffect(() => {
-    Promise.all([getCustomers(), getContracts(), getProfiles()])
-      .then(([c, co, p]) => { setCustomers(c.map(x=>({id:x.id,name:x.name}))); setContracts(co.map(x=>({id:x.id,contract_no:x.contract_no,title:x.title}))); setProfiles(p.map(x=>({id:x.id,display_name:x.display_name}))); })
+    Promise.all([getCustomers(), getContracts(), getProfiles(), getBiDepartmentNames()])
+      .then(([c, co, p, depts]) => {
+        setCustomers(c.map(x=>({id:x.id,name:x.name})));
+        setContracts(co.map(x=>({id:x.id,contract_no:x.contract_no,title:x.title})));
+        setProfiles(p.map(x=>({id:x.id,display_name:x.display_name})));
+        setDepartments(depts);
+      })
       .catch(() => {});
   }, []);
 
@@ -42,7 +50,7 @@ function ConstructionNewPageContent() {
     if (!title.trim()) { toast.error("工事名を入力してください"); return; }
     setSaving(true);
     try {
-      await createConstruction({ title: title.trim(), customer_id: customerId || undefined, contract_id: contractId || undefined, assigned_to: assignedTo || undefined, start_date: startDate || undefined, end_date: endDate || undefined, order_amount: orderAmount ? Number(orderAmount) : undefined, budget_cost: budgetCost ? Number(budgetCost) : undefined });
+      await createConstruction({ title: title.trim(), customer_id: customerId || undefined, contract_id: contractId || undefined, assigned_to: assignedTo || undefined, start_date: startDate || undefined, end_date: endDate || undefined, order_amount: orderAmount ? Number(orderAmount) : undefined, budget_cost: budgetCost ? Number(budgetCost) : undefined, department_name: departmentName || undefined });
       toast.success("登録しました"); router.push("/constructions");
     } catch { toast.error("登録に失敗"); } finally { setSaving(false); }
   };
@@ -56,6 +64,7 @@ function ConstructionNewPageContent() {
           <div className="space-y-2"><Label>顧客</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{customers.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>契約</Label><Select value={contractId} onValueChange={setContractId}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{contracts.map(c=><SelectItem key={c.id} value={c.id}>{c.contract_no}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>担当者</Label><Select value={assignedTo} onValueChange={setAssignedTo}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{profiles.map(p=><SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><Label>部門（BI集計）</Label><Select value={departmentName || "_none"} onValueChange={(v) => setDepartmentName(v === "_none" ? "" : v)}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="_none">未設定</SelectItem>{departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>受注額</Label><Input type="number" value={orderAmount} onChange={e=>setOrderAmount(e.target.value)} /></div>
           <div className="space-y-2"><Label>着工日</Label><Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
           <div className="space-y-2"><Label>竣工日</Label><Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>

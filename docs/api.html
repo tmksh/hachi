@@ -141,7 +141,7 @@
   <div class="hero-inner">
     <div class="hero-eyebrow">External Integration — API &amp; Webhook</div>
     <h1>外部連携 API・<em>Webhook</em></h1>
-    <p class="hero-desc">BRIDGE のデータを他のシステムと繋ぐための設計方針と仕様をまとめたページです。kintone・Salesforce などの既存システムとの連携も、最初の設計段階から対応しています。</p>
+    <p class="hero-desc">BRIDGE のデータを他のシステムと繋ぐための設計方針と仕様をまとめたページです。kintone・Salesforce などの既存システムとの連携も、最初の設計段階から対応しています。<strong>エンジニア向けの REST API / Webhook から、設定画面だけで使えるアプリ連携まで、段階ごとに整理</strong>しています。</p>
   </div>
 </div>
 
@@ -192,9 +192,106 @@
     </div>
   </div>
 
-  <!-- ② なぜ最初から設計するのか -->
+  <!-- ② 誰が・どう使う？ -->
   <div class="sec">
-    <div class="sec-eyebrow">② Why — Design Policy</div>
+    <div class="sec-eyebrow">② Who — Choose Your Path</div>
+    <h2>「外部 API / Webhook」はエンジニアだけのもの？</h2>
+    <p>結論から言うと、<strong>このページで説明している REST API と Webhook を直接使う本格連携は、IT 部門・SI（システムインテグレータ）・エンジニア向け</strong>です。API キーの管理や HMAC 署名の検証など、専門知識が必要な部分があります。</p>
+    <p>一方で、<strong>多くの会社はもっと簡単な方法で十分</strong>です。「連携したい」と言われたとき、いきなり双方向同期を約束する必要はありません。BRIDGE では次の <strong>3 段階</strong> から選べます。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>レベル</th><th>誰が設定する？</th><th>使う機能</th><th>難易度</th><th>こんなとき</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>① 通知だけ</strong></td>
+            <td>社内の管理者（オーナー / 本部管理者）</td>
+            <td>設定 → <strong>アプリ連携</strong><br><span style="font-size:.8rem;color:var(--muted)">Chatwork / Slack / Teams / Discord / LINE 等（8 種）</span></td>
+            <td>低 ✅</td>
+            <td>「受注したら Slack に知らせたい」「新規顧客を Chatwork に通知」<br><strong>プログラミング不要。トークン or Webhook URL を貼るだけ。</strong></td>
+          </tr>
+          <tr>
+            <td><strong>② ノーコード連携</strong></td>
+            <td>管理者 ＋ 少し IT に慣れた担当者</td>
+            <td><strong>Zapier / Make / n8n</strong> ＋ Webhook URL</td>
+            <td>中</td>
+            <td>「BRIDGE のイベントを kintone / スプレッドシート / メールに流したい」<br>中継ツール経由なら<strong>コードを書かずに</strong>連携可能</td>
+          </tr>
+          <tr>
+            <td><strong>③ 本格連携</strong></td>
+            <td>SI・自社エンジニア</td>
+            <td><strong>REST API</strong>（外 → BRIDGE）<br><strong>Webhook</strong>（BRIDGE → 外）</td>
+            <td>高</td>
+            <td>kintone / Salesforce との<strong>データ同期・カスタム連携</strong><br>このページの後半で説明する<strong>「出口」</strong>。日常運用は ① ② で足りることが多い</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram">
+<pre>【レベル ① アプリ連携 — 設定画面だけ】
+
+  BRIDGE（設定 → アプリ連携）          Slack / Chatwork
+        │                                    │
+        │  商談が受注になりました！           │
+        └──────── 自動通知 ────────────────→  ✓
+
+【レベル ② ノーコード — Zapier / Make が中継】
+
+  BRIDGE ── Webhook ──→  Zapier / Make  ──→  kintone / Sheets / メール
+                              ↑
+                    プログラミング不要。GUI で配線
+
+【レベル ③ 本格連携 — SI・エンジニア向け】
+
+  自社システム / kintone  ←── REST API ──→  BRIDGE
+  自社システム / kintone  ←── Webhook ────  BRIDGE
+                              ↑
+                    API キー・署名検証・競合ルールの設計が必要</pre>
+    </div>
+
+    <div class="tip">
+      <strong>💡 先方への説明のポイント</strong><br>
+      「外部 API / Webhook は<strong>将来 SI さんが入ったときに壊れない土台</strong>であり、全員が自分で設定するものではありません。日常の通知連携は<strong>アプリ連携（レベル ①）</strong>で十分なケースがほとんどです。kintone 本格連携が必要になったら、<strong>Webhook ＋ Zapier（レベル ②）</strong>か <strong>SI による REST API 連携（レベル ③）</strong>を選びます。」
+    </div>
+
+    <h3 style="margin-top:2rem;font-size:1.05rem">「連携」と言われたときの切り分け</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>先方の言い方</th><th>本当に必要なもの</th><th>レベル</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>「Slack に通知が欲しい」</td>
+            <td>アプリ連携</td>
+            <td>①</td>
+          </tr>
+          <tr>
+            <td>「kintone にもデータを流したい」</td>
+            <td>BRIDGE → kintone（一方向）＋ Zapier 等</td>
+            <td>② または ③</td>
+          </tr>
+          <tr>
+            <td>「今は kintone も使う。徐々に BRIDGE に移したい」</td>
+            <td>外部 → BRIDGE（移行期の取り込み）</td>
+            <td>③（SI 支援）</td>
+          </tr>
+          <tr>
+            <td>「両方で入力して、常に同じ状態にしたい」</td>
+            <td><strong>双方向自動同期</strong>（後述 ⑤ 参照）</td>
+            <td>③＋<strong>個別見積</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ③ なぜ最初から設計するのか -->
+  <div class="sec">
+    <div class="sec-eyebrow">③ Why — Design Policy</div>
     <h2>なぜ「最初から」設計しておく必要があるのか</h2>
     <p>「必要になってから追加すればいい」と思われがちですが、外部連携は<strong>後から付け足すと既存機能を壊しやすい</strong>タイプの機能です。先方のご要望どおり初期設計に組み込んでおく理由は、主に次の 4 つです。</p>
 
@@ -231,9 +328,9 @@
     <p style="margin-top:1rem">特に最後の<strong>「囲い込みリスク」</strong>は、先方が明確に懸念されているポイントです。API が用意されていれば、将来 BRIDGE 以外のシステムに乗り換えたくなったときも、データをエクスポートして移行する選択肢が残ります。これが <em>ベンダーロックイン回避</em> の本質です。</p>
   </div>
 
-  <!-- ③ どう設計するか — 3つの柱 -->
+  <!-- ④ どう設計するか — 3つの柱 -->
   <div class="sec">
-    <div class="sec-eyebrow">③ How — 3 Pillars</div>
+    <div class="sec-eyebrow">④ How — 3 Pillars</div>
     <h2>「最初から設計する」とは、具体的に何をするのか</h2>
     <p>「外部連携前提の設計」は、思想や合言葉ではなく、<strong>初期リリースの中でやっておく具体的な作業の集まり</strong>です。中身を分解すると次の 3 つの柱になります。フェーズ 1（初期リリース）でやるのはこの 3 つです。</p>
 
@@ -284,9 +381,9 @@
     </div>
   </div>
 
-  <!-- ④ 連携の方向 -->
+  <!-- ⑤ 連携の方向 -->
   <div class="sec">
-    <div class="sec-eyebrow">④ Direction — One-way or Two-way</div>
+    <div class="sec-eyebrow">⑤ Direction — One-way or Two-way</div>
     <h2>連携の方向：一方向か、双方向か</h2>
     <p>もうひとつ最初に決めておきたいのが、<strong>「データを更新できるのはどちらか」</strong>です。技術というより運用ルールの話ですが、ここの方針で設計コストが大きく変わります。</p>
 
@@ -314,13 +411,19 @@
             <td>既存システムの運用を変えたくない移行期</td>
           </tr>
           <tr>
-            <td><strong>双方向</strong></td>
+            <td><strong>双方向</strong> <span class="tag tag-later">個別見積</span></td>
             <td>どちらでも更新でき、自動で同期する</td>
-            <td>高</td>
-            <td>2 システムを長期並走させる場合（競合解決ルール必須）</td>
+            <td><strong>高</strong></td>
+            <td>2 システムを長期並走させる場合（競合解決ルール必須）<br><span style="font-size:.8rem;color:var(--muted)">初期リリースの標準機能ではありません</span></td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="notice">
+      <strong>⚠ 「双方向」についてよく読んでください</strong><br>
+      この行は「BRIDGE でも kintone でも<strong>日常の入力画面として両方使い続ける</strong>」場合の話です。実装コストが「高」なのは API を 2 本つなぐだけではなく、<strong>競合（どちらが最新か）・無限ループ防止・削除の扱い・監査ログ</strong>まで設計が必要だからです。<br><br>
+      多くの場合は上の <strong>「BRIDGE → 外部（推奨）」</strong> で、BRIDGE を正として kintone 等へ通知・反映すれば十分です。「連携したい」と言われただけで双方向を選ばないでください。双方向が必要と判断された場合は、<strong>SI 案件として個別見積</strong>となります。
     </div>
 
     <div class="card-grid" style="margin-top:1.5rem">
@@ -335,9 +438,9 @@
     </div>
   </div>
 
-  <!-- ⑤ 実装フェーズ -->
+  <!-- ⑥ 実装フェーズ -->
   <div class="sec">
-    <div class="sec-eyebrow">⑤ When — Phases</div>
+    <div class="sec-eyebrow">⑥ When — Phases</div>
     <h2>いつ何をやるか — 段階的なリリース</h2>
     <p>外部連携の機能は、いきなり全部を作るのではなく段階的にリリースします。先方のご要望の核である<strong>「最初から設計しておく」はフェーズ 1 でカバー</strong>します。フェーズ 2 以降は、設定画面の操作だけで連携先を追加できる状態を目指します。</p>
 
@@ -352,21 +455,21 @@
       <div class="phase-item">
         <div class="phase-num">2</div>
         <div class="phase-body">
-          <h3>フェーズ 2 ― 外部 API 公開<span class="tag tag-decide" style="margin-left:.5rem">要確認</span></h3>
-          <p>設定画面から API キーを発行・管理できる UI をリリース。顧客・案件・見積などの外部向けエンドポイントを公開。Webhook 配信機能と、配信履歴を見られる画面を追加。<br>→ Zapier・n8n・自社スクリプトから BRIDGE のデータを取得・更新できる状態になります。</p>
+          <h3>フェーズ 2 ― 外部 API 公開<span class="tag tag-decide" style="margin-left:.5rem">実装済</span></h3>
+          <p>設定画面から API キーを発行・管理できる UI をリリース。顧客・案件・見積などの外部向けエンドポイントを公開。Webhook 配信機能と、配信履歴を見られる画面を追加。<strong>アプリ連携（Chatwork / Slack 等 8 種）</strong>も設定画面から接続可能。<br>→ Zapier・n8n・自社スクリプトから BRIDGE のデータを取得・更新できる状態になります。<strong>日常の通知連携はレベル ① のアプリ連携で対応</strong>できます。</p>
         </div>
       </div>
       <div class="phase-item">
         <div class="phase-num">3</div>
         <div class="phase-body">
           <h3>フェーズ 3 ― 個別システム連携<span class="tag tag-later" style="margin-left:.5rem">フェーズ 2 以降</span></h3>
-          <p>kintone・Salesforce など、具体的なシステムとの専用コネクタを実装。設定画面に kintone API トークンを入力するだけで自動同期される状態を目指します。連携方向・対象データ・競合解決ルールが合意できたものから着手します。</p>
+          <p>kintone・Salesforce など、具体的なシステムとの<strong>一方向</strong>専用コネクタを実装。設定画面に kintone API トークンを入力するだけで BRIDGE → kintone へ自動反映される状態を目指します（<strong>双方向同期は対象外</strong>。必要な場合は個別見積）。連携方向・対象データ・競合解決ルールが合意できたものから着手します。</p>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ⑥ 連携できるデータ（参考） -->
+  <!-- ⑦ 連携できるデータ（参考） -->
   <div class="sec">
     <div class="sec-eyebrow">Reference — Events</div>
     <h2>参考：連携できるデータとイベント一覧</h2>
@@ -427,7 +530,7 @@
     </div>
   </div>
 
-  <!-- ⑦ 確認事項 -->
+  <!-- ⑧ 確認事項 -->
   <div class="sec">
     <div class="sec-eyebrow">Next Steps</div>
     <h2>今後ご相談したいこと</h2>
@@ -446,8 +549,8 @@
           </tr>
           <tr>
             <td>②</td>
-            <td>連携の方向（BRIDGE → 外部 / 外部 → BRIDGE / 両方向）</td>
-            <td>設計コストと方式が変わるため</td>
+            <td>連携の方向（BRIDGE → 外部 / 外部 → BRIDGE / 双方向）</td>
+            <td>設計コストと方式が変わるため。<strong>双方向は個別見積</strong>。通常は BRIDGE → 外部（一方向）を推奨</td>
           </tr>
           <tr>
             <td>③</td>

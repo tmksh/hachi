@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "qa:e2e": "node scripts/qa-e2e.mjs",
+    "qa:routes": "node scripts/qa-routes.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

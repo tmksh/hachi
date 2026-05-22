@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
 
 export async function getWorkflowRequests(status?: string) {
@@ -114,6 +115,18 @@ export async function approveWorkflowStep(stepId: string, comment?: string) {
         .from("workflow_requests")
         .update({ status: "approved", decided_at: new Date().toISOString() })
         .eq("id", step.request_id);
+
+      const { data: request } = await supabase
+        .from("workflow_requests")
+        .select("company_id, title")
+        .eq("id", step.request_id)
+        .single();
+      if (request) {
+        void dispatchWebhook(request.company_id, "workflow.approved", {
+          id: step.request_id,
+          title: request.title,
+        });
+      }
     }
   }
 }
@@ -132,6 +145,18 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
       .from("workflow_requests")
       .update({ status: "rejected", decided_at: new Date().toISOString() })
       .eq("id", step.request_id);
+
+    const { data: request } = await supabase
+      .from("workflow_requests")
+      .select("company_id, title")
+      .eq("id", step.request_id)
+      .single();
+    if (request) {
+      void dispatchWebhook(request.company_id, "workflow.rejected", {
+        id: step.request_id,
+        title: request.title,
+      });
+    }
   }
 }
 

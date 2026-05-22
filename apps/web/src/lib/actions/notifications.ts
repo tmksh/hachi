@@ -20,8 +20,6 @@ export async function getNotifications(): Promise<Notification[]> {
   if (!user) return [];
 
   const now = new Date();
-  // TODO フェーズ2: 直近7日のみに戻す。現在はテスト用に1ヶ月前〜1週間後の予定を通知として表示。
-  const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const in7daysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
@@ -50,7 +48,7 @@ export async function getNotifications(): Promise<Notification[]> {
     supabase
       .from("calendar_events")
       .select("id, title, start_at, category, location")
-      .gte("start_at", oneMonthAgo.toISOString())
+      .gte("start_at", now.toISOString())
       .lte("start_at", in7days.toISOString())
       .order("start_at", { ascending: false })
       .limit(10),

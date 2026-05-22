@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -32,37 +32,28 @@ import {
   AreaChart,
   Area,
 } from "recharts";
-import { getBiSettings } from "@/lib/actions/bi";
-import type { BiAnnualSettings } from "@/lib/actions/bi";
+import { getBiSettings, getBiActuals } from "@/lib/actions/bi";
+import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
 import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
+import { aggregateChartPeriods, type PeriodGranularity } from "@/lib/bi-config";
+import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
 
-// ── サンプルデータ ────────────────────────────────────────────────────
-const SAMPLE_DEPT_ACTUALS = [
-  { name: "一般住宅",  label: "A部門", revenue: 1200, grossProfit: 267 },
-  { name: "新築",      label: "B部門", revenue: 800,  grossProfit: 306 },
-  { name: "公共工事",  label: "C部門", revenue: 550,  grossProfit: 81  },
-  { name: "リフォーム", label: "D部門", revenue: 300, grossProfit: 92  },
+// データ未登録時のフォールバック
+const FALLBACK_DEPT_ACTUALS = [
+  { name: "一般住宅",  label: "A部門", revenue: 0, grossProfit: 0 },
+  { name: "新築",      label: "B部門", revenue: 0, grossProfit: 0 },
+  { name: "公共工事",  label: "C部門", revenue: 0, grossProfit: 0 },
+  { name: "リフォーム", label: "D部門", revenue: 0, grossProfit: 0 },
 ];
 
-const SAMPLE_MONTHLY = [
-  { month: "4月",  revenue: 480, grossProfit: 130 },
-  { month: "5月",  revenue: 520, grossProfit: 142 },
-  { month: "6月",  revenue: 610, grossProfit: 160 },
-  { month: "7月",  revenue: 580, grossProfit: 152 },
-  { month: "8月",  revenue: 660, grossProfit: 178 },
-  { month: "9月",  revenue: 720, grossProfit: 190 },
-  { month: "10月", revenue: 690, grossProfit: 182 },
-  { month: "11月", revenue: 780, grossProfit: 210 },
-  { month: "12月", revenue: 820, grossProfit: 218 },
-  { month: "1月",  revenue: 760, grossProfit: 198 },
-  { month: "2月",  revenue: 700, grossProfit: 184 },
-  { month: "3月",  revenue: 880, grossProfit: 235 },
-];
+const FALLBACK_MONTHLY = [
+  "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月",
+].map((month) => ({ month, revenue: 0, grossProfit: 0 }));
 
-const FORECAST = {
-  contracted:  { revenue: 7200, grossProfit: 2088 },
-  prospective: { revenue: 8500, grossProfit: 2465 },
-};
+const FALLBACK_FORECAST_TIERS = [
+  { id: "contracted", label: "着地（契約済）", revenue: 0, grossProfit: 0 },
+  { id: "prospective", label: "着地（A見込含）", revenue: 0, grossProfit: 0 },
+];
 
 // ── 円形プログレス ────────────────────────────────────────────────────
 function CircularProgress({
@@ -241,18 +232,41 @@ function KpiCard({ label, value, sub, delta, deltaPositive, negative, sparkData,
 // メイン
 // ────────────────────────────────────────────────────────────────────
 export default function BiDashboardPage() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const [showTheoretical, setShowTheoretical] = useState(true);
   const [settings, setSettings] = useState<BiAnnualSettings | null>(null);
+  const [actuals, setActuals] = useState<BiActuals | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [accentColor, setAccentColor] = useState("#10b981");
+  const [chartPeriod, setChartPeriod] = useState<PeriodGranularity>("month");
   const fiscalYear = getCurrentFiscalYear();
 
   useEffect(() => {
-    getBiSettings(fiscalYear)
-      .then((s) => { setSettings(s); setSettingsLoaded(true); })
+    if (searchParams.get("settings") === "1") {
+      setSettingsOpen(true);
+      window.history.replaceState(null, "", "/bi");
+    }
+  }, [searchParams]);
+
+  const loadBiData = useCallback(() => {
+    return Promise.all([getBiSettings(fiscalYear), getBiActuals(fiscalYear)])
+      .then(([s, a]) => { setSettings(s); setActuals(a); setSettingsLoaded(true); })
       .catch(() => setSettingsLoaded(true));
   }, [fiscalYear]);
+
+  useEffect(() => {
+    loadBiData();
+  }, [loadBiData]);
+
+  const deptActuals = actuals?.deptActuals ?? FALLBACK_DEPT_ACTUALS;
+  const monthlyActuals = actuals?.monthly ?? FALLBACK_MONTHLY;
+  const monthlyOverheadAllocations = actuals?.monthlyOverheadAllocations ?? Array(12).fill(Math.round((settings?.overhead_budget ?? 1200) / 12));
+  const monthlyByDept = actuals?.monthlyByDept ?? [];
+  const forecastTiers = actuals?.forecastTiers ?? FALLBACK_FORECAST_TIERS;
+  const sparklines = actuals?.sparklines;
+  const deltas = actuals?.deltas;
+  const hasRealData = actuals?.hasData ?? false;
 
   // ── 設定値 ──
   const targetRevenue  = settings?.target_revenue       ?? 10000;
@@ -268,8 +282,8 @@ export default function BiDashboardPage() {
   }
 
   // ── 全社集計（§3.2） ──
-  const totalRevenue     = SAMPLE_DEPT_ACTUALS.reduce((s, d) => s + d.revenue, 0);
-  const totalGrossProfit = SAMPLE_DEPT_ACTUALS.reduce((s, d) => s + d.grossProfit, 0);
+  const totalRevenue     = deptActuals.reduce((s, d) => s + d.revenue, 0);
+  const totalGrossProfit = deptActuals.reduce((s, d) => s + d.grossProfit, 0);
   const grossProfitRate  = pct(totalGrossProfit, totalRevenue);
   const achieveRateTotal = pct(totalRevenue, targetRevenue);
   const grossProfitTotal = totalGrossProfit - overheadBudget;
@@ -278,6 +292,12 @@ export default function BiDashboardPage() {
   const opRate           = pct(operatingProfit, totalRevenue);
 
   const hasDbSettings = settingsLoaded && settings !== null;
+
+  const chartData = aggregateChartPeriods(monthlyActuals, chartPeriod, monthlyOverheadAllocations);
+  const gpRateDelta = deltas?.grossProfitRatePt;
+  const gpRateDeltaLabel = gpRateDelta != null
+    ? `${gpRateDelta >= 0 ? "+" : ""}${gpRateDelta}pt`
+    : undefined;
 
   // ── P&L ウォーターフォールデータ ──
   const plData = [
@@ -300,13 +320,19 @@ export default function BiDashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <KpiColorBar value={accentColor} onChange={setAccentColor} />
-          <Badge variant="outline" className="text-xs">サンプルデータ</Badge>
+          <Badge variant="outline" className="text-xs">{hasRealData ? "実績データ" : "実績未登録"}</Badge>
           {hasDbSettings && <Badge variant="secondary" className="text-xs">設定済</Badge>}
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => router.push("/bi/settings")}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
             <Settings2 className="h-3.5 w-3.5" />期首設定
           </Button>
         </div>
       </div>
+
+      <BiSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onSaved={loadBiData}
+      />
 
       <Tabs defaultValue="summary" className="space-y-6">
         <TabsList>
@@ -331,16 +357,16 @@ export default function BiDashboardPage() {
               sub={`目標 ${fmtMan(targetRevenue)} ・ 達成率 ${achieveRateTotal}%`}
               delta={`${achieveRateTotal}%`}
               deltaPositive={achieveRateTotal >= 50}
-              sparkData={[40, 55, 48, 62, 70, 68, 85]}
+              sparkData={hasRealData ? sparklines?.revenue : undefined}
               accentColor={accentColor}
             />
             <KpiCard
               label="粗利率"
               value={`${grossProfitRate}%`}
               sub={`粗利額 ${fmtMan(totalGrossProfit)}`}
-              delta="+1.2pt"
-              deltaPositive
-              sparkData={[22, 24, 23, 25, 26, 26, 26]}
+              delta={gpRateDeltaLabel}
+              deltaPositive={gpRateDelta == null || gpRateDelta >= 0}
+              sparkData={hasRealData ? sparklines?.grossProfitRate : undefined}
               accentColor={accentColor}
             />
             <KpiCard
@@ -350,7 +376,7 @@ export default function BiDashboardPage() {
               delta={`${r1(Math.abs(gptRate))}%`}
               deltaPositive={grossProfitTotal >= 0}
               negative={grossProfitTotal < 0}
-              sparkData={[-80, -60, -55, -50, -45, -47, -45]}
+              sparkData={hasRealData ? sparklines?.grossProfitTotal : undefined}
               accentColor={accentColor}
             />
             <KpiCard
@@ -360,7 +386,7 @@ export default function BiDashboardPage() {
               delta={`${r1(Math.abs(opRate))}%`}
               deltaPositive={operatingProfit >= 0}
               negative={operatingProfit < 0}
-              sparkData={[-100, -90, -85, -90, -100, -105, -105]}
+              sparkData={hasRealData ? sparklines?.operatingProfit : undefined}
               accentColor={accentColor}
             />
           </div>
@@ -482,19 +508,30 @@ export default function BiDashboardPage() {
                 <p className="text-xs text-muted-foreground mt-1">売上 / 粗利 / 売上総利益（按分後）の推移</p>
               </div>
               <div className="inline-flex items-center rounded-md border border-border bg-background p-0.5 text-[11px]">
-                <button className="px-2.5 py-1 rounded-sm text-muted-foreground hover:text-foreground transition">月次</button>
-                <button className="px-2.5 py-1 rounded-sm text-muted-foreground hover:text-foreground transition">四半期</button>
-                <button className="px-2.5 py-1 rounded-sm bg-foreground text-background font-medium">年次</button>
+                {(["month", "quarter", "year"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setChartPeriod(p)}
+                    className={`px-2.5 py-1 rounded-sm transition ${
+                      chartPeriod === p
+                        ? "bg-foreground text-background font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {p === "month" ? "月次" : p === "quarter" ? "四半期" : "年次"}
+                  </button>
+                ))}
               </div>
             </CardHeader>
             <CardContent className="pb-5">
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart
-                  data={SAMPLE_MONTHLY.map((m) => ({
-                    ...m,
+                  data={chartData.map((m) => ({
+                    month: m.label,
                     売上: m.revenue,
                     粗利: m.grossProfit,
-                    売上総利益: m.grossProfit - Math.round(overheadBudget / 12),
+                    売上総利益: m.grossProfitTotal,
                   }))}
                   margin={{ top: 12, right: 16, bottom: 0, left: 0 }}
                 >
@@ -538,7 +575,7 @@ export default function BiDashboardPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">着地予測（期末見込み）</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">期首予算 / 契約済 / A見込含 の3パターン比較</p>
+              <p className="text-xs text-muted-foreground mt-1">期首予算と、分析設定で定義した着地パターンを比較</p>
             </CardHeader>
             <CardContent className="px-0 pb-0">
               <div className="overflow-x-auto">
@@ -547,17 +584,20 @@ export default function BiDashboardPage() {
                     <tr className="border-b bg-muted/30 text-xs">
                       <th className="text-left  px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">指標</th>
                       <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">期首予算</th>
-                      <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">着地（契約済）</th>
-                      <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">着地（A見込含）</th>
+                      {forecastTiers.map((tier) => (
+                        <th key={tier.id} className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap last:px-5">
+                          {tier.label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
                       const rows = [
-                        { label: "全社売上",   budget: targetRevenue, c: FORECAST.contracted.revenue,     p: FORECAST.prospective.revenue,     showRate: false },
-                        { label: "粗利額",     budget: targetGp,      c: FORECAST.contracted.grossProfit, p: FORECAST.prospective.grossProfit, showRate: true,  base: { budget: targetRevenue, c: FORECAST.contracted.revenue, p: FORECAST.prospective.revenue } },
-                        { label: "売上総利益", budget: targetGp - overheadBudget, c: FORECAST.contracted.grossProfit - overheadBudget, p: FORECAST.prospective.grossProfit - overheadBudget, showRate: true, base: { budget: targetRevenue, c: FORECAST.contracted.revenue, p: FORECAST.prospective.revenue } },
-                        { label: "営業利益",   budget: targetGp - overheadBudget - sgaBudget, c: FORECAST.contracted.grossProfit - overheadBudget - sgaBudget, p: FORECAST.prospective.grossProfit - overheadBudget - sgaBudget, showRate: true, base: { budget: targetRevenue, c: FORECAST.contracted.revenue, p: FORECAST.prospective.revenue } },
+                        { label: "全社売上", budget: targetRevenue, showRate: false, pick: (t: typeof forecastTiers[0]) => t.revenue },
+                        { label: "粗利額", budget: targetGp, showRate: true, pick: (t: typeof forecastTiers[0]) => t.grossProfit, baseBudget: targetRevenue, basePick: (t: typeof forecastTiers[0]) => t.revenue },
+                        { label: "売上総利益", budget: targetGp - overheadBudget, showRate: true, pick: (t: typeof forecastTiers[0]) => t.grossProfit - overheadBudget, baseBudget: targetRevenue, basePick: (t: typeof forecastTiers[0]) => t.revenue },
+                        { label: "営業利益", budget: targetGp - overheadBudget - sgaBudget, showRate: true, pick: (t: typeof forecastTiers[0]) => t.grossProfit - overheadBudget - sgaBudget, baseBudget: targetRevenue, basePick: (t: typeof forecastTiers[0]) => t.revenue },
                       ];
                       return rows.map((row, idx) => {
                         const cell = (val: number, rate?: number) => (
@@ -576,9 +616,16 @@ export default function BiDashboardPage() {
                         return (
                           <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
                             <td className="px-5 py-3 font-medium">{row.label}</td>
-                            <td className="text-right px-4 py-3">{cell(row.budget, row.showRate && row.base ? pct(row.budget, row.base.budget) : undefined)}</td>
-                            <td className="text-right px-4 py-3">{cell(row.c,      row.showRate && row.base ? pct(row.c,      row.base.c)      : undefined)}</td>
-                            <td className="text-right px-5 py-3">{cell(row.p,      row.showRate && row.base ? pct(row.p,      row.base.p)      : undefined)}</td>
+                            <td className="text-right px-4 py-3">{cell(row.budget, row.showRate && row.baseBudget ? pct(row.budget, row.baseBudget) : undefined)}</td>
+                            {forecastTiers.map((tier) => {
+                              const val = row.pick(tier);
+                              const base = row.basePick?.(tier);
+                              return (
+                                <td key={tier.id} className="text-right px-4 py-3 last:px-5">
+                                  {cell(val, row.showRate && base ? pct(val, base) : undefined)}
+                                </td>
+                              );
+                            })}
                           </tr>
                         );
                       });
@@ -586,8 +633,11 @@ export default function BiDashboardPage() {
                     <tr className="bg-muted/40 border-t-2">
                       <td className="px-5 py-3 text-xs font-medium text-muted-foreground">売上達成率</td>
                       <td className="text-right px-4 py-3 text-sm font-bold">100%</td>
-                      <td className="text-right px-4 py-3 text-sm font-bold">{pct(FORECAST.contracted.revenue, targetRevenue)}%</td>
-                      <td className="text-right px-5 py-3 text-sm font-bold">{pct(FORECAST.prospective.revenue, targetRevenue)}%</td>
+                      {forecastTiers.map((tier) => (
+                        <td key={tier.id} className="text-right px-4 py-3 text-sm font-bold last:px-5">
+                          {pct(tier.revenue, targetRevenue)}%
+                        </td>
+                      ))}
                     </tr>
                   </tbody>
                 </table>
@@ -611,7 +661,7 @@ export default function BiDashboardPage() {
 
           {/* 部門 KPI カード */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {SAMPLE_DEPT_ACTUALS.map((d, i) => {
+            {deptActuals.map((d, i) => {
               const target = deptTargetMap[d.name] ?? 1000;
               const rate   = pct(d.revenue, target);
               const gpRate = pct(d.grossProfit, d.revenue);
@@ -665,6 +715,50 @@ export default function BiDashboardPage() {
             })}
           </div>
 
+          {/* 部門別月次推移（§3.3 売上構成比按分） */}
+          {monthlyByDept.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">部門別 月次推移</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">製造間接費は当月の売上構成比で部門按分（§3.3）</p>
+              </CardHeader>
+              <CardContent className="pb-5">
+                <ResponsiveContainer width="100%" height={280}>
+                  <AreaChart
+                    data={monthlyActuals.map((m, i) => {
+                      const row: Record<string, string | number> = { month: m.month };
+                      for (const dept of monthlyByDept) {
+                        row[dept.name] = dept.months[i]?.grossProfitTotal ?? 0;
+                      }
+                      return row;
+                    })}
+                    margin={{ top: 12, right: 16, bottom: 0, left: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} unit="万" axisLine={false} tickLine={false} width={50} />
+                    <RTooltip
+                      formatter={(v, n) => [`${Number(v) < 0 ? "▲" : ""}¥${Math.abs(Number(v)).toLocaleString()}万`, n]}
+                      contentStyle={{ fontSize: 12, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" iconSize={8} />
+                    {monthlyByDept.map((dept, i) => (
+                      <Area
+                        key={dept.name}
+                        type="monotone"
+                        dataKey={dept.name}
+                        stroke={["#8b5cf6", "#6366f1", "#0ea5e9", "#10b981"][i % 4]}
+                        fill={["#8b5cf6", "#6366f1", "#0ea5e9", "#10b981"][i % 4]}
+                        fillOpacity={0.15}
+                        strokeWidth={1.8}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
           {/* 部門比較グラフ */}
           <Card>
             <CardHeader className="pb-3">
@@ -674,7 +768,7 @@ export default function BiDashboardPage() {
             <CardContent className="pb-5">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart
-                  data={SAMPLE_DEPT_ACTUALS.map((d) => ({
+                  data={deptActuals.map((d) => ({
                     name: d.name,
                     目標: deptTargetMap[d.name] ?? 1000,
                     売上: d.revenue,
@@ -727,7 +821,7 @@ export default function BiDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {SAMPLE_DEPT_ACTUALS.map((d, i) => {
+                    {deptActuals.map((d, i) => {
                       const target  = deptTargetMap[d.name] ?? 1000;
                       const rate    = pct(d.revenue, target);
                       const gpRate  = pct(d.grossProfit, d.revenue);

@@ -21,12 +21,15 @@ export interface WidgetConfig {
 const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: "ai-focus",       label: "AIフォーカス",     visible: true,  order: 0 },
   { id: "attendance",     label: "勤怠",             visible: true,  order: 1 },
-  { id: "mail",           label: "メール",            visible: true,  order: 2 },
+  { id: "mail",           label: "お知らせ",          visible: true,  order: 2 },
   { id: "workflow",       label: "ワークフロー",      visible: true,  order: 3 },
   { id: "kpi",            label: "KPI指標",           visible: true,  order: 4 },
   { id: "trend",          label: "売上トレンド",      visible: true,  order: 5 },
-  { id: "customers",      label: "最近の顧客",        visible: true,  order: 6 },
-  { id: "constructions",  label: "進行中の工事",      visible: true,  order: 7 },
+  { id: "deals",          label: "商談パイプライン",  visible: true,  order: 6 },
+  { id: "quotes",         label: "最近の見積",        visible: true,  order: 7 },
+  { id: "customers",      label: "最近の顧客",        visible: true,  order: 8 },
+  { id: "production",     label: "生産サマリー",      visible: true,  order: 9 },
+  { id: "constructions",  label: "進行中の工事",      visible: true,  order: 10 },
 ];
 
 const STORAGE_KEY = "dashboard-widgets-v1";

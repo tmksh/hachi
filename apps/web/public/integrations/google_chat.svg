@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Google Chat">
+  <rect width="128" height="128" rx="24" fill="#fff"/>
+  <path fill="#0066DA" d="M22 28h58c8.8 0 16 7.2 16 16v36l-32 28-32-28V44c0-8.8 7.2-16 16-16z"/>
+  <path fill="#0057C2" d="M96 44v36l-32 28V72l32-28z"/>
+  <path fill="#2684FC" d="M22 28h36v64L38 92 22 84V28z"/>
+  <path fill="#00AC47" d="M58 28h22c8.8 0 16 7.2 16 16v10H58V28z"/>
+  <path fill="#EA4335" d="M80 44h16v10c0 8.8-7.2 16-16 16H58V44h22z" opacity=".85"/>
+  <circle cx="44" cy="54" r="3.5" fill="#fff"/>
+  <circle cx="56" cy="54" r="3.5" fill="#fff"/>
+  <circle cx="68" cy="54" r="3.5" fill="#fff"/>
+</svg>

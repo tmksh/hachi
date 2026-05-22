@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type { Announcement } from "@/lib/database.types";
 
 export async function getAnnouncements() {
@@ -104,6 +105,13 @@ export async function createAnnouncement(input: {
     .select()
     .single();
   if (error) throw error;
+
+  void dispatchWebhook(profile.company_id, "announcement.published", {
+    id: data.id,
+    title: data.title,
+    is_urgent: data.is_urgent,
+  });
+
   return data as Announcement;
 }
 

@@ -2,9 +2,11 @@
 -- BI ダッシュボード 年度設定
 -- ============================================
 
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- 年度ごとの全社設定
 CREATE TABLE bi_annual_settings (
-  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id          UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   fiscal_year         INT  NOT NULL,                           -- 西暦年度 (e.g. 2026 = R8年度)
   target_revenue      NUMERIC NOT NULL DEFAULT 0,             -- 全社目標売上（年額）
@@ -22,7 +24,7 @@ CREATE INDEX idx_bi_annual_settings_company ON bi_annual_settings(company_id);
 
 -- 予算配賦 内訳明細（モードA用）
 CREATE TABLE bi_overhead_items (
-  id          UUID    PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id          UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id  UUID    NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   setting_id  UUID    NOT NULL REFERENCES bi_annual_settings(id) ON DELETE CASCADE,
   name        TEXT    NOT NULL,
@@ -37,7 +39,7 @@ CREATE INDEX idx_bi_overhead_items_setting ON bi_overhead_items(setting_id);
 
 -- 部門別 売上・粗利目標
 CREATE TABLE bi_department_targets (
-  id              UUID    PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id      UUID    NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   setting_id      UUID    NOT NULL REFERENCES bi_annual_settings(id) ON DELETE CASCADE,
   department_name TEXT    NOT NULL,

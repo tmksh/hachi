@@ -8,7 +8,7 @@ ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_category_check;
 
 -- 2. document_categories テーブルを作成
 CREATE TABLE IF NOT EXISTS document_categories (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   key TEXT NOT NULL,
   label TEXT NOT NULL,
@@ -22,10 +22,12 @@ CREATE INDEX IF NOT EXISTS idx_document_categories_company ON document_categorie
 -- 3. RLS
 ALTER TABLE document_categories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "company members can view document_categories" ON document_categories;
 CREATE POLICY "company members can view document_categories"
   ON document_categories FOR SELECT
   USING (company_id = auth_company_id());
 
+DROP POLICY IF EXISTS "admins can manage document_categories" ON document_categories;
 CREATE POLICY "admins can manage document_categories"
   ON document_categories FOR ALL
   USING (company_id = auth_company_id() AND auth_role() IN ('owner', 'hq_admin'));

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { Deal, DealActivity } from "@/lib/database.types";
+import { dispatchWebhook } from "@/lib/webhooks";
 
 export async function getDealStages() {
   const supabase = await createClient();
@@ -91,13 +92,32 @@ export async function createDeal(input: {
     .select()
     .single();
   if (error) throw error;
+  void dispatchWebhook(profile.company_id, "deal.created", {
+    id: data.id,
+    title: data.title,
+    stage: data.stage,
+    value: data.value,
+    customer_id: data.customer_id,
+  });
   return data as Deal;
 }
 
 export async function updateDeal(id: string, input: Partial<Omit<Deal, "id" | "company_id" | "created_at" | "updated_at">>) {
   const supabase = await createClient();
+  const { data: before } = await supabase.from("deals").select("stage, company_id").eq("id", id).single();
   const { data, error } = await supabase.from("deals").update(input).eq("id", id).select().single();
   if (error) throw error;
+  const event = before && input.stage && before.stage !== input.stage ? "deal.stage_changed" : "deal.updated";
+  void dispatchWebhook(data.company_id, event, {
+    id: data.id,
+    title: data.title,
+    stage: data.stage,
+    value: data.value,
+    previous_stage: before?.stage,
+  });
+  if (input.stage && ["won", "lost"].includes(input.stage)) {
+    void dispatchWebhook(data.company_id, "deal.closed", { id: data.id, stage: data.stage });
+  }
   return data as Deal;
 }
 

@@ -4,6 +4,7 @@
 -- ============================================================
 
 -- 自分のエントリを更新（打刻・勤務区分変更）
+DROP POLICY IF EXISTS "attendance_employee_update" ON attendance_entries;
 CREATE POLICY "attendance_employee_update" ON attendance_entries
   FOR UPDATE USING (
     company_id = auth_company_id()
@@ -11,6 +12,7 @@ CREATE POLICY "attendance_employee_update" ON attendance_entries
   );
 
 -- 管理者は全員分を更新（承認・却下）
+DROP POLICY IF EXISTS "attendance_admin_update" ON attendance_entries;
 CREATE POLICY "attendance_admin_update" ON attendance_entries
   FOR UPDATE USING (
     company_id = auth_company_id()
@@ -18,6 +20,7 @@ CREATE POLICY "attendance_admin_update" ON attendance_entries
   );
 
 -- 管理者は削除可能
+DROP POLICY IF EXISTS "attendance_admin_delete" ON attendance_entries;
 CREATE POLICY "attendance_admin_delete" ON attendance_entries
   FOR DELETE USING (
     company_id = auth_company_id()

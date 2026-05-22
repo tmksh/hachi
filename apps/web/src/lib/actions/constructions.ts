@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type { Construction, ConstructionTask, ContractorOrder } from "@/lib/database.types";
 
 export async function getConstructions() {
@@ -67,6 +68,7 @@ export async function createConstruction(input: {
   order_amount?: number;
   budget_cost?: number;
   assigned_to?: string;
+  department_name?: string;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -91,18 +93,53 @@ export async function createConstruction(input: {
       order_amount: input.order_amount || 0,
       budget_cost: input.budget_cost || 0,
       assigned_to: input.assigned_to || null,
+      department_name: input.department_name || null,
       status: "preparing",
     })
     .select()
     .single();
   if (error) throw error;
+
+  void dispatchWebhook(profile.company_id, "construction.created", {
+    id: data.id,
+    construction_no: data.construction_no,
+    title: data.title,
+    status: data.status,
+    order_amount: data.order_amount,
+  });
+
   return data as Construction;
 }
 
 export async function updateConstruction(id: string, input: Partial<Omit<Construction, "id" | "company_id" | "construction_no" | "created_at" | "updated_at">>) {
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("constructions")
+    .select("status, company_id, title, construction_no, order_amount")
+    .eq("id", id)
+    .single();
   const { data, error } = await supabase.from("constructions").update(input).eq("id", id).select().single();
   if (error) throw error;
+
+  if (before && input.status && before.status !== input.status) {
+    if (input.status === "in_progress") {
+      void dispatchWebhook(data.company_id, "construction.started", {
+        id: data.id,
+        construction_no: data.construction_no,
+        title: data.title,
+        status: data.status,
+      });
+    }
+    if (input.status === "completed") {
+      void dispatchWebhook(data.company_id, "construction.completed", {
+        id: data.id,
+        construction_no: data.construction_no,
+        title: data.title,
+        order_amount: data.order_amount,
+      });
+    }
+  }
+
   return data as Construction;
 }
 

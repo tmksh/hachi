@@ -155,6 +155,7 @@ export async function updateSession(request: NextRequest) {
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
+  const isExternalApi = request.nextUrl.pathname.startsWith("/api/v1/");
 
   // /admin 配下は super-admin@example.com 以外なら /admin/login へ
   if (
@@ -167,7 +168,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (!user && !isPublicPath) {
+  if (!user && !isPublicPath && !isExternalApi) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

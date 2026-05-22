@@ -19,9 +19,11 @@ import {
   HardHat,
   BarChart3,
   ExternalLink,
-  Sparkles,
   Check,
   CheckCircle2,
+  FileText,
+  Receipt,
+  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -29,6 +31,15 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
 import { AnalogClock } from "@/components/shared/analog-clock";
 import { SortableWidget } from "@/components/shared/sortable-widget";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import {
   DndContext,
   closestCorners,
@@ -87,7 +98,25 @@ function formatYen(n: number) {
   return `¥${n.toLocaleString()}`;
 }
 
+function WidgetHeader({ title, href }: { title: string; href: string }) {
+  return (
+    <CardHeader>
+      <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+      <Link href={href}>
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded text-primary hover:bg-primary/10 transition-colors">
+          <ExternalLink className="h-4 w-4" />
+        </span>
+      </Link>
+    </CardHeader>
+  );
+}
 
+const KPI_ITEMS = [
+  { label: "受注額", key: "wonValue" as const, href: "/deals", icon: TrendingUp, format: formatYen },
+  { label: "パイプライン", key: "pipelineValue" as const, href: "/deals", icon: BarChart3, format: formatYen },
+  { label: "顧客数", key: "customerCount" as const, href: "/crm", icon: Users, format: (n: number) => String(n) },
+  { label: "進行案件", key: "activeConstructions" as const, href: "/constructions", icon: Briefcase, format: (n: number) => String(n) },
+];
 
 export default function DashboardPage() {
   const [clockedIn, setClockedIn] = useState(false);
@@ -187,41 +216,25 @@ export default function DashboardPage() {
                   </div>
                 ))
               ) : (
-                [
-                  {
-                    label: "受注額",
-                    value: formatYen(data?.kpis.wonValue ?? 0),
-                    icon: TrendingUp,
-                  },
-                  {
-                    label: "パイプライン",
-                    value: formatYen(data?.kpis.pipelineValue ?? 0),
-                    icon: BarChart3,
-                  },
-                  {
-                    label: "顧客数",
-                    value: String(data?.kpis.customerCount ?? 0),
-                    icon: Users,
-                  },
-                  {
-                    label: "進行案件",
-                    value: String(data?.kpis.activeConstructions ?? 0),
-                    icon: Briefcase,
-                  },
-                ].map((kpi, i) => (
-                  <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                      <div
-                        className="neumorph-icon h-8 w-8"
-                        style={{ background: kpiColor }}
-                      >
-                        <kpi.icon className="h-4 w-4 text-white" />
+                KPI_ITEMS.map((kpi) => {
+                  const value = data?.kpis[kpi.key] ?? 0;
+                  const Icon = kpi.icon;
+                  return (
+                    <Link
+                      key={kpi.label}
+                      href={kpi.href}
+                      className="block px-4 first:pl-0 last:pr-0 rounded-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">{kpi.label}</span>
+                        <div className="neumorph-icon h-8 w-8" style={{ background: kpiColor }}>
+                          <Icon className="h-4 w-4 text-white" />
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
-                  </div>
-                ))
+                      <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.format(value)}</p>
+                    </Link>
+                  );
+                })
               )}
             </div>
           </CardContent>
@@ -414,6 +427,174 @@ export default function DashboardPage() {
                         <p className="text-xs text-muted-foreground px-2 py-2">お知らせはありません</p>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+              );
+
+            case "trend":
+              return !isVisible("trend") ? null : (
+                <Card className="h-full">
+                  <WidgetHeader title="売上トレンド" href="/deals" />
+                  <CardContent className="pt-2">
+                    <p className="text-[11px] text-muted-foreground mb-3">直近7ヶ月 / 受注額・パイプライン（万円）</p>
+                    {loading ? (
+                      <Skeleton className="h-[220px] w-full" />
+                    ) : (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={data?.monthlyTrend ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" vertical={false} />
+                          <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <Tooltip
+                            cursor={false}
+                            contentStyle={{
+                              borderRadius: 10,
+                              fontSize: 12,
+                              border: "1px solid hsl(var(--border))",
+                              background: "hsl(var(--card))",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                            }}
+                            formatter={(v, name) => [`¥${v}万`, name ?? ""]}
+                          />
+                          <Bar dataKey="パイプライン" fill="#d4d4d8" radius={[4, 4, 0, 0]} maxBarSize={36} activeBar={false} />
+                          <Bar dataKey="受注額" fill={kpiColor} radius={[4, 4, 0, 0]} maxBarSize={36} activeBar={false} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+
+            case "deals":
+              return !isVisible("deals") ? null : (
+                <Card className="h-full">
+                  <WidgetHeader title="商談パイプライン" href="/deals" />
+                  <CardContent>
+                    <div className="space-y-1">
+                      {loading ? (
+                        Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="px-2 py-2 space-y-1">
+                            <Skeleton className="h-3 w-32" />
+                            <Skeleton className="h-3 w-20" />
+                          </div>
+                        ))
+                      ) : data?.recentDeals.length ? (
+                        data.recentDeals.map((deal) => (
+                          <Link
+                            key={deal.id}
+                            href="/deals"
+                            className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium truncate">{deal.title}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">{deal.customerName}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-semibold tabular-nums">{formatYen(deal.value ?? 0)}</p>
+                              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 mt-0.5">{deal.stageLabel}</Badge>
+                            </div>
+                          </Link>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground px-2 py-2">進行中の商談はありません</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+
+            case "quotes":
+              return !isVisible("quotes") ? null : (
+                <Card className="h-full">
+                  <WidgetHeader title="最近の見積" href="/quotes" />
+                  <CardContent>
+                    <div className="space-y-1">
+                      {loading ? (
+                        Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="px-2 py-2 space-y-1">
+                            <Skeleton className="h-3 w-24" />
+                            <Skeleton className="h-3 w-16" />
+                          </div>
+                        ))
+                      ) : data?.recentEstimates.length ? (
+                        data.recentEstimates.map((est) => (
+                          <Link
+                            key={est.id}
+                            href={`/quotes/${est.id}`}
+                            className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{est.estimateNo}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">{est.title}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-semibold tabular-nums">{formatYen(est.total ?? 0)}</p>
+                              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 mt-0.5">{est.statusLabel}</Badge>
+                            </div>
+                          </Link>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground px-2 py-2">見積データはありません</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+
+            case "production":
+              return !isVisible("production") ? null : (
+                <Card className="h-full">
+                  <WidgetHeader title="生産サマリー" href="/contracts" />
+                  <CardContent className="space-y-2">
+                    {[
+                      {
+                        label: "契約",
+                        href: "/contracts",
+                        icon: ClipboardList,
+                        count: data?.productionSummary.contractCount ?? 0,
+                        sub: `進行中 ${data?.productionSummary.activeContracts ?? 0}件`,
+                      },
+                      {
+                        label: "請求（下書き）",
+                        href: "/invoices",
+                        icon: FileText,
+                        count: data?.productionSummary.invoiceDraft ?? 0,
+                        sub: "要発行",
+                      },
+                      {
+                        label: "請求（未入金）",
+                        href: "/invoices",
+                        icon: Receipt,
+                        count: data?.productionSummary.invoiceSent ?? 0,
+                        sub: formatYen(data?.productionSummary.invoiceUnpaidTotal ?? 0),
+                      },
+                      {
+                        label: "工事",
+                        href: "/constructions",
+                        icon: HardHat,
+                        count: data?.kpis.activeConstructions ?? 0,
+                        sub: "進行中",
+                      },
+                    ].map((item) => (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        className="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <item.icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <div>
+                            <p className="text-xs font-medium">{item.label}</p>
+                            <p className="text-[11px] text-muted-foreground">{item.sub}</p>
+                          </div>
+                        </div>
+                        {loading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : (
+                          <Badge variant="secondary" className="text-xs tabular-nums">{item.count}</Badge>
+                        )}
+                      </Link>
+                    ))}
                   </CardContent>
                 </Card>
               );

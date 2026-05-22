@@ -360,15 +360,43 @@ function CommentableCell({
 interface Props {
   constructionId: string;
   contractAmount?: number;
+  initialOrders?: Array<{
+    id: string;
+    title: string;
+    amount: number;
+    status: string;
+    work_content?: string | null;
+    craftsman?: { name: string } | null;
+  }>;
+  authorName?: string;
 }
 
-export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Props) {
-  const patternIndex =
-    constructionId.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % PATTERNS.length;
-  const initial = PATTERNS[patternIndex];
+function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
+  if (!orders?.length) return [];
+  return orders.map((order) => ({
+    id: order.id,
+    status: order.status === "approved" || order.status === "submitted" ? "発注済" : "未発注",
+    name: order.craftsman?.name ?? order.title,
+    work_type: order.work_content ?? order.title,
+    budget: Number(order.amount ?? 0),
+    add_contract_1: 0,
+    add_contract_2: 0,
+    management_budget: Number(order.amount ?? 0),
+    order_amount: Number(order.amount ?? 0),
+    add_order_1: 0,
+    add_order_2: 0,
+    add_order_3: 0,
+    monthly: {},
+  }));
+}
+
+export function CostBudgetTab({ constructionId, contractAmount: propAmount, initialOrders, authorName = "ユーザー" }: Props) {
+  const mappedRows = useMemo(() => mapOrdersToRows(initialOrders), [initialOrders]);
+  const fallbackPattern = PATTERNS[constructionId.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % PATTERNS.length];
+  const initialRows = mappedRows.length > 0 ? mappedRows : fallbackPattern.rows.map(r => ({ ...r, monthly: { ...r.monthly } }));
 
   const [rows, setRows] = useState<ContractorRow[]>(() =>
-    initial.rows.map(r => ({ ...r, monthly: { ...r.monthly } }))
+    initialRows.map(r => ({ ...r, monthly: { ...r.monthly } }))
   );
   const [saved, setSaved] = useState(false);
 
@@ -382,7 +410,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
     [comments]
   );
   const handleAddComment = useCallback((cellKey: string, text: string) => {
-    const author = "田中 一郎"; // TODO: 認証ユーザーから取得
+    const author = authorName;
     setComments(prev => [...prev, {
       id: `c-${Date.now()}`,
       cellKey,
@@ -392,7 +420,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
       text,
       createdAt: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
     }]);
-  }, []);
+  }, [authorName]);
   const handleOpenPopover = useCallback((cellKey: string, rect: DOMRect) => {
     setOpenPopover(prev => prev?.cellKey === cellKey ? null : { cellKey, rect });
   }, []);
@@ -416,7 +444,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount }: Pr
   }, [commentMode]);
 
   const contractAmount =
-    propAmount && propAmount > 0 ? propAmount : initial.contract_amount;
+    propAmount && propAmount > 0 ? propAmount : fallbackPattern.contract_amount;
 
   const months = getMonths("2025-08");
 

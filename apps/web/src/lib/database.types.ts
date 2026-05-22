@@ -55,6 +55,7 @@ export type Deal = {
   priority: string;
   assigned_to: string | null;
   expected_close_date: string | null;
+  department_name: string | null;
   tags: string[];
   next_action: string | null;
   days_in_stage: number;
@@ -184,6 +185,7 @@ export type Contract = {
   assigned_to: string | null;
   progress: number;
   notes: string | null;
+  department_name: string | null;
   created_at: string;
   updated_at: string;
   customer?: Customer;
@@ -210,6 +212,7 @@ export type Construction = {
   worker_count: number;
   progress: number;
   assigned_to: string | null;
+  department_name: string | null;
   created_at: string;
   updated_at: string;
   customer?: Customer;
@@ -452,6 +455,7 @@ export type Invoice = {
   total: number;
   status: 'draft' | 'sent' | 'paid' | 'cancelled';
   notes: string | null;
+  paid_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

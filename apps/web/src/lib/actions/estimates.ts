@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type { Estimate, EstimateCategory, EstimateItem } from "@/lib/database.types";
 
 export async function getEstimates() {
@@ -96,6 +97,14 @@ export async function createEstimate(
     if (itemsError) throw itemsError;
   }
 
+  void dispatchWebhook(profile.company_id, "estimate.created", {
+    id: estimate.id,
+    estimate_no: estimate.estimate_no,
+    title: estimate.title,
+    total: estimate.total,
+    status: estimate.status,
+  });
+
   return estimate as Estimate;
 }
 
@@ -105,6 +114,11 @@ export async function updateEstimate(
   items?: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">>
 ) {
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("estimates")
+    .select("status, company_id, title, estimate_no, total")
+    .eq("id", id)
+    .single();
 
   if (items) {
     const subtotal = items.reduce((sum, item) => sum + (item.selling_amount || 0), 0);
@@ -142,6 +156,24 @@ export async function updateEstimate(
   } else {
     const { error } = await supabase.from("estimates").update(input).eq("id", id);
     if (error) throw error;
+  }
+
+  if (before && input.status && before.status !== input.status) {
+    if (input.status === "accepted") {
+      void dispatchWebhook(before.company_id, "estimate.approved", {
+        id,
+        estimate_no: before.estimate_no,
+        title: before.title,
+        total: before.total,
+      });
+    } else if (input.status === "rejected") {
+      void dispatchWebhook(before.company_id, "estimate.rejected", {
+        id,
+        estimate_no: before.estimate_no,
+        title: before.title,
+        total: before.total,
+      });
+    }
   }
 }
 

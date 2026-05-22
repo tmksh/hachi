@@ -1,6 +1,6 @@
 # BRIDGE — プロジェクト仕様書
 
-> 最終更新: 2026-05-11
+> 最終更新: 2026-05-22
 
 ---
 
@@ -16,18 +16,34 @@
 
 | 項目 | 技術 |
 |------|------|
-| フレームワーク | Next.js 15 (App Router) |
+| フレームワーク | Next.js 16 (App Router) |
 | スタイリング | Tailwind CSS v4 + `class-variance-authority` |
 | UI コンポーネント | Radix UI + shadcn/ui |
 | バックエンド | Supabase (PostgreSQL + Auth + Storage) |
 | チャート | Recharts |
 | アニメーション | Framer Motion |
-| デプロイ | Netlify |
+| デプロイ | Netlify (`apps/web`) |
 | パッケージ管理 | npm (monorepo: `apps/web`) |
 
 ---
 
-## 3. 環境変数 (`.env.local`)
+## 3. 開発・起動
+
+```bash
+cd apps/web
+npm install   # 初回のみ
+npm run dev   # http://localhost:3000
+```
+
+ルートから実行する場合:
+
+```bash
+npm run dev --prefix apps/web
+```
+
+---
+
+## 4. 環境変数 (`.env.local`)
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
@@ -37,11 +53,12 @@ SUPABASE_SERVICE_ROLE_KEY=...
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_DOMAIN=          # テナント slug 用（本番）
 ```
 
 ---
 
-## 4. ロール定義
+## 5. ロール定義
 
 | ロール | 説明 |
 |--------|------|
@@ -51,151 +68,213 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 | `employee` | 一般社員 |
 | *(super-admin)* | BRIDGE 運営（メール固定: `super-admin@example.com`） |
 
+Middleware (`lib/supabase/middleware.ts`) により CRM・BI・予算・マーケティング等のルートを保護。  
+Supabase RLS により `company_id` 単位でデータを分離。
+
 ---
 
-## 5. ページ構成
+## 6. 機能一覧と実装状況
+
+詳細は [機能一覧](docs/features.html) を参照。
+
+### CRM・リード
+
+| 機能 | パス | 状態 |
+|------|------|------|
+| 顧客管理 | `/crm` | 実装済 — CRUD、法人/個人タブ、カード/テーブル、タグ付与、関連データ参照 |
+| 商談パイプライン | `/deals` | 実装済 — カンバン D&D、KPI、受注フロー、編集ダイアログ |
+| 見積管理 | `/quotes` | 実装済 — 明細 CRUD、粗利計算、ステータス管理、商談連携 |
+| 職人管理 | `/craftsmen` | 実装済 — CRUD、専門/ランク、下請連携 |
+
+### 工事・生産
+
+| 機能 | パス | 状態 |
+|------|------|------|
+| 契約管理 | `/contracts` | 実装済 |
+| 工事管理 | `/constructions` | 実装済 — ガント、原価（下請発注連携）、下請発注、請求書自動生成 |
+| 請求管理 | `/invoices` | 実装済 |
+| 予算管理 | `/budget` | 実装済 — 完了工事から実績集計、承認フロー |
+
+### ポータル
+
+| 機能 | パス | 状態 |
+|------|------|------|
+| 勤怠管理 | `/attendance` | 実装済 |
+| ワークフロー | `/workflow` | 実装済 — 多段承認、差戻し、コメント |
+| 社内回覧板 | `/circulation` | 実装済 |
+| カレンダー | `/calendar` | 実装済 — Google カレンダー双方向同期（OAuth 設定時） |
+| メール連携 | `/mail` | 実装済 — Gmail OAuth / IMAP、未連携時はデモスレッド |
+| 文書管理 | `/documents` | 実装済 — Supabase Storage |
+
+### システム
+
+| 機能 | パス | 状態 |
+|------|------|------|
+| BI ダッシュボード | `/bi` | 実装済 — 工事・請求から実績集計、期首設定 DB 連携 |
+| ロールベース権限 | Middleware + RLS | 実装済 — 4 段階ロール + カスタムロール（UI） |
+| 通知・設定 | `/settings` | 実装済 — ベル通知（60 秒更新）、各種マスタ |
+
+### 外部連携
+
+| 機能 | 状態 |
+|------|------|
+| Supabase Auth / DB / Storage | 稼働中 |
+| Gmail API | OAuth 設定時に利用可 |
+| Google Calendar API | OAuth 設定時に双方向同期（`calendar` スコープ） |
+| 外部向け REST API | 実装済 — `/api/v1/*`（GET）、設定画面で API キー発行 |
+| Webhook | 実装済 — 全主要イベント発火、HMAC 署名付き POST |
+| アプリ連携 | 実装済 — Chatwork / Slack 等 8 サービス、設定画面からワンクリック接続 |
+
+---
+
+## 7. ページ構成
 
 ### ユーザー向け (`/`)
 
-| パス | ページ名 | 概要 |
-|------|---------|------|
-| `/dashboard` | ダッシュボード | KPI・勤怠打刻・ウィジェット |
-| `/crm` | CRM | 顧客管理 |
-| `/deals` | 商談 | 商談パイプライン（カンバン） |
-| `/constructions` | 工事管理 | 工事案件一覧・ガントチャート |
-| `/bi` | BIダッシュボード | 売上・粗利率・商談ステージ分析 |
-| `/calendar` | カレンダー | ローカル予定 + Google カレンダー双方向同期 |
-| `/mail` | メール | Gmail 連携受信トレイ |
-| `/attendance` | 勤怠 | 出退勤打刻・履歴 |
-| `/contracts` | 契約書 | 契約書管理 |
-| `/quotes` | 見積 | 見積管理 |
-| `/invoices` | 請求書 | 請求書管理 |
-| `/documents` | 書類 | 各種書類 |
-| `/budget` | 予算 | 予算管理 |
-| `/craftsmen` | 職人管理 | 職人マスタ |
-| `/circulation` | 回覧板 | 社内回覧 |
-| `/workflow` | ワークフロー | 承認ワークフロー |
-| `/marketing` | マーケティング | マーケティング施策 |
-| `/settings` | 設定 | プロフィール・招待・パスワード |
+| パス | ページ名 |
+|------|---------|
+| `/dashboard` | ダッシュボード |
+| `/crm` | 顧客管理 |
+| `/deals` | 商談パイプライン |
+| `/constructions` | 工事管理 |
+| `/bi` | BI ダッシュボード |
+| `/calendar` | カレンダー |
+| `/mail` | メール |
+| `/attendance` | 勤怠 |
+| `/contracts` | 契約書 |
+| `/quotes` | 見積 |
+| `/invoices` | 請求書 |
+| `/documents` | 書類 |
+| `/budget` | 予算 |
+| `/craftsmen` | 職人管理 |
+| `/circulation` | 回覧板 |
+| `/workflow` | ワークフロー |
+| `/marketing` | マーケティング |
+| `/settings` | 設定 |
 
 ### 管理コンソール (`/admin`)
 
-| パス | ページ名 | 概要 |
-|------|---------|------|
-| `/admin` | 管理コンソール | 全国 BI・企業一覧 |
-| `/admin/login` | 管理ログイン | super-admin 専用ログイン |
+| パス | 説明 |
+|------|------|
+| `/admin` | 全国 BI・企業一覧 |
+| `/admin/login` | super-admin 専用ログイン |
 
 ---
 
-## 6. 管理コンソール仕様 (`/admin`)
+## 8. 外部連携 API
 
-- **認証**: `super-admin@example.com` のみアクセス可
-- **ヘッダー**: `PageHeader` コンポーネント + `レポート出力` ドロップダウン
-- **レポート出力**: 加盟店BI / 企業一覧 / ユーザー一覧 を CSV (BOM付き UTF-8) でダウンロード
-- **タブ構成**:
-  - `全国 BI` — KPI stat-card × 2 行 + 月次トレンド折れ線・ステータス円グラフ・粗利率分布棒グラフ・加盟店ランキングテーブル
-  - `企業一覧` — 企業テーブル + 企業追加ダイアログ（オーナーアカウント同時作成）
-- **サイドバー** (`AdminSidebar`): 全国加盟店BI / 企業一覧 の 2 項目
-- **KPI デザイン**:
-  - 上段 4 枚（登録企業数など）: `stat-card` + `neumorph-icon`（ダークグリーン）
-  - BI タブ KPI: `stat-card` + 薄グリーン反転アイコン (`bg-primary/10 text-primary`)
-- **チャートカラー**: グリーン系 `PIE_COLORS = ["#0F5132","#1A7A52","#2D9E6B","#4DB88A","#7DCFAA","#A8DFC5"]`
+### REST API（Bearer 認証）
+
+| メソッド | エンドポイント | 内容 |
+|----------|---------------|------|
+| GET | `/api/v1/customers` | 顧客一覧 |
+| GET | `/api/v1/deals` | 商談一覧 |
+| GET | `/api/v1/estimates` | 見積一覧 |
+| GET | `/api/v1/contracts` | 契約一覧 |
+| GET | `/api/v1/constructions` | 工事一覧 |
+| GET | `/api/v1/invoices` | 請求一覧 |
+
+認証: `Authorization: Bearer brg_...`  
+API キーは **設定 → API/Webhook** から発行。
+
+### アプリ連携（ワンクリック通知）
+
+**設定 → アプリ連携** から Chatwork / Slack / Teams / Google Chat / Discord / LINE Notify / LINE WORKS / kintone を接続。  
+顧客・商談・見積・契約・工事・請求・ワークフロー・回覧板のイベントを各サービスへ自動通知。
+
+### Webhook
+
+業務イベント発生時に登録 URL へ JSON POST。ヘッダー `X-Bridge-Signature: sha256=...` で HMAC 検証可能。  
+**発火対象:** 顧客 CRUD、商談 CRUD/ステージ変更、見積作成/受理/却下、契約作成/締結、工事作成/着工/完了、請求送付/入金、WF 承認/却下、回覧板投稿。
+
+詳細設計: [docs/api.html](docs/api.html)
 
 ---
 
-## 7. Google 連携
+## 9. Google 連携
 
-### Gmail 連携
+### Gmail
 
 | 項目 | 内容 |
 |------|------|
-| 認証フロー | `/api/gmail/auth` → Google OAuth → `/api/gmail/callback` |
-| スコープ | `gmail.readonly`, `gmail.send`, `gmail.modify`, `userinfo.email`, `userinfo.profile` |
-| トークン保存 | `email_accounts` テーブル (`access_token`, `refresh_token`, `token_expires_at`) |
-| 同期 | `/api/gmail/sync` — Gmail スレッド・メッセージを `email_threads` / `email_messages` に保存 |
-| 切断 | `disconnectGmailAccount()` — `email_accounts` レコード削除 |
+| 認証 | `/api/gmail/auth` → OAuth → `/api/gmail/callback` |
+| 同期 | `/api/gmail/sync` |
+| 未連携時 | デモスレッド表示（`lib/mocks/mail-mock.ts`） |
 
-### Google カレンダー連携
+### Google カレンダー
 
 | 項目 | 内容 |
 |------|------|
-| 認証フロー | Supabase OAuth (`signInWithOAuth`) → `/api/auth/callback` でトークン抽出 |
-| スコープ | `calendar.readonly` |
-| トークン保存 | `profiles` テーブル (`google_access_token`, `google_refresh_token`, `google_token_expires_at`) |
-| トークン取得 | `/api/google-token` — 期限切れ時にリフレッシュ |
-| 双方向同期 | ローカル予定作成時に Google Calendar へ書き込み (`google_event_id` で紐付け) |
-| 切断 | `disconnectGoogleCalendar()` — `profiles` のトークンフィールドを null 更新 |
+| スコープ | `https://www.googleapis.com/auth/calendar` |
+| 双方向同期 | ローカル予定 ↔ Google Calendar（`google_event_id` で紐付け） |
+| トークン | `profiles.google_*` / `/api/google-token` |
 
 ---
 
-## 8. データベーススキーマ (主要テーブル)
+## 10. BI ダッシュボード
+
+- **期首設定**: `/bi` の Dialog（旧 `/bi/settings` は `/bi?settings=1` へリダイレクト）→ `bi_annual_settings`, `bi_overhead_items`, `bi_department_targets`
+- **分析ルール（会社共通）**: `bi_company_config` — 着地予測 tier（A見込等）、実績ソース、粗利率
+- **期中変更**: `bi_budget_change_log` — 予算変更の修正履歴・遡及按分
+- **実績集計**: `getBiActuals()` — 設定に基づき工事/商談/請求から売上・粗利を集計
+- **部門紐付け**: `constructions.department_name`, `deals.department_name`（工事・商談編集で設定）
+- **表示単位**: 万円
+- **月次按分**: 製造間接費は変更履歴を反映。全社は均等÷12または売上構成比、部門別は売上構成比
+
+---
+
+## 11. データベース（主要テーブル）
 
 | テーブル | 用途 |
 |---------|------|
 | `profiles` | ユーザープロフィール・Google トークン |
-| `companies` | 加盟企業マスタ |
-| `customers` | 顧客マスタ |
+| `companies` | 加盟企業 |
+| `customers` | 顧客 |
 | `deals` | 商談 |
-| `constructions` | 工事案件 |
-| `calendar_events` | カレンダー予定 (`google_event_id`, `google_calendar_id` を含む) |
-| `email_accounts` | 連携メールアカウント (unique: `user_id, provider`) |
-| `email_threads` | メールスレッド |
-| `email_messages` | メールメッセージ |
-| `attendance_records` | 勤怠打刻 |
-| `contracts` | 契約書 |
-| `quotes` | 見積書 |
-| `invoices` | 請求書 |
+| `constructions` | 工事 |
+| `contractor_orders` | 下請発注 |
+| `estimates` / `estimate_items` | 見積 |
+| `contracts` | 契約 |
+| `invoices` | 請求 |
+| `budgets` | 予算 |
+| `bi_annual_settings` | BI 期首設定 |
+| `bi_company_config` | BI 分析ルール（着地 tier・実績ソース等） |
+| `bi_budget_change_log` | BI 期中予算変更履歴 |
+| `api_keys` | 外部 API キー |
+| `app_integrations` | Chatwork / Slack 等アプリ連携設定 |
+| `webhook_endpoints` / `webhook_logs` | Webhook 設定・ログ |
 | `announcements` | 回覧板 |
 
-### マイグレーション履歴
+### マイグレーション
 
-| ファイル | 内容 |
-|---------|------|
-| `00001_initial_schema.sql` | 初期スキーマ |
-| `00002_rls_policies.sql` | Row Level Security ポリシー |
-| `00003_storage_policies.sql` | Storage ポリシー |
-| `00004_announcement_target_roles.sql` | 回覧対象ロール |
-| `00005_company_slug.sql` | 企業サブドメイン slug |
-| `00006_kickoff_inputs.sql` | キックオフ入力フォームデータ |
-| `00007_kickoff_company_update.sql` | 会社情報更新 |
-| `00008_crm_master_data.sql` | CRM マスタデータ |
-| `00009_craftsmen_master_data.sql` | 職人マスタデータ |
-| `00010_email_accounts_unique.sql` | `email_accounts(user_id, provider)` ユニーク制約 |
-| `00011_google_tokens.sql` | `profiles` に Google トークンカラム追加 |
-| `00012_calendar_google_event_id.sql` | `calendar_events` に `google_event_id`, `google_calendar_id` 追加 |
+`supabase/migrations/` — 00001〜00030（最新: bi_budget_change_log）
 
 ---
 
-## 9. 主要コンポーネント
-
-| コンポーネント | パス | 説明 |
-|----------------|------|------|
-| `PageHeader` | `components/shared/page-header.tsx` | ページヘッダー（タイトル・説明・スロット） |
-| `AdminSidebar` | `components/layout/admin-sidebar.tsx` | 管理コンソール用サイドバー |
-| `AnalogClock` | `components/shared/analog-clock.tsx` | アナログ時計 |
-| `WidgetCustomizer` | `components/shared/widget-customizer.tsx` | ダッシュボードウィジェット表示設定 |
-| `BiKpi` | `app/(app)/admin/page.tsx` (ローカル) | BI タブ用 KPI カード |
-
----
-
-## 10. 認証フロー
+## 12. 認証フロー
 
 ```
-ログイン (/login)
-  ├── メール/パスワード認証 (Supabase signInWithPassword)
-  ├── Google OAuth (signInWithOAuth) → /api/auth/callback → Google トークン保存
-  └── 初回招待 (inviteUserByEmail / createUser + verifyOtp)
-
-パスワード更新 (/update-password)
-オンボーディング (/onboarding)
+/login          メール/パスワード + Google OAuth
+/onboarding     初回セットアップ
+/update-password  パスワード変更
+/api/auth/callback  OAuth コールバック
 ```
 
 ---
 
-## 11. 開発メモ
+## 13. 既知の制約
 
-- **開発サーバー起動**: `cd apps/web && npm run dev`
-- **Supabase マイグレーション適用**: Supabase ダッシュボードの SQL Editor で直接実行
-- **Turbopack キャッシュクリア**: `pkill -f "next dev"; rm -f .next/dev/lock; npm run dev`
-- **管理コンソールアクセス**: `/admin/login` にて `super-admin@example.com` でログイン
-- **Google OAuth テストユーザー**: Google Cloud Console の OAuth 同意画面でテストユーザーを追加する必要あり（外部ユーザータイプの場合）
+| 項目 | 内容 |
+|------|------|
+| Gmail / Google Calendar | Google Cloud OAuth 同意画面・審査が必要（テストユーザー追加で開発可） |
+| メール未連携 | デモスレッドを表示（仕様通り） |
+| 原価タブ | 下請発注データを初期表示。月次内訳の詳細編集はローカル UI |
+| BI 請求の二重計上 | 工事+請求を両方ソースにした場合、工事紐付き請求は自動除外 |
+
+---
+
+## 14. 関連ドキュメント
+
+- [機能一覧](docs/features.html)
+- [外部連携 API 仕様](docs/api.html)
+- [仕様書トップ](docs/index.html)
