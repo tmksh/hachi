@@ -1,6 +1,6 @@
 # BRIDGE — プロジェクト仕様書
 
-> 最終更新: 2026-05-22
+> 最終更新: 2026-05-24（2026/04/16 設計レビュー反映）
 
 ---
 
@@ -62,13 +62,13 @@ NEXT_PUBLIC_APP_DOMAIN=          # テナント slug 用（本番）
 
 | ロール | 説明 |
 |--------|------|
-| `owner` | 施工店オーナー |
-| `hq_admin` | 本部管理者 |
+| `hq_admin` | 本部管理者（最上位。旧 owner は 00033 で廃止・移行） |
 | `contractor_admin` | 施工店管理者 |
 | `employee` | 一般社員 |
 | *(super-admin)* | BRIDGE 運営（メール固定: `super-admin@example.com`） |
 
-Middleware (`lib/supabase/middleware.ts`) により CRM・BI・予算・マーケティング等のルートを保護。  
+Middleware (`lib/supabase/middleware.ts`) により CRM・BI・予算等のルートを保護。  
+`/marketing` は全ロールアクセス不可（v2 非公開・ルートブロック）。  
 Supabase RLS により `company_id` 単位でデータを分離。
 
 ---
@@ -91,9 +91,24 @@ Supabase RLS により `company_id` 単位でデータを分離。
 | 機能 | パス | 状態 |
 |------|------|------|
 | 契約管理 | `/contracts` | 実装済 |
-| 工事管理 | `/constructions` | 実装済 — ガント、原価（下請発注連携）、下請発注、請求書自動生成 |
-| 請求管理 | `/invoices` | 実装済 |
+| 工事管理 | `/constructions` | 実装済 — **7タブ**（工程表/見積もり/契約書/追加変更/工事台帳/発注書/請求書） |
+| 追加変更 | 工事詳細タブ | 実装済 — `change_orders`、CloudSign B案連携 |
+| 工事台帳 | 工事詳細タブ | 実装済 — `construction_cost_budgets` へ DB 永続化 |
+| 発注書 | 工事詳細タブ | 実装済 — 支払スケジュール 2/4/6/12 回 |
+| 請求管理 | `/invoices` | 実装済 — 締日ベース月次請求生成 |
 | 予算管理 | `/budget` | 実装済 — 完了工事から実績集計、承認フロー |
+
+#### 工事詳細 7タブ
+
+| タブ | 内容 |
+|------|------|
+| 工程表 | ガントチャート、タスク CRUD |
+| 見積もり | 1工事に複数見積、版（version）・改訂（parent_estimate_id）、予備費1/2 |
+| 契約書 | 契約 PDF アップロード・管理 |
+| 追加変更 | 変更前後明細・差額、CloudSign 送信 or PDF 代替 |
+| 工事台帳 | 原価管理表、`construction_cost_budgets` 永続化 |
+| 発注書 | 下請発注、`payment_schedule`（2/4/6/12回） |
+| 請求書 | 単発作成・月次一括生成（締日設定連動） |
 
 ### ポータル
 
@@ -104,21 +119,23 @@ Supabase RLS により `company_id` 単位でデータを分離。
 | 社内回覧板 | `/circulation` | 実装済 |
 | カレンダー | `/calendar` | 実装済 — Google カレンダー双方向同期（OAuth 設定時） |
 | メール連携 | `/mail` | 実装済 — Gmail OAuth / IMAP、未連携時はデモスレッド |
-| 文書管理 | `/documents` | 実装済 — Supabase Storage |
+| 文書管理 | `/documents` | 実装済 — 顧客・工事紐付け、リスト/グリッド表示 |
 
 ### システム
 
 | 機能 | パス | 状態 |
 |------|------|------|
 | BI ダッシュボード | `/bi` | 実装済 — 工事・請求から実績集計、期首設定 DB 連携 |
-| ロールベース権限 | Middleware + RLS | 実装済 — 4 段階ロール + カスタムロール（UI） |
-| 通知・設定 | `/settings` | 実装済 — ベル通知（60 秒更新）、各種マスタ |
+| ロールベース権限 | Middleware + RLS | 実装済 — **3 段階ロール**（owner 廃止） |
+| 通知・設定 | `/settings` | 実装済 — CloudSign・請求締日、ベル通知（60 秒更新） |
+| マーケティング | `/marketing` | **v2 非公開** — ナビ非表示、Middleware で全ロールブロック |
 
 ### 外部連携
 
 | 機能 | 状態 |
 |------|------|
 | Supabase Auth / DB / Storage | 稼働中 |
+| CloudSign API（B案） | 実装済 — 追加変更タブ、設定 > 会社情報 |
 | Gmail API | OAuth 設定時に利用可 |
 | Google Calendar API | OAuth 設定時に双方向同期（`calendar` スコープ） |
 | 外部向け REST API | 実装済 — `/api/v1/*`（GET）、設定画面で API キー発行 |
@@ -149,7 +166,7 @@ Supabase RLS により `company_id` 単位でデータを分離。
 | `/craftsmen` | 職人管理 |
 | `/circulation` | 回覧板 |
 | `/workflow` | ワークフロー |
-| `/marketing` | マーケティング |
+| `/marketing` | マーケティング（**v2 非公開・ルートブロック**） |
 | `/settings` | 設定 |
 
 ### 管理コンソール (`/admin`)
@@ -176,6 +193,12 @@ Supabase RLS により `company_id` 単位でデータを分離。
 
 認証: `Authorization: Bearer brg_...`  
 API キーは **設定 → API/Webhook** から発行。
+
+### CloudSign（B案）
+
+- **設定**: 設定 → 会社情報 → CloudSign 連携（`companies.settings.cloudsign`）
+- **用途**: 追加変更工事タブから電子署名送信
+- **未設定時**: PDF ダウンロードで代替（顧客が別途 CloudSign 契約）
 
 ### アプリ連携（ワンクリック通知）
 
@@ -227,16 +250,19 @@ API キーは **設定 → API/Webhook** から発行。
 
 | テーブル | 用途 |
 |---------|------|
-| `profiles` | ユーザープロフィール・Google トークン |
-| `companies` | 加盟企業 |
+| `profiles` | ユーザープロフィール・Google トークン（role: hq_admin / contractor_admin / employee） |
+| `companies` | 加盟企業（settings: cloudsign, invoice_closing_day 等） |
 | `customers` | 顧客 |
 | `deals` | 商談 |
 | `constructions` | 工事 |
-| `contractor_orders` | 下請発注 |
-| `estimates` / `estimate_items` | 見積 |
+| `estimates` / `estimate_items` | 見積（construction_id, version, reserve_fee_*） |
+| `change_orders` | 追加変更工事（CloudSign 連携） |
+| `construction_cost_budgets` | 工事台帳（原価管理表）永続化 |
+| `contractor_orders` | 下請発注（payment_schedule JSONB） |
 | `contracts` | 契約 |
 | `invoices` | 請求 |
 | `budgets` | 予算 |
+| `documents` | 文書（customer_id, construction_id 紐付け） |
 | `bi_annual_settings` | BI 期首設定 |
 | `bi_company_config` | BI 分析ルール（着地 tier・実績ソース等） |
 | `bi_budget_change_log` | BI 期中予算変更履歴 |
@@ -247,7 +273,13 @@ API キーは **設定 → API/Webhook** から発行。
 
 ### マイグレーション
 
-`supabase/migrations/` — 00001〜00030（最新: bi_budget_change_log）
+`supabase/migrations/` — 00001〜00033
+
+| 番号 | 内容 |
+|------|------|
+| 00031 | 見積版管理・予備費、change_orders、payment_schedule |
+| 00032 | construction_cost_budgets、documents 顧客/工事紐付け |
+| 00033 | owner ロール廃止 → hq_admin へ移行 |
 
 ---
 
@@ -268,7 +300,8 @@ API キーは **設定 → API/Webhook** から発行。
 |------|------|
 | Gmail / Google Calendar | Google Cloud OAuth 同意画面・審査が必要（テストユーザー追加で開発可） |
 | メール未連携 | デモスレッドを表示（仕様通り） |
-| 原価タブ | 下請発注データを初期表示。月次内訳の詳細編集はローカル UI |
+| マーケティング | v2 非公開。ナビ非表示、Middleware で `/marketing` 全ロールブロック |
+| CloudSign | B案（顧客別途契約）。API 未設定時は PDF ダウンロード代替 |
 | BI 請求の二重計上 | 工事+請求を両方ソースにした場合、工事紐付き請求は自動除外 |
 
 ---

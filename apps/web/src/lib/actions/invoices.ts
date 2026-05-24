@@ -227,3 +227,126 @@ export async function createInvoice(
 
   return invoice as Invoice;
 }
+
+type ClosingDaySetting = "20" | "end_of_month";
+
+function getClosingDay(settings: Record<string, unknown> | null | undefined): ClosingDaySetting {
+  const day = settings?.invoice_closing_day;
+  return day === "20" ? "20" : "end_of_month";
+}
+
+function getBillingPeriod(reference: Date, closingDay: ClosingDaySetting) {
+  const y = reference.getFullYear();
+  const m = reference.getMonth();
+  if (closingDay === "20") {
+    const end = new Date(y, m, 20);
+    const start = new Date(y, m - 1, 21);
+    return { start, end, label: `${start.getFullYear()}年${start.getMonth() + 1}月21日〜${end.getFullYear()}年${end.getMonth() + 1}月20日` };
+  }
+  const start = new Date(y, m, 1);
+  const end = new Date(y, m + 1, 0);
+  return { start, end, label: `${y}年${m + 1}月（月末締め）` };
+}
+
+function monthsBetween(start: string, end: string): number {
+  const s = new Date(start + "T00:00:00");
+  const e = new Date(end + "T00:00:00");
+  return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1);
+}
+
+/** 工程表・締日に基づく月次請求の自動生成 */
+export async function generateMonthlyInvoices(constructionId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", profile.company_id)
+    .single();
+  const closingDay = getClosingDay(company?.settings as Record<string, unknown>);
+
+  const { data: con } = await supabase
+    .from("constructions")
+    .select("id, title, customer_id, order_amount, start_date, end_date")
+    .eq("id", constructionId)
+    .single();
+  if (!con?.start_date || !con?.end_date) {
+    throw new Error("工期（開始日・終了日）を設定してください");
+  }
+
+  const monthCount = monthsBetween(con.start_date, con.end_date);
+  const monthlyAmount = Math.floor((con.order_amount ?? 0) / monthCount);
+  const created = [];
+
+  for (let i = 0; i < monthCount; i++) {
+    const ref = new Date(con.start_date + "T00:00:00");
+    ref.setMonth(ref.getMonth() + i);
+    const period = getBillingPeriod(ref, closingDay);
+
+    const invoiceDate = period.end.toISOString().split("T")[0];
+    const dueDate = new Date(period.end);
+    dueDate.setMonth(dueDate.getMonth() + 1);
+    if (closingDay === "20") {
+      dueDate.setDate(20);
+    } else {
+      dueDate.setMonth(dueDate.getMonth() + 1);
+      dueDate.setDate(0);
+    }
+
+    const { data: existing } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("construction_id", constructionId)
+      .eq("invoice_date", invoiceDate)
+      .maybeSingle();
+    if (existing) continue;
+
+    const amount = i === monthCount - 1
+      ? (con.order_amount ?? 0) - monthlyAmount * (monthCount - 1)
+      : monthlyAmount;
+    const subtotal = amount;
+    const tax = Math.floor(subtotal * 0.1);
+
+    const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true });
+    const invoiceNo = `INV-${String((count || 0) + 1).padStart(4, "0")}`;
+
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .insert({
+        company_id: profile.company_id,
+        invoice_no: invoiceNo,
+        construction_id: constructionId,
+        customer_id: con.customer_id,
+        invoice_date: invoiceDate,
+        due_date: dueDate.toISOString().split("T")[0],
+        payment_terms: closingDay === "20" ? "20日締め翌月20日払い" : "月末締め翌月末払い",
+        subtotal,
+        tax,
+        total: subtotal + tax,
+        status: "draft",
+        notes: `${period.label} 分`,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    await supabase.from("invoice_items").insert({
+      company_id: profile.company_id,
+      invoice_id: invoice.id,
+      description: `${con.title}（${period.label}）`,
+      quantity: 1,
+      unit_price: subtotal,
+      amount: subtotal,
+      sort_order: 0,
+    });
+
+    created.push(invoice);
+  }
+
+  return created;
+}

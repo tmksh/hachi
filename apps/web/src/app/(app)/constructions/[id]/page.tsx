@@ -23,8 +23,8 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   ArrowLeft, Pencil, CheckCircle2, MapPin, CalendarRange,
-  Wallet, User2, FileText, FilePlus2,
-  PackageCheck, FolderOpen, ExternalLink,
+  Wallet, User2, FileText,
+  PackageCheck, ExternalLink,
   Plus, Trash2, Loader2, Wand2,
 } from "lucide-react";
 import {
@@ -37,15 +37,22 @@ import {
 } from "@/lib/actions/constructions";
 import { getCraftsmen } from "@/lib/actions/craftsmen";
 import type { Craftsman } from "@/lib/database.types";
-import { createInvoiceFromConstruction } from "@/lib/actions/invoices";
-import { useRouter } from "next/navigation";
-import { Receipt } from "lucide-react";
+import { getCompany } from "@/lib/actions/profiles";
 import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { ContractTab } from "@/components/constructions/contract-tab";
+import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
+import { InvoicesTab } from "@/components/constructions/invoices-tab";
 import { useAuth } from "@/hooks/use-auth";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
+import {
+  getConstructionEstimate,
+  createOrdersFromEstimate,
+} from "@/lib/actions/constructions";
+import { createEstimateRevision } from "@/lib/actions/estimates";
+import { getChangeOrders } from "@/lib/actions/change-orders";
+import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 
 type Detail = Awaited<ReturnType<typeof getConstruction>>;
 type Order = Detail["orders"][number] & { craftsman?: { id: string; name: string } | null };
@@ -68,15 +75,54 @@ function InfoCell({ icon, label, value }: { icon: React.ReactNode; label: string
 /* ──────────────────────────────────────────────────
    見積もりタブ
 ────────────────────────────────────────────────── */
-function EstimateTab({ data }: { data: Detail }) {
+function EstimateTab({ data, constructionId, onEstimateChange }: {
+  data: Detail;
+  constructionId: string;
+  onEstimateChange: (est: Detail["estimate"]) => void;
+}) {
   const contract = data.contract as (typeof data.contract & {
     amount?: number; contract_date?: string | null; notes?: string | null; estimate_id?: string | null;
   }) | null;
   const estimate = (data as Detail & { estimate?: (typeof data & {
+    id?: string;
     estimate_no?: string; title?: string | null; subtotal?: number; tax?: number; total?: number;
     gross_profit?: number; gross_profit_rate?: number; notes?: string | null; status?: string;
     categories?: EstimateCategory[]; items?: EstimateItem[];
+    reserve_fee_1_rate?: number; reserve_fee_2_rate?: number;
   }) | null }).estimate;
+
+  const estimateList = (data as Detail & { estimates?: Array<{
+    id: string; estimate_no: string; title: string | null; version: number;
+    status: string; total: number; subtotal: number; gross_profit_rate: number;
+  }> }).estimates ?? [];
+
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
+  const [creatingRevision, setCreatingRevision] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(estimate?.id ?? estimateList[0]?.id ?? null);
+
+  async function handleCreateRevision() {
+    if (!estimate?.id) return;
+    setCreatingRevision(true);
+    try {
+      const rev = await createEstimateRevision(estimate.id, constructionId);
+      await handleSelectEstimate(rev.id);
+      toast.success(`改訂版 v${rev.version} を作成しました`);
+    } catch {
+      toast.error("改訂版の作成に失敗しました");
+    } finally {
+      setCreatingRevision(false);
+    }
+  }
+
+  async function handleSelectEstimate(id: string) {
+    setSelectedId(id);
+    setLoadingEstimate(true);
+    try {
+      const est = await getConstructionEstimate(id);
+      onEstimateChange(est as Detail["estimate"]);
+    } catch { toast.error("見積もりの読み込みに失敗しました"); }
+    finally { setLoadingEstimate(false); }
+  }
 
   if (!estimate && !contract) {
     return (
@@ -116,6 +162,11 @@ function EstimateTab({ data }: { data: Detail }) {
     draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
   };
 
+  const reserve1Rate = estimate.reserve_fee_1_rate ?? 0.02;
+  const reserve2Rate = estimate.reserve_fee_2_rate ?? 0.03;
+  const reserve1 = Math.round((estimate.subtotal ?? 0) * reserve1Rate);
+  const reserve2 = Math.round((estimate.subtotal ?? 0) * reserve2Rate);
+
   // カテゴリ別に明細を整理
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = estimate.items ?? [];
@@ -127,10 +178,30 @@ function EstimateTab({ data }: { data: Detail }) {
 
   return (
     <div className="space-y-4">
+      {estimateList.length > 1 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-muted-foreground">見積バージョン:</span>
+          {estimateList.map((e: (typeof estimateList)[number]) => (
+            <Button
+              key={e.id}
+              variant={selectedId === e.id ? "default" : "outline"}
+              size="sm"
+              className="text-xs h-7"
+              disabled={loadingEstimate}
+              onClick={() => handleSelectEstimate(e.id)}
+            >
+              v{e.version} ({e.estimate_no})
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* サマリーカード */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {[
           { label: "小計", value: `¥${(estimate.subtotal ?? 0).toLocaleString()}` },
+          { label: `予備費1（${(reserve1Rate * 100).toFixed(0)}%）`, value: `¥${reserve1.toLocaleString()}` },
+          { label: `予備費2（${(reserve2Rate * 100).toFixed(0)}%）`, value: `¥${reserve2.toLocaleString()}` },
           { label: "消費税（10%）", value: `¥${(estimate.tax ?? 0).toLocaleString()}` },
           { label: "合計金額", value: `¥${(estimate.total ?? 0).toLocaleString()}`, highlight: true },
           { label: "粗利率", value: `${(estimate.gross_profit_rate ?? 0).toFixed(1)}%`, color: (estimate.gross_profit_rate ?? 0) >= 20 ? "text-green-600" : "text-amber-600" },
@@ -157,6 +228,16 @@ function EstimateTab({ data }: { data: Detail }) {
             <ExternalLink className="h-4 w-4" />見積一覧を開く
           </Button>
         </Link>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          disabled={creatingRevision || !estimate?.id}
+          onClick={handleCreateRevision}
+        >
+          {creatingRevision ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          改訂版を作成
+        </Button>
       </div>
 
       {/* 明細テーブル */}
@@ -228,20 +309,7 @@ function EstimateTab({ data }: { data: Detail }) {
 }
 
 /* ──────────────────────────────────────────────────
-   追加変更タブ
-────────────────────────────────────────────────── */
-function ChangeOrderTab() {
-  return (
-    <div className="py-16 text-center text-sm text-muted-foreground">
-      <FilePlus2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
-      <p>追加・変更工事の記録</p>
-      <p className="text-xs mt-1">追加変更管理機能は今後実装予定です</p>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────
-   発注書・請書タブ
+   発注書タブ
 ────────────────────────────────────────────────── */
 const ORDER_STATUS_MAP = {
   draft:     { label: "下書き",   cls: "bg-gray-100 text-gray-600" },
@@ -252,11 +320,12 @@ const ORDER_STATUS_MAP = {
 
 const PAYMENT_COUNT_OPTIONS = ["1回", "2回", "3回", "4回", "6回", "12回", "その他"];
 
-function OrdersTab({ constructionId, initialOrders, constructionStartDate, constructionEndDate }: {
+function OrdersTab({ constructionId, initialOrders, constructionStartDate, constructionEndDate, estimateId }: {
   constructionId: string;
   initialOrders: Order[];
   constructionStartDate?: string | null;
   constructionEndDate?: string | null;
+  estimateId?: string | null;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [dialog, setDialog] = useState(false);
@@ -278,6 +347,8 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
     specialNotes: "",
   });
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const openDialog = () => {
     setForm(f => ({
@@ -363,13 +434,36 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
     }
   }
 
+  async function handleImportFromEstimate() {
+    if (!estimateId) {
+      toast.error("見積もりが紐付いていません");
+      return;
+    }
+    setImporting(true);
+    try {
+      const created = await createOrdersFromEstimate(constructionId, estimateId);
+      setOrders(prev => [...(created as Order[]), ...prev]);
+      toast.success(`${created.length}件の発注書を見積から取得しました`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "取得に失敗しました");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const total = orders.reduce((s, o) => s + o.amount, 0);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{orders.length} 件</p>
+        <p className="text-sm text-muted-foreground">{orders.length} 件（見積項目から自動取得・支払回数別配分）</p>
         <div className="flex gap-2">
+          {estimateId && (
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleImportFromEstimate} disabled={importing}>
+              {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+              見積から発注書を取得
+            </Button>
+          )}
           {orders.length === 0 && (
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleSeed} disabled={seeding}>
               {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
@@ -405,11 +499,23 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
               <tbody>
                 {orders.map((order) => {
                   const st = ORDER_STATUS_MAP[order.status as keyof typeof ORDER_STATUS_MAP] ?? ORDER_STATUS_MAP.draft;
+                  const schedule = (order as Order & { payment_schedule?: Array<{ phase: string; amount: number; due_date: string | null }> }).payment_schedule
+                    ?? buildPaymentSchedule(order.amount, order.payment_count ?? "1回", order.start_date, order.end_date);
+                  const isExpanded = expandedId === order.id;
                   return (
+                    <>
                     <tr key={order.id} className="glass-row group cursor-default">
                       <td className="px-4 py-3 rounded-l-[10px]">
                         <p className="font-medium">{order.title}</p>
                         {order.notes && <p className="text-xs text-muted-foreground mt-0.5">{order.notes}</p>}
+                        {schedule.length > 1 && (
+                          <button
+                            className="text-[10px] text-blue-600 mt-1 hover:underline"
+                            onClick={() => setExpandedId(isExpanded ? null : order.id)}
+                          >
+                            支払スケジュール ({order.payment_count ?? "1回"})
+                          </button>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-sm text-muted-foreground">
                         {order.craftsman?.name ?? "—"}
@@ -449,6 +555,21 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
                         </button>
                       </td>
                     </tr>
+                    {isExpanded && schedule.length > 0 && (
+                      <tr key={`${order.id}-schedule`} className="bg-muted/20">
+                        <td colSpan={5} className="px-4 py-2">
+                          <div className="flex flex-wrap gap-2">
+                            {schedule.map((s: { phase: string; amount: number; due_date: string | null }) => (
+                              <span key={s.phase} className="text-[11px] bg-white border rounded px-2 py-1 tabular-nums">
+                                {s.phase}: ¥{s.amount.toLocaleString()}
+                                {s.due_date && <span className="text-muted-foreground ml-1">({s.due_date})</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   );
                 })}
               </tbody>
@@ -582,46 +703,31 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
 }
 
 /* ──────────────────────────────────────────────────
-   ドキュメント一覧タブ
-────────────────────────────────────────────────── */
-function DocumentsTab() {
-  return (
-    <div className="py-16 text-center text-sm text-muted-foreground">
-      <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-30" />
-      <p>工事関連書類</p>
-      <p className="text-xs mt-1">設計図・仕様書・写真などを登録できます（実装予定）</p>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────
    メインページ
 ────────────────────────────────────────────────── */
 type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[number];
 
 export default function ConstructionDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
   const { profile } = useAuth();
   const [data, setData] = useState<Detail | null>(null);
   const [docs, setDocs] = useState<ContractDoc[]>([]);
+  const [changeOrders, setChangeOrders] = useState<Awaited<ReturnType<typeof getChangeOrders>>>([]);
+  const [closingDayLabel, setClosingDayLabel] = useState("月末締め");
   const [loading, setLoading] = useState(true);
   const [completeOpen, setCompleteOpen] = useState(false);
-  const [creatingInvoice, setCreatingInvoice] = useState(false);
-
-  const handleCreateInvoice = async () => {
-    if (!id) return;
-    setCreatingInvoice(true);
-    try {
-      const invoice = await createInvoiceFromConstruction(id as string);
-      toast.success("請求書を作成しました");
-      router.push(`/invoices/${invoice.id}`);
-    } catch { toast.error("請求書の作成に失敗しました"); }
-    finally { setCreatingInvoice(false); }
-  };
 
   const reload = () => {
-    if (id) getConstruction(id as string).then(setData).catch(() => {});
+    if (!id) return;
+    Promise.all([
+      getConstruction(id as string).catch(() => null),
+      getConstructionContractDocs(id as string).catch(() => []),
+      getChangeOrders(id as string).catch(() => []),
+    ]).then(([d, docsList, cos]) => {
+      setData(d);
+      setDocs(docsList);
+      setChangeOrders(cos);
+    });
   };
 
   useEffect(() => {
@@ -629,9 +735,14 @@ export default function ConstructionDetailPage() {
     Promise.all([
       getConstruction(id as string).catch(() => null),
       getConstructionContractDocs(id as string).catch(() => []),
-    ]).then(([d, docsList]) => {
+      getChangeOrders(id as string).catch(() => []),
+      getCompany().catch(() => null),
+    ]).then(([d, docsList, cos, company]) => {
       setData(d);
       setDocs(docsList);
+      setChangeOrders(cos);
+      const settings = company?.settings as Record<string, unknown> | undefined;
+      setClosingDayLabel(settings?.invoice_closing_day === "20" ? "20日締め" : "月末締め");
     }).finally(() => setLoading(false));
   }, [id]);
 
@@ -656,6 +767,7 @@ export default function ConstructionDetailPage() {
     amount?: number; contract_date?: string | null; start_date?: string | null;
     end_date?: string | null; notes?: string | null; status?: string; estimate_id?: string | null;
   }) | null;
+  const estimate = (data as Detail & { estimate?: { id?: string } | null }).estimate;
 
   return (
     <div className="p-4 md:p-6 space-y-5">
@@ -675,15 +787,6 @@ export default function ConstructionDetailPage() {
             <h1 className="text-xl font-semibold mt-1.5">{data.title}</h1>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
-              onClick={handleCreateInvoice}
-              disabled={creatingInvoice}
-            >
-              <Receipt className="h-4 w-4" />{creatingInvoice ? "作成中..." : "請求書を作成"}
-            </Button>
             {isCompletable && (
               <Button size="sm" variant="outline" className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50" onClick={() => setCompleteOpen(true)}>
                 <CheckCircle2 className="h-4 w-4" />完了にする
@@ -737,8 +840,8 @@ export default function ConstructionDetailPage() {
           <TabsTrigger value="contract"  className="text-xs">契約書</TabsTrigger>
           <TabsTrigger value="change"    className="text-xs">追加変更</TabsTrigger>
           <TabsTrigger value="budget"    className="text-xs">工事台帳</TabsTrigger>
-          <TabsTrigger value="orders"    className="text-xs">発注書・請書</TabsTrigger>
-          <TabsTrigger value="documents" className="text-xs">ドキュメント一覧</TabsTrigger>
+          <TabsTrigger value="orders"    className="text-xs">発注書</TabsTrigger>
+          <TabsTrigger value="invoices"  className="text-xs">請求書</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schedule" className="mt-4">
@@ -749,7 +852,11 @@ export default function ConstructionDetailPage() {
         </TabsContent>
 
         <TabsContent value="estimate" className="mt-4">
-          <EstimateTab data={{ ...data, contract }} />
+          <EstimateTab
+            data={{ ...data, contract }}
+            constructionId={id as string}
+            onEstimateChange={(est) => setData((prev: Detail | null) => prev ? { ...prev, estimate: est } : prev)}
+          />
         </TabsContent>
 
         <TabsContent value="contract" className="mt-4">
@@ -769,7 +876,12 @@ export default function ConstructionDetailPage() {
         </TabsContent>
 
         <TabsContent value="change" className="mt-4">
-          <ChangeOrderTab />
+          <ChangeOrderTab
+            constructionId={id as string}
+            initialOrders={changeOrders}
+            baseAmount={contract?.amount ?? data.order_amount ?? 0}
+            onRefresh={reload}
+          />
         </TabsContent>
 
         <TabsContent value="budget" className="mt-4">
@@ -777,6 +889,14 @@ export default function ConstructionDetailPage() {
             constructionId={id as string}
             contractAmount={contract?.amount ?? data.order_amount ?? undefined}
             initialOrders={data.orders as Order[]}
+            initialEstimateItems={(estimate as { items?: EstimateItem[] } | null)?.items?.map(i => ({
+              id: i.id,
+              name: i.name,
+              cost_amount: i.cost_amount,
+              selling_amount: i.selling_amount,
+              category_id: i.category_id,
+            }))}
+            periodStart={data.start_date}
             authorName={profile?.display_name ?? "ユーザー"}
           />
         </TabsContent>
@@ -787,11 +907,21 @@ export default function ConstructionDetailPage() {
             initialOrders={data.orders as Order[]}
             constructionStartDate={data.start_date}
             constructionEndDate={data.end_date}
+            estimateId={estimate?.id ?? contract?.estimate_id ?? null}
           />
         </TabsContent>
 
-        <TabsContent value="documents" className="mt-4">
-          <DocumentsTab />
+        <TabsContent value="invoices" className="mt-4">
+          <InvoicesTab
+            constructionId={id as string}
+            initialInvoices={(data as Detail & { invoices?: Array<{
+              id: string; invoice_no: string; invoice_date: string | null;
+              due_date: string | null; total: number; status: string; created_at: string;
+            }> }).invoices ?? []}
+            hasSchedule={Boolean(data.start_date && data.end_date)}
+            closingDayLabel={closingDayLabel}
+            onRefresh={reload}
+          />
         </TabsContent>
       </Tabs>
 

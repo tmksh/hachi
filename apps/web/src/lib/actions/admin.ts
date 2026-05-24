@@ -353,7 +353,7 @@ export async function createAdminCompany(input: {
     company_id: company.id,
     display_name: input.ownerName,
     email: input.ownerEmail,
-    role: "owner",
+    role: "hq_admin",
   });
   if (profileError) {
     // プロフィール作成失敗時はユーザーと企業を削除してロールバック

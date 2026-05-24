@@ -235,8 +235,8 @@
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">見積管理</div>
-      <div class="feat-desc">見積書の作成・編集・削除・ステータス管理（下書き／送付済み／受理／却下）。明細行と粗利・粗利率をリアルタイム自動計算。商談からの顧客・金額引き継ぎに対応。見積詳細から契約・工事への連携も可能。</div>
-      <div class="feat-tags"><span class="feat-tag">明細行 CRUD</span><span class="feat-tag">粗利・粗利率計算</span><span class="feat-tag">ステータス管理</span><span class="feat-tag">商談連携</span></div></div>
+      <div class="feat-desc">見積書の作成・編集・削除・ステータス管理（下書き／送付済み／受理／却下）。明細行と粗利・粗利率をリアルタイム自動計算。商談からの顧客・金額引き継ぎに対応。工事詳細では1工事に複数見積・版（revision）管理。予備費1（2%）・予備費2（3%）を見積ごとに設定可能。</div>
+      <div class="feat-tags"><span class="feat-tag">明細行 CRUD</span><span class="feat-tag">粗利・粗利率計算</span><span class="feat-tag">版管理・改訂</span><span class="feat-tag">予備費設定</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
@@ -254,14 +254,26 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">工事管理</div>
-      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細画面は「概要／ガント／原価／下請発注／書類」タブ構成。ガントチャートでタスクの期間を視覚管理、職人への下請発注（発注ステータス管理）、契約書 PDF 印刷、工事から請求書を自動生成。削除時は関連タスク・下請発注も同時削除。</div>
-      <div class="feat-tags"><span class="feat-tag">ガントチャート</span><span class="feat-tag">原価・コスト管理</span><span class="feat-tag">下請発注</span><span class="feat-tag">請求書自動生成</span></div></div>
+      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細画面は7タブ構成：工程表／見積もり／契約書／追加変更／工事台帳／発注書／請求書。ガントチャート、複数見積の版管理、追加変更（CloudSign B案）、工事台帳の DB 永続化、発注書の支払スケジュール（2/4/6/12回）、締日ベースの月次請求生成に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">7タブ構成</span><span class="feat-tag">追加変更・CloudSign</span><span class="feat-tag">工事台帳永続化</span><span class="feat-tag">月次請求生成</span></div></div>
+
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">追加変更工事</div>
+      <div class="feat-desc">工事詳細「追加変更」タブで設計変更・追加工事を管理。変更前後の明細・差額を記録し、承認ワークフローに対応。CloudSign API 連携（B案：顧客が別途契約）で電子署名送信。API 未設定時は PDF ダウンロードで代替。設定 &gt; 会社情報で API キーを登録。</div>
+      <div class="feat-tags"><span class="feat-tag">change_orders</span><span class="feat-tag">CloudSign B案</span><span class="feat-tag">差額・明細比較</span><span class="feat-tag">承認ステータス</span></div></div>
+
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">工事台帳（原価管理）</div>
+      <div class="feat-desc">工事詳細「工事台帳」タブで下請業者ごとの実行予算・発注・月次請求を管理。粗利・粗利率をリアルタイム計算。construction_cost_budgets テーブルへ永続化し、保存後もデータを保持。見積明細からの初期行インポートに対応。</div>
+      <div class="feat-tags"><span class="feat-tag">DB 永続化</span><span class="feat-tag">粗利自動計算</span><span class="feat-tag">月次請求入力</span><span class="feat-tag">予算残アラート</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">請求管理</div>
-      <div class="feat-desc">請求書の作成・明細編集・消費税計算・ステータス管理（下書き／送付済み／入金済み／キャンセル）。工事詳細から請求書を自動生成する機能を搭載。一覧で入金サマリーを表示。ブラウザ印刷に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">明細編集・消費税計算</span><span class="feat-tag">工事からの自動生成</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div></div>
+      <div class="feat-desc">請求書の作成・明細編集・消費税計算・ステータス管理（下書き／送付済み／入金済み／キャンセル）。工事詳細「請求書」タブから単発作成、または会社設定の締日（20日締め／月末締め）に基づく月次請求の一括生成。一覧で入金サマリーを表示。ブラウザ印刷に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">締日ベース月次生成</span><span class="feat-tag">明細編集・消費税計算</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
@@ -303,8 +315,8 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">文書管理</div>
-      <div class="feat-desc">社内文書を Supabase Storage でクラウド管理。設定画面でカテゴリを追加・編集・削除でき、カテゴリタブでファイルを分類。キーワード検索、アップロード（日本語ファイル名含む）・ダウンロード・削除に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">クラウドストレージ</span><span class="feat-tag">カテゴリ管理</span><span class="feat-tag">アップロード・ダウンロード</span><span class="feat-tag">キーワード検索</span></div></div>
+      <div class="feat-desc">社内文書を Supabase Storage でクラウド管理。顧客・工事に紐付けて集約保管可能。リスト／グリッド表示切替、カテゴリタブでファイルを分類。キーワード検索、アップロード（日本語ファイル名含む）・ダウンロード・削除に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">顧客・工事紐付け</span><span class="feat-tag">リスト/グリッド表示</span><span class="feat-tag">カテゴリ管理</span><span class="feat-tag">キーワード検索</span></div></div>
 
     <!-- SYSTEM -->
     <div class="feat-card" data-cat="system">
@@ -316,16 +328,22 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">ロールベース権限管理</div>
-      <div class="feat-desc">オーナー・本部管理者・施工店管理者・社員の4段階ロール。Next.js Middleware でルートを保護し、Supabase RLS でデータレベルのアクセス制御を二重実施。メニュー表示・ページアクセス・データ閲覧がロールごとに自動制限される。カスタムロール権限も設定で追加可能。</div>
-      <div class="feat-tags"><span class="feat-tag">4段階ロール</span><span class="feat-tag">RLS + Middleware 二重制御</span><span class="feat-tag">ルート保護</span><span class="feat-tag">カスタムロール</span></div></div>
+      <div class="feat-desc">本部管理者・施工店管理者・社員の3段階ロール（オーナーロール廃止）。Next.js Middleware でルートを保護し、Supabase RLS でデータレベルのアクセス制御を二重実施。マーケティングは v2 非公開（全ロールアクセス不可）。メニュー表示・ページアクセス・データ閲覧がロールごとに自動制限される。</div>
+      <div class="feat-tags"><span class="feat-tag">3段階ロール</span><span class="feat-tag">RLS + Middleware 二重制御</span><span class="feat-tag">ルート保護</span><span class="feat-tag">CloudSign 設定</span></div></div>
 
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">通知・設定</div>
-      <div class="feat-desc">未読のお知らせ・承認待ちワークフローをヘッダーのベルバッジで通知（60秒間隔更新）。クリックで既読化。設定タブはプロフィール・会社情報・メンバー招待・パスワード変更・通知 ON/OFF・メール署名・勤怠設定・ワークフロー種別・CRM／職人マスタの管理を提供。</div>
-      <div class="feat-tags"><span class="feat-tag">未読バッジ通知</span><span class="feat-tag">通知 ON/OFF 設定</span><span class="feat-tag">メンバー招待・ロール変更</span><span class="feat-tag">各種マスタ管理</span></div></div>
+      <div class="feat-desc">未読のお知らせ・承認待ちワークフローをヘッダーのベルバッジで通知（60秒間隔更新）。設定タブはプロフィール・会社情報（CloudSign 連携・請求締日含む）・メンバー招待・パスワード変更・通知 ON/OFF・メール署名・勤怠設定・ワークフロー種別・CRM／職人マスタの管理を提供。</div>
+      <div class="feat-tags"><span class="feat-tag">未読バッジ通知</span><span class="feat-tag">CloudSign 設定</span><span class="feat-tag">請求締日設定</span><span class="feat-tag">各種マスタ管理</span></div></div>
 
     <!-- INTEGRATION -->
+    <div class="feat-card" data-cat="integration">
+      <div class="feat-cat">外部連携</div>
+      <div class="feat-title">CloudSign API（B案）</div>
+      <div class="feat-desc">追加変更工事の電子署名連携。設定 &gt; 会社情報で API キーを有効化。顧客が別途 CloudSign を契約する B案。API 未設定時は PDF ダウンロードで代替。change_orders に document_id / status を記録。</div>
+      <div class="feat-tags"><span class="feat-tag">追加変更連携</span><span class="feat-tag">B案（顧客契約）</span><span class="feat-tag">PDF 代替</span></div></div>
+
     <div class="feat-card" data-cat="integration">
       <div class="feat-cat">外部連携</div>
       <div class="feat-title">Supabase Auth</div>
@@ -383,6 +401,12 @@
 
     <div class="ext-title">外部連携</div>
     <div class="ext-grid">
+
+      <div class="ext-card">
+        <div class="ext-name">CloudSign API（B案）</div>
+        <div class="ext-desc">追加変更工事の電子署名。設定画面で API キーを登録。未契約・未設定時は PDF ダウンロードで代替。</div>
+        <span class="ext-status ext-status-done">実装済み</span>
+      </div>
 
       <div class="ext-card">
 

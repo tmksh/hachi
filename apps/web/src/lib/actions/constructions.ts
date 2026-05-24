@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
+import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import type { Construction, ConstructionTask, ContractorOrder } from "@/lib/database.types";
 
 export async function getConstructions() {
@@ -35,9 +36,31 @@ export async function getConstruction(id: string) {
     .eq("construction_id", id)
     .order("created_at", { ascending: false });
 
-  // 契約に紐づく見積もり明細を取得
+  // 契約に紐づく見積もり + 工事に直接紐づく見積もり一覧
   let estimate = null;
+  let estimates: Array<{
+    id: string;
+    estimate_no: string;
+    title: string | null;
+    version: number;
+    status: string;
+    total: number;
+    subtotal: number;
+    gross_profit_rate: number;
+    created_at: string;
+  }> = [];
   const contractData = data as typeof data & { estimate_id?: string | null };
+
+  const { data: linkedEstimates } = await supabase
+    .from("estimates")
+    .select("id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at")
+    .eq("construction_id", id)
+    .order("version", { ascending: false });
+
+  if (linkedEstimates?.length) {
+    estimates = linkedEstimates;
+  }
+
   if (contractData.contract_id) {
     const { data: contract } = await supabase
       .from("contracts")
@@ -52,11 +75,50 @@ export async function getConstruction(id: string) {
         .single();
       if (est) {
         estimate = est;
+        if (!estimates.some((e) => e.id === est.id)) {
+          estimates = [
+            {
+              id: est.id,
+              estimate_no: est.estimate_no,
+              title: est.title,
+              version: est.version ?? 1,
+              status: est.status,
+              total: est.total,
+              subtotal: est.subtotal,
+              gross_profit_rate: est.gross_profit_rate,
+              created_at: est.created_at,
+            },
+            ...estimates,
+          ];
+        }
       }
     }
   }
 
-  return { ...data, tasks: tasks || [], orders: orders || [], estimate };
+  // 契約見積がなければ最新版を詳細表示用に取得
+  if (!estimate && estimates.length > 0) {
+    const { data: est } = await supabase
+      .from("estimates")
+      .select("*, categories:estimate_categories(*), items:estimate_items(*)")
+      .eq("id", estimates[0].id)
+      .single();
+    if (est) estimate = est;
+  }
+
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select("id, invoice_no, invoice_date, due_date, total, status, created_at")
+    .eq("construction_id", id)
+    .order("invoice_date", { ascending: false });
+
+  return {
+    ...data,
+    tasks: tasks || [],
+    orders: orders || [],
+    estimate,
+    estimates: estimates || [],
+    invoices: invoices || [],
+  };
 }
 
 export async function createConstruction(input: {
@@ -283,6 +345,14 @@ export async function createContractorOrder(input: {
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
+  const paymentCount = input.paymentCount || "1回";
+  const schedule = buildPaymentSchedule(
+    input.amount,
+    paymentCount,
+    input.startDate,
+    input.endDate,
+  );
+
   const { data, error } = await supabase
     .from("contractor_orders")
     .insert({
@@ -293,14 +363,15 @@ export async function createContractorOrder(input: {
       amount: input.amount,
       status: "draft",
       notes: input.notes || null,
-      order_date: input.orderDate || null,
+      order_date: input.orderDate || new Date().toISOString().split("T")[0],
       start_date: input.startDate || null,
       end_date: input.endDate || null,
       completion_date: input.completionDate || null,
       payment_date: input.paymentDate || null,
-      payment_count: input.paymentCount || "1回",
+      payment_count: paymentCount,
       work_content: input.workContent || null,
       special_notes: input.specialNotes || null,
+      payment_schedule: schedule,
     })
     .select("*, craftsman:craftsmen(id, name)")
     .single();
@@ -490,4 +561,82 @@ export async function seedContractorOrders(constructionId: string) {
     .select("*, craftsman:craftsmen(id, name)");
   if (error) throw error;
   return data;
+}
+
+export async function getConstructionEstimate(estimateId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("*, categories:estimate_categories(*), items:estimate_items(*)")
+    .eq("id", estimateId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function linkEstimateToConstruction(estimateId: string, constructionId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("estimates")
+    .update({ construction_id: constructionId })
+    .eq("id", estimateId);
+  if (error) throw error;
+}
+
+export async function createOrdersFromEstimate(constructionId: string, estimateId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: construction } = await supabase
+    .from("constructions")
+    .select("start_date, end_date")
+    .eq("id", constructionId)
+    .single();
+  if (!construction) throw new Error("Construction not found");
+
+  const { data: items } = await supabase
+    .from("estimate_items")
+    .select("*")
+    .eq("estimate_id", estimateId)
+    .order("sort_order");
+
+  if (!items?.length) throw new Error("見積明細がありません");
+
+  const today = new Date().toISOString().split("T")[0];
+  const created = [];
+
+  for (const item of items) {
+    const amount = Number(item.cost_amount || item.selling_amount || 0);
+    if (amount <= 0) continue;
+    const schedule = buildPaymentSchedule(
+      amount,
+      "2回",
+      construction.start_date,
+      construction.end_date,
+    );
+    const { data, error } = await supabase
+      .from("contractor_orders")
+      .insert({
+        company_id: profile.company_id,
+        construction_id: constructionId,
+        title: item.name,
+        amount,
+        status: "draft",
+        order_date: today,
+        start_date: construction.start_date,
+        end_date: construction.end_date,
+        payment_count: "2回",
+        work_content: item.specification || item.name,
+        payment_schedule: schedule,
+      })
+      .select("*, craftsman:craftsmen(id, name)")
+      .single();
+    if (error) throw error;
+    created.push(data);
+  }
+
+  return created;
 }

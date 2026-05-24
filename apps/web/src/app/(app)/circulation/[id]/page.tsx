@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 type Detail = Awaited<ReturnType<typeof getAnnouncement>>;
 
 const ROLE_ORDER_LIST: Role[] = [
-  ROLES.OWNER,
+  ROLES.HQ_ADMIN,
   ROLES.HQ_ADMIN,
   ROLES.CONTRACTOR_ADMIN,
   ROLES.EMPLOYEE,
@@ -134,7 +134,6 @@ export default function CirculationDetailPage() {
   // 編集・削除できるのは投稿者本人 or owner/hq_admin
   const canEdit = data && (
     data.author_id === profile?.id ||
-    profile?.role === "owner" ||
     profile?.role === "hq_admin"
   );
 

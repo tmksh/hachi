@@ -4,21 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/lib/database.types";
 
-export type TeamRole = "owner" | "hq_admin" | "contractor_admin" | "employee";
+export type TeamRole = "hq_admin" | "contractor_admin" | "employee";
 
-/**
- * テナント内の管理者であることを確認し、自社の company_id と自身の role を返す。
- * owner / hq_admin のみがメンバー管理を実行可能。
- */
 async function assertTenantAdmin(): Promise<{
   companyId: string;
   actorRole: TeamRole;
   actorId: string;
 }> {
   const authClient = await createClient();
-  const {
-    data: { user },
-  } = await authClient.auth.getUser();
+  const { data: { user } } = await authClient.auth.getUser();
   if (!user) throw new Error("認証が必要です");
 
   const { data: me, error } = await authClient
@@ -28,8 +22,8 @@ async function assertTenantAdmin(): Promise<{
     .single();
   if (error || !me) throw new Error("プロフィールが取得できません");
 
-  if (!["owner", "hq_admin"].includes(me.role)) {
-    throw new Error("メンバー管理は owner / hq_admin 権限が必要です");
+  if (me.role !== "hq_admin") {
+    throw new Error("メンバー管理は本部管理者権限が必要です");
   }
 
   return {
@@ -39,32 +33,14 @@ async function assertTenantAdmin(): Promise<{
   };
 }
 
-/**
- * 操作者ロールが対象ロールを割り当て可能か判定する。
- *
- * - owner は owner を作れない（1社1オーナー原則）
- * - hq_admin は hq_admin / owner を作れない（権限拡散防止）
- * - hq_admin は contractor_admin / employee のみ可
- */
 function assertCanAssignRole(actorRole: TeamRole, targetRole: TeamRole) {
-  if (actorRole === "owner") {
-    if (targetRole === "owner") {
-      throw new Error("オーナーを新規作成することはできません（1社1オーナー）");
-    }
-    return;
+  if (actorRole !== "hq_admin") {
+    throw new Error("メンバー管理は本部管理者権限が必要です");
   }
-  if (actorRole === "hq_admin") {
-    if (targetRole === "owner" || targetRole === "hq_admin") {
-      throw new Error("本部管理者は同等以上のロールを作成できません");
-    }
-    return;
-  }
-  throw new Error("メンバー管理は owner / hq_admin 権限が必要です");
+  // 本部管理者は全ロールを割り当て可能（自分自身の降格は updateTeamMemberRole で禁止）
+  void targetRole;
 }
 
-/**
- * 自社のメンバー一覧を取得（プロフィール情報のみ）。
- */
 export async function listTeamMembers(): Promise<Profile[]> {
   const { companyId } = await assertTenantAdmin();
   const admin = createAdminClient();
@@ -78,13 +54,6 @@ export async function listTeamMembers(): Promise<Profile[]> {
   return (data ?? []) as Profile[];
 }
 
-/**
- * メンバー招待。
- *
- * password が指定された場合は createUser で即座にアカウント作成し、
- * 管理者が仮パスワードを別途共有する運用。
- * password 未指定の場合は inviteUserByEmail でマジックリンクを送信。
- */
 export async function inviteTeamMember(input: {
   email: string;
   displayName: string;
@@ -112,7 +81,6 @@ export async function inviteTeamMember(input: {
   };
 
   if (input.password) {
-    // パスワード指定あり: 即時アカウント作成 & プロフィール登録
     const { data, error } = await admin.auth.admin.createUser({
       email: input.email.trim(),
       password: input.password,
@@ -144,7 +112,6 @@ export async function inviteTeamMember(input: {
       if (profileError) throw profileError;
     }
   } else {
-    // パスワード未指定: マジックリンク招待メール
     const { error } = await admin.auth.admin.inviteUserByEmail(
       input.email.trim(),
       {
@@ -161,9 +128,6 @@ export async function inviteTeamMember(input: {
   }
 }
 
-/**
- * ロール変更（自社のメンバーのみ、owner 自身を降格させる行為は禁止）
- */
 export async function updateTeamMemberRole(userId: string, role: TeamRole) {
   const { companyId, actorRole, actorId } = await assertTenantAdmin();
 
@@ -182,13 +146,6 @@ export async function updateTeamMemberRole(userId: string, role: TeamRole) {
   if (!target || target.company_id !== companyId) {
     throw new Error("対象メンバーが自社に属していません");
   }
-  // owner は他の owner のロールを降格できる（重複オーナー解消のため）
-  if (target.role === "owner" && actorRole !== "owner") {
-    throw new Error("オーナーのロールは変更できません");
-  }
-  if (actorRole === "hq_admin" && target.role === "hq_admin") {
-    throw new Error("本部管理者は他の本部管理者のロールを変更できません");
-  }
 
   const { error } = await admin
     .from("profiles")
@@ -197,9 +154,6 @@ export async function updateTeamMemberRole(userId: string, role: TeamRole) {
   if (error) throw error;
 }
 
-/**
- * メンバー削除（Auth ユーザーと profiles を削除）
- */
 export async function removeTeamMember(userId: string) {
   const { companyId, actorRole, actorId } = await assertTenantAdmin();
 
@@ -217,17 +171,8 @@ export async function removeTeamMember(userId: string) {
   if (!target || target.company_id !== companyId) {
     throw new Error("対象メンバーが自社に属していません");
   }
-  // owner は他の owner も削除できる（重複オーナー解消のため）
-  if (target.role === "owner" && actorRole !== "owner") {
-    throw new Error("オーナーの削除は別のオーナーのみ行えます");
-  }
-  if (actorRole === "hq_admin" && target.role === "hq_admin") {
-    throw new Error("本部管理者は他の本部管理者を削除できません");
-  }
 
-  // FK 制約違反を回避するため、削除前に関連レコードをクリーンアップ
   await Promise.all([
-    // nullable FK → NULL にセット
     admin.from("customers").update({ assigned_to: null }).eq("assigned_to", userId),
     admin.from("deals").update({ assigned_to: null }).eq("assigned_to", userId),
     admin.from("deal_activities").update({ performed_by: null }).eq("performed_by", userId),
@@ -244,11 +189,9 @@ export async function removeTeamMember(userId: string) {
     admin.from("documents").update({ uploaded_by: null }).eq("uploaded_by", userId),
     admin.from("invoices").update({ created_by: null }).eq("created_by", userId),
     admin.from("budgets").update({ created_by: null }).eq("created_by", userId),
-    // ビジネスレコードの NOT NULL FK → null にセット（nullable 化前の互換）
     admin.from("announcements").update({ author_id: null }).eq("author_id", userId),
     admin.from("workflow_requests").update({ requester_id: null }).eq("requester_id", userId),
     admin.from("workflow_steps").update({ approver_id: null }).eq("approver_id", userId),
-    // ユーザー固有レコードは削除
     admin.from("attendance_comments").delete().eq("user_id", userId),
     admin.from("announcement_reads").delete().eq("user_id", userId),
     admin.from("announcement_comments").delete().eq("user_id", userId),
@@ -256,16 +199,14 @@ export async function removeTeamMember(userId: string) {
     admin.from("email_accounts").delete().eq("user_id", userId),
   ]);
 
-  // auth.users 削除 → profiles も CASCADE で削除される
+  void actorRole;
+
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) throw error;
 }
 
-/**
- * 招待メール再送信
- */
 export async function resendTeamInvite(userId: string): Promise<void> {
-  const { companyId, actorRole, actorId } = await assertTenantAdmin();
+  const { companyId, actorId } = await assertTenantAdmin();
 
   if (userId === actorId) {
     throw new Error("自分自身への再送信はできません");
@@ -280,12 +221,6 @@ export async function resendTeamInvite(userId: string): Promise<void> {
     .single();
   if (!target || target.company_id !== companyId) {
     throw new Error("対象メンバーが自社に属していません");
-  }
-  if (target.role === "owner") {
-    throw new Error("オーナーへの再送信はできません");
-  }
-  if (actorRole === "hq_admin" && target.role === "hq_admin") {
-    throw new Error("本部管理者は他の本部管理者への再送信ができません");
   }
 
   const appUrl =

@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
-import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil, GripVertical } from "lucide-react";
+import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil, GripVertical, LayoutGrid, List } from "lucide-react";
 import { toast } from "sonner";
 import {
   getDocuments, createDocument, deleteDocument,
@@ -40,6 +40,7 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   // カテゴリ
   const [categories, setCategories] = useState<DocCategory[]>([]);
@@ -73,7 +74,7 @@ export default function DocumentsPage() {
 
   const load = () => {
     setLoading(true);
-    getDocuments(tab === "all" ? undefined : tab).then(setDocs).catch(() => {}).finally(() => setLoading(false));
+    getDocuments({ category: tab === "all" ? undefined : tab }).then(setDocs).catch(() => {}).finally(() => setLoading(false));
   };
 
   useEffect(() => { loadCategories(); }, []);
@@ -180,9 +181,19 @@ export default function DocumentsPage() {
         </Button>
       </PageHeader>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-wrap items-center gap-3 justify-between">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <div className="flex gap-1 border rounded-lg p-0.5">
+          <Button variant={viewMode === "list" ? "secondary" : "ghost"} size="sm" onClick={() => setViewMode("list")}>
+            <List className="h-4 w-4" />
+          </Button>
+          <Button variant={viewMode === "grid" ? "secondary" : "ghost"} size="sm" onClick={() => setViewMode("grid")}>
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -194,12 +205,46 @@ export default function DocumentsPage() {
           }
         </TabsList>
         <TabsContent value={tab} className="mt-4">
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {loading ? Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
+              )) : filtered.length === 0 ? (
+                <p className="col-span-full text-center py-12 text-muted-foreground">文書なし</p>
+              ) : filtered.map(d => (
+                <Card key={d.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 space-y-2">
+                    <div className="h-20 rounded-lg bg-muted/50 flex items-center justify-center">
+                      {d.mime_type?.startsWith("image/") ? (
+                        <span className="text-xs text-muted-foreground">画像</span>
+                      ) : (
+                        <FileText className="h-8 w-8 text-muted-foreground/50" />
+                      )}
+                    </div>
+                    <p className="text-sm font-medium truncate">{d.name}</p>
+                    {(d as Doc & { customer?: { name: string } }).customer?.name && (
+                      <p className="text-[11px] text-muted-foreground truncate">{(d as Doc & { customer?: { name: string } }).customer!.name}</p>
+                    )}
+                    <div className="flex gap-1 pt-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDownload(d.storage_path, d.file_name)}>
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDeleteTarget(d)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
           <Card variant="inset">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>文書名</TableHead>
+                    <TableHead>顧客</TableHead>
                     <TableHead>ファイル名</TableHead>
                     <TableHead>カテゴリ</TableHead>
                     <TableHead>サイズ</TableHead>
@@ -212,16 +257,18 @@ export default function DocumentsPage() {
                   {loading
                     ? Array.from({ length: 4 }).map((_, i) => (
                         <TableRow key={i}>
-                          {Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
-                          <TableCell></TableCell>
+                          {Array.from({ length: 8 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
                         </TableRow>
                       ))
                     : filtered.length === 0
-                    ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">文書なし</TableCell></TableRow>
+                    ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">文書なし</TableCell></TableRow>
                     : filtered.map(d => (
                         <TableRow key={d.id}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2"><FileText className="h-4 w-4 text-muted-foreground" />{d.name}</div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {(d as Doc & { customer?: { name: string } }).customer?.name ?? "—"}
                           </TableCell>
                           <TableCell className="text-sm">{d.file_name}</TableCell>
                           <TableCell>
@@ -246,6 +293,7 @@ export default function DocumentsPage() {
               </Table>
             </div>
           </Card>
+          )}
         </TabsContent>
       </Tabs>
 

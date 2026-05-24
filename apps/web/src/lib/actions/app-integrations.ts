@@ -25,7 +25,7 @@ async function getAdminContext() {
     .select("company_id, role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["owner", "hq_admin"].includes(profile.role)) {
+  if (!profile || profile.role !== "hq_admin") {
     throw new Error("権限がありません");
   }
   return { supabase, company_id: profile.company_id, user_id: user.id };

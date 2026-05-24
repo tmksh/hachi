@@ -15,7 +15,7 @@ export type Profile = {
   company_id: string;
   display_name: string;
   email: string;
-  role: 'owner' | 'hq_admin' | 'contractor_admin' | 'employee';
+  role: 'hq_admin' | 'contractor_admin' | 'employee';
   avatar_url: string | null;
   department: string | null;
   position: string | null;
@@ -118,6 +118,9 @@ export type Estimate = {
   company_id: string;
   customer_id: string | null;
   project_id: string | null;
+  construction_id: string | null;
+  version: number;
+  parent_estimate_id: string | null;
   estimate_no: string;
   title: string | null;
   status: 'draft' | 'issued' | 'sent' | 'accepted' | 'rejected';
@@ -128,6 +131,9 @@ export type Estimate = {
   cost_total: number;
   gross_profit: number;
   gross_profit_rate: number;
+  reserve_fee_1_rate: number;
+  reserve_fee_2_rate: number;
+  default_gross_profit_rate: number;
   validity_date: string | null;
   issued_at: string | null;
   assigned_to: string | null;
@@ -137,6 +143,27 @@ export type Estimate = {
   customer?: Customer;
   categories?: EstimateCategory[];
   items?: EstimateItem[];
+};
+
+export type ChangeOrder = {
+  id: string;
+  company_id: string;
+  construction_id: string;
+  estimate_id: string | null;
+  title: string;
+  status: 'draft' | 'pending' | 'approved' | 'rejected' | 'sent';
+  before_amount: number;
+  after_amount: number;
+  diff_amount: number;
+  before_items: unknown[];
+  after_items: unknown[];
+  change_reason: string | null;
+  cloudsign_document_id: string | null;
+  cloudsign_status: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  creator?: Profile;
 };
 
 export type EstimateCategory = {
@@ -237,6 +264,13 @@ export type ConstructionTask = {
   updated_at: string;
 };
 
+export type PaymentScheduleItem = {
+  phase: string;
+  rate: number;
+  amount: number;
+  due_date: string | null;
+};
+
 export type ContractorOrder = {
   id: string;
   company_id: string;
@@ -248,8 +282,18 @@ export type ContractorOrder = {
   approved_by: string | null;
   approved_at: string | null;
   notes: string | null;
+  order_date: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  completion_date: string | null;
+  payment_date: string | null;
+  payment_count: string | null;
+  work_content: string | null;
+  special_notes: string | null;
+  payment_schedule: PaymentScheduleItem[];
   created_at: string;
   updated_at: string;
+  craftsman?: { id: string; name: string };
 };
 
 export type AttendanceEntry = {
@@ -432,12 +476,15 @@ export type Document = {
   file_name: string;
   mime_type: string | null;
   size: number;
+  customer_id: string | null;
+  construction_id: string | null;
   uploaded_by: string | null;
   share_token: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
   uploader?: Profile;
+  customer?: { id: string; name: string } | null;
 };
 
 export type Invoice = {

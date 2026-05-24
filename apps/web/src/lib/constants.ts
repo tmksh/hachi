@@ -53,9 +53,8 @@ export const NAV_GROUPS = [
   // },
 ] as const;
 
-// User roles
+// User roles（議事録: オーナーロール廃止 → 本部管理者が最上位）
 export const ROLES = {
-  OWNER: "owner",
   HQ_ADMIN: "hq_admin",
   CONTRACTOR_ADMIN: "contractor_admin",
   EMPLOYEE: "employee",
@@ -63,36 +62,39 @@ export const ROLES = {
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
+/** 管理者ロール（設定変更・メンバー管理可能） */
+export const ADMIN_ROLES: Role[] = ["hq_admin"];
+
 /**
  * Route prefix → 許可するロール一覧 (未定義 = 全ロール許可)
  * ミドルウェアとクライアントで共有する。
  */
 export const ROUTE_ROLES: Record<string, Role[]> = {
-  "/bi":          ["owner", "hq_admin", "contractor_admin"],
-  "/crm":         ["owner", "hq_admin", "contractor_admin"],
-  "/deals":       ["owner", "hq_admin", "contractor_admin"],
-  "/quotes":      ["owner", "hq_admin", "contractor_admin"],
-  "/craftsmen":   ["owner", "hq_admin", "contractor_admin"],
-  "/contracts":   ["owner", "hq_admin", "contractor_admin"],
-  "/invoices":    ["owner", "hq_admin", "contractor_admin"],
-  "/budget":      ["owner", "hq_admin"],
-  "/marketing":   ["owner", "hq_admin"],
+  "/bi":          ["hq_admin", "contractor_admin"],
+  "/crm":         ["hq_admin", "contractor_admin"],
+  "/deals":       ["hq_admin", "contractor_admin"],
+  "/quotes":      ["hq_admin", "contractor_admin"],
+  "/craftsmen":   ["hq_admin", "contractor_admin"],
+  "/contracts":   ["hq_admin", "contractor_admin"],
+  "/invoices":    ["hq_admin", "contractor_admin"],
+  "/budget":      ["hq_admin"],
+  "/marketing":   [],
 };
 
 /** ナビ項目キー → 許可するロール一覧 (未定義 = 全ロール許可) */
 export const NAV_ITEM_ROLES: Record<string, Role[]> = {
-  bi:                 ["owner", "hq_admin", "contractor_admin"],
-  crm:                ["owner", "hq_admin", "contractor_admin"],
-  deals:              ["owner", "hq_admin", "contractor_admin"],
-  quotes:             ["owner", "hq_admin", "contractor_admin"],
-  craftsmen:          ["owner", "hq_admin", "contractor_admin"],
-  contracts:          ["owner", "hq_admin", "contractor_admin"],
-  invoices:           ["owner", "hq_admin", "contractor_admin"],
-  budget:             ["owner", "hq_admin"],
-  "marketing-email":  ["owner", "hq_admin"],
-  "marketing-sns":    ["owner", "hq_admin"],
-  "marketing-roi":    ["owner", "hq_admin"],
-  "marketing-creative": ["owner", "hq_admin"],
+  bi:                 ["hq_admin", "contractor_admin"],
+  crm:                ["hq_admin", "contractor_admin"],
+  deals:              ["hq_admin", "contractor_admin"],
+  quotes:             ["hq_admin", "contractor_admin"],
+  craftsmen:          ["hq_admin", "contractor_admin"],
+  contracts:          ["hq_admin", "contractor_admin"],
+  invoices:           ["hq_admin", "contractor_admin"],
+  budget:             ["hq_admin"],
+  "marketing-email":  ["hq_admin"],
+  "marketing-sns":    ["hq_admin"],
+  "marketing-roi":    ["hq_admin"],
+  "marketing-creative": ["hq_admin"],
 };
 
 /** ナビ項目にアクセスできるか */
@@ -106,11 +108,12 @@ export function canAccessNavItem(key: string, role: Role): boolean {
 export function canAccessRoute(pathname: string, role: Role): boolean {
   const matched = Object.keys(ROUTE_ROLES).find((p) => pathname.startsWith(p));
   if (!matched) return true;
-  return ROUTE_ROLES[matched].includes(role);
+  const allowed = ROUTE_ROLES[matched];
+  if (allowed.length === 0) return false;
+  return allowed.includes(role);
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
-  owner:            "オーナー",
   hq_admin:         "本部管理者",
   contractor_admin: "施工店管理者",
   employee:         "社員",

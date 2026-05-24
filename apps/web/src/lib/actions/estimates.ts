@@ -184,3 +184,85 @@ export async function deleteEstimate(id: string) {
   const { error } = await supabase.from("estimates").delete().eq("id", id);
   if (error) throw error;
 }
+
+/** 見積改訂版を作成（2回目以降は元見積をコピーして version+1） */
+export async function createEstimateRevision(parentEstimateId: string, constructionId?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const parent = await getEstimate(parentEstimateId);
+  const nextVersion = (parent.version ?? 1) + 1;
+
+  const { count } = await supabase.from("estimates").select("*", { count: "exact", head: true });
+  const estimateNo = `${parent.estimate_no}-R${nextVersion}`;
+
+  const { data: estimate, error } = await supabase
+    .from("estimates")
+    .insert({
+      company_id: profile.company_id,
+      customer_id: parent.customer_id,
+      construction_id: constructionId ?? parent.construction_id ?? null,
+      parent_estimate_id: parentEstimateId,
+      version: nextVersion,
+      estimate_no: estimateNo,
+      title: parent.title ? `${parent.title}（改訂${nextVersion}）` : `改訂見積 v${nextVersion}`,
+      status: "draft",
+      subtotal: parent.subtotal,
+      tax: parent.tax,
+      total: parent.total,
+      cost_total: parent.cost_total,
+      gross_profit: parent.gross_profit,
+      gross_profit_rate: parent.gross_profit_rate,
+      reserve_fee_1_rate: parent.reserve_fee_1_rate ?? 0.02,
+      reserve_fee_2_rate: parent.reserve_fee_2_rate ?? 0.03,
+      default_gross_profit_rate: parent.default_gross_profit_rate ?? 0.5,
+      assigned_to: parent.assigned_to,
+      notes: parent.notes,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  const catMap = new Map<string, string>();
+  for (const cat of parent.categories ?? []) {
+    const { data: newCat } = await supabase
+      .from("estimate_categories")
+      .insert({ company_id: profile.company_id, estimate_id: estimate.id, name: cat.name, sort_order: cat.sort_order })
+      .select()
+      .single();
+    if (newCat) catMap.set(cat.id, newCat.id);
+  }
+
+  if (parent.items?.length) {
+    await supabase.from("estimate_items").insert(
+      parent.items.map((item, i) => ({
+        company_id: profile.company_id,
+        estimate_id: estimate.id,
+        category_id: item.category_id ? catMap.get(item.category_id) ?? null : null,
+        name: item.name,
+        description: item.description,
+        specification: item.specification,
+        quantity: item.quantity,
+        unit: item.unit,
+        cost_price: item.cost_price,
+        cost_amount: item.cost_amount,
+        selling_price: item.selling_price,
+        selling_amount: item.selling_amount,
+        gross_profit: item.gross_profit,
+        gross_profit_rate: item.gross_profit_rate,
+        sort_order: i,
+        notes: item.notes,
+      })),
+    );
+  }
+
+  if (constructionId) {
+    await supabase.from("estimates").update({ construction_id: constructionId }).eq("id", estimate.id);
+  }
+
+  return estimate as Estimate;
+}
+

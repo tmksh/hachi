@@ -19,15 +19,13 @@ import { cn } from "@/lib/utils";
 type TargetType = "all" | "roles";
 
 const ROLE_ORDER: Role[] = [
-  ROLES.OWNER,
   ROLES.HQ_ADMIN,
   ROLES.CONTRACTOR_ADMIN,
   ROLES.EMPLOYEE,
 ];
 
 const ROLE_DESCRIPTIONS: Record<Role, string> = {
-  owner: "会社の代表者",
-  hq_admin: "本社スタッフ",
+  hq_admin: "本社スタッフ（本部管理者）",
   contractor_admin: "施工店責任者",
   employee: "一般スタッフ",
 };

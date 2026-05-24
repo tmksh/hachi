@@ -71,14 +71,12 @@ import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, type Role } from "@/lib/consta
 import { useCompanyPermissions, type CustomRole, type RolePermissions, DEFAULT_PERMISSIONS } from "@/hooks/use-company-permissions";
 
 const ROLE_LABEL: Record<TeamRole, string> = {
-  owner: "オーナー",
   hq_admin: "本部管理者",
   contractor_admin: "施工店管理者",
   employee: "社員",
 };
 
 const ROLE_COLOR: Record<TeamRole, string> = {
-  owner: "bg-amber-100 text-amber-800 border-amber-200",
   hq_admin: "bg-blue-100 text-blue-800 border-blue-200",
   contractor_admin: "bg-emerald-100 text-emerald-800 border-emerald-200",
   employee: "bg-slate-100 text-slate-800 border-slate-200",
@@ -100,6 +98,9 @@ export default function SettingsPage() {
   const [companyPostal, setCompanyPostal] = useState("");
   const [companyRepresentative, setCompanyRepresentative] = useState("");
   const [companyInvoiceNumber, setCompanyInvoiceNumber] = useState("");
+  const [invoiceClosingDay, setInvoiceClosingDay] = useState<"20" | "end_of_month">("end_of_month");
+  const [cloudsignEnabled, setCloudsignEnabled] = useState(false);
+  const [cloudsignApiKey, setCloudsignApiKey] = useState("");
   const [savingCompany, setSavingCompany] = useState(false);
 
   // 署名
@@ -142,8 +143,8 @@ export default function SettingsPage() {
   );
   const [notifLoading, setNotifLoading] = useState(false);
 
-  const canEditCompany = profile?.role === "owner" || profile?.role === "hq_admin";
-  const canManageMembers = profile?.role === "owner" || profile?.role === "hq_admin";
+  const canEditCompany = profile?.role === "hq_admin";
+  const canManageMembers = profile?.role === "hq_admin";
 
   // メンバー管理
   const [members, setMembers] = useState<Profile[]>([]);
@@ -211,6 +212,11 @@ export default function SettingsPage() {
       setCompanyPostal(s?.postal_code ?? "");
       setCompanyRepresentative(s?.representative ?? "");
       setCompanyInvoiceNumber(s?.invoice_number ?? "");
+      setInvoiceClosingDay(s?.invoice_closing_day === "20" ? "20" : "end_of_month");
+      const cs = c.settings as Record<string, unknown>;
+      const cloudsign = cs?.cloudsign as { enabled?: boolean; api_key?: string } | undefined;
+      setCloudsignEnabled(Boolean(cloudsign?.enabled));
+      setCloudsignApiKey(cloudsign?.api_key ?? "");
       const att = (c.settings as Record<string, Record<string, unknown>>)?.attendance_settings;
       if (att) {
         setAttStartTime((att.start_time as string) ?? "09:00");
@@ -218,7 +224,6 @@ export default function SettingsPage() {
         setAttBreakMinutes(String(att.break_minutes ?? "60"));
         if (Array.isArray(att.leave_types)) setAttLeaveTypes(att.leave_types as string[]);
       }
-      const cs = c.settings as Record<string, unknown>;
       if (cs?.role_permissions) {
         setRolePerms({ ...DEFAULT_PERMISSIONS, ...(cs.role_permissions as RolePermissions) });
       }
@@ -255,11 +260,16 @@ export default function SettingsPage() {
         postal_code: companyPostal,
         representative: companyRepresentative,
         invoice_number: companyInvoiceNumber,
+        invoice_closing_day: invoiceClosingDay,
+        cloudsign: {
+          enabled: cloudsignEnabled,
+          api_key: cloudsignApiKey || undefined,
+        },
       });
       setCompany(updated);
       toast.success("会社情報を更新しました");
     } catch {
-      toast.error("更新に失敗しました（owner/hq_admin 権限が必要です）");
+      toast.error("更新に失敗しました（本部管理者権限が必要です）");
     } finally {
       setSavingCompany(false);
     }
@@ -283,7 +293,7 @@ export default function SettingsPage() {
       // owner 列は常に全許可のため保存しない（読み取り専用）
       const permsToSave: RolePermissions = {};
       Object.entries(rolePerms).forEach(([key, roles]) => {
-        permsToSave[key] = roles.filter((r) => r !== "owner");
+        permsToSave[key] = [...roles];
       });
       await updateCompany({ role_permissions: permsToSave, custom_roles: customRoles });
       // localStorage も更新してサイドバーに即反映
@@ -299,14 +309,11 @@ export default function SettingsPage() {
   };
 
   const togglePerm = (featureKey: string, role: string) => {
-    if (role === "owner") return; // owner は変更不可
     setRolePerms((prev) => {
       const current = prev[featureKey] ?? [];
       const next = current.includes(role)
         ? current.filter((r) => r !== role)
         : [...current, role];
-      // owner は必ず含める
-      if (!next.includes("owner")) next.unshift("owner");
       return { ...prev, [featureKey]: next };
     });
   };
@@ -626,6 +633,32 @@ export default function SettingsPage() {
                           <Label>インボイス登録番号</Label>
                           <Input value={companyInvoiceNumber} onChange={(e) => setCompanyInvoiceNumber(e.target.value)} placeholder="T-XXXXXXXXXXXXXXX" />
                         </div>
+                        <div className="space-y-2">
+                          <Label>請求締日</Label>
+                          <Select value={invoiceClosingDay} onValueChange={(v) => setInvoiceClosingDay(v as "20" | "end_of_month")}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="end_of_month">月末締め</SelectItem>
+                              <SelectItem value="20">20日締め</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">工事管理の月次請求自動生成に使用します</p>
+                        </div>
+                        <div className="space-y-2 sm:col-span-2 pt-2 border-t border-border">
+                          <Label>クラウドサイン連携（B案: 顧客別契約）</Label>
+                          <div className="flex items-center gap-3">
+                            <Switch checked={cloudsignEnabled} onCheckedChange={setCloudsignEnabled} />
+                            <span className="text-sm text-muted-foreground">電子契約連携を有効化</span>
+                          </div>
+                          {cloudsignEnabled && (
+                            <Input
+                              type="password"
+                              value={cloudsignApiKey}
+                              onChange={(e) => setCloudsignApiKey(e.target.value)}
+                              placeholder="クラウドサイン APIキー"
+                            />
+                          )}
+                        </div>
                       </div>
                       <div className="flex justify-end">
                         <Button onClick={handleSaveCompany} disabled={savingCompany}>
@@ -653,7 +686,7 @@ export default function SettingsPage() {
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground mt-2">
-                        会社情報の編集は owner / hq_admin 権限が必要です。
+                        会社情報の編集は本部管理者権限が必要です。
                       </p>
                     </div>
                   )}
@@ -692,10 +725,7 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  メンバーは自社のテナント内にのみ追加されます。
-                  {profile?.role === "owner"
-                    ? "オーナーは新規作成できません（1社1オーナー）。"
-                    : "本部管理者は同等以上のロール（オーナー / 本部管理者）を作成できません。"}
+                  メンバーは自社のテナント内にのみ追加されます。本部管理者がロールを割り当てます。
                 </p>
 
                 {membersLoading && members.length === 0 ? (
@@ -722,15 +752,7 @@ export default function SettingsPage() {
                       <tbody>
                         {members.map((m) => {
                           const isSelf = m.id === profile?.id;
-                          const isOwner = m.role === "owner";
-                          const actorIsOwner = profile?.role === "owner";
-                          // 自分自身は編集不可
-                          // オーナーは他のオーナーも編集・削除できる（重複解消のため）
-                          // hq_admin は同格の hq_admin を編集できない
-                          const canEditThis =
-                            !isSelf &&
-                            (actorIsOwner || !isOwner) &&
-                            !(profile?.role === "hq_admin" && m.role === "hq_admin");
+                          const canEditThis = !isSelf;
 
                           return (
                             <tr key={m.id} className="border-t hover:bg-muted/30">
@@ -754,11 +776,7 @@ export default function SettingsPage() {
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {profile?.role === "owner" && (
-                                        <>
-                                          <SelectItem value="hq_admin">本部管理者</SelectItem>
-                                        </>
-                                      )}
+                                      <SelectItem value="hq_admin">本部管理者</SelectItem>
                                       <SelectItem value="contractor_admin">施工店管理者</SelectItem>
                                       <SelectItem value="employee">社員</SelectItem>
                                     </SelectContent>
@@ -840,9 +858,8 @@ export default function SettingsPage() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {(["owner", "hq_admin", "contractor_admin", "employee"] as Role[]).map((role) => {
+                    {(["hq_admin", "contractor_admin", "employee"] as Role[]).map((role) => {
                       const colors: Record<Role, string> = {
-                        owner: "border-amber-200 bg-amber-50 text-amber-800",
                         hq_admin: "border-blue-200 bg-blue-50 text-blue-800",
                         contractor_admin: "border-emerald-200 bg-emerald-50 text-emerald-800",
                         employee: "border-slate-200 bg-slate-50 text-slate-800",
@@ -883,8 +900,7 @@ export default function SettingsPage() {
                 {/* 権限マトリクス（トグル式） */}
                 {(() => {
                   const systemRoles: Role[] = ["hq_admin", "contractor_admin", "employee"];
-                  const allCols: Array<{ key: string; label: string; isOwner?: boolean; color: string }> = [
-                    { key: "owner", label: "オーナー", isOwner: true, color: "bg-amber-100 text-amber-800" },
+                  const allCols: Array<{ key: string; label: string; color: string }> = [
                     { key: "hq_admin", label: "本部管理者", color: "bg-blue-100 text-blue-800" },
                     { key: "contractor_admin", label: "施工店管理者", color: "bg-emerald-100 text-emerald-800" },
                     { key: "employee", label: "社員", color: "bg-slate-100 text-slate-800" },
@@ -933,8 +949,8 @@ export default function SettingsPage() {
                                 <span className="text-sm">{row.label}</span>
                               </td>
                               {allCols.map((col) => {
-                                const has = (rolePerms[row.key] ?? []).includes(col.key) || col.isOwner;
-                                const editable = !col.isOwner && canManageMembers;
+                                const has = (rolePerms[row.key] ?? []).includes(col.key);
+                                const editable = canManageMembers;
                                 return (
                                   <td key={col.key} className="text-center px-1.5 py-1.5">
                                     <button
@@ -1170,9 +1186,7 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {profile?.role === "owner" && (
-                          <SelectItem value="hq_admin">本部管理者</SelectItem>
-                        )}
+                        <SelectItem value="hq_admin">本部管理者</SelectItem>
                         <SelectItem value="contractor_admin">施工店管理者</SelectItem>
                         <SelectItem value="employee">社員</SelectItem>
                       </SelectContent>

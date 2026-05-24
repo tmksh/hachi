@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { getCostBudget, saveCostBudget } from "@/lib/actions/cost-budgets";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Trash2, Plus, MessageSquare, Send, X } from "lucide-react";
 
@@ -360,6 +362,7 @@ function CommentableCell({
 interface Props {
   constructionId: string;
   contractAmount?: number;
+  periodStart?: string | null;
   initialOrders?: Array<{
     id: string;
     title: string;
@@ -368,7 +371,33 @@ interface Props {
     work_content?: string | null;
     craftsman?: { name: string } | null;
   }>;
+  initialEstimateItems?: Array<{
+    id: string;
+    name: string;
+    cost_amount: number;
+    selling_amount: number;
+    category_id: string | null;
+  }>;
   authorName?: string;
+}
+
+function mapEstimateItemsToRows(items: Props["initialEstimateItems"]): ContractorRow[] {
+  if (!items?.length) return [];
+  return items.map((item) => ({
+    id: item.id,
+    status: "未発注",
+    name: "",
+    work_type: item.name,
+    budget: Number(item.selling_amount || item.cost_amount || 0),
+    add_contract_1: 0,
+    add_contract_2: 0,
+    management_budget: Number(item.selling_amount || item.cost_amount || 0),
+    order_amount: Number(item.cost_amount || 0),
+    add_order_1: 0,
+    add_order_2: 0,
+    add_order_3: 0,
+    monthly: {},
+  }));
 }
 
 function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
@@ -390,18 +419,57 @@ function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
   }));
 }
 
-export function CostBudgetTab({ constructionId, contractAmount: propAmount, initialOrders, authorName = "ユーザー" }: Props) {
+export function CostBudgetTab({ constructionId, contractAmount: propAmount, periodStart, initialOrders, initialEstimateItems, authorName = "ユーザー" }: Props) {
   const mappedRows = useMemo(() => mapOrdersToRows(initialOrders), [initialOrders]);
+  const estimateRows = useMemo(() => mapEstimateItemsToRows(initialEstimateItems), [initialEstimateItems]);
   const fallbackPattern = PATTERNS[constructionId.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % PATTERNS.length];
-  const initialRows = mappedRows.length > 0 ? mappedRows : fallbackPattern.rows.map(r => ({ ...r, monthly: { ...r.monthly } }));
+  const initialRows = mappedRows.length > 0
+    ? mappedRows
+    : estimateRows.length > 0
+      ? estimateRows
+      : fallbackPattern.rows.map(r => ({ ...r, monthly: { ...r.monthly } }));
 
   const [rows, setRows] = useState<ContractorRow[]>(() =>
     initialRows.map(r => ({ ...r, monthly: { ...r.monthly } }))
   );
-  const [saved, setSaved] = useState(false);
-
-  /* ── コメント ── */
   const [comments, setComments] = useState<CellComment[]>([]);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const defaultPeriod = periodStart?.slice(0, 7) ?? "2025-01";
+  const resolvedContractAmount =
+    propAmount && propAmount > 0 ? propAmount : fallbackPattern.contract_amount;
+
+  useEffect(() => {
+    getCostBudget(constructionId).then((data) => {
+      if (data?.rows?.length) {
+        setRows(data.rows.map(r => ({ ...r, monthly: { ...r.monthly } })));
+        setComments(data.comments ?? []);
+      }
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, [constructionId]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await saveCostBudget({
+        constructionId,
+        contractAmount: resolvedContractAmount,
+        periodStart: defaultPeriod,
+        rows,
+        comments,
+      });
+      setSaved(true);
+      toast.success("工事台帳を保存しました");
+    } catch {
+      toast.error("保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const [openPopover, setOpenPopover] = useState<{ cellKey: string; rect: DOMRect } | null>(null);
   const [commentMode, setCommentMode] = useState(false);
 
@@ -443,10 +511,9 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, init
     setOpenPopover(prev => prev?.cellKey === cellKey ? null : { cellKey, rect });
   }, [commentMode]);
 
-  const contractAmount =
-    propAmount && propAmount > 0 ? propAmount : fallbackPattern.contract_amount;
+  const contractAmount = resolvedContractAmount;
 
-  const months = getMonths("2025-08");
+  const months = getMonths(defaultPeriod);
 
   /* ── row update helpers ── */
   const updateField = useCallback(
@@ -551,7 +618,8 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, init
             )}
           </button>
           <button
-            onClick={() => setSaved(true)}
+            onClick={handleSave}
+            disabled={saving}
             className={cn(
               "text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
               saved
@@ -559,7 +627,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, init
                 : "bg-[#6BC9B3] text-white hover:bg-[#4aab96] shadow-[0_2px_6px_rgba(107,201,179,0.50),0_1px_2px_rgba(107,201,179,0.30),inset_0_1px_0_rgba(255,255,255,0.25)] hover:shadow-[0_4px_10px_rgba(107,201,179,0.55),0_2px_4px_rgba(107,201,179,0.35),inset_0_1px_0_rgba(255,255,255,0.28)] hover:-translate-y-px active:translate-y-0 active:shadow-inner"
             )}
           >
-            {saved ? "保存済み" : "保存する"}
+            {saved ? "保存済み" : saving ? "保存中..." : "保存する"}
           </button>
         </div>
       </div>

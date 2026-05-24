@@ -63,6 +63,8 @@ export async function updateCompany(input: {
   postal_code?: string;
   representative?: string;
   invoice_number?: string;
+  invoice_closing_day?: "20" | "end_of_month";
+  cloudsign?: { enabled?: boolean; api_key?: string; client_id?: string };
   attendance_settings?: Record<string, unknown>;
   role_permissions?: Record<string, string[]>;
   custom_roles?: Array<{ id: string; name: string; base_role: string; color: string }>;
@@ -73,7 +75,7 @@ export async function updateCompany(input: {
 
   const { data: profile } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
-  if (!["owner", "hq_admin"].includes(profile.role)) throw new Error("権限がありません");
+  if (profile.role !== "hq_admin") throw new Error("権限がありません");
 
   const { data: current } = await supabase.from("companies").select("settings").eq("id", profile.company_id).single();
 
@@ -84,6 +86,13 @@ export async function updateCompany(input: {
     ...(input.postal_code !== undefined ? { postal_code: input.postal_code } : {}),
     ...(input.representative !== undefined ? { representative: input.representative } : {}),
     ...(input.invoice_number !== undefined ? { invoice_number: input.invoice_number } : {}),
+    ...(input.invoice_closing_day !== undefined ? { invoice_closing_day: input.invoice_closing_day } : {}),
+    ...(input.cloudsign !== undefined ? {
+      cloudsign: {
+        ...((current?.settings as Record<string, unknown> | null)?.cloudsign as Record<string, unknown> ?? {}),
+        ...input.cloudsign,
+      },
+    } : {}),
     ...(input.attendance_settings !== undefined ? { attendance_settings: input.attendance_settings } : {}),
     ...(input.role_permissions !== undefined ? { role_permissions: input.role_permissions } : {}),
     ...(input.custom_roles !== undefined ? { custom_roles: input.custom_roles } : {}),

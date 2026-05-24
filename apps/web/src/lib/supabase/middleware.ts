@@ -3,15 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // ルートプレフィックス → 許可ロール（ここで完結させて Edge Runtime の import を最小化）
 const ROUTE_ROLES: Record<string, string[]> = {
-  "/bi":        ["owner", "hq_admin", "contractor_admin"],
-  "/crm":       ["owner", "hq_admin", "contractor_admin"],
-  "/deals":     ["owner", "hq_admin", "contractor_admin"],
-  "/quotes":    ["owner", "hq_admin", "contractor_admin"],
-  "/craftsmen": ["owner", "hq_admin", "contractor_admin"],
-  "/contracts": ["owner", "hq_admin", "contractor_admin"],
-  "/invoices":  ["owner", "hq_admin", "contractor_admin"],
-  "/budget":    ["owner", "hq_admin"],
-  "/marketing": ["owner", "hq_admin"],
+  "/bi":        ["hq_admin", "contractor_admin"],
+  "/crm":       ["hq_admin", "contractor_admin"],
+  "/deals":     ["hq_admin", "contractor_admin"],
+  "/quotes":    ["hq_admin", "contractor_admin"],
+  "/craftsmen": ["hq_admin", "contractor_admin"],
+  "/contracts": ["hq_admin", "contractor_admin"],
+  "/invoices":  ["hq_admin", "contractor_admin"],
+  "/budget":    ["hq_admin"],
+  "/marketing": [],
 };
 
 // ── サブドメイン予約語（これらは会社 slug として使えない） ───────────────────────
@@ -209,7 +209,7 @@ export async function updateSession(request: NextRequest) {
       const role = profile?.role as string | undefined;
       const allowed = ROUTE_ROLES[matchedPath];
 
-      if (!role || !allowed.includes(role)) {
+      if (!role || allowed.length === 0 || !allowed.includes(role)) {
         const url = request.nextUrl.clone();
         url.pathname = "/unauthorized";
         return NextResponse.redirect(url);

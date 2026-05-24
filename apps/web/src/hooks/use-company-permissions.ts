@@ -17,11 +17,10 @@ export type RolePermissions = Record<string, string[]>;
 const STORAGE_KEY = "bridge_role_permissions";
 const CUSTOM_ROLES_KEY = "bridge_custom_roles";
 
-/** NAV_ITEM_ROLES から初期値を生成（owner は常に全機能アクセス） */
+/** NAV_ITEM_ROLES から初期値を生成 */
 function buildDefaultPerms(): RolePermissions {
-  const all: Role[] = ["owner", "hq_admin", "contractor_admin", "employee"];
+  const all: Role[] = ["hq_admin", "contractor_admin", "employee"];
   const result: RolePermissions = {};
-  // 制限なし機能はすべてのロールに付与
   const allKeys = [
     "dashboard", "bi", "crm", "deals", "quotes", "craftsmen",
     "contracts", "constructions", "invoices", "budget",
@@ -31,12 +30,11 @@ function buildDefaultPerms(): RolePermissions {
     const restricted = NAV_ITEM_ROLES[key] as Role[] | undefined;
     result[key] = restricted ? [...restricted] : [...all];
   });
-  // 管理系
-  result["settings_member"]     = ["owner", "hq_admin"];
-  result["settings_company"]    = ["owner", "hq_admin"];
-  result["settings_attendance"] = ["owner", "hq_admin"];
-  result["settings_workflow"]   = ["owner", "hq_admin"];
-  result["settings_crm"]        = ["owner", "hq_admin"];
+  result["settings_member"]     = ["hq_admin"];
+  result["settings_company"]    = ["hq_admin"];
+  result["settings_attendance"] = ["hq_admin"];
+  result["settings_workflow"]   = ["hq_admin"];
+  result["settings_crm"]        = ["hq_admin"];
   return result;
 }
 

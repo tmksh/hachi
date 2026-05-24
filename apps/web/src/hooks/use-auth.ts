@@ -63,12 +63,12 @@ export function useAuth() {
 
   const role = profile?.role ?? null;
 
-  /** owner または hq_admin */
-  const isAdmin = role === "owner" || role === "hq_admin";
-  /** オーナーのみ */
-  const isOwner = role === "owner";
-  /** 施工店管理者以上 (contractor_admin | hq_admin | owner) */
-  const isManager = role === "owner" || role === "hq_admin" || role === "contractor_admin";
+  /** 本部管理者 */
+  const isAdmin = role === "hq_admin";
+  /** @deprecated オーナーロール廃止 — hq_admin と同等 */
+  const isOwner = role === "hq_admin";
+  /** 施工店管理者以上 */
+  const isManager = role === "hq_admin" || role === "contractor_admin";
   /** 一般社員 */
   const isEmployee = role === "employee";
 

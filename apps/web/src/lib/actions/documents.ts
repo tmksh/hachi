@@ -64,16 +64,22 @@ export async function deleteDocumentCategory(id: string) {
   if (error) throw error;
 }
 
-export async function getDocuments(category?: string) {
+export async function getDocuments(filters?: { category?: string; customer_id?: string; construction_id?: string }) {
   const supabase = await createClient();
   let query = supabase
     .from("documents")
-    .select("*, uploader:profiles!documents_uploaded_by_fkey(id, display_name)")
+    .select("*, uploader:profiles!documents_uploaded_by_fkey(id, display_name), customer:customers(id, name)")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
-  if (category && category !== "all") {
-    query = query.eq("category", category);
+  if (filters?.category && filters.category !== "all") {
+    query = query.eq("category", filters.category);
+  }
+  if (filters?.customer_id) {
+    query = query.eq("customer_id", filters.customer_id);
+  }
+  if (filters?.construction_id) {
+    query = query.eq("construction_id", filters.construction_id);
   }
 
   const { data, error } = await query;
@@ -89,6 +95,8 @@ export async function createDocument(input: {
   file_name: string;
   mime_type?: string;
   size?: number;
+  customer_id?: string;
+  construction_id?: string;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -107,6 +115,8 @@ export async function createDocument(input: {
       file_name: input.file_name,
       mime_type: input.mime_type || null,
       size: input.size || 0,
+      customer_id: input.customer_id || null,
+      construction_id: input.construction_id || null,
       uploaded_by: user.id,
     })
     .select()

@@ -127,7 +127,7 @@ BEGIN
     (
       owner_id, company_id,
       'テスト オーナー', 'owner@bridge.test',
-      'owner', 'general', '代表取締役',
+      'hq_admin', 'general', '代表取締役',
       NOW(), NOW()
     ),
     (
@@ -151,7 +151,7 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   RAISE NOTICE '✅ シードデータの挿入が完了しました。';
-  RAISE NOTICE '   owner@bridge.test       / Bridge2024!  → オーナー';
+  RAISE NOTICE '   owner@bridge.test       / Bridge2024!  → 本部管理者';
   RAISE NOTICE '   hqadmin@bridge.test     / Bridge2024!  → 本部管理者';
   RAISE NOTICE '   contractor@bridge.test  / Bridge2024!  → 施工店管理者';
   RAISE NOTICE '   employee@bridge.test    / Bridge2024!  → 社員';
