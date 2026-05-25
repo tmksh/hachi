@@ -335,7 +335,7 @@ async function netlifyAddDomain(slug: string): Promise<string> {
   if (existing.includes(domain)) return domain;
 
   const patchRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}`, {
-    method: "PATCH",
+    method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -369,7 +369,7 @@ async function netlifyRemoveDomain(slug: string): Promise<void> {
   if (updated.length === existing.length) return;
 
   await fetch(`https://api.netlify.com/api/v1/sites/${siteId}`, {
-    method: "PATCH",
+    method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -430,13 +430,18 @@ export async function createAdminCompany(input: {
   }
 
   // 4. slug が設定されていれば Netlify にドメインエイリアスを追加（失敗しても登録自体はロールバックしない）
+  let netlifyDomain: string | null = null;
+  let netlifyError: string | null = null;
   if (input.slug) {
-    await netlifyAddDomain(input.slug).catch((e) => {
+    try {
+      netlifyDomain = await netlifyAddDomain(input.slug);
+    } catch (e) {
+      netlifyError = e instanceof Error ? e.message : String(e);
       console.error("[netlifyAddDomain]", e);
-    });
+    }
   }
 
-  return { companyId: company.id, userId: authData.user.id };
+  return { companyId: company.id, userId: authData.user.id, netlifyDomain, netlifyError };
 }
 
 /** 既存企業のサブドメインを Netlify に再同期する */
