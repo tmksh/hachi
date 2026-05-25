@@ -311,6 +311,73 @@ export async function getAdminBiGrossRateDistribution() {
   return buckets;
 }
 
+/* ─────────────────────── Netlify ドメインエイリアス自動管理 ──────────────────────── */
+
+async function netlifyAddDomain(slug: string): Promise<string> {
+  const token = process.env.NETLIFY_TOKEN;
+  const siteId = process.env.NETLIFY_SITE_ID;
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
+  if (!token || !siteId || !appDomain) {
+    throw new Error("Netlify 環境変数 (NETLIFY_TOKEN / NETLIFY_SITE_ID / NEXT_PUBLIC_APP_DOMAIN) が未設定です");
+  }
+
+  const domain = `${slug}.${appDomain}`;
+
+  const getRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!getRes.ok) {
+    throw new Error(`Netlify サイト取得失敗 (${getRes.status})`);
+  }
+
+  const site = await getRes.json() as { domain_aliases?: string[] };
+  const existing: string[] = site.domain_aliases ?? [];
+  if (existing.includes(domain)) return domain;
+
+  const patchRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ domain_aliases: [...existing, domain] }),
+  });
+  if (!patchRes.ok) {
+    const body = await patchRes.text();
+    throw new Error(`Netlify ドメイン追加失敗 (${patchRes.status}): ${body}`);
+  }
+
+  return domain;
+}
+
+async function netlifyRemoveDomain(slug: string): Promise<void> {
+  const token = process.env.NETLIFY_TOKEN;
+  const siteId = process.env.NETLIFY_SITE_ID;
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
+  if (!token || !siteId || !appDomain) return;
+
+  const domain = `${slug}.${appDomain}`;
+
+  const getRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!getRes.ok) return;
+
+  const site = await getRes.json() as { domain_aliases?: string[] };
+  const existing: string[] = site.domain_aliases ?? [];
+  const updated = existing.filter((d) => d !== domain);
+  if (updated.length === existing.length) return;
+
+  await fetch(`https://api.netlify.com/api/v1/sites/${siteId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ domain_aliases: updated }),
+  });
+}
+
 /* ─────────────────────── 企業追加（オーナーアカウント込み） ─────────────────────── */
 
 export async function createAdminCompany(input: {
@@ -362,11 +429,40 @@ export async function createAdminCompany(input: {
     throw profileError;
   }
 
+  // 4. slug が設定されていれば Netlify にドメインエイリアスを追加（失敗しても登録自体はロールバックしない）
+  if (input.slug) {
+    await netlifyAddDomain(input.slug).catch((e) => {
+      console.error("[netlifyAddDomain]", e);
+    });
+  }
+
   return { companyId: company.id, userId: authData.user.id };
+}
+
+/** 既存企業のサブドメインを Netlify に再同期する */
+export async function syncAdminCompanyDomain(companyId: string) {
+  await assertSuperAdmin();
+  const supabase = createAdminClient();
+  const { data: company, error } = await supabase
+    .from("companies")
+    .select("slug")
+    .eq("id", companyId)
+    .single();
+  if (error || !company?.slug) throw new Error("slug が設定された企業が見つかりません");
+
+  const domain = await netlifyAddDomain(company.slug);
+  return { domain };
 }
 
 export async function deleteAdminCompany(companyId: string) {
   const supabase = await assertSuperAdmin();
+
+  // slug を取得（Netlify からドメインを削除するため）
+  const { data: companyData } = await supabase
+    .from("companies")
+    .select("slug")
+    .eq("id", companyId)
+    .single();
 
   // プロフィール → Auth ユーザーを先に削除してから企業削除（CASCADE があるので companies 削除で連鎖するが念のため）
   const { data: profiles } = await supabase
@@ -380,4 +476,9 @@ export async function deleteAdminCompany(companyId: string) {
 
   const { error } = await supabase.from("companies").delete().eq("id", companyId);
   if (error) throw error;
+
+  // Netlify からドメインエイリアスを削除（失敗しても無視）
+  if (companyData?.slug) {
+    await netlifyRemoveDomain(companyData.slug).catch(() => {});
+  }
 }
