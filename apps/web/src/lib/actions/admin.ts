@@ -315,10 +315,15 @@ export async function getAdminBiGrossRateDistribution() {
 
 async function netlifyAddDomain(slug: string): Promise<string> {
   const token = process.env.NETLIFY_TOKEN;
-  const siteId = process.env.NETLIFY_SITE_ID;
+  const siteId = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
   const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
-  if (!token || !siteId || !appDomain) {
-    throw new Error("Netlify 環境変数 (NETLIFY_TOKEN / NETLIFY_SITE_ID / NEXT_PUBLIC_APP_DOMAIN) が未設定です");
+  const missing = [
+    !token && "NETLIFY_TOKEN",
+    !siteId && "NETLIFY_SITE_ID",
+    !appDomain && "NEXT_PUBLIC_APP_DOMAIN",
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    throw new Error(`Netlify 環境変数が未設定です: ${missing.join(", ")}`);
   }
 
   const domain = `${slug}.${appDomain}`;
@@ -352,7 +357,7 @@ async function netlifyAddDomain(slug: string): Promise<string> {
 
 async function netlifyRemoveDomain(slug: string): Promise<void> {
   const token = process.env.NETLIFY_TOKEN;
-  const siteId = process.env.NETLIFY_SITE_ID;
+  const siteId = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
   const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
   if (!token || !siteId || !appDomain) return;
 

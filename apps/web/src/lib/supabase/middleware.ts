@@ -88,14 +88,12 @@ export async function updateSession(request: NextRequest) {
     const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN!;
     const { pathname } = request.nextUrl;
 
-    // slug が DB に存在するか確認
-    const { data: company } = await supabase
-      .from("companies")
-      .select("id")
-      .eq("slug", slug)
-      .single();
+    // slug が DB に存在するか確認（RLS を避け id のみ取得）
+    const { data: companyId } = await supabase.rpc("resolve_company_id_by_slug", {
+      p_slug: slug,
+    });
 
-    if (!company) {
+    if (!companyId) {
       // 存在しない slug → apex ドメインのトップにリダイレクト
       const url = request.nextUrl.clone();
       url.host = appDomain;
@@ -125,7 +123,7 @@ export async function updateSession(request: NextRequest) {
         .eq("id", user.id)
         .single();
 
-      if (profile && profile.company_id !== company.id) {
+      if (profile && profile.company_id !== companyId) {
         // 自テナントのサブドメインにリダイレクト
         const { data: myCompany } = await supabase
           .from("companies")
@@ -146,7 +144,7 @@ export async function updateSession(request: NextRequest) {
 
     // サブドメイン情報をヘッダーで Server Components に伝搬
     supabaseResponse.headers.set("x-tenant-slug", slug);
-    supabaseResponse.headers.set("x-tenant-id", company.id);
+    supabaseResponse.headers.set("x-tenant-id", companyId);
     return supabaseResponse;
   }
   // ── ここから下は従来のシングルドメイン動作（現状と完全に同一） ─────────────
