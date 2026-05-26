@@ -5,3 +5,16 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Netlify デフォルト URL → 本番ドメインへ統一
+[[redirects]]
+  from = "https://hachigreen.netlify.app/*"
+  to = "https://bridge-linq.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://hachigreen.netlify.app/*"
+  to = "https://bridge-linq.com/:splat"
+  status = 301
+  force = true

@@ -28,6 +28,20 @@ const RESERVED_SUBDOMAINS = new Set([
  * - www.bridge.jp, bridge.jp → null（apex / www はテナントなし）
  * - acme.bridge.jp → "acme"
  */
+/** Netlify デフォルト URL (*.netlify.app) → 本番ドメインへ統一 */
+function redirectToCanonicalDomain(request: NextRequest): NextResponse | null {
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
+  if (!appDomain) return null;
+
+  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  if (!hostname.endsWith(".netlify.app")) return null;
+
+  const url = request.nextUrl.clone();
+  url.protocol = "https:";
+  url.host = appDomain;
+  return NextResponse.redirect(url);
+}
+
 function extractSubdomain(request: NextRequest): string | null {
   const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN; // 例: "bridge.jp"
   if (!appDomain) return null;
@@ -54,6 +68,9 @@ function extractSubdomain(request: NextRequest): string | null {
 }
 
 export async function updateSession(request: NextRequest) {
+  const canonicalRedirect = redirectToCanonicalDomain(request);
+  if (canonicalRedirect) return canonicalRedirect;
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

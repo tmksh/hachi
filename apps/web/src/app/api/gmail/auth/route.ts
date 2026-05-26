@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getRequestOrigin } from "@/lib/request-origin";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const origin = getRequestOrigin(request);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_APP_URL!));
+    return NextResponse.redirect(new URL("/login", origin));
   }
 
   const scopes = [
@@ -21,7 +23,7 @@ export async function GET() {
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/gmail/callback`,
+    redirect_uri: `${origin}/api/gmail/callback`,
     response_type: "code",
     scope: scopes,
     access_type: "offline",

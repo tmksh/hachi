@@ -426,21 +426,19 @@ export default function Dashboard3Page() {
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         {loading ? Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-2">
-            <Skeleton className="h-3 w-16" /><Skeleton className="h-7 w-24" />
+          <div key={i} className="bg-white rounded-lg px-3 py-2.5 border border-slate-100 shadow-sm">
+            <Skeleton className="h-6 w-full" />
           </div>
         )) : kpis.map((kpi, i) => (
-          <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex flex-col gap-1 group hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">{kpi.label}</span>
-              <div className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ background: kpi.color + "18" }}>
-                <kpi.icon className="h-3.5 w-3.5" style={{ color: kpi.color }} />
-              </div>
+          <div key={i} className="bg-white rounded-lg px-3 py-2.5 border border-slate-100 shadow-sm flex items-center gap-2.5 group hover:shadow-md transition-shadow">
+            <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0" style={{ background: kpi.color + "18" }}>
+              <kpi.icon className="h-3.5 w-3.5" style={{ color: kpi.color }} />
             </div>
-            <p className="text-2xl font-black tabular-nums tracking-tight text-slate-900 leading-none">{kpi.value}</p>
-            <p className="text-[11px] text-slate-400">{kpi.sub}</p>
+            <span className="text-xs font-semibold text-slate-500 shrink-0">{kpi.label}</span>
+            <p className="text-xl font-black tabular-nums tracking-tight text-slate-900 leading-none ml-auto">{kpi.value}</p>
+            <span className="text-xs text-slate-400 shrink-0">{kpi.sub}</span>
           </div>
         ))}
       </div>
