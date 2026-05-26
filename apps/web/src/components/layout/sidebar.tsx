@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { TEAL_ACTIVE_GRADIENT, TEAL_TITLE } from "@/lib/teal-theme";
+import { BLUE_ACTIVE_GRADIENT } from "@/lib/blue-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, canAccessNavItem, ROLE_LABELS } from "@/lib/constants";
 import { useKpiColor } from "@/hooks/use-kpi-color";
@@ -114,8 +116,12 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
 
   const unreadCount = notifications.length;
 
+  const useBlueSidebar = pathname.startsWith("/dashboard2");
+
   const isActive = (href: string) => {
-    if (href === "/dashboard") return pathname === "/dashboard";
+    if (href === "/dashboard") {
+      return pathname === "/dashboard" || pathname.startsWith("/dashboard2");
+    }
     return pathname.startsWith(href);
   };
 
@@ -146,25 +152,36 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
     setOpenGroup((prev) => (prev === key ? null : key));
   };
 
-  /** アクティブな背景色（薄め） */
-  const activeBg  = hexAlpha(kpiColor, 0.12);
-  /** アクティブテキスト色 */
-  const activeClr = kpiColor;
-  /** アクティブ塗りつぶし（サブアイテム） */
-  const activeFill = kpiColor;
+  const sidebarActiveItem = "text-white font-medium shadow-sm";
+  const sidebarActiveSubItem = "text-white font-medium shadow-sm";
+  const sidebarActiveIndicator = "bg-white/90";
+  const sidebarActiveStyle = {
+    background: useBlueSidebar ? BLUE_ACTIVE_GRADIENT : TEAL_ACTIVE_GRADIENT,
+  };
+  const groupActiveText = useBlueSidebar
+    ? "text-slate-800 dark:text-slate-200"
+    : `${TEAL_TITLE} dark:text-[#D8EDE4]`;
 
   return (
     <TooltipProvider delayDuration={300}>
       <motion.aside
         animate={{ width: expanded ? 220 : 68 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl"
+        className={cn(
+          "fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl",
+          useBlueSidebar && "sidebar-theme-blue",
+        )}
       >
         {/* Logo — クリックでサイドバー開閉 */}
-        <div className="flex h-16 items-center px-3 gap-2 mb-1">
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            expanded ? "h-14 px-3" : "h-12 justify-center px-1",
+          )}
+        >
           <button
             onClick={() => onExpandedChange(!expanded)}
-            className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl hover:bg-white/20"
+            className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl sidebar-nav-hover"
           >
             <Image src="/logo.png" alt="BRIDGE" width={40} height={34} className="object-contain w-8 h-auto" />
           </button>
@@ -184,7 +201,13 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
         </div>
 
         {/* Nav Groups */}
-        <nav className="flex-1 flex flex-col gap-0.5 py-3 overflow-y-auto px-2">
+        <nav
+          className={cn(
+            "flex-1 flex flex-col gap-1 min-h-0 overflow-y-auto",
+            expanded ? "py-3 px-2" : "py-2 px-1 items-center",
+            useBlueSidebar && "text-slate-800",
+          )}
+        >
           {visibleGroups.map((group) => {
             const Icon = GROUP_ICONS[group.key as keyof typeof GROUP_ICONS];
             const active = isGroupActive(group.key);
@@ -198,18 +221,19 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                     <button
                       onClick={() => toggleGroup(group.key)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
-                        "hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50",
+                        "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium sidebar-nav-hover",
+                        active && groupActiveText,
                       )}
-                      style={active ? { color: activeClr } : undefined}
                     >
                       <span className="shrink-0 relative">
                         {Icon && <Icon className="h-5 w-5" />}
                         {active && (
                           <motion.div
                             layoutId="sidebar-active"
-                            className="absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full"
-                            style={{ backgroundColor: activeClr }}
+                            className={cn(
+                              "absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full",
+                              sidebarActiveIndicator,
+                            )}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                           />
                         )}
@@ -239,14 +263,12 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                                 key={item.key}
                                 href={item.href}
                                 className={cn(
-                                  "flex items-center px-3 py-1.5 rounded-lg text-sm transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis",
+                                  "flex items-center px-3 py-1.5 rounded-lg text-sm whitespace-nowrap overflow-hidden text-ellipsis sidebar-nav-hover",
                                   isActive(item.href)
-                                    ? "font-medium shadow-sm"
-                                    : "text-muted-foreground hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50 hover:text-foreground"
+                                    ? sidebarActiveSubItem
+                                    : "text-muted-foreground hover:text-foreground"
                                 )}
-                                style={isActive(item.href)
-                                  ? { backgroundColor: activeFill, color: "white" }
-                                  : undefined}
+                                style={isActive(item.href) ? sidebarActiveStyle : undefined}
                               >
                                 {item.label}
                               </Link>
@@ -262,18 +284,19 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                     <HoverCardTrigger asChild>
                       <button
                         className={cn(
-                          "relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200",
-                          "hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50",
-                          !active && "text-muted-foreground"
+                          "relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover",
+                          active ? sidebarActiveItem : "text-muted-foreground",
                         )}
-                        style={active ? { backgroundColor: activeBg, color: activeClr } : undefined}
+                        style={active ? sidebarActiveStyle : undefined}
                       >
                         {Icon && <Icon className="h-5 w-5" />}
                         {active && (
                           <motion.div
                             layoutId="sidebar-active"
-                            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full"
-                            style={{ backgroundColor: activeClr }}
+                            className={cn(
+                              "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full",
+                              sidebarActiveIndicator,
+                            )}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                           />
                         )}
@@ -289,14 +312,10 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                             key={item.key}
                             href={item.href}
                             className={cn(
-                              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block",
-                              isActive(item.href)
-                                ? "font-medium"
-                                : "hover:bg-accent text-foreground"
+                              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block sidebar-nav-hover",
+                              isActive(item.href) ? sidebarActiveSubItem : "text-foreground",
                             )}
-                            style={isActive(item.href)
-                              ? { backgroundColor: activeFill, color: "white" }
-                              : undefined}
+                            style={isActive(item.href) ? sidebarActiveStyle : undefined}
                           >
                             {item.label}
                           </Link>
@@ -312,21 +331,26 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
         </nav>
 
         {/* Bottom actions */}
-        <div className="flex flex-col gap-0.5 pb-3 pt-3 px-2">
+        <div
+          className={cn(
+            "flex shrink-0 flex-col gap-1",
+            expanded ? "py-3 px-2" : "py-2 px-1 items-center",
+          )}
+        >
           {expanded ? (
             <>
-              <button onClick={() => setSearchOpen(true)} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <button onClick={() => setSearchOpen(true)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
                 <Search className="h-5 w-5 shrink-0" />
                 <span className="whitespace-nowrap">検索</span>
               </button>
-              <button onClick={() => setNotifOpen(true)} className="relative flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <button onClick={() => setNotifOpen(true)} className="relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
                 <Bell className="h-5 w-5 shrink-0" />
                 <span className="whitespace-nowrap">通知</span>
                 {unreadCount > 0 && <span className="absolute top-2.5 left-[30px] h-2 w-2 rounded-full bg-destructive" />}
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm hover:bg-accent transition-colors">
+                  <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm sidebar-nav-hover transition-colors">
                     <Avatar className="h-6 w-6 shrink-0 border-2 border-transparent hover:border-primary/20 transition-colors">
                       <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
                         {profile?.display_name?.charAt(0) ?? "U"}
@@ -372,7 +396,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button onClick={() => setSearchOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent transition-colors">
+                  <button onClick={() => setSearchOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
                     <Search className="h-5 w-5" />
                   </button>
                 </TooltipTrigger>
@@ -380,7 +404,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button onClick={() => setNotifOpen(true)} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent transition-colors">
+                  <button onClick={() => setNotifOpen(true)} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
                     <Bell className="h-5 w-5" />
                     {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive" />}
                   </button>

@@ -82,7 +82,7 @@ export async function getDashboardData() {
     supabase.from("deals").select("stage, value, updated_at, created_at"),
     supabase
       .from("constructions")
-      .select("id, title, status, progress, end_date, assigned_to, assignee:profiles!constructions_assigned_to_fkey(display_name)")
+      .select("id, title, status, progress, end_date, assigned_to, customer_id, customer:customers(id, name), assignee:profiles!constructions_assigned_to_fkey(display_name)")
       .in("status", ["in_progress", "preparing"])
       .order("end_date")
       .limit(5),
@@ -94,7 +94,7 @@ export async function getDashboardData() {
       .limit(5),
     supabase
       .from("deals")
-      .select("id, title, stage, value, updated_at, customer:customers(name)")
+      .select("id, title, stage, value, updated_at, customer:customers(id, name)")
       .order("updated_at", { ascending: false })
       .limit(12),
     supabase
@@ -160,13 +160,14 @@ export async function getDashboardData() {
       .filter((d) => !["won", "lost"].includes(d.stage))
       .slice(0, 5)
       .map((d) => {
-      const customer = d.customer as { name?: string } | null;
+      const customer = d.customer as { id?: string; name?: string } | null;
       return {
         id: d.id,
         title: d.title,
         stage: d.stage,
         stageLabel: DEAL_STAGE_LABELS[d.stage] ?? d.stage,
         value: d.value,
+        customerId: customer?.id ?? null,
         customerName: customer?.name ?? "—",
       };
     }),

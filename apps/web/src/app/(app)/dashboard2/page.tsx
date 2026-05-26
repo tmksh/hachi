@@ -1,41 +1,41 @@
 "use client";
 
-const AVATAR_COLORS = [
-  "bg-violet-500", "bg-blue-500", "bg-cyan-500", "bg-teal-500",
-  "bg-emerald-500", "bg-amber-500", "bg-orange-500", "bg-rose-500",
-  "bg-pink-500", "bg-indigo-500",
-];
-function avatarColor(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useWidgets } from "@/hooks/use-widgets";
-import { WidgetCustomizer } from "@/components/shared/widget-customizer";
-import { SortableWidget } from "@/components/shared/sortable-widget";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import {
   LogIn,
   LogOut,
   TrendingUp,
   Users,
   Briefcase,
-  HardHat,
   BarChart3,
-  ExternalLink,
+  ArrowUpRight,
+  Sparkles,
   Check,
   CheckCircle2,
+  HardHat,
+  FileText,
+  Receipt,
+  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
 import { AnalogClock } from "@/components/shared/analog-clock";
+import { SortableWidget } from "@/components/shared/sortable-widget";
+import { useWidgets } from "@/hooks/use-widgets";
 import {
   DndContext,
   closestCorners,
@@ -47,6 +47,20 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 
+import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
+import {
+  BLUE,
+  BLUE_CARD_SM,
+  BLUE_HOVER,
+  BLUE_TITLE,
+  BLUE_MUTED,
+  BLUE_KPI_ICON,
+  BLUE_KPI_ICON_STYLE,
+  BLUE_ACTIVE_GRADIENT,
+  CHART_WON_LEGEND,
+  CHART_PIPELINE_LEGEND,
+} from "@/lib/blue-theme";
+
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
 function formatYen(n: number) {
@@ -55,14 +69,104 @@ function formatYen(n: number) {
   return `¥${n.toLocaleString()}`;
 }
 
-const kpiColor = "#18181b";
+const KPI_ICON_CLASS = BLUE_KPI_ICON;
+const KPI_ICON_INNER = "h-3.5 w-3.5 text-white";
+
+/** デザイン確認用モック（万円）— 全7ヶ月に棒を表示 */
+const MOCK_TREND_VALUES = [
+  { 受注額: 2800, パイプライン: 1800 },
+  { 受注額: 3400, パイプライン: 2600 },
+  { 受注額: 2200, パイプライン: 3100 },
+  { 受注額: 4100, パイプライン: 2900 },
+  { 受注額: 3600, パイプライン: 3800 },
+  { 受注額: 4800, パイプライン: 3200 },
+  { 受注額: 5200, パイプライン: 4100 },
+];
+
+function getTrendChartData(trend: DashboardData["monthlyTrend"]) {
+  return (trend ?? []).map((row, i) => ({
+    month: row.month,
+    ...(MOCK_TREND_VALUES[i] ?? { 受注額: 3000, パイプライン: 2500 }),
+  }));
+}
+
+/** カードの空きスペースに合わせて高さが伸びる売上トレンドチャート */
+function ResponsiveTrendChart({
+  data,
+}: {
+  data: ReturnType<typeof getTrendChartData>;
+}) {
+  return (
+    <div className="flex-1 min-h-[180px] w-full">
+      <ResponsiveContainer width="100%" height="100%" minHeight={180}>
+        <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
+          <defs>
+            <linearGradient id="chartWonGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={BLUE[500]} />
+              <stop offset="100%" stopColor={BLUE[700]} />
+            </linearGradient>
+            <linearGradient id="chartPipelineGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={BLUE[50]} />
+              <stop offset="100%" stopColor={BLUE[100]} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={BLUE[50]} vertical={false} />
+          <XAxis dataKey="month" tick={{ fontSize: 11, fill: BLUE[500] }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: BLUE[500] }} axisLine={false} tickLine={false} />
+          <Tooltip
+            cursor={{ fill: `${BLUE[50]}88` }}
+            contentStyle={{ background: "#fff", border: `1px solid ${BLUE[100]}`, borderRadius: 10, fontSize: 12, boxShadow: "0 4px 16px rgba(0,75,146,0.08)" }}
+            formatter={(v, name) => [`¥${v}万`, name ?? ""]}
+          />
+          <Bar dataKey="パイプライン" fill="url(#chartPipelineGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey="受注額" fill="url(#chartWonGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** カードの空きスペースに合わせて自動でサイズが変わるアナログ時計 */
+function ResponsiveClock() {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState(76);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const rect = entries[0].contentRect;
+      const next = Math.max(48, Math.min(220, Math.floor(Math.min(rect.width, rect.height))));
+      setSize(next);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
+      <AnalogClock
+        size={size}
+        variant="blue"
+        hourColor="#0f172a"
+        minuteColor="#334155"
+        secondColor="#64748b"
+        centerColor="#0f172a"
+        numColor="#475569"
+        tickColor="#cbd5e1"
+      />
+    </div>
+  );
+}
 
 export default function Dashboard2Page() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
-  const { widgets, hydrated, toggleVisible, moveUp, moveDown, reorder, resizeWidget, setWidgetWidth, initWidths, reset } = useWidgets();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const now = new Date();
+
+  const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths } = useWidgets();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -87,132 +191,95 @@ export default function Dashboard2Page() {
     }).catch(() => {});
   }, []);
 
-  const now = new Date();
-
   const handleClockIn = async () => {
     try {
       await clockInAction();
       setClockedIn(true);
       setClockInTime(new Date());
       toast.success("出勤しました", { description: format(new Date(), "HH:mm", { locale: ja }) });
-    } catch {
-      toast.error("出勤打刻に失敗しました");
-    }
+    } catch { toast.error("出勤打刻に失敗しました"); }
   };
   const handleClockOut = async () => {
     try {
       await clockOutAction();
       setClockedIn(false);
       toast.success("退勤しました", { description: format(new Date(), "HH:mm", { locale: ja }) });
-    } catch {
-      toast.error("退勤打刻に失敗しました");
-    }
+    } catch { toast.error("退勤打刻に失敗しました"); }
   };
 
   const isVisible = (id: string) =>
     !hydrated || (widgets.find((w) => w.id === id)?.visible ?? true);
 
   const todos = data?.todos ?? [];
-  const visibleTodos = todos.slice(0, 6);
+  const visibleTodos = todos.slice(0, 5);
   const urgentCount = todos.filter((t) => t.priority === "high" && t.status !== "completed").length;
+
+  const kpis = [
+    { label: "受注額",      value: formatYen(data?.kpis.wonValue ?? 0),          sub: "今月",   icon: TrendingUp },
+    { label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0),     sub: "見込み", icon: BarChart3 },
+    { label: "顧客数",      value: String(data?.kpis.customerCount ?? 0),          sub: "社",     icon: Users },
+    { label: "進行案件",    value: String(data?.kpis.activeConstructions ?? 0),    sub: "件",     icon: Briefcase },
+  ];
 
   const renderCard = (id: string) => {
     switch (id) {
       case "attendance":
         return !isVisible("attendance") ? null : (
-          <div className="bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col gap-4 h-full">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">勤怠打刻</span>
-              <Link href="/attendance"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>勤怠打刻</span>
+              <Link href="/attendance"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
             </div>
-            <div className="flex flex-col items-center gap-2 pt-4">
-              <AnalogClock size={120} hourColor="#18181b" minuteColor="#27272a" secondColor="#71717a" centerColor="#18181b" />
-              <p className="text-xl font-bold tabular-nums tracking-tight text-zinc-900 leading-none">{format(now, "HH:mm")}</p>
-              <div className="flex items-center gap-3">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3">
+              <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+                <ResponsiveClock />
+              </div>
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <p className="text-xl font-black tabular-nums leading-none text-slate-900">{format(now, "HH:mm")}</p>
                 <div className="flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${clockedIn ? "bg-zinc-800" : "bg-zinc-300"}`} />
-                  <span className="text-[11px] text-zinc-500 font-medium">{clockedIn ? "勤務中" : "未出勤"}</span>
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 transition-all ${clockedIn ? "bg-emerald-500" : "bg-slate-300"}`} />
+                  <span className="text-[11px] text-slate-700">{clockedIn ? "勤務中" : "未出勤"}</span>
                 </div>
-                <span className="text-zinc-200">·</span>
-                <p className="text-[11px] text-zinc-400 tabular-nums">
+                <p className="text-[11px] text-slate-500">
                   {clockInTime ? `出勤 ${format(clockInTime, "HH:mm")}〜` : format(now, "M月d日（EEE）", { locale: ja })}
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 mt-auto">
-              <button onClick={handleClockIn} disabled={clockedIn}
-                className="h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-900 text-white hover:bg-zinc-700">
-                <LogIn className="h-3.5 w-3.5" />出勤
+            <div className="grid grid-cols-2 gap-2 shrink-0">
+              <button
+                onClick={handleClockIn}
+                disabled={clockedIn}
+                className="h-9 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-60 disabled:cursor-not-allowed text-white shadow-sm disabled:shadow-none"
+                style={{ background: clockedIn ? undefined : BLUE_ACTIVE_GRADIENT }}
+              >
+                <LogIn className="h-3 w-3" />出勤
               </button>
               <button onClick={handleClockOut} disabled={!clockedIn}
-                className="h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-zinc-200 text-zinc-600 hover:bg-zinc-50">
-                <LogOut className="h-3.5 w-3.5" />退勤
+                className={`h-9 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-60 disabled:cursor-not-allowed border ${BLUE_MUTED} ${BLUE_HOVER} disabled:opacity-40`}
+                style={{ background: BLUE[50], borderColor: BLUE[100], color: BLUE[700] }}>
+                <LogOut className="h-3 w-3" />退勤
               </button>
             </div>
-          </div>
-        );
-
-      case "ai-focus":
-        return !isVisible("ai-focus") ? null : (
-          <div className="bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">今日のフォーカス</span>
-                {!loading && todos.length > 0 && <span className="text-[11px] font-bold text-zinc-900 tabular-nums">{todos.length}件</span>}
-                {!loading && urgentCount > 0 && (
-                  <span className="text-[10px] font-semibold text-rose-500 border border-rose-200 rounded px-1.5 py-0.5">急ぎ {urgentCount}</span>
-                )}
-              </div>
-              <Link href="/bi"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
-            </div>
-            <div className="flex flex-col divide-y divide-zinc-100">
-              {loading ? Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 py-2.5">
-                  <Skeleton className="h-3.5 w-3.5 rounded-sm shrink-0" />
-                  <Skeleton className="h-3 flex-1" />
-                </div>
-              )) : visibleTodos.length ? visibleTodos.map((todo, idx) => {
-                const isCompleted = todo.status === "completed";
-                const isUrgent = todo.priority === "high" && !isCompleted;
-                return (
-                  <div key={todo.id} className={`flex items-center gap-3 py-2.5 px-1 cursor-pointer group hover:bg-zinc-50 rounded transition-colors ${isUrgent ? "hover:bg-rose-50/40" : ""}`}>
-                    <span className="text-[10px] tabular-nums text-zinc-300 w-4 shrink-0 font-mono leading-none">{String(idx + 1).padStart(2, "0")}</span>
-                    <span className={`text-xs flex-1 truncate ${isCompleted ? "line-through text-zinc-300" : "text-zinc-700"}`}>{todo.title}</span>
-                    {isUrgent && <span className="text-[9px] font-bold text-rose-500 border border-rose-200 rounded px-1 shrink-0">急</span>}
-                  </div>
-                );
-              }) : (
-                <div className="py-8 flex flex-col items-center gap-1.5 text-center">
-                  <CheckCircle2 className="h-6 w-6 text-zinc-300" />
-                  <p className="text-xs text-zinc-400">今日のタスクは完了しました</p>
-                </div>
-              )}
-            </div>
-            {!loading && todos.length > visibleTodos.length && (
-              <Link href="/bi" className="text-[11px] text-zinc-400 hover:text-zinc-700 transition-colors mt-auto">
-                +{todos.length - visibleTodos.length} 件 →
-              </Link>
-            )}
           </div>
         );
 
       case "workflow":
         return !isVisible("workflow") ? null : (
-          <div className="bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col gap-4 h-full">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">ワークフロー</span>
-              <Link href="/workflow"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>ワークフロー</span>
+              <Link href="/workflow"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
             </div>
-            <div className="flex flex-col gap-1 flex-1">
+            <div className="flex flex-col gap-2 flex-1">
               {[
-                { label: "承認待ち", count: data?.workflow.pendingApprovals ?? 0, accent: "text-amber-600" },
-                { label: "申請中",   count: data?.workflow.submittedRequests ?? 0, accent: "text-zinc-500" },
-                { label: "完了済み", count: data?.workflow.completedRequests ?? 0, accent: "text-zinc-800" },
+                { label: "承認待ち", count: data?.workflow.pendingApprovals ?? 0,  color: "text-slate-800" },
+                { label: "申請中",   count: data?.workflow.submittedRequests ?? 0,  color: "text-slate-600" },
+                { label: "完了済み", count: data?.workflow.completedRequests ?? 0,  color: "text-slate-700" },
               ].map((item, i) => (
-                <Link key={i} href="/workflow" className="flex items-center justify-between py-3 border-b border-zinc-100 last:border-0 hover:bg-zinc-50 -mx-2 px-2 rounded transition-colors">
-                  <span className="text-xs text-zinc-500">{item.label}</span>
-                  {loading ? <Skeleton className="h-5 w-8" /> : (
-                    <span className={`text-xl font-bold tabular-nums leading-none ${item.accent}`}>{item.count}</span>
+                <Link key={i} href="/workflow" className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors">
+                  <span className="text-xs text-slate-500">{item.label}</span>
+                  {loading ? <Skeleton className="h-5 w-6" /> : (
+                    <span className={`text-lg font-black tabular-nums ${item.color}`}>{item.count}</span>
                   )}
                 </Link>
               ))}
@@ -220,38 +287,84 @@ export default function Dashboard2Page() {
           </div>
         );
 
-      case "mail":
-        return !isVisible("mail") ? null : (
-          <div className="bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">お知らせ</span>
-                {!loading && data?.announcements && data.announcements.length > 0 && (
-                  <span className="text-[10px] font-bold tabular-nums text-zinc-900 bg-zinc-100 rounded-full px-2 py-0.5">{data.announcements.length}</span>
+      case "ai-focus":
+        return !isVisible("ai-focus") ? null : (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-slate-400" />
+                <span className={`text-xs font-bold ${BLUE_TITLE}`}>今日のフォーカス</span>
+                {!loading && todos.length > 0 && (
+                  <span className="text-[10px] font-bold text-slate-400 tabular-nums">{todos.length}件</span>
                 )}
               </div>
-              <Link href="/circulation"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
+              <div className="flex items-center gap-1.5">
+                {urgentCount > 0 && (
+                  <span className="text-[9px] font-bold text-rose-500 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5">急ぎ{urgentCount}</span>
+                )}
+                <Link href="/bi"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+              </div>
             </div>
-            <div className="flex flex-col divide-y divide-zinc-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              {loading ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 py-1.5 px-2">
+                  <Skeleton className="h-3 w-3 rounded shrink-0" /><Skeleton className="h-2.5 flex-1" />
+                </div>
+              )) : visibleTodos.length ? visibleTodos.map((todo) => {
+                const isCompleted = todo.status === "completed";
+                const isUrgent = todo.priority === "high" && !isCompleted;
+                return (
+                  <div key={todo.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg group cursor-pointer transition-colors ${isUrgent ? "hover:bg-rose-50" : "hover:bg-[#A3DAF6]/50"}`}>
+                    <div className={`h-3.5 w-3.5 rounded shrink-0 border flex items-center justify-center transition-colors ${isCompleted ? "border-slate-300 bg-slate-100" : "border-slate-200 group-hover:border-slate-300"}`}>
+                      {isCompleted && <Check className="h-2 w-2 text-slate-500" strokeWidth={3} />}
+                    </div>
+                    <span className={`text-sm flex-1 truncate ${isCompleted ? "line-through text-slate-300" : isUrgent ? "text-slate-800 font-semibold" : "text-slate-700"}`}>
+                      {todo.title}
+                    </span>
+                    {isUrgent && <span className="h-1.5 w-1.5 rounded-full bg-rose-400 shrink-0" />}
+                  </div>
+                );
+              }) : (
+                <div className="col-span-2 flex flex-col items-center gap-1 py-4">
+                  <CheckCircle2 className="h-5 w-5 text-slate-300" />
+                  <p className="text-[11px] text-slate-400">完了しました</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case "mail":
+        return !isVisible("mail") ? null : (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold ${BLUE_TITLE}`}>お知らせ</span>
+                {!loading && data?.announcements && data.announcements.length > 0 && (
+                  <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 tabular-nums shadow-sm">{data.announcements.length}</span>
+                )}
+              </div>
+              <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+            </div>
+            <div className="flex flex-col gap-2">
               {loading ? Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="py-2.5 space-y-1.5"><Skeleton className="h-3 w-3/4" /><Skeleton className="h-2.5 w-full" /></div>
+                <div key={i} className="space-y-1.5 py-2 border-b border-slate-50 last:border-0">
+                  <Skeleton className="h-3 w-3/4" /><Skeleton className="h-2.5 w-full" />
+                </div>
               )) : data?.announcements.length ? data.announcements.map((ann) => (
                 <Link key={ann.id} href={`/circulation/${ann.id}`}
-                  className="group flex items-start gap-2 py-2.5 px-1 hover:bg-zinc-50 rounded transition-colors">
-                  <div className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${ann.is_urgent ? "bg-rose-500" : "bg-zinc-300"}`} />
+                  className="group flex gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-[#A3DAF6]/50 -mx-1 px-1 rounded-lg transition-colors">
+                  <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className={`text-xs font-semibold leading-snug line-clamp-1 ${ann.is_urgent ? "text-rose-800" : "text-zinc-800"}`}>
-                        {ann.is_urgent && <span className="inline-block text-[9px] font-bold bg-rose-500 text-white rounded px-1 py-0.5 mr-1.5 align-middle">緊急</span>}
-                        {ann.title}
-                      </p>
-                      <span className="text-[10px] text-zinc-400 tabular-nums shrink-0">{format(new Date(ann.published_at), "M/d", { locale: ja })}</span>
+                      <p className="text-xs font-semibold text-slate-800 line-clamp-1">{ann.title}</p>
+                      <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{format(new Date(ann.published_at), "M/d", { locale: ja })}</span>
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate mt-0.5">{ann.body}</p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{ann.body}</p>
                   </div>
                 </Link>
               )) : (
-                <p className="text-xs text-zinc-400 py-4 text-center">お知らせはありません</p>
+                <p className="text-xs text-slate-400 py-4 text-center">お知らせはありません</p>
               )}
             </div>
           </div>
@@ -259,65 +372,277 @@ export default function Dashboard2Page() {
 
       case "customers":
         return !isVisible("customers") ? null : (
-          <div className="bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">最近の顧客</span>
-              <Link href="/crm"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>最近の顧客</span>
+              <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
             </div>
-            <div className="flex flex-col divide-y divide-zinc-100">
+            <div className="flex flex-col gap-1">
               {loading ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="py-2.5 flex items-center gap-3">
-                  <Skeleton className="h-8 w-8 rounded-md shrink-0" />
+                <div key={i} className="flex items-center gap-3 py-2">
+                  <Skeleton className="h-8 w-8 rounded-full shrink-0" />
                   <div className="flex-1 space-y-1"><Skeleton className="h-3 w-24" /><Skeleton className="h-2.5 w-16" /></div>
                 </div>
-              )) : data?.recentCustomers.length ? data.recentCustomers.map((customer) => (
+              )) : data?.recentCustomers.length ? data.recentCustomers.map((customer) => {
+                const avatar = getCustomerAvatarColor(customer.id);
+                return (
                 <Link key={customer.id} href={`/crm/${customer.id}`}
-                  className="py-2.5 flex items-center gap-3 group hover:bg-zinc-50 -mx-2 px-2 rounded transition-colors">
-                  <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${avatarColor(customer.name)}`}>
-                    <span className="text-xs font-bold text-white">{customer.name.charAt(0)}</span>
+                  className="flex items-center gap-3 py-2 hover:bg-[#A3DAF6]/50 -mx-1 px-1 rounded-xl transition-colors group">
+                  <div
+                    className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold shadow-sm"
+                    style={{ background: avatar.avatarGradient }}
+                  >
+                    {customer.name.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-zinc-800 truncate">{customer.name}</p>
-                    <p className="text-[11px] text-zinc-400">{customer.company_name || "個人"}</p>
+                    <p className="text-xs font-semibold text-slate-800 truncate">{customer.name}</p>
+                    <p className="text-[11px] text-slate-400">{customer.company_name || "個人"}</p>
                   </div>
-                  <span className="text-[10px] text-zinc-400 border border-zinc-200 rounded px-1.5 py-0.5 shrink-0">{customer.status}</span>
+                  <span className="text-[10px] text-slate-400 bg-slate-100 rounded-full px-2 py-0.5 shrink-0">{customer.status}</span>
+                </Link>
+              );}) : (
+                <p className="text-xs text-slate-400 py-4">顧客データはありません</p>
+              )}
+            </div>
+          </div>
+        );
+
+      case "trend":
+        return !isVisible("trend") ? null : (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`text-xs font-bold ${BLUE_TITLE}`}>売上トレンド</span>
+                <span className={`text-[11px] ${BLUE_MUTED} opacity-70 hidden sm:inline truncate`}>直近7ヶ月 / 万円</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center gap-2 text-[11px] ${BLUE_MUTED}`}>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block" style={{ background: CHART_WON_LEGEND }} />受注額</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block" style={{ background: CHART_PIPELINE_LEGEND }} />パイプライン</span>
+                </div>
+              </div>
+            </div>
+            {loading ? (
+              <Skeleton className="flex-1 min-h-[180px] w-full" />
+            ) : (
+              <ResponsiveTrendChart data={getTrendChartData(data?.monthlyTrend)} />
+            )}
+          </div>
+        );
+
+      case "deals":
+        return !isVisible("deals") ? null : (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>商談パイプライン</span>
+              <Link href="/deals"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+            </div>
+            <div className="flex flex-col gap-1">
+              {loading ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="py-2 space-y-1.5">
+                  <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
+                </div>
+              )) : data?.recentDeals.length ? data.recentDeals.map((deal) => {
+                const colorSeed = deal.customerId ?? deal.customerName;
+                const avatar = getCustomerAvatarColor(colorSeed);
+                const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
+                return (
+                <Link key={deal.id} href="/deals"
+                  className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div
+                      className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
+                      style={{ background: avatar.avatarGradient }}
+                    >
+                      {initial}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-slate-800 truncate">{deal.title}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{deal.customerName}</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(deal.value ?? 0)}</p>
+                    <span
+                      className="text-[10px] font-medium rounded-full px-2 py-0.5 mt-0.5 inline-block"
+                      style={{ background: avatar.track, color: avatar.progress }}
+                    >
+                      {deal.stageLabel}
+                    </span>
+                  </div>
+                </Link>
+              );}) : (
+                <p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>
+              )}
+            </div>
+          </div>
+        );
+
+      case "quotes":
+        return !isVisible("quotes") ? null : (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>最近の見積</span>
+              <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+            </div>
+            <div className="flex flex-col gap-1">
+              {loading ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="py-2 space-y-1.5">
+                  <Skeleton className="h-3 w-24" /><Skeleton className="h-3 w-16" />
+                </div>
+              )) : data?.recentEstimates.length ? data.recentEstimates.map((est) => (
+                <Link key={est.id} href={`/quotes/${est.id}`}
+                  className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 truncate">{est.estimateNo}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{est.title}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(est.total ?? 0)}</p>
+                    <span className="text-[10px] text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 mt-0.5 inline-block">{est.statusLabel}</span>
+                  </div>
                 </Link>
               )) : (
-                <p className="text-xs text-zinc-400 py-4">顧客データはありません</p>
+                <p className="text-xs text-slate-400 py-4">見積データはありません</p>
               )}
+            </div>
+          </div>
+        );
+
+      case "production":
+        return !isVisible("production") ? null : (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>生産サマリー</span>
+              <Link href="/contracts"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+            </div>
+            <div className="flex flex-col gap-1">
+              {[
+                {
+                  label: "契約",
+                  href: "/contracts",
+                  icon: ClipboardList,
+                  count: data?.productionSummary.contractCount ?? 0,
+                  sub: `進行中 ${data?.productionSummary.activeContracts ?? 0}件`,
+                },
+                {
+                  label: "請求（下書き）",
+                  href: "/invoices",
+                  icon: FileText,
+                  count: data?.productionSummary.invoiceDraft ?? 0,
+                  sub: "要発行",
+                },
+                {
+                  label: "請求（未入金）",
+                  href: "/invoices",
+                  icon: Receipt,
+                  count: data?.productionSummary.invoiceSent ?? 0,
+                  sub: formatYen(data?.productionSummary.invoiceUnpaidTotal ?? 0),
+                },
+                {
+                  label: "工事",
+                  href: "/constructions",
+                  icon: HardHat,
+                  count: data?.kpis.activeConstructions ?? 0,
+                  sub: "進行中",
+                },
+              ].map((item) => (
+                <Link key={item.label} href={item.href}
+                  className="flex items-center justify-between py-2 px-1 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <item.icon className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">{item.label}</p>
+                      <p className="text-[11px] text-slate-400">{item.sub}</p>
+                    </div>
+                  </div>
+                  {loading ? (
+                    <Skeleton className="h-5 w-8" />
+                  ) : (
+                    <span className="text-xs font-bold tabular-nums text-slate-800 bg-white border border-slate-100 rounded-full px-2 py-0.5 shrink-0 shadow-sm">{item.count}</span>
+                  )}
+                </Link>
+              ))}
             </div>
           </div>
         );
 
       case "constructions":
         return !isVisible("constructions") ? null : (
-          <div className="bg-white border border-zinc-200 rounded-xl shadow-sm p-5 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-widest uppercase text-zinc-400">進行中の工事</span>
-              <Link href="/constructions"><ExternalLink className="h-3.5 w-3.5 text-zinc-300 hover:text-zinc-600 transition-colors" /></Link>
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+              <span className={`text-xs font-bold ${BLUE_TITLE}`}>進行中の工事</span>
+              <Link href="/constructions"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
             </div>
-            <div className="flex flex-col gap-3">
-              {loading ? Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <div className="flex items-center justify-between"><Skeleton className="h-3 w-28" /><Skeleton className="h-5 w-10" /></div>
-                  <Skeleton className="h-1 w-full" />
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-x-2 gap-y-1 flex-1 min-h-0 overflow-y-auto content-start">
+              {loading ? Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex flex-col items-center gap-1 w-full">
+                  <Skeleton className="h-14 w-full max-w-[160px] rounded-t-full" />
+                  <Skeleton className="h-3 w-16" />
                 </div>
-              )) : data?.constructions.length ? data.constructions.map((c, idx) => (
-                <Link key={c.id} href={`/constructions/${c.id}`}
-                  className="group block space-y-2 hover:bg-zinc-50 -mx-2 px-2 py-1.5 rounded transition-colors">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-[10px] font-mono font-bold text-zinc-300 shrink-0">{String(idx + 1).padStart(2, "0")}</span>
-                      <span className="text-xs font-semibold text-zinc-700 truncate">{c.title}</span>
+              )) : data?.constructions.length ? data.constructions.map((c, idx) => {
+                const customer = c.customer as { id?: string; name?: string } | null;
+                const colorSeed = customer?.id ?? customer?.name ?? c.title;
+                const avatar = getCustomerAvatarColor(colorSeed);
+                const MOCK_PROGRESS = [72, 35, 18, 55, 91];
+                const rawProgress = c.progress > 0 ? c.progress : MOCK_PROGRESS[idx % MOCK_PROGRESS.length];
+                const progress = Math.min(100, Math.max(0, rawProgress));
+                const gradId = `gauge-grad-b-${c.id}`;
+                const radius = 38;
+                const circumference = Math.PI * radius;
+                const dashOffset = circumference * (1 - progress / 100);
+                return (
+                  <Link
+                    key={c.id}
+                    href={`/constructions/${c.id}`}
+                    className="group @container flex flex-col items-center w-full transition-transform hover:-translate-y-0.5"
+                  >
+                    <div className="relative w-full" style={{ aspectRatio: "2 / 1.05" }}>
+                      <svg viewBox="0 0 100 56" className="w-full h-full block" preserveAspectRatio="xMidYMax meet">
+                        <defs>
+                          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor={avatar.start} />
+                            <stop offset="100%" stopColor={avatar.end} />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          d={`M 12 50 A ${radius} ${radius} 0 0 1 88 50`}
+                          fill="none"
+                          stroke="#EEF2F4"
+                          strokeWidth="11"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d={`M 12 50 A ${radius} ${radius} 0 0 1 88 50`}
+                          fill="none"
+                          stroke={`url(#${gradId})`}
+                          strokeWidth="11"
+                          strokeLinecap="round"
+                          strokeDasharray={circumference}
+                          strokeDashoffset={dashOffset}
+                          style={{ transition: "stroke-dashoffset 0.6s ease-out" }}
+                        />
+                        <text
+                          x="50"
+                          y="47"
+                          textAnchor="middle"
+                          fill={avatar.end}
+                          fontSize="18"
+                          fontWeight="700"
+                          className="tabular-nums"
+                        >
+                          {progress}
+                          <tspan fontSize="11" fontWeight="700">%</tspan>
+                        </text>
+                      </svg>
                     </div>
-                    <span className="text-base font-black tabular-nums text-zinc-900 shrink-0">{c.progress}<span className="text-[10px] font-semibold text-zinc-400">%</span></span>
-                  </div>
-                  <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-zinc-900 rounded-full transition-all duration-500" style={{ width: `${c.progress}%` }} />
-                  </div>
-                </Link>
-              )) : (
-                <p className="text-xs text-zinc-400 py-4">進行中の工事はありません</p>
+                    <span className="w-full text-center font-medium text-slate-600 truncate mt-1 px-0.5 text-[clamp(0.875rem,9cqi,1.25rem)] leading-snug">
+                      {customer?.name ?? c.title}
+                    </span>
+                  </Link>
+                );
+              }) : (
+                <p className="text-xs text-slate-400 py-4 col-span-full text-center">進行中の工事はありません</p>
               )}
             </div>
           </div>
@@ -331,54 +656,31 @@ export default function Dashboard2Page() {
   const sortableIds = widgets.filter((w) => w.id !== "kpi" && w.visible).map((w) => w.id);
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-4 min-h-screen">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">ダッシュボード</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
-        </div>
-        <WidgetCustomizer
-          widgets={widgets}
-          onToggle={toggleVisible}
-          onMoveUp={moveUp}
-          onMoveDown={moveDown}
-          onReset={reset}
-          kpiColor={kpiColor}
-          onKpiColorChange={() => {}}
-        />
+      <div>
+        <h1 className={`text-lg font-bold tracking-tight ${BLUE_TITLE}`}>ダッシュボード</h1>
+        <p className={`text-xs mt-0.5 ${BLUE_MUTED}`}>{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
       </div>
 
       {/* KPI row */}
-      {isVisible("kpi") && (
-        <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
-          <CardContent className="py-2">
-            <div className="grid grid-cols-2 lg:grid-cols-4">
-              {loading ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="px-4 first:pl-0 last:pr-0 space-y-1.5">
-                  <Skeleton className="h-3 w-16" /><Skeleton className="h-6 w-24" />
-                </div>
-              )) : [
-                { label: "受注額",      value: formatYen(data?.kpis.wonValue ?? 0),           icon: TrendingUp },
-                { label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0),      icon: BarChart3 },
-                { label: "顧客数",      value: String(data?.kpis.customerCount ?? 0),          icon: Users },
-                { label: "進行案件",    value: String(data?.kpis.activeConstructions ?? 0),    icon: Briefcase },
-              ].map((kpi, i) => (
-                <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)]">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                    <div className="neumorph-icon h-8 w-8" style={{ background: kpiColor }}>
-                      <kpi.icon className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
-                </div>
-              ))}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {loading ? Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={BLUE_CARD_SM + " px-3 py-2.5"}>
+            <Skeleton className="h-6 w-full" />
+          </div>
+        )) : kpis.map((kpi, i) => (
+          <div key={i} className={BLUE_CARD_SM + " px-3 py-2.5 flex items-center gap-2.5 flex-nowrap min-w-0 group hover:shadow-md transition-shadow"}>
+            <div className={KPI_ICON_CLASS} style={BLUE_KPI_ICON_STYLE}>
+              <kpi.icon className={KPI_ICON_INNER} />
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <span className="text-xs font-semibold truncate min-w-0 text-slate-600">{kpi.label}</span>
+            <p className="text-xl font-black tabular-nums tracking-tight leading-none ml-auto whitespace-nowrap shrink-0 text-slate-900">{kpi.value}</p>
+            <span className="text-xs shrink-0 whitespace-nowrap text-slate-500">{kpi.sub}</span>
+          </div>
+        ))}
+      </div>
 
       {/* Sortable widget grid */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>

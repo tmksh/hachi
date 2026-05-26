@@ -106,11 +106,11 @@ export function SortableWidget({
         flex: widthPx ? `0 0 ${widthPx}px` : "1 1 calc(33.333% - 11px)",
         width: widthPx ? `${widthPx}px` : undefined,
         minWidth: `${MIN_CARD_W}px`,
-        ...(height ? { height } : {}),
+        ...(height ? { height, display: "flex", flexDirection: "column" } : {}),
         boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.12)" : undefined,
       }}
       {...attributes}
-      className="relative group/drag"
+      className="relative group/drag h-full min-h-0"
     >
       {/* ドラッグ用ハンドル：カード上端中央のバー（ホバー時のみ表示） */}
       <div
@@ -130,7 +130,7 @@ export function SortableWidget({
       {/* リサイズハンドル（右下、ホバーで濃く表示） */}
       <div
         onMouseDown={handleResizeMouseDown}
-        className="absolute bottom-1.5 right-1.5 z-20 w-5 h-5 flex items-center justify-center opacity-40 group-hover/drag:opacity-100 cursor-nwse-resize transition-opacity rounded hover:bg-foreground/10"
+        className="absolute bottom-1.5 right-1.5 z-20 w-5 h-5 flex items-center justify-center opacity-0 group-hover/drag:opacity-100 cursor-nwse-resize transition-opacity rounded hover:bg-foreground/10"
         title="ドラッグして自由にサイズ変更"
       >
         <svg viewBox="0 0 10 10" className="w-3 h-3 text-muted-foreground">
@@ -143,7 +143,11 @@ export function SortableWidget({
         </svg>
       </div>
 
-      {children}
+      {height ? (
+        <div className="flex-1 min-h-0 flex flex-col w-full">{children}</div>
+      ) : (
+        children
+      )}
     </div>
   );
 }

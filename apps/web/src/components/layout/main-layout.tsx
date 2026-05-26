@@ -8,6 +8,8 @@ import { Sidebar } from "./sidebar";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BLUE_PAGE_BG } from "@/lib/blue-theme";
+import { TEAL_PAGE_BG } from "@/lib/teal-theme";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -19,6 +21,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname();
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
+  const pageBg = pathname?.startsWith("/dashboard2") ? BLUE_PAGE_BG : TEAL_PAGE_BG;
 
   if (isAdminLogin) {
     return <>{children}</>;
@@ -54,7 +57,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
       <Sidebar
         profile={profile}
         onSignOut={signOut}

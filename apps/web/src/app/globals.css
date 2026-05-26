@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --shadow-sm: 0 0 0 1px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.07);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -277,13 +281,28 @@
   /* ── Sidebar ── */
   .frost-sidebar {
     background: #FFFFFF;
-    border-right: 1px solid rgba(0, 0, 0, 0.07);
-    box-shadow: none;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   }
   .dark .frost-sidebar {
-    background: #1F2937;
-    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    background: #243040;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: none;
+  }
+  .frost-sidebar .sidebar-nav-hover {
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .sidebar-nav-hover:hover {
+    background: rgba(216, 237, 228, 0.75);
+  }
+  .dark .sidebar-nav-hover:hover {
+    background: rgba(42, 128, 85, 0.22);
+  }
+  .sidebar-theme-blue .sidebar-nav-hover:hover {
+    background: rgba(163, 218, 246, 0.75);
+  }
+  .dark .sidebar-theme-blue .sidebar-nav-hover:hover {
+    background: rgba(43, 110, 168, 0.22);
   }
 
   /* ── Input ── */
@@ -418,17 +437,6 @@
   }
   .dark .neumorph-icon {
     background: linear-gradient(135deg, #22a068 0%, #0f5132 100%);
-  }
-
-  /* ── Clock face ── */
-  .neumorph-clock {
-    background: #FFFFFF;
-    border: 1px solid #E5E7EB;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  }
-  .dark .neumorph-clock {
-    background: #1F2937;
-    border-color: rgba(255, 255, 255, 0.08);
   }
 
   /* ── Button overrides ── */

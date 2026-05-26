@@ -58,7 +58,7 @@ export function AdminSidebar() {
         <div className="flex h-16 items-center px-3 gap-2 mb-1">
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl hover:bg-white/20"
+            className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl sidebar-nav-hover"
           >
             <Image src="/logo.png" alt="BRIDGE" width={40} height={34} className="object-contain w-8 h-auto" />
           </button>
@@ -90,8 +90,7 @@ export function AdminSidebar() {
                   key={key}
                   onClick={() => goTab(key)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium text-left",
-                    "hover:bg-accent/60",
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left sidebar-nav-hover",
                     active ? "text-primary" : "text-muted-foreground",
                   )}
                 >
@@ -115,8 +114,7 @@ export function AdminSidebar() {
                   <button
                     onClick={() => goTab(key)}
                     className={cn(
-                      "relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200",
-                      "hover:bg-accent/60",
+                      "relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover",
                       active ? "bg-primary/10 text-primary" : "text-muted-foreground",
                     )}
                   >
@@ -142,14 +140,14 @@ export function AdminSidebar() {
             <>
               <Link
                 href="/dashboard"
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground sidebar-nav-hover hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4 shrink-0" />
                 <span className="whitespace-nowrap">通常画面に戻る</span>
               </Link>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 hover:bg-accent/60 mt-1">
+                  <button className="flex items-center gap-3 px-3 py-2 rounded-xl sidebar-nav-hover mt-1">
                     <Avatar className="h-7 w-7">
                       <AvatarFallback className="bg-amber-100 text-amber-700 text-xs font-semibold">
                         {initial}
@@ -184,7 +182,7 @@ export function AdminSidebar() {
                 <TooltipTrigger asChild>
                   <Link
                     href="/dashboard"
-                    className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all"
+                    className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover hover:text-foreground transition-all"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </Link>
@@ -193,7 +191,7 @@ export function AdminSidebar() {
               </Tooltip>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-accent/60 transition-all">
+                  <button className="flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover transition-all">
                     <Avatar className="h-7 w-7">
                       <AvatarFallback className="bg-amber-100 text-amber-700 text-xs font-semibold">
                         {initial}
