@@ -8,6 +8,7 @@ interface AnalogClockProps {
   size?: number;
   className?: string;
   variant?: "teal" | "blue";
+  flat?: boolean;
   hourColor?: string;
   minuteColor?: string;
   secondColor?: string;
@@ -26,6 +27,7 @@ export function AnalogClock({
   size = 88,
   className = "",
   variant = "teal",
+  flat = false,
   hourColor,
   minuteColor,
   secondColor,
@@ -70,13 +72,15 @@ export function AnalogClock({
         borderRadius: "50%",
         background: "#ffffff",
         border: `${border}px solid ${palette[50]}`,
-        boxShadow: [
-          `${-shadow(8)}px ${-shadow(8)}px ${shadow(18)}px rgba(255,255,255,1)`,
-          `${shadow(8)}px ${shadow(10)}px ${shadow(22)}px rgba(${shadowRgb},0.18)`,
-          `0 ${shadow(4)}px ${shadow(14)}px rgba(${variant === "blue" ? "163,218,246" : "216,237,228"},0.45)`,
-          `inset ${-shadow(7)}px ${-shadow(7)}px ${shadow(16)}px rgba(255,255,255,0.95)`,
-          `inset ${shadow(7)}px ${shadow(9)}px ${shadow(16)}px rgba(${insetRgb},0.2)`,
-        ].join(", "),
+        boxShadow: flat
+          ? `0 ${shadow(2)}px ${shadow(8)}px rgba(0,0,0,0.12)`
+          : [
+              `${-shadow(8)}px ${-shadow(8)}px ${shadow(18)}px rgba(255,255,255,1)`,
+              `${shadow(8)}px ${shadow(10)}px ${shadow(22)}px rgba(${shadowRgb},0.18)`,
+              `0 ${shadow(4)}px ${shadow(14)}px rgba(${variant === "blue" ? "163,218,246" : "216,237,228"},0.45)`,
+              `inset ${-shadow(7)}px ${-shadow(7)}px ${shadow(16)}px rgba(255,255,255,0.95)`,
+              `inset ${shadow(7)}px ${shadow(9)}px ${shadow(16)}px rgba(${insetRgb},0.2)`,
+            ].join(", "),
       }}
     >
       <svg width="100%" height="100%" viewBox={`0 0 ${VB} ${VB}`}>

@@ -143,11 +143,7 @@ export function SortableWidget({
         </svg>
       </div>
 
-      {height ? (
-        <div className="flex-1 min-h-0 flex flex-col w-full">{children}</div>
-      ) : (
-        children
-      )}
+      <div className="flex-1 min-h-0 flex flex-col w-full">{children}</div>
     </div>
   );
 }

@@ -91,24 +91,24 @@ export async function getDashboardData() {
       .select("id, name, company_name, status, created_at")
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
-      .limit(5),
+      .limit(15),
     supabase
       .from("deals")
       .select("id, title, stage, value, updated_at, customer:customers(id, name)")
       .order("updated_at", { ascending: false })
-      .limit(12),
+      .limit(20),
     supabase
       .from("estimates")
       .select("id, estimate_no, title, status, total, created_at")
       .order("created_at", { ascending: false })
-      .limit(5),
+      .limit(15),
     supabase.from("contracts").select("id, status"),
     supabase.from("invoices").select("id, status, total"),
     supabase
       .from("announcements")
       .select("id, title, body, pinned, is_urgent, published_at, author:profiles!announcements_author_id_fkey(display_name)")
       .order("published_at", { ascending: false })
-      .limit(5),
+      .limit(15),
     supabase
       .from("todos")
       .select("id, title, status, priority, due_date, assigned_to")
