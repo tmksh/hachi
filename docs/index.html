@@ -334,6 +334,8 @@
   <span class="nav-logo">BRIDGE</span>
   <div class="nav-links">
     <a href="index.html">仕様書</a>
+    <a href="index.html#architecture">アーキテクチャ</a>
+    <a href="index.html#subdomain">サブドメイン</a>
     <a href="index.html#lead-flow">リードフロー</a>
           <a href="index.html#constructions">工事管理（7タブ）</a>
           <a href="index.html#cost">工事台帳</a>
@@ -346,9 +348,9 @@
 <!-- HERO -->
 <div class="hero">
   <div class="hero-inner">
-    <div class="hero-eyebrow">System Specification — v1.1（2026/04/16 設計レビュー反映）</div>
+    <div class="hero-eyebrow">System Specification — v1.2（2026/05/25 サブドメイン対応反映）</div>
     <h1>BRIDGE<br><em>統合業務支援システム</em></h1>
-    <p class="hero-desc">建設業・リフォーム業向けに設計されたオールインワン業務管理プラットフォーム。顧客管理・7タブ構成の工事管理・勤怠・ワークフロー・文書管理を一つのシステムで管理します。マーケティング機能は v2 非公開（ルートブロック）です。</p>
+    <p class="hero-desc">建設業・リフォーム業向けに設計されたオールインワン業務管理プラットフォーム。顧客管理・7タブ構成の工事管理・勤怠・ワークフロー・文書管理を一つのシステムで管理します。各加盟店は <strong>{slug}.bridge-linq.com</strong> の専用 URL で利用します。マーケティング機能は v2 非公開（ルートブロック）です。</p>
     <div class="hero-btns">
       <a href="features.html" class="btn btn-primary">機能一覧を見る</a>
     </div>
@@ -382,7 +384,7 @@
   </section>
 
   <!-- ARCHITECTURE -->
-  <section>
+  <section id="architecture">
     <div class="section-label">Architecture</div>
     <h2>システムアーキテクチャ</h2>
     <p class="section-desc">3層構成。クライアント・サーバー・データ層が明確に分離されており、エッジでのロール保護とリアルタイム通信を実現しています。</p>
@@ -405,10 +407,12 @@
       <div class="arch-layer arch-server">
         <div class="arch-layer-label">サーバー・エッジ層</div>
         <div class="arch-layer-title">Next.js Middleware + Server Actions（Netlify Edge）</div>
-        <div class="arch-layer-body">Netlify のエッジネットワーク上でミドルウェアが実行されます。すべてのページリクエストに対して認証チェックとロールベースのルート保護を行い、権限のないユーザーを /unauthorized にリダイレクトします。</div>
+        <div class="arch-layer-body">Netlify のエッジネットワーク上でミドルウェアが実行されます。認証チェック・ロールベースのルート保護に加え、<strong>サブドメイン（slug）からテナント（company_id）を解決</strong>します。権限のないユーザーを /unauthorized にリダイレクトします。</div>
         <div class="arch-tags">
           <span class="arch-tag">middleware.ts（RBAC）</span>
+          <span class="arch-tag">サブドメイン解決</span>
           <span class="arch-tag">Server Actions</span>
+          <span class="arch-tag">Netlify API（ドメイン自動追加）</span>
           <span class="arch-tag">セッション更新</span>
           <span class="arch-tag">ルート保護</span>
         </div>
@@ -436,6 +440,160 @@
           <div class="arch-data-desc">WebSocket による通知・勤怠状態のリアルタイム配信</div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- SUBDOMAIN / MULTI-TENANT -->
+  <section id="subdomain">
+    <div class="section-label">Multi-Tenant</div>
+    <h2>サブドメイン方式マルチテナント</h2>
+    <p class="section-desc">各加盟店（company）に slug を割り当て、<strong>{slug}.bridge-linq.com</strong> の専用 URL でアクセスします。apex ドメイン（bridge-linq.com）はプラットフォーム共通・運営管理用です。</p>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">URL 構成</div>
+    <div class="table-wrap" style="margin-bottom:2rem;">
+      <table>
+        <thead>
+          <tr><th>URL</th><th>用途</th><th>例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-mono">bridge-linq.com</td>
+            <td>プラットフォーム apex（共通入口）</td>
+            <td>運営管理・未設定時のフォールバック</td>
+          </tr>
+          <tr>
+            <td class="td-mono">{slug}.bridge-linq.com</td>
+            <td>加盟店専用 URL（テナント分離）</td>
+            <td><span class="td-mono">acme.bridge-linq.com/login</span></td>
+          </tr>
+          <tr>
+            <td class="td-mono">bridge-linq.com/admin</td>
+            <td>運営管理コンソール（Super Admin）</td>
+            <td>企業登録・slug 発行・Netlify ドメイン自動追加</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">リクエストフロー</div>
+    <div class="auth-flow" style="margin-bottom:2rem;">
+      <div class="auth-step">
+        <div class="auth-step-num">Step 1</div>
+        <div class="auth-step-title">Host 解析</div>
+        <div class="auth-step-desc">middleware が <span class="td-mono">{slug}.bridge-linq.com</span> から slug を抽出</div>
+      </div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step">
+        <div class="auth-step-num">Step 2</div>
+        <div class="auth-step-title">テナント解決</div>
+        <div class="auth-step-desc">RPC <span class="td-mono">resolve_company_id_by_slug</span> で company_id を取得</div>
+      </div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step">
+        <div class="auth-step-num">Step 3</div>
+        <div class="auth-step-title">認証・RBAC</div>
+        <div class="auth-step-desc">未ログイン → /login、別テナント → 自社サブドメインへリダイレクト</div>
+      </div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step step-last">
+        <div class="auth-step-num">Step 4</div>
+        <div class="auth-step-title">ヘッダー伝搬</div>
+        <div class="auth-step-desc"><span class="td-mono">x-tenant-slug</span> / <span class="td-mono">x-tenant-id</span> を Server Components へ</div>
+      </div>
+    </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">企業登録時の Netlify 自動連携</div>
+    <div class="table-wrap" style="margin-bottom:2rem;">
+      <table>
+        <thead>
+          <tr><th>ステップ</th><th>処理</th><th>実装</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">1. 企業登録</td>
+            <td>運営管理コンソールで企業名・slug・オーナーアカウントを入力</td>
+            <td class="td-mono">createAdminCompany</td>
+          </tr>
+          <tr>
+            <td class="td-name">2. DB 保存</td>
+            <td><span class="td-mono">companies.slug</span> に slug を保存</td>
+            <td class="td-mono">Supabase</td>
+          </tr>
+          <tr>
+            <td class="td-name">3. ドメイン追加</td>
+            <td>Netlify API で <span class="td-mono">{slug}.bridge-linq.com</span> を domain alias に追加</td>
+            <td class="td-mono">netlifyAddDomain</td>
+          </tr>
+          <tr>
+            <td class="td-name">4. 利用開始</td>
+            <td>数分後 SSL 込みでサブドメイン URL が利用可能</td>
+            <td class="td-mono">Netlify DNS + HTTPS</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">Netlify / DNS 設定</div>
+    <div class="table-wrap" style="margin-bottom:1.5rem;">
+      <table>
+        <thead>
+          <tr><th>種別</th><th>設定</th><th>備考</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="td-chip">DNS</span></td>
+            <td class="td-mono">bridge-linq.com → Netlify DNS（nsone.net）</td>
+            <td>お名前.com でネームサーバー変更</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">DNS</span></td>
+            <td class="td-mono">* CNAME hachigreen.netlify.app</td>
+            <td>ワイルドカードで全サブドメインを Netlify へ</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">Domain</span></td>
+            <td class="td-mono">bridge-linq.com</td>
+            <td>Primary domain</td>
+          </tr>
+          <tr>
+            <td><span class="td-chip">Domain</span></td>
+            <td class="td-mono">{slug}.bridge-linq.com</td>
+            <td>企業登録時に API で自動追加（手動不要）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">環境変数（Netlify）</div>
+    <div class="table-wrap" style="margin-bottom:1.5rem;">
+      <table>
+        <thead>
+          <tr><th>変数名</th><th>例</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-mono">NEXT_PUBLIC_APP_DOMAIN</td>
+            <td class="td-mono">bridge-linq.com</td>
+            <td>サブドメイン解決の基点ドメイン（Builds + Functions 両方必要）</td>
+          </tr>
+          <tr>
+            <td class="td-mono">NETLIFY_TOKEN</td>
+            <td class="td-mono">nfp_…</td>
+            <td>Personal Access Token。ドメイン alias 追加 API 用</td>
+          </tr>
+          <tr>
+            <td class="td-mono">NETLIFY_SITE_ID</td>
+            <td class="td-mono">d8019260-…</td>
+            <td>hachigreen サイト ID（<span class="td-mono">SITE_ID</span> でも可）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="db-note">
+      <strong>予約語 slug（使用不可）:</strong> www, app, admin, api, mail, ftp, smtp, pop, cdn, static, assets, status, help, support, docs<br>
+      <strong>slug 形式:</strong> 小文字英数字とハイフンのみ（2〜63 文字）。<span class="td-mono">00005_company_slug</span> / <span class="td-mono">00035_company_slug_lookup</span> マイグレーション参照。<br>
+      <strong>注意:</strong> Netlify はワイルドカード domain alias 非対応のため、サブドメインは企業ごとに API で個別追加します。
     </div>
   </section>
 
@@ -501,7 +659,7 @@
             <td><span class="td-chip">デプロイ</span></td>
             <td class="td-name">Netlify</td>
             <td class="td-mono">—</td>
-            <td>Git push で自動デプロイ。エッジネットワークで配信</td>
+            <td>Git push で自動デプロイ。<strong>bridge-linq.com</strong> + 加盟店サブドメインを Netlify DNS / API で管理</td>
           </tr>
           <tr>
             <td><span class="td-chip">パッケージ管理</span></td>
@@ -526,7 +684,7 @@
     <h2>データベース設計</h2>
     <p class="section-desc">PostgreSQL + Supabase RLS によるマルチテナント構成。全テーブルに company_id を持ち、ログインユーザーは自社データのみアクセス可能です。</p>
     <div class="db-grid">
-      <div class="db-item"><div class="db-item-name">companies</div><div class="db-item-desc">会社マスタ。マルチテナントの基点</div></div>
+      <div class="db-item"><div class="db-item-name">companies</div><div class="db-item-desc">会社マスタ。slug カラムでサブドメイン紐付け</div></div>
       <div class="db-item"><div class="db-item-name">profiles</div><div class="db-item-desc">ユーザープロフィール・ロール情報</div></div>
       <div class="db-item"><div class="db-item-name">customers</div><div class="db-item-desc">顧客情報・タグ・担当者</div></div>
       <div class="db-item"><div class="db-item-name">leads</div><div class="db-item-desc">リード・見込み客管理</div></div>
@@ -549,7 +707,7 @@
       <div class="db-item"><div class="db-item-name">app_integrations</div><div class="db-item-desc">Chatwork / Slack 等連携設定</div></div>
     </div>
     <div class="db-note">
-      全テーブルに <strong>company_id</strong> カラムを設け、RLS（Row Level Security）ポリシーを適用しています。ログインユーザーのトークンから company_id を取得し、自社データのみ参照・更新できます。マイグレーションは <strong>00001〜00033</strong>（最新: 00033_remove_owner_role）。00031 で見積版管理・追加変更・支払スケジュール、00032 で工事台帳永続化・文書紐付けを追加しています。
+      全テーブルに <strong>company_id</strong> カラムを設け、RLS（Row Level Security）ポリシーを適用しています。ログインユーザーのトークンから company_id を取得し、自社データのみ参照・更新できます。サブドメイン解決は RLS をバイパスしないよう <strong>resolve_company_id_by_slug</strong>（SECURITY DEFINER）で id のみ公開取得します。マイグレーションは <strong>00001〜00035</strong>（最新: 00035_company_slug_lookup）。00034 で slug カラム修復、00035 で slug ルックアップ RPC を追加しています。
     </div>
   </section>
 
@@ -692,8 +850,21 @@
   <section>
     <div class="section-label">Accounts</div>
     <h2>ログイン情報</h2>
-    <p class="section-desc">以下のアカウントでログインして各機能を確認できます。</p>
+    <p class="section-desc">本番 URL は <strong>https://bridge-linq.com</strong>（Netlify: hachigreen）。加盟店は <strong>{slug}.bridge-linq.com</strong> でログインします。</p>
     <div class="login-table">
+      <div class="login-section-header">本番環境</div>
+      <div class="login-row main">
+        <div class="login-role">プラットフォーム URL</div>
+        <div class="login-email">https://bridge-linq.com</div>
+        <div><span class="login-pass">—</span></div>
+        <div><span class="badge-full">Primary domain</span></div>
+      </div>
+      <div class="login-row main">
+        <div class="login-role">運営管理コンソール</div>
+        <div class="login-email">https://bridge-linq.com/admin/login</div>
+        <div><span class="login-pass">super-admin@example.com / admin2026</span></div>
+        <div><span class="badge-full">企業登録・slug 発行</span></div>
+      </div>
       <div class="login-section-header">実際に使用するアカウント</div>
       <div class="login-row main">
         <div class="login-role">管理者（メイン）</div>
