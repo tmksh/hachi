@@ -5,24 +5,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
-import { Plus } from "lucide-react";
+import { KpiRow } from "@/components/shared/kpi-row";
+import { StatusSelect } from "@/components/shared/status-select";
+import { Plus, Receipt, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { getInvoices, updateInvoiceStatus } from "@/lib/actions/invoices";
+import { getStatusOption } from "@/lib/status-config";
 
 type Invoice = Awaited<ReturnType<typeof getInvoices>>[number];
-
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  draft:     { label: "下書き",   color: "text-muted-foreground" },
-  sent:      { label: "送付済み", color: "text-blue-600" },
-  paid:      { label: "入金済み", color: "text-emerald-600" },
-  cancelled: { label: "キャンセル", color: "text-rose-500" },
-};
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -40,7 +35,7 @@ export default function InvoicesPage() {
     setUpdating(id);
     try {
       await updateInvoiceStatus(id, status);
-      toast.success(`ステータスを「${STATUS_CONFIG[status].label}」に変更しました`);
+      toast.success(`ステータスを「${getStatusOption("invoice", status)?.label ?? status}」に変更しました`);
     } catch {
       setInvoices(prev);
       toast.error("ステータスの更新に失敗しました");
@@ -55,30 +50,38 @@ export default function InvoicesPage() {
   const draftCount = invoices.filter(i => i.status === "draft").length;
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="請求管理" description="請求書の一覧と管理">
         <Link href="/invoices/new">
           <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規作成</Button>
         </Link>
       </PageHeader>
 
-      {/* サマリー */}
-      {!loading && invoices.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "入金済み", val: `¥${Math.round(totalPaid / 10000).toLocaleString()}万`, color: "text-emerald-600" },
-            { label: "送付済み（未入金）", val: `¥${Math.round(totalSent / 10000).toLocaleString()}万`, color: "text-blue-600" },
-            { label: "下書き", val: `${draftCount}件`, color: "text-muted-foreground" },
-          ].map((k, i) => (
-            <Card key={i} className="py-0">
-              <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-muted-foreground">{k.label}</p>
-                <p className={`text-lg font-semibold tabular-nums ${k.color}`}>{k.val}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <KpiRow
+        loading={loading}
+        columns={3}
+        items={[
+          {
+            label: "入金済み",
+            value: `¥${Math.round(totalPaid / 10000).toLocaleString()}万`,
+            icon: Receipt,
+            valueClassName: "text-emerald-700",
+          },
+          {
+            label: "送付済み",
+            value: `¥${Math.round(totalSent / 10000).toLocaleString()}万`,
+            sub: "未入金",
+            icon: Receipt,
+            valueClassName: "text-blue-700",
+          },
+          {
+            label: "下書き",
+            value: draftCount,
+            sub: "件",
+            icon: FileText,
+          },
+        ]}
+      />
 
       <Card variant="inset">
         <div className="overflow-x-auto">
@@ -120,23 +123,13 @@ export default function InvoicesPage() {
                   <TableCell className="text-sm">{inv.invoice_date ? format(parseISO(inv.invoice_date), "yyyy/MM/dd", { locale: ja }) : "-"}</TableCell>
                   <TableCell className="text-sm">{inv.due_date ? format(parseISO(inv.due_date), "yyyy/MM/dd", { locale: ja }) : "-"}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">¥{inv.total.toLocaleString()}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Select
+                  <TableCell>
+                    <StatusSelect
+                      entity="invoice"
                       value={inv.status}
                       disabled={updating === inv.id}
                       onValueChange={(v) => handleStatusChange(inv.id, v as "draft" | "sent" | "paid" | "cancelled")}
-                    >
-                      <SelectTrigger className={`h-7 text-xs w-[110px] ${STATUS_CONFIG[inv.status]?.color ?? ""}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                          <SelectItem key={k} value={k} className="text-xs">
-                            <span className={v.color}>{v.label}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -15,7 +15,7 @@ export type Profile = {
   company_id: string;
   display_name: string;
   email: string;
-  role: 'hq_admin' | 'contractor_admin' | 'employee';
+  role: 'hq_admin' | 'contractor_admin' | 'employee' | 'admin' | 'executive' | 'sales' | 'field_manager' | 'designer' | 'administration' | 'external_partner';
   avatar_url: string | null;
   department: string | null;
   position: string | null;
@@ -40,6 +40,14 @@ export type Customer = {
   ai_score: number | null;
   tags: string[];
   notes: string | null;
+  eight_id: string | null;
+  customer_type: 'corporation' | 'individual' | null;
+  department: string | null;
+  age: number | null;
+  inquiry_category: string | null;
+  inquiry_date: string | null;
+  inquiry_content: string | null;
+  custom_fields: Record<string, string>;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -58,6 +66,7 @@ export type Deal = {
   department_name: string | null;
   tags: string[];
   next_action: string | null;
+  summary: string | null;
   days_in_stage: number;
   created_at: string;
   updated_at: string;
@@ -108,6 +117,10 @@ export type Craftsman = {
   active_projects: number;
   total_projects: number;
   notes: string | null;
+  skills: string[];
+  service_areas: string[];
+  contract_rate: number | null;
+  payment_notes: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

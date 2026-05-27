@@ -13,7 +13,6 @@ export const NAV_GROUPS = [
     label: "リード",
     items: [
       { key: "crm", label: "顧客・商談管理", href: "/crm" },
-      { key: "deals", label: "パイプライン", href: "/deals" },
       { key: "quotes", label: "見積管理", href: "/quotes" },
       { key: "craftsmen", label: "職人管理", href: "/craftsmen" },
     ],
@@ -24,8 +23,13 @@ export const NAV_GROUPS = [
     items: [
       { key: "contracts", label: "契約管理", href: "/contracts" },
       { key: "constructions", label: "工事管理", href: "/constructions" },
-      { key: "invoices", label: "請求管理", href: "/invoices" },
-      { key: "budget", label: "予算管理", href: "/budget" },
+    ],
+  },
+  {
+    key: "admin",
+    label: "管理",
+    items: [
+      { key: "admin-settings", label: "管理者設定", href: "/settings" },
     ],
   },
   {
@@ -58,12 +62,19 @@ export const ROLES = {
   HQ_ADMIN: "hq_admin",
   CONTRACTOR_ADMIN: "contractor_admin",
   EMPLOYEE: "employee",
+  ADMIN: "admin",
+  EXECUTIVE: "executive",
+  SALES: "sales",
+  FIELD_MANAGER: "field_manager",
+  DESIGNER: "designer",
+  ADMINISTRATION: "administration",
+  EXTERNAL_PARTNER: "external_partner",
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
 /** 管理者ロール（設定変更・メンバー管理可能） */
-export const ADMIN_ROLES: Role[] = ["hq_admin"];
+export const ADMIN_ROLES: Role[] = ["hq_admin", "admin"];
 
 /**
  * Route prefix → 許可するロール一覧 (未定義 = 全ロール許可)
@@ -75,10 +86,22 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   "/deals":       ["hq_admin", "contractor_admin"],
   "/quotes":      ["hq_admin", "contractor_admin"],
   "/craftsmen":   ["hq_admin", "contractor_admin"],
-  "/contracts":   ["hq_admin", "contractor_admin"],
-  "/invoices":    ["hq_admin", "contractor_admin"],
-  "/budget":      ["hq_admin"],
+  "/contracts":   ["hq_admin", "contractor_admin", "admin", "sales"],
   "/marketing":   [],
+};
+
+/** CSV定義ロールラベル（37–43） */
+export const CSV_ROLE_LABELS: Record<string, string> = {
+  admin: "管理者（Admin）",
+  executive: "経営層（Executive）",
+  sales: "営業（Sales）",
+  field_manager: "現場担当（Field Manager）",
+  designer: "設計士（Designer）",
+  administration: "総務（Administration）",
+  external_partner: "外部協力業者",
+  hq_admin: "本部管理者",
+  contractor_admin: "施工店管理者",
+  employee: "社員",
 };
 
 /** ナビ項目キー → 許可するロール一覧 (未定義 = 全ロール許可) */
@@ -88,9 +111,8 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   deals:              ["hq_admin", "contractor_admin"],
   quotes:             ["hq_admin", "contractor_admin"],
   craftsmen:          ["hq_admin", "contractor_admin"],
-  contracts:          ["hq_admin", "contractor_admin"],
-  invoices:           ["hq_admin", "contractor_admin"],
-  budget:             ["hq_admin"],
+  contracts:          ["hq_admin", "contractor_admin", "admin", "sales"],
+  "admin-settings":   ["hq_admin", "admin"],
   "marketing-email":  ["hq_admin"],
   "marketing-sns":    ["hq_admin"],
   "marketing-roi":    ["hq_admin"],
@@ -117,6 +139,13 @@ export const ROLE_LABELS: Record<Role, string> = {
   hq_admin:         "本部管理者",
   contractor_admin: "施工店管理者",
   employee:         "社員",
+  admin:            "管理者",
+  executive:        "経営層",
+  sales:            "営業",
+  field_manager:    "現場担当",
+  designer:         "設計士",
+  administration:   "総務",
+  external_partner: "外部協力業者",
 };
 
 // Departments
@@ -164,5 +193,8 @@ export const STATUS_COLORS = {
   in_progress: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   suspended: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
   delayed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  issued: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  sent: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  accepted: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   paid: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
 } as const;

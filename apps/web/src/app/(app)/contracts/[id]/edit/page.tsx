@@ -59,8 +59,8 @@ export default function ContractEditPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3"><Link href={`/contracts/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold">契約編集</h1></div>
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex items-center gap-3"><Link href={`/contracts/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">契約編集</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">契約情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {loading ? <div className="space-y-4">{Array.from({length:6}).map((_,i)=><Skeleton key={i} className="h-10 w-full" />)}</div> : (

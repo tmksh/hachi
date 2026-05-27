@@ -428,12 +428,12 @@ export default function CalendarPage() {
   );
 
   return (
-    <div className="md:h-screen md:flex md:flex-col p-4 md:p-6 md:gap-3 space-y-4 md:space-y-0 md:overflow-hidden">
+    <div className="md:h-screen md:flex md:flex-col p-4 md:p-8 md:gap-3 space-y-4 md:space-y-0 md:overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between md:shrink-0">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">カレンダー</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">スケジュール管理</p>
+          <h1 className="text-2xl font-semibold tracking-tight">カレンダー</h1>
+          <p className="text-sm text-muted-foreground mt-1">スケジュール管理</p>
         </div>
 
         {/* ログイン中のユーザー表示 */}

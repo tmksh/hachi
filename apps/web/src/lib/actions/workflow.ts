@@ -185,6 +185,35 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
   }
 }
 
+export async function updateWorkflowRequestStatus(
+  id: string,
+  status: "draft" | "submitted" | "approved" | "rejected" | "cancelled",
+) {
+  const supabase = await createClient();
+  const patch: {
+    status: typeof status;
+    submitted_at?: string | null;
+    decided_at?: string | null;
+    updated_at: string;
+  } = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (status === "submitted") {
+    patch.submitted_at = new Date().toISOString();
+    patch.decided_at = null;
+  } else if (status === "approved" || status === "rejected" || status === "cancelled") {
+    patch.decided_at = new Date().toISOString();
+  } else if (status === "draft") {
+    patch.submitted_at = null;
+    patch.decided_at = null;
+  }
+
+  const { error } = await supabase.from("workflow_requests").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
 export async function addWorkflowComment(requestId: string, body: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -21,10 +21,10 @@ export default function MarketingSnsPage() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [customers]);
 
-  if (loading) return <div className="p-4 md:p-6 space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
+  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="SNS・チャネル分析" description="顧客獲得チャネルの分析" />
       <div className="grid grid-cols-2 gap-3">
         <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">総顧客数</p><p className="text-2xl font-semibold">{customers.length}</p></CardContent></Card>

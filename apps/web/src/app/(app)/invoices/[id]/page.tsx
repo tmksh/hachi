@@ -117,14 +117,14 @@ export default function InvoiceDetailPage() {
   const handlePrint = () => window.print();
 
   if (loading) return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-4 md:p-8 space-y-6">
       <Skeleton className="h-8 w-64" />
       <Skeleton className="h-48" />
       <Skeleton className="h-64" />
     </div>
   );
   if (!data) return (
-    <div className="p-4 md:p-6">
+    <div className="p-4 md:p-8">
       <Link href="/invoices" className="text-sm text-muted-foreground flex items-center gap-1">
         <ArrowLeft className="h-4 w-4" />戻る
       </Link>
@@ -133,7 +133,7 @@ export default function InvoiceDetailPage() {
   );
 
   return (
-    <div className="p-4 md:p-6 space-y-5 print:p-0 print:space-y-3">
+    <div className="p-4 md:p-8 space-y-6 print:p-0 print:space-y-3">
       <Link href="/invoices" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden">
         <ArrowLeft className="h-4 w-4" />請求書一覧
       </Link>
@@ -142,7 +142,7 @@ export default function InvoiceDetailPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-semibold tabular-nums">{data.invoice_no ?? "INV-???"}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight tabular-nums">{data.invoice_no ?? "INV-???"}</h1>
             <Badge className={STATUS_CONFIG[data.status]?.color ?? ""}>
               {STATUS_CONFIG[data.status]?.label ?? data.status}
             </Badge>

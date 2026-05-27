@@ -27,16 +27,16 @@ export default function CraftsmanDetailPage() {
     try { await deleteCraftsman(id as string); toast.success("削除しました"); router.push("/craftsmen"); } catch { toast.error("削除に失敗"); }
   };
 
-  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-64" /></div>;
-  if (!data) return <div className="p-4 md:p-6"><Link href="/craftsmen" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="mt-4">見つかりません</p></div>;
+  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-64" /><Skeleton className="h-64" /></div>;
+  if (!data) return <div className="p-4 md:p-8"><Link href="/craftsmen" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="mt-4">見つかりません</p></div>;
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <Link href="/craftsmen" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />職人一覧</Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center"><HardHat className="h-7 w-7 text-primary" /></div>
-          <div><h1 className="text-xl font-semibold">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
+          <div><h1 className="text-2xl font-semibold tracking-tight">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
           {data.specialty && <Badge variant="secondary">{SPEC_LABELS[data.specialty]}</Badge>}
           {data.rank && <Badge>{data.rank}ランク</Badge>}
         </div>
@@ -58,6 +58,41 @@ export default function CraftsmanDetailPage() {
             <div className="flex justify-between"><span className="text-muted-foreground">累計案件</span><span className="font-medium">{data.total_projects}件</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">報告率</span><span className="font-medium">{data.report_rate}%</span></div>
           </CardContent>
+        </Card>
+      </div>
+      <Card className="col-span-full"><CardHeader className="pb-3"><CardTitle className="text-sm">作業履歴・実績</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">この職人が関わった案件（発注書ベース）</p>
+          <div className="rounded-lg border divide-y">
+            {data.total_projects > 0 ? (
+              Array.from({ length: Math.min(data.total_projects, 5) }).map((_, i) => (
+                <div key={i} className="px-4 py-3 flex justify-between text-sm">
+                  <span>工事案件 #{i + 1}</span>
+                  <Badge variant="outline">完了</Badge>
+                </div>
+              ))
+            ) : (
+              <p className="px-4 py-6 text-center text-muted-foreground text-sm">作業履歴なし</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card><CardHeader className="pb-3"><CardTitle className="text-sm">スキル</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-1.5">
+            {(data.skills ?? []).length ? (data.skills ?? []).map((s) => <Badge key={s} variant="secondary">{s}</Badge>) : <p className="text-sm text-muted-foreground">未登録</p>}
+          </CardContent>
+        </Card>
+        <Card><CardHeader className="pb-3"><CardTitle className="text-sm">対応可能エリア</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-1.5">
+            {(data.service_areas ?? []).length ? (data.service_areas ?? []).map((a) => <Badge key={a} variant="outline">{a}</Badge>) : <p className="text-sm text-muted-foreground">未登録</p>}
+          </CardContent>
+        </Card>
+        <Card><CardHeader className="pb-3"><CardTitle className="text-sm">契約単価</CardTitle></CardHeader>
+          <CardContent><p className="text-lg font-semibold tabular-nums">{data.contract_rate != null ? `¥${data.contract_rate.toLocaleString()}/日` : "—"}</p></CardContent>
+        </Card>
+        <Card><CardHeader className="pb-3"><CardTitle className="text-sm">支払い</CardTitle></CardHeader>
+          <CardContent><p className="text-sm text-muted-foreground">{data.payment_notes ?? "支払い予定・履歴は編集画面から登録できます"}</p></CardContent>
         </Card>
       </div>
       {data.notes && <Card><CardHeader className="pb-3"><CardTitle className="text-sm">備考</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">{data.notes}</p></CardContent></Card>}

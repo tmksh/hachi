@@ -37,6 +37,8 @@ import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
 import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
 import { aggregateChartPeriods, type PeriodGranularity } from "@/lib/bi-config";
 import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
+import { PageHeader } from "@/components/shared/page-header";
+import { cn } from "@/lib/utils";
 
 // データ未登録時のフォールバック
 const FALLBACK_DEPT_ACTUALS = [
@@ -313,20 +315,14 @@ export default function BiDashboardPage() {
     <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">
 
       {/* ────────── ページヘッダー ────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">BIダッシュボード</h1>
-          <p className="text-sm text-muted-foreground mt-1">{fiscalYearLabel(fiscalYear)} ・ 経営指標の可視化</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <KpiColorBar value={accentColor} onChange={setAccentColor} />
-          <Badge variant="outline" className="text-xs">{hasRealData ? "実績データ" : "実績未登録"}</Badge>
-          {hasDbSettings && <Badge variant="secondary" className="text-xs">設定済</Badge>}
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
-            <Settings2 className="h-3.5 w-3.5" />期首設定
-          </Button>
-        </div>
-      </div>
+      <PageHeader title="BIダッシュボード" description={`${fiscalYearLabel(fiscalYear)} ・ 経営指標の可視化`}>
+        <KpiColorBar value={accentColor} onChange={setAccentColor} />
+        <Badge variant="outline" className="text-xs">{hasRealData ? "実績データ" : "実績未登録"}</Badge>
+        {hasDbSettings && <Badge variant="secondary" className="text-xs">設定済</Badge>}
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
+          <Settings2 className="h-3.5 w-3.5" />期首設定
+        </Button>
+      </PageHeader>
 
       <BiSettingsDialog
         open={settingsOpen}
@@ -507,17 +503,16 @@ export default function BiDashboardPage() {
                 <CardTitle className="text-base font-semibold">月別推移</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">売上 / 粗利 / 売上総利益（按分後）の推移</p>
               </div>
-              <div className="inline-flex items-center rounded-md border border-border bg-background p-0.5 text-[11px]">
+              <div className="segmented-control shrink-0 text-[11px]">
                 {(["month", "quarter", "year"] as const).map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => setChartPeriod(p)}
-                    className={`px-2.5 py-1 rounded-sm transition ${
-                      chartPeriod === p
-                        ? "bg-foreground text-background font-medium"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={cn(
+                      "segmented-control-btn",
+                      chartPeriod === p && "segmented-control-btn-active",
+                    )}
                   >
                     {p === "month" ? "月次" : p === "quarter" ? "四半期" : "年次"}
                   </button>

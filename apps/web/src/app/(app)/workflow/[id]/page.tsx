@@ -125,7 +125,7 @@ export default function WorkflowDetailPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="p-4 md:p-8 space-y-6">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-64" />
       </div>
@@ -133,7 +133,7 @@ export default function WorkflowDetailPage() {
   }
   if (!data) {
     return (
-      <div className="p-4 md:p-6">
+      <div className="p-4 md:p-8">
         <Link href="/workflow" className="text-sm text-muted-foreground flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" />戻る
         </Link>
@@ -147,13 +147,13 @@ export default function WorkflowDetailPage() {
   const fields = (data as Detail & { payload?: Record<string, unknown> }).payload ?? {};
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <Link href="/workflow" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" />ワークフロー一覧
       </Link>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-xl font-semibold">{data.title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{data.title}</h1>
         <StatusBadge status={data.status} />
         {(data as Detail & { is_urgent?: boolean }).is_urgent && (
           <Badge variant="destructive">緊急</Badge>

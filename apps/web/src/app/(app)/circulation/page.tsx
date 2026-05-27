@@ -63,7 +63,7 @@ export default function CirculationPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="回覧・お知らせ" description="社内通知と回覧板">
         <Link href="/circulation/new">
           <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規作成</Button>

@@ -70,16 +70,17 @@ import type { Company, Profile } from "@/lib/database.types";
 import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
 import { useCompanyPermissions, type CustomRole, type RolePermissions, DEFAULT_PERMISSIONS } from "@/hooks/use-company-permissions";
 
-const ROLE_LABEL: Record<TeamRole, string> = {
-  hq_admin: "本部管理者",
-  contractor_admin: "施工店管理者",
-  employee: "社員",
-};
-
-const ROLE_COLOR: Record<TeamRole, string> = {
+const ROLE_COLOR: Record<Role, string> = {
   hq_admin: "bg-blue-100 text-blue-800 border-blue-200",
   contractor_admin: "bg-emerald-100 text-emerald-800 border-emerald-200",
   employee: "bg-slate-100 text-slate-800 border-slate-200",
+  admin: "bg-violet-100 text-violet-800 border-violet-200",
+  executive: "bg-amber-100 text-amber-800 border-amber-200",
+  sales: "bg-sky-100 text-sky-800 border-sky-200",
+  field_manager: "bg-orange-100 text-orange-800 border-orange-200",
+  designer: "bg-pink-100 text-pink-800 border-pink-200",
+  administration: "bg-teal-100 text-teal-800 border-teal-200",
+  external_partner: "bg-gray-100 text-gray-800 border-gray-200",
 };
 
 export default function SettingsPage() {
@@ -495,7 +496,7 @@ export default function SettingsPage() {
 
   if (authLoading) {
     return (
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="p-4 md:p-8 space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-96" />
       </div>
@@ -503,8 +504,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <h1 className="text-xl font-semibold">設定</h1>
+    <div className="p-4 md:p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">設定</h1>
+        <p className="text-sm text-muted-foreground mt-1">アカウント・組織・各機能の設定</p>
+      </div>
       <Tabs defaultValue="profile">
         <TabsList>
           <TabsTrigger value="profile">アカウント</TabsTrigger>
@@ -783,7 +787,7 @@ export default function SettingsPage() {
                                   </Select>
                                 ) : (
                                   <Badge variant="outline" className={`text-xs ${ROLE_COLOR[m.role]}`}>
-                                    {ROLE_LABEL[m.role]}
+                                    {ROLE_LABELS[m.role]}
                                     {isSelf && <span className="ml-1">（自分）</span>}
                                   </Badge>
                                 )}
@@ -859,13 +863,13 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {(["hq_admin", "contractor_admin", "employee"] as Role[]).map((role) => {
-                      const colors: Record<Role, string> = {
+                      const colors: Partial<Record<Role, string>> = {
                         hq_admin: "border-blue-200 bg-blue-50 text-blue-800",
                         contractor_admin: "border-emerald-200 bg-emerald-50 text-emerald-800",
                         employee: "border-slate-200 bg-slate-50 text-slate-800",
                       };
                       return (
-                        <div key={role} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colors[role]}`}>
+                        <div key={role} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colors[role] ?? "border-slate-200 bg-slate-50 text-slate-800"}`}>
                           {ROLE_LABELS[role]}
                           <span className="text-[10px] opacity-60">（システム）</span>
                         </div>

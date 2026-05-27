@@ -1,19 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageHeader } from "@/components/shared/page-header";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
+import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
+import { DealsTimelineTab } from "@/components/crm/deals-timeline-tab";
+import { RecordingSummaryTab } from "@/components/crm/recording-summary-tab";
+import { CustomerTodoTab } from "@/components/crm/customer-todo-tab";
+import { SchedulingTab } from "@/components/crm/scheduling-tab";
+import { CustomerFilesTab } from "@/components/crm/customer-files-tab";
+import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
+import { cn } from "@/lib/utils";
 import {
-  ArrowLeft, Pencil, Trash2, Phone, Mail, MapPin,
-  Building2, Plus, FileText, Briefcase, HardHat, ClipboardList,
+  ArrowLeft, Trash2, Phone, Mail, MapPin,
+  Building2, Plus, FileText, Briefcase, HardHat, ClipboardList, ClipboardPen,
+  User, Calendar, Tag, ChevronRight, Inbox, Mic, ListTodo, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomer, deleteCustomer, getCustomerRelated } from "@/lib/actions/customers";
@@ -24,10 +34,9 @@ type Related = Awaited<ReturnType<typeof getCustomerRelated>>;
 
 const STAGE_LABELS: Record<string, string> = {
   lead: "リード", negotiation: "商談中", proposal: "提案中",
+  inquiry: "問い合わせ", first_meeting: "初回面談", materials_sent: "資料送付",
+  quote_submitted: "見積提出", closing: "クロージング",
   won: "受注", lost: "失注",
-};
-const STATUS_LABELS_EST: Record<string, string> = {
-  draft: "下書き", sent: "送付済", accepted: "受理", rejected: "却下",
 };
 const STATUS_LABELS_CON: Record<string, string> = {
   draft: "下書き", active: "有効", completed: "完了", cancelled: "解除",
@@ -35,24 +44,92 @@ const STATUS_LABELS_CON: Record<string, string> = {
 const STATUS_LABELS_CONS: Record<string, string> = {
   preparing: "準備中", in_progress: "施工中", completed: "完了", suspended: "停止", delayed: "遅延",
 };
+const CUSTOMER_STATUS: Record<string, string> = {
+  active: "アクティブ", inactive: "非アクティブ", pending: "保留",
+};
+
+function DetailRow({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex items-start justify-between gap-3 py-2.5 border-b border-border/50 last:border-0", className)}>
+      <span className="text-xs text-muted-foreground shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm text-right font-medium">{value || <span className="text-muted-foreground font-normal">—</span>}</span>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub, icon: Icon, accent }: {
+  label: string; value: number | string; sub: string;
+  icon: React.ComponentType<{ className?: string }>; accent: string;
+}) {
+  return (
+    <Card variant="inset" className="py-0 overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-stretch">
+          <div className="w-1 shrink-0" style={{ background: accent }} />
+          <div className="flex-1 flex items-center gap-3 px-4 py-3.5">
+            <div className="size-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: accent + "18", color: accent }}>
+              <Icon className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">{label}</p>
+              <p className="text-xl font-bold tabular-nums leading-tight">{value}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{sub}</p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyRelated({ message, action }: { message: string; action: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+      <div className="size-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
+        <Inbox className="size-5 text-muted-foreground" />
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">{message}</p>
+      {action}
+    </div>
+  );
+}
+
+function RelatedRow({ onClick, children }: { onClick?: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-white/45 dark:hover:bg-white/5 transition-colors border-b border-border/40 last:border-0 group"
+    >
+      <div className="flex-1 min-w-0">{children}</div>
+      <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors" />
+    </button>
+  );
+}
 
 export default function CrmDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const [mainTab, setMainTab] = useState("overview");
   const [data, setData] = useState<CustomerDetail | null>(null);
   const [related, setRelated] = useState<Related | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    const allowed = ["overview", "entry", "deals", "recording", "todo", "scheduling", "files"];
+    if (tab && allowed.includes(tab)) setMainTab(tab);
+  }, []);
+
+  const reloadCustomer = () => {
     if (!id) return;
-    Promise.all([
-      getCustomer(id as string),
-      getCustomerRelated(id as string),
-    ])
-      .then(([c, r]) => {
-        setData(c as CustomerDetail);
-        setRelated(r);
-      })
+    getCustomer(id as string).then(c => setData(c as CustomerDetail)).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([getCustomer(id as string), getCustomerRelated(id as string)])
+      .then(([c, r]) => { setData(c as CustomerDetail); setRelated(r); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
@@ -64,245 +141,320 @@ export default function CrmDetailPage() {
   };
 
   if (loading) return (
-    <div className="p-4 md:p-6 space-y-4">
-      <Skeleton className="h-8 w-64" />
-      <div className="grid grid-cols-2 gap-4"><Skeleton className="h-48" /><Skeleton className="h-48" /></div>
-      <Skeleton className="h-64" />
+    <div className="p-4 md:p-8 space-y-6">
+      <Skeleton className="h-5 w-24" />
+      <Skeleton className="h-32 w-full rounded-xl" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+      <Skeleton className="h-80 w-full" />
     </div>
   );
+
   if (!data) return (
-    <div className="p-4 md:p-6">
-      <Link href="/crm" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-4">
-        <ArrowLeft className="h-4 w-4" />戻る
+    <div className="p-4 md:p-8 space-y-6">
+      <Link href="/crm" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+        <ArrowLeft className="h-4 w-4" />顧客一覧
       </Link>
       <p>顧客が見つかりません</p>
     </div>
   );
 
+  const avatar = getCustomerAvatarColor(data.id);
+  const isCorp = data.customer_type === "corporation" || !!data.company_name;
   const totalDeal = related?.deals.reduce((s, d) => s + (d.value ?? 0), 0) ?? 0;
   const totalEst = related?.estimates.reduce((s, e) => s + (e.total_amount ?? 0), 0) ?? 0;
   const totalCon = related?.contracts.reduce((s, c) => s + (c.amount ?? 0), 0) ?? 0;
+  const budgetLabel = data.budget_min || data.budget_max
+    ? `¥${(data.budget_min ?? 0).toLocaleString()}${data.budget_max ? ` 〜 ¥${data.budget_max.toLocaleString()}` : " 〜"}`
+    : null;
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <Link href="/crm" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <div className="p-4 md:p-8 space-y-6">
+      <Link href="/crm" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />顧客一覧
       </Link>
 
-      {/* ヘッダー */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="text-xl font-bold text-primary">{data.name.charAt(0)}</span>
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold">{data.name}</h1>
-            <p className="text-sm text-muted-foreground">{data.company_name || "個人"}</p>
-          </div>
-          <Badge variant="secondary">{data.status}</Badge>
-        </div>
-        <div className="flex gap-2">
-          <Link href={`/crm/${id}/edit`}>
-            <Button variant="outline" size="sm"><Pencil className="h-4 w-4 mr-1" />編集</Button>
-          </Link>
-          <Button variant="outline" size="sm" onClick={handleDelete} className="text-destructive">
-            <Trash2 className="h-4 w-4 mr-1" />削除
-          </Button>
-        </div>
-      </div>
-
-      {/* サマリーカード */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "商談数", value: related?.deals.length ?? 0, sub: `¥${(totalDeal / 10000).toFixed(0)}万` },
-          { label: "見積数", value: related?.estimates.length ?? 0, sub: `¥${(totalEst / 10000).toFixed(0)}万` },
-          { label: "契約数", value: related?.contracts.length ?? 0, sub: `¥${(totalCon / 10000).toFixed(0)}万` },
-          { label: "工事数", value: related?.constructions.length ?? 0, sub: `進行中 ${related?.constructions.filter(c => c.status === "in_progress").length ?? 0}件` },
-        ].map(({ label, value, sub }) => (
-          <Card key={label} variant="inset">
-            <CardContent className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="text-2xl font-bold tabular-nums">{value}</p>
-              <p className="text-xs text-muted-foreground">{sub}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* 基本情報 + 関連データ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
-        {/* 左: 顧客情報 */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">連絡先</CardTitle></CardHeader>
-            <CardContent className="space-y-2.5 text-sm">
-              {data.phone && <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground shrink-0" />{data.phone}</div>}
-              {data.email && <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground shrink-0" />{data.email}</div>}
-              {data.address && <div className="flex items-start gap-2"><MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" /><span>{data.address}</span></div>}
-              {data.company_name && <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-muted-foreground shrink-0" />{data.company_name}</div>}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">詳細</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">ソース</span><span>{data.source ?? "-"}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">担当</span><span>{data.assigned_to_profile?.display_name ?? "-"}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">予算</span><span>{data.budget_min || data.budget_max ? `¥${(data.budget_min ?? 0).toLocaleString()}〜` : "-"}</span></div>
+      {/* プロフィールヘッダー */}
+      <Card className="overflow-hidden py-0">
+        <div className="h-1.5" style={{ background: avatar.avatarGradient }} />
+        <CardContent className="p-5">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <CustomerAvatar seed={data.id} name={data.name} size="lg" />
+            <div className="flex-1 min-w-0 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">{data.name}</h1>
+                <Badge variant="outline" className="text-xs">{isCorp ? "法人" : "個人"}</Badge>
+                <Badge className={cn(
+                  "text-xs",
+                  data.status === "active" && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                  data.status === "inactive" && "bg-gray-100 text-gray-500 hover:bg-gray-100",
+                  data.status === "pending" && "bg-amber-100 text-amber-700 hover:bg-amber-100",
+                )}>
+                  {CUSTOMER_STATUS[data.status] ?? data.status}
+                </Badge>
+              </div>
+              {data.company_name && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" />{data.company_name}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {data.phone && (
+                  <a href={`tel:${data.phone}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 hover:bg-muted transition-colors">
+                    <Phone className="h-3 w-3" />{data.phone}
+                  </a>
+                )}
+                {data.email && (
+                  <a href={`mailto:${data.email}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 hover:bg-muted transition-colors truncate max-w-xs">
+                    <Mail className="h-3 w-3 shrink-0" />{data.email}
+                  </a>
+                )}
+                {data.address && (
+                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 text-muted-foreground">
+                    <MapPin className="h-3 w-3 shrink-0" />{data.address}
+                  </span>
+                )}
+              </div>
               {data.tags?.length > 0 && (
-                <div className="flex gap-1 flex-wrap pt-1">
-                  {data.tags.map(t => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}
+                <div className="flex flex-wrap gap-1.5">
+                  {data.tags.map(t => (
+                    <Badge key={t} variant="secondary" className="text-[10px] h-5 px-2 font-normal">{t}</Badge>
+                  ))}
                 </div>
               )}
-              {data.notes && <p className="text-muted-foreground pt-2 border-t text-xs">{data.notes}</p>}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" size="sm" onClick={() => setMainTab("entry")}>
+                <ClipboardPen className="h-4 w-4 mr-1.5" />記入画面
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDelete} className="text-destructive hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* 右: 関連データタブ */}
-        <Tabs defaultValue="deals">
-          <TabsList>
-            <TabsTrigger value="deals" className="gap-1.5">
-              <Briefcase className="h-3.5 w-3.5" />商談 {related?.deals.length ? `(${related.deals.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="estimates" className="gap-1.5">
-              <FileText className="h-3.5 w-3.5" />見積 {related?.estimates.length ? `(${related.estimates.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="contracts" className="gap-1.5">
-              <ClipboardList className="h-3.5 w-3.5" />契約 {related?.contracts.length ? `(${related.contracts.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="constructions" className="gap-1.5">
-              <HardHat className="h-3.5 w-3.5" />工事 {related?.constructions.length ? `(${related.constructions.length})` : ""}
-            </TabsTrigger>
-          </TabsList>
+      <Tabs value={mainTab} onValueChange={setMainTab}>
+        <TabsList className="h-auto flex flex-wrap gap-1">
+          <TabsTrigger value="overview" className="text-xs px-3">概要</TabsTrigger>
+          <TabsTrigger value="entry" className="text-xs px-3 gap-1"><ClipboardPen className="h-3 w-3" />記入画面</TabsTrigger>
+          <TabsTrigger value="deals" className="text-xs px-3 gap-1"><Briefcase className="h-3 w-3" />商談</TabsTrigger>
+          <TabsTrigger value="recording" className="text-xs px-3 gap-1"><Mic className="h-3 w-3" />録音・要約</TabsTrigger>
+          <TabsTrigger value="todo" className="text-xs px-3 gap-1"><ListTodo className="h-3 w-3" />ToDo</TabsTrigger>
+          <TabsTrigger value="scheduling" className="text-xs px-3 gap-1"><Calendar className="h-3 w-3" />スケジューリング</TabsTrigger>
+          <TabsTrigger value="files" className="text-xs px-3 gap-1"><Upload className="h-3 w-3" />ファイル</TabsTrigger>
+        </TabsList>
 
-          {/* 商談 */}
-          <TabsContent value="deals" className="mt-3">
-            <Card variant="inset">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/40">
-                <p className="text-xs text-muted-foreground">この顧客に紐づく商談</p>
-                <Link href={`/deals?customer_id=${id}`}>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                    <Plus className="h-3 w-3" />商談を追加
-                  </Button>
-                </Link>
-              </div>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>件名</TableHead><TableHead>ステージ</TableHead>
-                  <TableHead className="text-right">金額</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
+        <TabsContent value="entry" className="mt-4">
+          <CustomerEntryForm mode="edit" customerId={id as string} onSaved={() => reloadCustomer()} />
+        </TabsContent>
+
+        <TabsContent value="deals" className="mt-4">
+          <DealsTimelineTab customerId={id as string} />
+        </TabsContent>
+
+        <TabsContent value="recording" className="mt-4">
+          <RecordingSummaryTab customerId={id as string} />
+        </TabsContent>
+
+        <TabsContent value="todo" className="mt-4">
+          <CustomerTodoTab customerId={id as string} />
+        </TabsContent>
+
+        <TabsContent value="scheduling" className="mt-4">
+          <SchedulingTab customerId={id as string} />
+        </TabsContent>
+
+        <TabsContent value="files" className="mt-4">
+          <CustomerFilesTab customerId={id as string} />
+        </TabsContent>
+
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          {/* KPI */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiCard label="商談" value={related?.deals.length ?? 0} sub={`合計 ¥${(totalDeal / 10000).toFixed(0)}万`} icon={Briefcase} accent={avatar.progress} />
+            <KpiCard label="見積" value={related?.estimates.length ?? 0} sub={`合計 ¥${(totalEst / 10000).toFixed(0)}万`} icon={FileText} accent="#2563eb" />
+            <KpiCard label="契約" value={related?.contracts.length ?? 0} sub={`合計 ¥${(totalCon / 10000).toFixed(0)}万`} icon={ClipboardList} accent="#059669" />
+            <KpiCard label="工事" value={related?.constructions.length ?? 0} sub={`進行中 ${related?.constructions.filter(c => c.status === "in_progress").length ?? 0}件`} icon={HardHat} accent="#d97706" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
+            {/* 左: プロフィール詳細 */}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />基本情報
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <DetailRow label="担当者" value={data.assigned_to_profile?.display_name} />
+                  <DetailRow label="部門" value={data.department} />
+                  <DetailRow label="年齢" value={data.age != null ? `${data.age}歳` : null} />
+                  <DetailRow label="予算感" value={budgetLabel} />
+                  <DetailRow label="EIGHT-ID" value={data.eight_id} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />問い合わせ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <DetailRow label="知ったきっかけ" value={data.source} />
+                  <DetailRow label="問い合わせ分類" value={data.inquiry_category} />
+                  <DetailRow label="問い合わせ日" value={data.inquiry_date ? format(new Date(data.inquiry_date), "yyyy/MM/dd", { locale: ja }) : null} />
+                  {data.inquiry_content && (
+                    <div className="pt-3 mt-1 border-t border-border/50">
+                      <p className="text-[11px] text-muted-foreground mb-1.5">問い合わせ内容</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{data.inquiry_content}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {(data.notes || (data.custom_fields && Object.keys(data.custom_fields).length > 0)) && (
+                <Card>
+                  <CardHeader className="pb-1 pt-4 px-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Tag className="h-4 w-4 text-muted-foreground" />備考・その他
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 space-y-3">
+                    {data.notes && <p className="text-sm leading-relaxed whitespace-pre-wrap">{data.notes}</p>}
+                    {data.custom_fields && Object.entries(data.custom_fields).map(([k, v]) => (
+                      <DetailRow key={k} label={k} value={v} />
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* 右: 関連データ */}
+            <Card variant="inset" className="py-0 overflow-hidden">
+              <Tabs defaultValue="deals">
+                <div className="px-4 pt-3 pb-0 border-b border-border/40">
+                  <TabsList className="h-8 bg-transparent p-0 gap-1 w-full justify-start">
+                    {([
+                      { value: "deals", icon: Briefcase, label: "商談", count: related?.deals.length },
+                      { value: "estimates", icon: FileText, label: "見積", count: related?.estimates.length },
+                      { value: "contracts", icon: ClipboardList, label: "契約", count: related?.contracts.length },
+                      { value: "constructions", icon: HardHat, label: "工事", count: related?.constructions.length },
+                    ] as const).map(({ value, icon: Icon, label, count }) => (
+                      <TabsTrigger
+                        key={value}
+                        value={value}
+                        className="text-xs h-7 px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md gap-1"
+                      >
+                        <Icon className="h-3 w-3" />{label}{count ? ` (${count})` : ""}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+
+                <TabsContent value="deals" className="mt-0">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
+                    <p className="text-xs text-muted-foreground">紐づく商談</p>
+                    <Link href={`/crm?view=pipeline`}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                        <Plus className="h-3 w-3" />追加
+                      </Button>
+                    </Link>
+                  </div>
                   {related?.deals.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground text-sm">商談なし</TableCell></TableRow>
+                    <EmptyRelated message="商談がまだありません" action={
+                      <Link href="/crm?view=pipeline"><Button size="sm" variant="outline" className="gap-1"><Plus className="h-3.5 w-3.5" />商談を追加</Button></Link>
+                    } />
                   ) : related?.deals.map(d => (
-                    <TableRow key={d.id} className="glass-row cursor-pointer" onClick={() => router.push(`/deals`)}>
-                      <TableCell className="font-medium text-sm">{d.title}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{STAGE_LABELS[d.stage ?? ""] ?? d.stage}</Badge></TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{d.value ? `¥${d.value.toLocaleString()}` : "-"}</TableCell>
-                    </TableRow>
+                    <RelatedRow key={d.id} onClick={() => router.push("/crm?view=pipeline")}>
+                      <p className="font-medium text-sm truncate">{d.title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-[10px] h-5">{STAGE_LABELS[d.stage ?? ""] ?? d.stage}</Badge>
+                        {d.value != null && <span className="text-xs font-semibold tabular-nums">¥{d.value.toLocaleString()}</span>}
+                      </div>
+                    </RelatedRow>
                   ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
+                </TabsContent>
 
-          {/* 見積 */}
-          <TabsContent value="estimates" className="mt-3">
-            <Card variant="inset">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/40">
-                <p className="text-xs text-muted-foreground">この顧客に紐づく見積</p>
-                <Link href={`/quotes/new?customer_id=${id}`}>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                    <Plus className="h-3 w-3" />見積を作成
-                  </Button>
-                </Link>
-              </div>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>番号</TableHead><TableHead>件名</TableHead>
-                  <TableHead>ステータス</TableHead><TableHead className="text-right">金額</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
+                <TabsContent value="estimates" className="mt-0">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
+                    <p className="text-xs text-muted-foreground">紐づく見積</p>
+                    <Link href={`/quotes/new?customer_id=${id}`}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />作成</Button>
+                    </Link>
+                  </div>
                   {related?.estimates.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">見積なし</TableCell></TableRow>
+                    <EmptyRelated message="見積がまだありません" action={
+                      <Link href={`/quotes/new?customer_id=${id}`}><Button size="sm" variant="outline" className="gap-1"><Plus className="h-3.5 w-3.5" />見積を作成</Button></Link>
+                    } />
                   ) : related?.estimates.map(e => (
-                    <TableRow key={e.id} className="glass-row cursor-pointer" onClick={() => router.push(`/quotes/${e.id}`)}>
-                      <TableCell className="text-xs text-muted-foreground tabular-nums">{e.estimate_no}</TableCell>
-                      <TableCell className="font-medium text-sm">{e.title}</TableCell>
-                      <TableCell><StatusBadge status={e.status ?? "draft"} /></TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{e.total_amount ? `¥${e.total_amount.toLocaleString()}` : "-"}</TableCell>
-                    </TableRow>
+                    <RelatedRow key={e.id} onClick={() => router.push(`/quotes/${e.id}`)}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{e.estimate_no}</span>
+                        <p className="font-medium text-sm truncate">{e.title}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <StatusBadge status={e.status ?? "draft"} />
+                        {e.total_amount != null && <span className="text-xs font-semibold tabular-nums">¥{e.total_amount.toLocaleString()}</span>}
+                      </div>
+                    </RelatedRow>
                   ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
+                </TabsContent>
 
-          {/* 契約 */}
-          <TabsContent value="contracts" className="mt-3">
-            <Card variant="inset">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/40">
-                <p className="text-xs text-muted-foreground">この顧客に紐づく契約</p>
-                <Link href={`/contracts/new?customer_id=${id}`}>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                    <Plus className="h-3 w-3" />契約を追加
-                  </Button>
-                </Link>
-              </div>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>番号</TableHead><TableHead>件名</TableHead>
-                  <TableHead>ステータス</TableHead><TableHead className="text-right">金額</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
+                <TabsContent value="contracts" className="mt-0">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
+                    <p className="text-xs text-muted-foreground">紐づく契約</p>
+                    <Link href={`/contracts/new?customer_id=${id}`}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />追加</Button>
+                    </Link>
+                  </div>
                   {related?.contracts.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">契約なし</TableCell></TableRow>
+                    <EmptyRelated message="契約がまだありません" action={
+                      <Link href={`/contracts/new?customer_id=${id}`}><Button size="sm" variant="outline" className="gap-1"><Plus className="h-3.5 w-3.5" />契約を追加</Button></Link>
+                    } />
                   ) : related?.contracts.map(c => (
-                    <TableRow key={c.id} className="glass-row cursor-pointer" onClick={() => router.push(`/contracts/${c.id}`)}>
-                      <TableCell className="text-xs text-muted-foreground tabular-nums">{c.contract_no}</TableCell>
-                      <TableCell className="font-medium text-sm">{c.title}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{STATUS_LABELS_CON[c.status ?? ""] ?? c.status}</Badge></TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{c.amount ? `¥${c.amount.toLocaleString()}` : "-"}</TableCell>
-                    </TableRow>
+                    <RelatedRow key={c.id} onClick={() => router.push(`/contracts/${c.id}`)}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{c.contract_no}</span>
+                        <p className="font-medium text-sm truncate">{c.title}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-[10px] h-5">{STATUS_LABELS_CON[c.status ?? ""] ?? c.status}</Badge>
+                        {c.amount != null && <span className="text-xs font-semibold tabular-nums">¥{c.amount.toLocaleString()}</span>}
+                      </div>
+                    </RelatedRow>
                   ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
+                </TabsContent>
 
-          {/* 工事 */}
-          <TabsContent value="constructions" className="mt-3">
-            <Card variant="inset">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/40">
-                <p className="text-xs text-muted-foreground">この顧客に紐づく工事</p>
-                <Link href={`/constructions/new?customer_id=${id}`}>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                    <Plus className="h-3 w-3" />工事を追加
-                  </Button>
-                </Link>
-              </div>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>件名</TableHead><TableHead>ステータス</TableHead>
-                  <TableHead>開始</TableHead><TableHead className="text-right">進捗</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
+                <TabsContent value="constructions" className="mt-0">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
+                    <p className="text-xs text-muted-foreground">紐づく工事</p>
+                    <Link href={`/constructions/new?customer_id=${id}`}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />追加</Button>
+                    </Link>
+                  </div>
                   {related?.constructions.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">工事なし</TableCell></TableRow>
+                    <EmptyRelated message="工事がまだありません" action={
+                      <Link href={`/constructions/new?customer_id=${id}`}><Button size="sm" variant="outline" className="gap-1"><Plus className="h-3.5 w-3.5" />工事を追加</Button></Link>
+                    } />
                   ) : related?.constructions.map(c => (
-                    <TableRow key={c.id} className="glass-row cursor-pointer" onClick={() => router.push(`/constructions/${c.id}`)}>
-                      <TableCell className="font-medium text-sm">{c.title}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{STATUS_LABELS_CONS[c.status ?? ""] ?? c.status}</Badge></TableCell>
-                      <TableCell className="text-sm text-muted-foreground tabular-nums">{c.start_date ?? "-"}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{c.progress_pct ?? 0}%</TableCell>
-                    </TableRow>
+                    <RelatedRow key={c.id} onClick={() => router.push(`/constructions/${c.id}`)}>
+                      <p className="font-medium text-sm truncate">{c.title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-[10px] h-5">{STATUS_LABELS_CONS[c.status ?? ""] ?? c.status}</Badge>
+                        {c.start_date && <span className="text-[11px] text-muted-foreground">{c.start_date}</span>}
+                        <span className="text-xs font-semibold tabular-nums ml-auto">{c.progress_pct ?? 0}%</span>
+                      </div>
+                    </RelatedRow>
                   ))}
-                </TableBody>
-              </Table>
+                </TabsContent>
+              </Tabs>
             </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

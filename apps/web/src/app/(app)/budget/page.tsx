@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
+import { KpiRow } from "@/components/shared/kpi-row";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,11 +13,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Wallet, Percent } from "lucide-react";
 import { toast } from "sonner";
 import { getBudgets, deleteBudget, updateBudget } from "@/lib/actions/budgets";
 import { BudgetEditDialog } from "@/components/budget/budget-edit-dialog";
-import { cn } from "@/lib/utils";
 import type { Budget, BudgetItem } from "@/lib/database.types";
 
 type BudgetRow = Awaited<ReturnType<typeof getBudgets>>[number];
@@ -63,7 +63,7 @@ export default function BudgetPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="予算管理" description="年度予算の策定と実績管理">
         <Button size="sm" onClick={handleNew} className="gap-1.5">
           <Plus className="h-4 w-4" />予算を策定
@@ -107,20 +107,27 @@ export default function BudgetPage() {
                   {/* 実績サマリー */}
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">実績サマリー（完了工事 {act.completed_count}件）</p>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                      {[
-                        { label: "実績売上",  val: fmt(act.revenue),      sub: `計画: ${fmt(planRevenue)}`,  color: "" },
-                        { label: "実績原価",  val: fmt(act.cost),         sub: `計画: ${fmt(planCost)}`,     color: "" },
-                        { label: "実績粗利",  val: fmt(act.gross_profit), sub: `計画: ${fmt(planGross)}`,    color: act.gross_profit >= 0 ? "text-green-700" : "text-red-600" },
-                        { label: "粗利率",    val: pct(act.gross_rate),   sub: planRevenue > 0 ? `計画: ${pct((planGross/planRevenue)*100)}` : "-", color: act.gross_rate >= 0 ? "text-green-700" : "text-red-600" },
-                      ].map((k) => (
-                        <div key={k.label} className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-                          <p className="text-xs text-muted-foreground mb-1">{k.label}</p>
-                          <p className={cn("text-lg font-semibold tabular-nums", k.color)}>{k.val}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{k.sub}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <KpiRow
+                      className="mb-4"
+                      items={[
+                        { label: "実績売上", value: fmt(act.revenue), sub: `計画 ${fmt(planRevenue)}`, icon: TrendingUp },
+                        { label: "実績原価", value: fmt(act.cost), sub: `計画 ${fmt(planCost)}`, icon: Wallet },
+                        {
+                          label: "実績粗利",
+                          value: fmt(act.gross_profit),
+                          sub: `計画 ${fmt(planGross)}`,
+                          icon: TrendingUp,
+                          valueClassName: act.gross_profit >= 0 ? "text-emerald-700" : "text-red-600",
+                        },
+                        {
+                          label: "粗利率",
+                          value: pct(act.gross_rate),
+                          sub: planRevenue > 0 ? `計画 ${pct((planGross / planRevenue) * 100)}` : "-",
+                          icon: Percent,
+                          valueClassName: act.gross_rate >= 0 ? "text-emerald-700" : "text-red-600",
+                        },
+                      ]}
+                    />
                     {/* 売上達成率バー */}
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">

@@ -22,7 +22,7 @@ export default function MarketingEmailPage() {
   useEffect(() => { getEmailThreads().then(setThreads).catch(()=>{}).finally(()=>setLoading(false)); }, []);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="メールマーケティング" description="メール配信の管理"><Link href="/marketing/email/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規配信</Button></Link></PageHeader>
       <Card variant="inset"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>件名</TableHead><TableHead>日時</TableHead><TableHead>既読</TableHead></TableRow></TableHeader>
         <TableBody>{loading ? Array.from({length:3}).map((_,i)=><TableRow key={i}><TableCell><Skeleton className="h-4 w-48"/></TableCell><TableCell><Skeleton className="h-4 w-20"/></TableCell><TableCell><Skeleton className="h-4 w-12"/></TableCell></TableRow>) : threads.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">配信なし</TableCell></TableRow> : threads.map(t => (

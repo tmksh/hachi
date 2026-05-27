@@ -747,7 +747,7 @@ export default function ConstructionDetailPage() {
   }, [id]);
 
   if (loading) return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-4 md:p-8 space-y-6">
       <Skeleton className="h-6 w-24" />
       <Skeleton className="h-10 w-64" />
       <Skeleton className="h-20" />
@@ -755,7 +755,7 @@ export default function ConstructionDetailPage() {
     </div>
   );
   if (!data) return (
-    <div className="p-4 md:p-6">
+    <div className="p-4 md:p-8">
       <Link href="/constructions" className="text-sm text-muted-foreground flex items-center gap-1"><ArrowLeft className="h-4 w-4" />戻る</Link>
       <p className="mt-4">見つかりません</p>
     </div>
@@ -770,7 +770,7 @@ export default function ConstructionDetailPage() {
   const estimate = (data as Detail & { estimate?: { id?: string } | null }).estimate;
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-8 space-y-6">
       <Link href="/constructions" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" />工事一覧
       </Link>
@@ -784,7 +784,7 @@ export default function ConstructionDetailPage() {
               <StatusBadge status={data.status} />
               {customer && <Badge variant="outline" className="text-xs">{customer.name}</Badge>}
             </div>
-            <h1 className="text-xl font-semibold mt-1.5">{data.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight mt-1.5">{data.title}</h1>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {isCompletable && (

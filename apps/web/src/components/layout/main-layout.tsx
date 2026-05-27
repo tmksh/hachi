@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { BridgeAiChat } from "@/components/ai/bridge-ai-chat";
 import { Sidebar } from "./sidebar";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
@@ -75,10 +76,12 @@ export function MainLayout({ children }: MainLayoutProps) {
           {children}
         </div>
       </motion.main>
+      <BridgeAiChat />
       {/* Mobile */}
       <main className="md:hidden pb-32">
         {children}
       </main>
+      <BridgeAiChat />
     </div>
   );
 }

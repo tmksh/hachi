@@ -14,6 +14,17 @@ export async function getEstimates() {
   return data;
 }
 
+export async function getEstimatesByCustomer(customerId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("*, customer:customers(id, name, company_name)")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 export async function getEstimate(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -175,6 +186,71 @@ export async function updateEstimate(
       });
     }
   }
+}
+
+/** 見積コピー（新規見積として複製） */
+export async function copyEstimate(sourceId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const source = await getEstimate(sourceId);
+  const { count } = await supabase.from("estimates").select("*", { count: "exact", head: true });
+  const estimateNo = `EST-${String((count || 0) + 1).padStart(4, "0")}`;
+
+  const { data: estimate, error } = await supabase.from("estimates").insert({
+    company_id: profile.company_id,
+    customer_id: source.customer_id,
+    estimate_no: estimateNo,
+    title: source.title ? `${source.title}（コピー）` : "見積（コピー）",
+    status: "draft",
+    subtotal: source.subtotal,
+    tax: source.tax,
+    total: source.total,
+    cost_total: source.cost_total,
+    gross_profit: source.gross_profit,
+    gross_profit_rate: source.gross_profit_rate,
+    notes: source.notes,
+  }).select().single();
+  if (error) throw error;
+
+  const catMap = new Map<string, string>();
+  for (const cat of source.categories ?? []) {
+    const { data: newCat } = await supabase.from("estimate_categories").insert({
+      company_id: profile.company_id,
+      estimate_id: estimate.id,
+      name: cat.name,
+      sort_order: cat.sort_order,
+    }).select().single();
+    if (newCat) catMap.set(cat.id, newCat.id);
+  }
+
+  if (source.items?.length) {
+    await supabase.from("estimate_items").insert(
+      source.items.map((item, i) => ({
+        company_id: profile.company_id,
+        estimate_id: estimate.id,
+        category_id: item.category_id ? catMap.get(item.category_id) ?? null : null,
+        name: item.name,
+        description: item.description,
+        specification: item.specification,
+        quantity: item.quantity,
+        unit: item.unit,
+        cost_price: item.cost_price,
+        cost_amount: item.cost_amount,
+        selling_price: item.selling_price,
+        selling_amount: item.selling_amount,
+        gross_profit: item.gross_profit,
+        gross_profit_rate: item.gross_profit_rate,
+        sort_order: i,
+        notes: item.notes,
+      })),
+    );
+  }
+
+  return estimate as Estimate;
 }
 
 export async function deleteEstimate(id: string) {

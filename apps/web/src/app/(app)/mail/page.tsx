@@ -190,9 +190,9 @@ function MailPageContent() {
   const hasAccounts = accounts.length > 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">メール</h1>
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">メール</h1>
         <div className="flex items-center gap-2">
           {accounts.map((acc) => (
             <DropdownMenu key={acc.id}>
@@ -399,7 +399,7 @@ export default function MailPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-4 md:p-6 space-y-4">
+        <div className="p-4 md:p-8 space-y-6">
           <Skeleton className="h-8 w-32" />
           <Skeleton className="h-[600px]" />
         </div>

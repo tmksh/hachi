@@ -34,9 +34,19 @@ export async function createCustomer(input: Omit<Customer, "id" | "company_id" |
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
+  let eightId = input.eight_id;
+  if (!eightId) {
+    const { count } = await supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .eq("company_id", profile.company_id)
+      .is("deleted_at", null);
+    eightId = `EIGHT-${String((count ?? 0) + 1).padStart(6, "0")}`;
+  }
+
   const { data, error } = await supabase
     .from("customers")
-    .insert({ ...input, company_id: profile.company_id })
+    .insert({ ...input, eight_id: eightId, company_id: profile.company_id })
     .select()
     .single();
   if (error) throw error;

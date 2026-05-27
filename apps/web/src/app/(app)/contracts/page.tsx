@@ -3,17 +3,20 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { KpiRow } from "@/components/shared/kpi-row";
+import { StatusSelect } from "@/components/shared/status-select";
 import { Search, Plus, FileSignature, TrendingUp, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { getContracts, deleteContract } from "@/lib/actions/contracts";
+import { getContracts, deleteContract, updateContract } from "@/lib/actions/contracts";
+import { getStatusOption } from "@/lib/status-config";
 
 type ContractRow = Awaited<ReturnType<typeof getContracts>>[number];
 
@@ -27,8 +30,24 @@ export default function ContractsListPage() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<ContractRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => { getContracts().then(setRows).catch(() => {}).finally(() => setLoading(false)); }, []);
+
+  const handleStatusChange = async (id: string, status: ContractRow["status"]) => {
+    const prev = rows;
+    setRows((current) => current.map((r) => (r.id === id ? { ...r, status } : r)));
+    setUpdating(id);
+    try {
+      await updateContract(id, { status });
+      toast.success(`ステータスを「${getStatusOption("contract", status)?.label ?? status}」に変更しました`);
+    } catch {
+      setRows(prev);
+      toast.error("ステータスの更新に失敗しました");
+    } finally {
+      setUpdating(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -47,21 +66,29 @@ export default function ContractsListPage() {
   });
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="契約管理" description="契約の締結状況を管理します">
         <Link href="/contracts/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規契約</Button></Link>
       </PageHeader>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "総契約数", val: rows.length, icon: FileSignature },
-          { label: "総契約金額", val: fmt(rows.reduce((s, c) => s + (c.amount ?? 0), 0)), icon: TrendingUp },
-          { label: "有効契約", val: rows.filter(c => c.status === "executing" || c.status === "contracted").length, icon: FileSignature },
-          { label: "有効金額", val: fmt(rows.filter(c => c.status === "executing" || c.status === "contracted").reduce((s, c) => s + (c.amount ?? 0), 0)), icon: TrendingUp },
-        ].map((k, i) => (
-          <Card key={i} className="py-0"><CardContent className="pt-4 pb-3"><div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">{k.label}</span><k.icon className="h-4 w-4 text-muted-foreground" /></div>{loading ? <Skeleton className="h-8 w-20" /> : <p className="text-2xl font-semibold tabular-nums">{k.val}</p>}</CardContent></Card>
-        ))}
-      </div>
+      <KpiRow
+        loading={loading}
+        items={[
+          { label: "総契約数", value: rows.length, sub: "件", icon: FileSignature },
+          { label: "総契約金額", value: fmt(rows.reduce((s, c) => s + (c.amount ?? 0), 0)), icon: TrendingUp },
+          {
+            label: "有効契約",
+            value: rows.filter((c) => c.status === "executing" || c.status === "contracted").length,
+            sub: "件",
+            icon: FileSignature,
+          },
+          {
+            label: "有効金額",
+            value: fmt(rows.filter((c) => c.status === "executing" || c.status === "contracted").reduce((s, c) => s + (c.amount ?? 0), 0)),
+            icon: TrendingUp,
+          },
+        ]}
+      />
 
       <div className="relative max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" /></div>
 
@@ -78,7 +105,14 @@ export default function ContractsListPage() {
                   <TableCell className="text-sm">{c.title}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(c.amount ?? 0)}</TableCell>
                   <TableCell className="text-sm">{c.contract_date ?? "-"}</TableCell>
-                  <TableCell><StatusBadge status={c.status} /></TableCell>
+                  <TableCell>
+                    <StatusSelect
+                      entity="contract"
+                      value={c.status}
+                      disabled={updating === c.id}
+                      onValueChange={(v) => handleStatusChange(c.id, v as ContractRow["status"])}
+                    />
+                  </TableCell>
                   <TableCell>
                     <button
                       className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"

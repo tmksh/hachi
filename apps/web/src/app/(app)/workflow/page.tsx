@@ -10,9 +10,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { StatusSelect } from "@/components/shared/status-select";
 import { Plus } from "lucide-react";
-import { getWorkflowRequests } from "@/lib/actions/workflow";
+import { toast } from "sonner";
+import { getWorkflowRequests, updateWorkflowRequestStatus } from "@/lib/actions/workflow";
+import { getStatusOption } from "@/lib/status-config";
 
 type Row = Awaited<ReturnType<typeof getWorkflowRequests>>[number];
 const TYPE_LABELS: Record<string, string> = { expense: "経費", leave: "休暇", purchase: "購入", custom: "その他" };
@@ -22,13 +24,29 @@ export default function WorkflowPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("all");
+  const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => { getWorkflowRequests().then(setRows).catch(() => {}).finally(() => setLoading(false)); }, []);
+
+  const handleStatusChange = async (id: string, status: Row["status"]) => {
+    const prev = rows;
+    setRows((current) => current.map((r) => (r.id === id ? { ...r, status } : r)));
+    setUpdating(id);
+    try {
+      await updateWorkflowRequestStatus(id, status);
+      toast.success(`ステータスを「${getStatusOption("workflow", status)?.label ?? status}」に変更しました`);
+    } catch {
+      setRows(prev);
+      toast.error("ステータスの更新に失敗しました");
+    } finally {
+      setUpdating(null);
+    }
+  };
 
   const filtered = rows.filter(r => tab === "all" || r.status === tab);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="ワークフロー" description="申請と承認の管理"><Link href="/workflow/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規申請</Button></Link></PageHeader>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList><TabsTrigger value="all">すべて</TabsTrigger><TabsTrigger value="submitted">申請中</TabsTrigger><TabsTrigger value="approved">承認済</TabsTrigger><TabsTrigger value="rejected">却下</TabsTrigger></TabsList>
@@ -41,7 +59,14 @@ export default function WorkflowPage() {
                   <TableCell className="font-medium">{r.title}</TableCell>
                   <TableCell>{r.requester?.display_name ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.amount ? `¥${r.amount.toLocaleString()}` : "-"}</TableCell>
-                  <TableCell><StatusBadge status={r.status} /></TableCell>
+                  <TableCell>
+                    <StatusSelect
+                      entity="workflow"
+                      value={r.status}
+                      disabled={updating === r.id}
+                      onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
+                    />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody></Table></div></Card>

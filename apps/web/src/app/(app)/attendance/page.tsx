@@ -184,7 +184,7 @@ export default function AttendancePage() {
   ];
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="勤怠管理" description="出退勤の管理と記録" />
 
       {/* 打刻カード＋月次サマリー */}

@@ -28,14 +28,14 @@ export default function CraftsmanNewPage() {
     if (!name.trim()) { toast.error("名前を入力してください"); return; }
     setSaving(true);
     try {
-      await createCraftsman({ name: name.trim(), company_name: companyName || null, phone: phone || null, email: email || null, specialty: (specialty || null) as "carpenter"|"electrical"|"interior"|"plumbing"|"general"|null, rank: (rank || null) as "A"|"B"|"C"|null, report_rate: 0, active_projects: 0, total_projects: 0, notes: notes || null });
+      await createCraftsman({ name: name.trim(), company_name: companyName || null, phone: phone || null, email: email || null, specialty: (specialty || null) as "carpenter"|"electrical"|"interior"|"plumbing"|"general"|null, rank: (rank || null) as "A"|"B"|"C"|null, report_rate: 0, active_projects: 0, total_projects: 0, notes: notes || null, skills: [], service_areas: [], contract_rate: null, payment_notes: null });
       toast.success("登録しました"); router.push("/craftsmen");
     } catch { toast.error("登録に失敗"); } finally { setSaving(false); }
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-3"><Link href="/craftsmen"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold">新規職人登録</h1></div>
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex items-center gap-3"><Link href="/craftsmen"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">新規職人登録</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">職人情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

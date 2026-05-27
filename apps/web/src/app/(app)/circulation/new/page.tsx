@@ -24,10 +24,17 @@ const ROLE_ORDER: Role[] = [
   ROLES.EMPLOYEE,
 ];
 
-const ROLE_DESCRIPTIONS: Record<Role, string> = {
+const ROLE_DESCRIPTIONS: Partial<Record<Role, string>> = {
   hq_admin: "本社スタッフ（本部管理者）",
   contractor_admin: "施工店責任者",
   employee: "一般スタッフ",
+  admin: "システム全体の管理者",
+  executive: "経営層・役員",
+  sales: "営業担当",
+  field_manager: "現場責任者",
+  designer: "設計士",
+  administration: "総務",
+  external_partner: "外部協力業者",
 };
 
 export default function CirculationNewPage() {
@@ -87,14 +94,14 @@ export default function CirculationNewPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/circulation">
           <Button variant="ghost" size="icon" className="size-8">
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <h1 className="text-xl font-semibold">新規お知らせ</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">新規お知らせ</h1>
       </div>
 
       <Card>

@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
 import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil, GripVertical, LayoutGrid, List } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   getDocuments, createDocument, deleteDocument,
@@ -171,7 +172,7 @@ export default function DocumentsPage() {
   });
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="文書管理" description="社内文書の管理">
         <Button variant="outline" size="sm" onClick={() => setCatOpen(true)}>
           <Settings2 className="h-4 w-4 mr-1" />カテゴリ設定
@@ -186,13 +187,24 @@ export default function DocumentsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1 border rounded-lg p-0.5">
-          <Button variant={viewMode === "list" ? "secondary" : "ghost"} size="sm" onClick={() => setViewMode("list")}>
-            <List className="h-4 w-4" />
-          </Button>
-          <Button variant={viewMode === "grid" ? "secondary" : "ghost"} size="sm" onClick={() => setViewMode("grid")}>
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
+        <div className="segmented-control shrink-0 text-xs">
+          {([
+            { key: "list", label: "一覧", Icon: List },
+            { key: "grid", label: "カード", Icon: LayoutGrid },
+          ] as const).map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setViewMode(key)}
+              className={cn(
+                "segmented-control-btn",
+                viewMode === key && "segmented-control-btn-active",
+              )}
+              aria-label={`${label}表示`}
+            >
+              <Icon className="shrink-0" />{label}
+            </button>
+          ))}
         </div>
       </div>
 

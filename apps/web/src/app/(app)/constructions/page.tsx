@@ -12,11 +12,14 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
-import { Search, Plus, HardHat, ArrowUpDown, Trash2 } from "lucide-react";
+import { KpiRow } from "@/components/shared/kpi-row";
+import { StatusSelect } from "@/components/shared/status-select";
+import { Search, Plus, HardHat, ArrowUpDown, Trash2, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { getConstructions, deleteConstruction } from "@/lib/actions/constructions";
+import { getConstructions, deleteConstruction, updateConstruction } from "@/lib/actions/constructions";
 import { getProfiles } from "@/lib/actions/profiles";
+import { getStatusOption } from "@/lib/status-config";
 import type { Profile } from "@/lib/database.types";
 
 type Row = Awaited<ReturnType<typeof getConstructions>>[number];
@@ -41,6 +44,7 @@ export default function ConstructionsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -49,6 +53,21 @@ export default function ConstructionsPage() {
       await deleteConstruction(deleteTarget.id);
       setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
     } catch { /* ignore */ } finally { setDeleting(false); setDeleteTarget(null); }
+  };
+
+  const handleStatusChange = async (id: string, status: Row["status"]) => {
+    const prev = rows;
+    setRows((current) => current.map((r) => (r.id === id ? { ...r, status } : r)));
+    setUpdating(id);
+    try {
+      await updateConstruction(id, { status });
+      toast.success(`ステータスを「${getStatusOption("construction", status)?.label ?? status}」に変更しました`);
+    } catch {
+      setRows(prev);
+      toast.error("ステータスの更新に失敗しました");
+    } finally {
+      setUpdating(null);
+    }
   };
 
   useEffect(() => {
@@ -84,7 +103,7 @@ export default function ConstructionsPage() {
   }, [rows, search, tab, assigneeFilter, sortKey]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="工事管理" description="工事の進捗と原価を管理">
         <Link href="/constructions/new">
           <Button size="sm" className="gap-1.5">
@@ -93,22 +112,15 @@ export default function ConstructionsPage() {
         </Link>
       </PageHeader>
 
-      {/* KPI */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "総工事数", val: rows.length },
-          { label: "施工中", val: rows.filter((r) => r.status === "in_progress").length },
-          { label: "着工前", val: rows.filter((r) => r.status === "preparing").length },
-          { label: "完了", val: rows.filter((r) => r.status === "completed").length },
-        ].map((k, i) => (
-          <Card key={i} className="py-0">
-            <CardContent className="pt-4 pb-3">
-              <span className="text-xs text-muted-foreground">{k.label}</span>
-              {loading ? <Skeleton className="h-8 w-16 mt-1" /> : <p className="text-2xl font-semibold">{k.val}</p>}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <KpiRow
+        loading={loading}
+        items={[
+          { label: "総工事数", value: rows.length, sub: "件", icon: HardHat },
+          { label: "施工中", value: rows.filter((r) => r.status === "in_progress").length, sub: "件", icon: HardHat },
+          { label: "着工前", value: rows.filter((r) => r.status === "preparing").length, sub: "件", icon: HardHat },
+          { label: "完了", value: rows.filter((r) => r.status === "completed").length, sub: "件", icon: CheckCircle2 },
+        ]}
+      />
 
       {/* フィルタ行 */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -192,7 +204,12 @@ export default function ConstructionsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <StatusBadge status={r.status} />
+                        <StatusSelect
+                          entity="construction"
+                          value={r.status}
+                          disabled={updating === r.id}
+                          onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
+                        />
                         <span className="text-sm font-semibold tabular-nums">{r.progress}%</span>
                         <button
                           className="opacity-0 group-hover/card:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"

@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
 import { AnalogClock } from "@/components/shared/analog-clock";
+import { KpiRow } from "@/components/shared/kpi-row";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import { AdaptiveList } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
@@ -51,12 +52,9 @@ import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import {
   TEAL,
-  TEAL_CARD_SM,
   TEAL_HOVER,
   TEAL_TITLE,
   TEAL_MUTED,
-  TEAL_KPI_ICON,
-  TEAL_KPI_ICON_STYLE,
   TEAL_ACTIVE_GRADIENT,
   TEAL_WON_GRADIENT,
   CHART_WON_LEGEND,
@@ -70,9 +68,6 @@ function formatYen(n: number) {
   if (n >= 10_000) return `¥${(n / 10_000).toFixed(0)}万`;
   return `¥${n.toLocaleString()}`;
 }
-
-const KPI_ICON_CLASS = TEAL_KPI_ICON;
-const KPI_ICON_INNER = "h-3.5 w-3.5 text-white";
 
 /** デザイン確認用モック（万円）— 全7ヶ月に棒を表示 */
 const MOCK_TREND_VALUES = [
@@ -700,27 +695,17 @@ export default function DashboardPage() {
 
       {/* Header */}
       <div>
-        <h1 className={`text-lg font-bold tracking-tight ${TEAL_TITLE}`}>ダッシュボード</h1>
-        <p className={`text-xs mt-0.5 ${TEAL_MUTED}`}>{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
+        <h1 className={`text-2xl font-semibold tracking-tight ${TEAL_TITLE}`}>ダッシュボード</h1>
+        <p className={`text-sm mt-1 ${TEAL_MUTED}`}>{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        {loading ? Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className={TEAL_CARD_SM + " px-3 py-2.5"}>
-            <Skeleton className="h-6 w-full" />
-          </div>
-        )) : kpis.map((kpi, i) => (
-          <div key={i} className={TEAL_CARD_SM + " px-3 py-2.5 flex items-center gap-2.5 flex-nowrap min-w-0 group hover:shadow-md transition-shadow"}>
-            <div className={KPI_ICON_CLASS} style={TEAL_KPI_ICON_STYLE}>
-              <kpi.icon className={KPI_ICON_INNER} />
-            </div>
-            <span className="text-xs font-semibold truncate min-w-0 text-slate-600">{kpi.label}</span>
-            <p className="text-xl font-black tabular-nums tracking-tight leading-none ml-auto whitespace-nowrap shrink-0 text-slate-900">{kpi.value}</p>
-            <span className="text-xs shrink-0 whitespace-nowrap text-slate-500">{kpi.sub}</span>
-          </div>
-        ))}
-      </div>
+      <KpiRow loading={loading} items={kpis.map((kpi) => ({
+        label: kpi.label,
+        value: kpi.value,
+        sub: kpi.sub,
+        icon: kpi.icon,
+      }))} />
 
       {/* Sortable widget grid */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>

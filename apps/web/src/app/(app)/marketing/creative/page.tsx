@@ -19,7 +19,7 @@ export default function MarketingCreativePage() {
   useEffect(() => { getDocuments().then(setDocs).catch(()=>{}).finally(()=>setLoading(false)); }, []);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <PageHeader title="クリエイティブ管理" description="マーケティング素材の管理"><Link href="/marketing/creative/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規追加</Button></Link></PageHeader>
       {loading ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{Array.from({length:6}).map((_,i)=><Skeleton key={i} className="h-32" />)}</div> : docs.length === 0 ? <Card><CardContent className="py-12 text-center text-muted-foreground">クリエイティブ素材なし</CardContent></Card> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

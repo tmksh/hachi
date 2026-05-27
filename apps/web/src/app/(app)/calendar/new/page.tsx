@@ -103,14 +103,14 @@ function CalendarNewPageContent() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/calendar">
           <Button variant="ghost" size="icon" className="size-8">
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <h1 className="text-xl font-semibold">予定追加</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">予定追加</h1>
       </div>
       <Card>
         <CardHeader className="pb-3">
@@ -191,7 +191,7 @@ function CalendarNewPageContent() {
 
 export default function CalendarNewPage() {
   return (
-    <Suspense fallback={<div className="p-4 md:p-6 text-sm text-muted-foreground">読み込み中...</div>}>
+    <Suspense fallback={<div className="p-4 md:p-8 text-sm text-muted-foreground">読み込み中...</div>}>
       <CalendarNewPageContent />
     </Suspense>
   );
