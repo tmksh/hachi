@@ -27,7 +27,7 @@ function Card({ className, variant = "default", ...props }: CardProps) {
       data-variant={variant}
       className={cn(
         "text-card-foreground flex flex-col gap-4 rounded-lg py-5 transition-[box-shadow] duration-200",
-        variant === "inset" ? "frost-card-inset py-0" : "frost-card",
+        variant === "inset" ? "frost-card-inset py-0 overflow-hidden" : "frost-card",
         className
       )}
       {...props}

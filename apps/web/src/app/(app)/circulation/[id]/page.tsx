@@ -138,7 +138,7 @@ export default function CirculationDetailPage() {
   );
 
   if (loading) return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Skeleton className="h-8 w-64" />
       <Skeleton className="h-64" />
     </div>
@@ -153,7 +153,7 @@ export default function CirculationDetailPage() {
   );
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <Link href="/circulation" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />一覧に戻る
@@ -181,7 +181,7 @@ export default function CirculationDetailPage() {
             </Badge>
           )}
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">{data.title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.title}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {data.author?.display_name ?? "-"} · {format(parseISO(data.published_at), "yyyy年M月d日 HH:mm", { locale: ja })}
           {data.due_date && <span className="ml-2">期限: {data.due_date}</span>}

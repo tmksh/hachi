@@ -63,7 +63,7 @@ export default function BudgetPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="予算管理" description="年度予算の策定と実績管理">
         <Button size="sm" onClick={handleNew} className="gap-1.5">
           <Plus className="h-4 w-4" />予算を策定

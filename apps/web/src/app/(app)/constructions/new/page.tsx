@@ -56,8 +56,8 @@ function ConstructionNewPageContent() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      <div className="flex items-center gap-3"><Link href="/constructions"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">新規工事登録</h1></div>
+    <div className="p-4 md:p-6 space-y-4">
+      <div className="flex items-center gap-3"><Link href="/constructions"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">新規工事登録</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">工事情報</CardTitle></CardHeader>
         <CardContent className="space-y-4"><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2 sm:col-span-2"><Label>工事名 *</Label><Input value={title} onChange={e=>setTitle(e.target.value)} /></div>

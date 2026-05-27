@@ -41,11 +41,11 @@ export default function CraftsmanEditPage() {
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
 
-  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      <div className="flex items-center gap-3"><Link href={`/craftsmen/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">職人編集</h1></div>
+    <div className="p-4 md:p-6 space-y-4">
+      <div className="flex items-center gap-3"><Link href={`/craftsmen/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">職人編集</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">職人情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

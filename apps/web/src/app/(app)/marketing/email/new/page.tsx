@@ -26,8 +26,8 @@ export default function MarketingEmailNewPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      <div className="flex items-center gap-3"><Link href="/marketing/email"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">メール配信作成</h1></div>
+    <div className="p-4 md:p-6 space-y-4">
+      <div className="flex items-center gap-3"><Link href="/marketing/email"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">メール配信作成</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">配信内容</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2"><Label>宛先 *</Label><Input value={to} onChange={e=>setTo(e.target.value)} placeholder="カンマ区切り" /></div>

@@ -252,7 +252,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
       <PageHeader title="管理コンソール" description="プラットフォーム全体の管理 / 全国加盟店BI">
         <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs">

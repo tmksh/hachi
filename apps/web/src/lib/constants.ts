@@ -26,13 +26,6 @@ export const NAV_GROUPS = [
     ],
   },
   {
-    key: "admin",
-    label: "管理",
-    items: [
-      { key: "admin-settings", label: "管理者設定", href: "/settings" },
-    ],
-  },
-  {
     key: "portal",
     label: "ポータル",
     items: [
@@ -73,6 +66,28 @@ export const ROLES = {
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
+/** メンバー割当可能ロール（external_partner は URL 経由のため除外） */
+export type AssignableRole = Exclude<Role, "external_partner">;
+
+/** CSV No.37–42 デフォルトロール */
+export const CSV_DEFAULT_ROLES: AssignableRole[] = [
+  "admin",
+  "executive",
+  "sales",
+  "field_manager",
+  "designer",
+  "administration",
+];
+
+/** レガシーロール（既存ユーザー互換） */
+export const LEGACY_ROLES: AssignableRole[] = ["hq_admin", "contractor_admin", "employee"];
+
+/** メンバー招待・ロール変更で選択可能なシステムロール */
+export const ASSIGNABLE_TEAM_ROLES: AssignableRole[] = [...LEGACY_ROLES, ...CSV_DEFAULT_ROLES];
+
+/** 権限マトリクスに表示するシステムロール */
+export const SYSTEM_PERMISSION_ROLES: AssignableRole[] = ASSIGNABLE_TEAM_ROLES;
+
 /** 管理者ロール（設定変更・メンバー管理可能） */
 export const ADMIN_ROLES: Role[] = ["hq_admin", "admin"];
 
@@ -112,7 +127,6 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   quotes:             ["hq_admin", "contractor_admin"],
   craftsmen:          ["hq_admin", "contractor_admin"],
   contracts:          ["hq_admin", "contractor_admin", "admin", "sales"],
-  "admin-settings":   ["hq_admin", "admin"],
   "marketing-email":  ["hq_admin"],
   "marketing-sns":    ["hq_admin"],
   "marketing-roi":    ["hq_admin"],

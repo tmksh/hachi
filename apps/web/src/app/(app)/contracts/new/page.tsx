@@ -51,7 +51,7 @@ export default function ContractNewPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-3"><Link href="/contracts"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><PageHeader title="新規契約登録" description="新しい契約を登録します" /></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">契約情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">

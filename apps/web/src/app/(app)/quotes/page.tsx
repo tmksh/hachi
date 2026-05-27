@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusSelect } from "@/components/shared/status-select";
-import { Search, Plus, TrendingUp, FileText, Trash2, CheckCircle2, ArrowLeft, Users } from "lucide-react";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
+import { Search, Plus, TrendingUp, FileText, Trash2, CheckCircle2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { getEstimates, deleteEstimate, updateEstimate } from "@/lib/actions/estimates";
@@ -91,7 +92,7 @@ function QuotesPageContent() {
 
   if (!customerId) {
     return (
-      <div className="p-4 md:p-8 space-y-6">
+      <div className="p-4 md:p-6 space-y-4">
         <PageHeader title="見積管理" description="顧客を選択して見積一覧へ">
           <Link href="/quotes/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規見積</Button></Link>
         </PageHeader>
@@ -105,7 +106,7 @@ function QuotesPageContent() {
               <Link key={customer.id} href={`/quotes?customer=${customer.id}`}>
                 <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer h-full">
                   <div className="flex items-start gap-3">
-                    <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Users className="h-5 w-5 text-primary" /></div>
+                    <CustomerAvatar seed={customer.id} name={customer.name} size="md" />
                     <div className="min-w-0">
                       <p className="font-semibold truncate">{customer.name}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">{estimates.length}件 · {fmt(t)}</p>
@@ -122,7 +123,7 @@ function QuotesPageContent() {
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Link href="/quotes" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" />顧客一覧
       </Link>
@@ -138,15 +139,26 @@ function QuotesPageContent() {
           { label: "下書き", value: customerRows.filter((r) => r.status === "draft").length, sub: "件", icon: FileText },
         ]}
       />
-      <div className="relative max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" /></div>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList><TabsTrigger value="all">すべて</TabsTrigger><TabsTrigger value="draft">下書き</TabsTrigger><TabsTrigger value="sent">送付済</TabsTrigger><TabsTrigger value="accepted">受理</TabsTrigger><TabsTrigger value="rejected">却下</TabsTrigger></TabsList>
+        <div className="flex flex-wrap items-center gap-3">
+          <TabsList>
+            <TabsTrigger value="all">すべて</TabsTrigger>
+            <TabsTrigger value="draft">下書き</TabsTrigger>
+            <TabsTrigger value="sent">送付済</TabsTrigger>
+            <TabsTrigger value="accepted">受理</TabsTrigger>
+            <TabsTrigger value="rejected">却下</TabsTrigger>
+          </TabsList>
+          <div className="relative flex-1 min-w-[180px] max-w-md ml-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+        </div>
         <TabsContent value={tab} className="mt-4">
           <Card variant="inset"><div className="overflow-x-auto">
             <Table><TableHeader><TableRow><TableHead>見積番号</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
               <TableBody>
                 {loading ? Array.from({length:5}).map((_,i)=><TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-4 w-full"/></TableCell></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
-                  <TableRow key={r.id} className="cursor-pointer hover:bg-accent/50 group" onClick={() => router.push(`/quotes/${r.id}`)}>
+                  <TableRow key={r.id} className="cursor-pointer glass-row group" onClick={() => router.push(`/quotes/${r.id}`)}>
                     <TableCell><Link href={`/quotes/${r.id}`} className="font-medium text-primary hover:underline" onClick={e => e.stopPropagation()}>{r.estimate_no}</Link></TableCell>
                     <TableCell>{r.title ?? "-"}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{fmt(r.total ?? 0)}</TableCell>

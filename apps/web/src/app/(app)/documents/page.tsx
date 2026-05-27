@@ -172,7 +172,7 @@ export default function DocumentsPage() {
   });
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="文書管理" description="社内文書の管理">
         <Button variant="outline" size="sm" onClick={() => setCatOpen(true)}>
           <Settings2 className="h-4 w-4 mr-1" />カテゴリ設定

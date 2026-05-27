@@ -21,8 +21,8 @@ export default function ConstructionReportNewPage() {
   const handleSave = () => { toast.success("日報を保存しました"); router.push(`/constructions/${id}`); };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      <div className="flex items-center gap-3"><Link href={`/constructions/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">日報作成</h1></div>
+    <div className="p-4 md:p-6 space-y-4">
+      <div className="flex items-center gap-3"><Link href={`/constructions/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">日報作成</h1></div>
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">日報情報</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

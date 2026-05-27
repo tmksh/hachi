@@ -94,14 +94,14 @@ export default function CirculationNewPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-3">
         <Link href="/circulation">
           <Button variant="ghost" size="icon" className="size-8">
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">新規お知らせ</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">新規お知らせ</h1>
       </div>
 
       <Card>

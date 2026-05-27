@@ -36,7 +36,17 @@ export default function QuoteEditPage() {
       .then(([est, c]) => {
         setCustomers(c.map(x => ({id:x.id,name:x.name})));
         setCustomerId(est.customer_id ?? ""); setTitle(est.title ?? ""); setNotes(est.notes ?? ""); setStatus(est.status ?? "draft");
-        setItems(est.items.length > 0 ? est.items.map(i => ({ name: i.name, quantity: i.quantity, unit: i.unit ?? "式", selling_price: i.selling_price })) : [{ name: "", quantity: 1, unit: "式", selling_price: 0 }]);
+        setItems(est.items.length > 0 ? est.items.map(i => ({ name: i.name, quantity: i.quantity, unit: i.unit ?? "式", selling_price: i.selling_price })) : [
+          { name: "仮設工事", quantity: 1, unit: "式", selling_price: 300000 },
+          { name: "基礎工事", quantity: 1, unit: "式", selling_price: 800000 },
+          { name: "木工事", quantity: 1, unit: "式", selling_price: 1500000 },
+          { name: "屋根・板金工事", quantity: 1, unit: "式", selling_price: 400000 },
+          { name: "外壁工事", quantity: 1, unit: "式", selling_price: 600000 },
+          { name: "内装工事", quantity: 1, unit: "式", selling_price: 700000 },
+          { name: "電気設備工事", quantity: 1, unit: "式", selling_price: 350000 },
+          { name: "給排水衛生工事", quantity: 1, unit: "式", selling_price: 450000 },
+          { name: "諸経費", quantity: 1, unit: "式", selling_price: 200000 },
+        ]);
       }).catch(() => toast.error("取得に失敗")).finally(() => setLoading(false));
   }, [id]);
 
@@ -60,40 +70,46 @@ export default function QuoteEditPage() {
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
 
-  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
-      <div className="flex items-center gap-3"><Link href={`/quotes/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-2xl font-semibold tracking-tight">見積編集</h1></div>
-      <Card><CardHeader className="pb-3"><CardTitle className="text-base">基本情報</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>件名 *</Label><Input value={title} onChange={e=>setTitle(e.target.value)} /></div>
-            <div className="space-y-2"><Label>顧客</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{customers.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">下書き</SelectItem><SelectItem value="sent">送付済み</SelectItem><SelectItem value="accepted">受理</SelectItem><SelectItem value="rejected">却下</SelectItem></SelectContent></Select></div>
-          </div>
-          <div className="space-y-2"><Label>備考</Label><Textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} /></div>
-        </CardContent>
-      </Card>
-      <Card><CardHeader className="pb-3 flex-row items-center justify-between"><CardTitle className="text-base">明細</CardTitle><Button size="sm" variant="outline" onClick={addItem}><Plus className="h-4 w-4 mr-1" />行追加</Button></CardHeader>
-        <CardContent><div className="overflow-x-auto">
-          <Table><TableHeader><TableRow><TableHead>品名</TableHead><TableHead className="w-20">数量</TableHead><TableHead className="w-20">単位</TableHead><TableHead className="w-28">単価</TableHead><TableHead className="w-28 text-right">金額</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+    <div className="p-4 md:p-8 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2"><Link href={`/quotes/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link><h1 className="text-xl font-semibold tracking-tight">見積編集</h1></div>
+        <div className="flex gap-2"><Link href={`/quotes/${id}`}><Button variant="outline" size="sm">キャンセル</Button></Link><Button size="sm" onClick={handleSave} disabled={saving}><Save className="size-4 mr-1" />{saving?"保存中...":"保存"}</Button></div>
+      </div>
+
+      <Card><CardContent className="pt-4 pb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,480px)_auto_auto] gap-3 items-end">
+          <div className="space-y-1"><Label className="text-xs">件名 *</Label><Input value={title} onChange={e=>setTitle(e.target.value)} className="h-9" /></div>
+          <div className="space-y-1"><Label className="text-xs">顧客</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger className="h-9 w-48"><SelectValue placeholder="選択" /></SelectTrigger><SelectContent>{customers.map(c=><SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-1"><Label className="text-xs">ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">下書き</SelectItem><SelectItem value="sent">送付済み</SelectItem><SelectItem value="accepted">受理</SelectItem><SelectItem value="rejected">却下</SelectItem></SelectContent></Select></div>
+        </div>
+        <div className="mt-3 space-y-1"><Label className="text-xs">備考</Label><Textarea rows={2} value={notes} onChange={e=>setNotes(e.target.value)} className="text-sm" /></div>
+      </CardContent></Card>
+
+      <Card><CardHeader className="py-3 px-5 flex-row items-center justify-between border-b border-border/40"><CardTitle className="text-sm font-semibold">明細</CardTitle><Button size="sm" variant="outline" className="h-7 text-xs" onClick={addItem}><Plus className="h-3.5 w-3.5 mr-1" />行追加</Button></CardHeader>
+        <CardContent className="p-0"><div className="overflow-x-auto">
+          <Table><TableHeader><TableRow className="text-xs"><TableHead className="pl-5">品名</TableHead><TableHead className="w-20">数量</TableHead><TableHead className="w-20">単位</TableHead><TableHead className="w-28">単価</TableHead><TableHead className="w-28 text-right">金額</TableHead><TableHead className="w-10 pr-3"></TableHead></TableRow></TableHeader>
             <TableBody>{items.map((item, i) => (
-              <TableRow key={i}>
-                <TableCell><Input value={item.name} onChange={e=>updateItem(i,"name",e.target.value)} /></TableCell>
-                <TableCell><Input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",Number(e.target.value))} /></TableCell>
-                <TableCell><Input value={item.unit} onChange={e=>updateItem(i,"unit",e.target.value)} /></TableCell>
-                <TableCell><Input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",Number(e.target.value))} /></TableCell>
-                <TableCell className="text-right tabular-nums font-medium">¥{(item.quantity * item.selling_price).toLocaleString()}</TableCell>
-                <TableCell><Button size="icon" variant="ghost" onClick={()=>removeItem(i)} disabled={items.length<=1}><Trash2 className="h-4 w-4" /></Button></TableCell>
+              <TableRow key={i} className="[&>td]:py-1.5">
+                <TableCell className="pl-5"><Input value={item.name} onChange={e=>updateItem(i,"name",e.target.value)} className="h-8 text-sm" /></TableCell>
+                <TableCell><Input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",Number(e.target.value))} className="h-8 text-sm" /></TableCell>
+                <TableCell><Input value={item.unit} onChange={e=>updateItem(i,"unit",e.target.value)} className="h-8 text-sm" /></TableCell>
+                <TableCell><Input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",Number(e.target.value))} className="h-8 text-sm" /></TableCell>
+                <TableCell className="text-right tabular-nums text-sm font-medium">¥{(item.quantity * item.selling_price).toLocaleString()}</TableCell>
+                <TableCell className="pr-3"><Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>removeItem(i)} disabled={items.length<=1}><Trash2 className="h-3.5 w-3.5" /></Button></TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>
         </div>
-        <div className="mt-4 text-right space-y-1"><p className="text-sm">小計: ¥{subtotal.toLocaleString()}</p><p className="text-sm">消費税: ¥{tax.toLocaleString()}</p><p className="text-lg font-bold">合計: ¥{(subtotal+tax).toLocaleString()}</p></div>
+        <div className="flex justify-end gap-6 px-5 py-3 border-t border-border/40 text-sm">
+          <span className="text-muted-foreground">小計 <span className="font-medium text-foreground tabular-nums">¥{subtotal.toLocaleString()}</span></span>
+          <span className="text-muted-foreground">消費税 <span className="font-medium text-foreground tabular-nums">¥{tax.toLocaleString()}</span></span>
+          <span className="font-semibold tabular-nums">合計 ¥{(subtotal+tax).toLocaleString()}</span>
+        </div>
         </CardContent>
       </Card>
-      <div className="flex justify-end gap-3 pb-6"><Link href={`/quotes/${id}`}><Button variant="outline">キャンセル</Button></Link><Button onClick={handleSave} disabled={saving}><Save className="size-4 mr-1" />{saving?"保存中...":"保存"}</Button></div>
     </div>
   );
 }

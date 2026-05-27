@@ -20,15 +20,15 @@ export default function ContractDetailPage() {
 
   useEffect(() => { if (id) getContract(id as string).then(setData).catch(() => {}).finally(() => setLoading(false)); }, [id]);
 
-  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-64" /><div className="grid grid-cols-2 gap-4"><Skeleton className="h-64" /><Skeleton className="h-64" /></div></div>;
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-64" /><div className="grid grid-cols-2 gap-4"><Skeleton className="h-64" /><Skeleton className="h-64" /></div></div>;
   if (!data) return <div className="p-4 md:p-8"><Link href="/contracts" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-4"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="text-muted-foreground">契約が見つかりません</p></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Link href="/contracts" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />契約一覧</Link>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3"><h1 className="text-2xl font-semibold tracking-tight">{data.contract_no}</h1><StatusBadge status={data.status} /></div>
+          <div className="flex items-center gap-3"><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.contract_no}</h1><StatusBadge status={data.status} /></div>
           <p className="text-sm text-muted-foreground mt-1">{data.customer?.name ?? "-"} - {data.title}</p>
         </div>
         <div className="flex items-center gap-3">

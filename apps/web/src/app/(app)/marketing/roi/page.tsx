@@ -27,10 +27,10 @@ export default function MarketingRoiPage() {
   const wonCount = deals.filter(d => d.stage === "won").length;
   const convRate = totalDeals > 0 ? ((wonCount / totalDeals) * 100).toFixed(1) : "0";
 
-  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-48" /><div className="grid grid-cols-3 gap-3">{Array.from({length:3}).map((_,i)=><Skeleton key={i} className="h-24" />)}</div></div>;
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-48" /><div className="grid grid-cols-3 gap-3">{Array.from({length:3}).map((_,i)=><Skeleton key={i} className="h-24" />)}</div></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="ROI分析" description="投資対効果の分析" />
       <div className="grid grid-cols-3 gap-3">
         <Card className="py-0"><CardContent className="pt-4 pb-3"><p className="text-xs text-muted-foreground">受注金額</p><p className="text-2xl font-semibold tabular-nums">¥{Math.round(wonValue/10000).toLocaleString()}万</p></CardContent></Card>

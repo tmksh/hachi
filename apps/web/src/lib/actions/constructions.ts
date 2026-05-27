@@ -5,6 +5,50 @@ import { dispatchWebhook } from "@/lib/webhooks";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import type { Construction, ConstructionTask, ContractorOrder } from "@/lib/database.types";
 
+const AUTHOR_NOTE_PREFIX = "作成者:";
+
+function resolveEstimateAuthor(est: {
+  created_by_name?: string | null;
+  notes?: string | null;
+  assignee?: { display_name?: string | null } | null;
+}): string | null {
+  if (est.created_by_name?.trim()) return est.created_by_name.trim();
+  const match = est.notes?.match(new RegExp(`^${AUTHOR_NOTE_PREFIX}\\s*(.+?)(?:\\n|$)`));
+  if (match?.[1]) return match[1].trim();
+  return est.assignee?.display_name ?? null;
+}
+
+function buildAuthorNotes(createdByName?: string, existingNotes?: string | null): string | null {
+  const name = createdByName?.trim();
+  if (!name) return existingNotes ?? null;
+  const authorLine = `${AUTHOR_NOTE_PREFIX} ${name}`;
+  const stripped = existingNotes?.replace(new RegExp(`^${AUTHOR_NOTE_PREFIX}\\s*.+?\\n?`), "").trim();
+  if (!stripped) return authorLine;
+  return `${authorLine}\n${stripped}`;
+}
+
+function parseEstimateSequence(estimateNo: string): number {
+  const match = estimateNo.match(/^EST-(?:\d{4}-)?(\d+)$/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function throwIfSupabaseError(error: { message: string } | null): void {
+  if (error) throw new Error(error.message);
+}
+
+async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string) {
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("estimate_no")
+    .eq("company_id", companyId);
+  throwIfSupabaseError(error);
+
+  const max = (data ?? []).reduce((current, row) => {
+    return Math.max(current, parseEstimateSequence(row.estimate_no));
+  }, 0);
+  return `EST-${String(max + 1).padStart(4, "0")}`;
+}
+
 export async function getConstructions() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -48,17 +92,23 @@ export async function getConstruction(id: string) {
     subtotal: number;
     gross_profit_rate: number;
     created_at: string;
+    updated_at: string;
+    created_by_name: string | null;
+    assignee: { id: string; display_name: string | null } | null;
   }> = [];
   const contractData = data as typeof data & { estimate_id?: string | null };
 
   const { data: linkedEstimates } = await supabase
     .from("estimates")
-    .select("id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at")
+    .select("id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at, updated_at, notes, assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
     .eq("construction_id", id)
     .order("version", { ascending: false });
 
   if (linkedEstimates?.length) {
-    estimates = linkedEstimates;
+    estimates = linkedEstimates.map((est) => ({
+      ...est,
+      created_by_name: resolveEstimateAuthor(est),
+    })) as typeof estimates;
   }
 
   if (contractData.contract_id) {
@@ -87,6 +137,9 @@ export async function getConstruction(id: string) {
               subtotal: est.subtotal,
               gross_profit_rate: est.gross_profit_rate,
               created_at: est.created_at,
+              updated_at: est.updated_at ?? est.created_at,
+              created_by_name: resolveEstimateAuthor(est),
+              assignee: null,
             },
             ...estimates,
           ];
@@ -561,6 +614,548 @@ export async function seedContractorOrders(constructionId: string) {
     .select("*, craftsman:craftsmen(id, name)");
   if (error) throw error;
   return data;
+}
+
+export async function seedConstructionEstimates(constructionId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: construction } = await supabase
+    .from("constructions")
+    .select("customer_id, title")
+    .eq("id", constructionId)
+    .single();
+  if (!construction) throw new Error("Construction not found");
+
+  const { data: existingNumbers, error: numbersError } = await supabase
+    .from("estimates")
+    .select("estimate_no")
+    .eq("company_id", profile.company_id);
+  throwIfSupabaseError(numbersError);
+  const startNo = (existingNumbers ?? []).reduce((current, row) => {
+    return Math.max(current, parseEstimateSequence(row.estimate_no));
+  }, 0) + 1;
+
+  // 5バージョンの見積データ
+  const versions: Array<{
+    title: string;
+    status: "draft" | "issued" | "sent" | "accepted" | "rejected";
+    categories: Array<{ name: string; items: Array<{ name: string; spec: string; qty: number; unit: string; price: number; cost_rate: number }> }>;
+  }> = [
+    {
+      title: "初回提案",
+      status: "draft",
+      categories: [
+        {
+          name: "外構工事",
+          items: [
+            { name: "門扉", spec: "BH1000 CL", qty: 1, unit: "個", price: 14800, cost_rate: 0.878 },
+            { name: "壁上センサー", spec: "ハクナップLEDライト", qty: 1, unit: "個", price: 7600, cost_rate: 0.855 },
+            { name: "ステールサイン", spec: "—", qty: 1, unit: "個", price: 8500, cost_rate: 0.847 },
+            { name: "ポスト", spec: "メールボックス・ア", qty: 1, unit: "個", price: 8000, cost_rate: 0.850 },
+            { name: "カーポート取り付け工事", spec: "—", qty: 1, unit: "式", price: 40000, cost_rate: 0.875 },
+          ],
+        },
+        {
+          name: "外構工事2",
+          items: [
+            { name: "フェンス設置", spec: "高さ1.2m アルミ製", qty: 20, unit: "m", price: 8500, cost_rate: 0.882 },
+          ],
+        },
+        {
+          name: "植栽工事",
+          items: [
+            { name: "デザイン設計", spec: "—", qty: 1, unit: "式", price: 50000, cost_rate: 0.800 },
+            { name: "シンボルツリー", spec: "シマトネリコ H=3m", qty: 2, unit: "本", price: 18000, cost_rate: 0.833 },
+            { name: "低木植栽", spec: "ツツジ・サツキ他", qty: 15, unit: "本", price: 4200, cost_rate: 0.833 },
+          ],
+        },
+      ],
+    },
+    {
+      title: "変更見積",
+      status: "draft",
+      categories: [
+        { name: "外構工事", items: [
+          { name: "門扉", spec: "BH1000 CL（カラー変更）", qty: 1, unit: "個", price: 16800, cost_rate: 0.880 },
+          { name: "カーポート取り付け工事", spec: "サイズ拡張", qty: 1, unit: "式", price: 55000, cost_rate: 0.873 },
+        ]},
+        { name: "植栽工事", items: [
+          { name: "シンボルツリー", spec: "シマトネリコ H=3.5m に変更", qty: 2, unit: "本", price: 22000, cost_rate: 0.818 },
+        ]},
+      ],
+    },
+    {
+      title: "追加工事",
+      status: "draft",
+      categories: [
+        { name: "追加外構", items: [
+          { name: "宅配ボックス", spec: "Panasonic コンボ", qty: 1, unit: "台", price: 45000, cost_rate: 0.844 },
+        ]},
+      ],
+    },
+    {
+      title: "最終提案",
+      status: "draft",
+      categories: [
+        { name: "本体工事", items: [
+          { name: "基礎工事", spec: "ベタ基礎", qty: 1, unit: "式", price: 1800000, cost_rate: 0.867 },
+          { name: "木工事", spec: "在来軸組工法", qty: 1, unit: "式", price: 4500000, cost_rate: 0.867 },
+          { name: "屋根・板金工事", spec: "ガルバリウム鋼板", qty: 1, unit: "式", price: 850000, cost_rate: 0.847 },
+          { name: "外壁工事", spec: "サイディング張", qty: 1, unit: "式", price: 1200000, cost_rate: 0.875 },
+          { name: "内装工事", spec: "クロス・床材一式", qty: 1, unit: "式", price: 1400000, cost_rate: 0.857 },
+          { name: "電気設備工事", spec: "—", qty: 1, unit: "式", price: 680000, cost_rate: 0.853 },
+          { name: "給排水衛生工事", spec: "—", qty: 1, unit: "式", price: 950000, cost_rate: 0.853 },
+        ]},
+        { name: "諸経費", items: [
+          { name: "諸経費", spec: "現場管理費・一般管理費", qty: 1, unit: "式", price: 1850000, cost_rate: 0.870 },
+        ]},
+      ],
+    },
+    {
+      title: "追加変更",
+      status: "draft",
+      categories: [
+        { name: "追加工事", items: [
+          { name: "システムキッチン グレードアップ", spec: "LIXIL リシェル SI", qty: 1, unit: "式", price: 850000, cost_rate: 0.812 },
+          { name: "造作家具追加", spec: "リビング収納", qty: 1, unit: "式", price: 420000, cost_rate: 0.810 },
+          { name: "床暖房追加", spec: "リビング 10畳", qty: 1, unit: "式", price: 300000, cost_rate: 0.800 },
+        ]},
+      ],
+    },
+  ];
+
+  const created = [];
+  for (let i = 0; i < versions.length; i++) {
+    const v = versions[i];
+    const allItems = v.categories.flatMap(c => c.items);
+    const subtotal = allItems.reduce((s, it) => s + Math.round(it.qty * it.price), 0);
+    const costTotal = allItems.reduce((s, it) => s + Math.round(it.qty * it.price * it.cost_rate), 0);
+    const tax = Math.floor(subtotal * 0.1);
+    const total = subtotal + tax;
+    const grossProfit = subtotal - costTotal;
+    const grossProfitRate = subtotal > 0 ? (grossProfit / subtotal) * 100 : 0;
+    const estimateNo = `EST-${String(startNo + i).padStart(4, "0")}`;
+
+    const { data: estimate, error: estErr } = await supabase
+      .from("estimates")
+      .insert({
+        company_id: profile.company_id,
+        customer_id: construction.customer_id,
+        construction_id: constructionId,
+        estimate_no: estimateNo,
+        title: v.title,
+        status: v.status,
+        subtotal,
+        tax,
+        total,
+        cost_total: costTotal,
+        gross_profit: grossProfit,
+        gross_profit_rate: grossProfitRate,
+        version: i + 1,
+        notes: null,
+      })
+      .select()
+      .single();
+    if (estErr) throw estErr;
+
+    for (let ci = 0; ci < v.categories.length; ci++) {
+      const cat = v.categories[ci];
+      const { data: category, error: catErr } = await supabase
+        .from("estimate_categories")
+        .insert({
+          company_id: profile.company_id,
+          estimate_id: estimate.id,
+          name: cat.name,
+          sort_order: ci,
+        })
+        .select()
+        .single();
+      if (catErr) throw catErr;
+
+      for (let ii = 0; ii < cat.items.length; ii++) {
+        const it = cat.items[ii];
+        const sellingAmount = Math.round(it.qty * it.price);
+        const costAmount = Math.round(sellingAmount * it.cost_rate);
+        const gp = sellingAmount - costAmount;
+        const gpRate = sellingAmount > 0 ? (gp / sellingAmount) * 100 : 0;
+        const { error: itemErr } = await supabase
+          .from("estimate_items")
+          .insert({
+            company_id: profile.company_id,
+            estimate_id: estimate.id,
+            category_id: category.id,
+            name: it.name,
+            specification: it.spec === "—" ? null : it.spec,
+            quantity: it.qty,
+            unit: it.unit,
+            cost_price: Math.round(it.price * it.cost_rate),
+            cost_amount: costAmount,
+            selling_price: it.price,
+            selling_amount: sellingAmount,
+            gross_profit: gp,
+            gross_profit_rate: gpRate,
+            sort_order: ii,
+          });
+        if (itemErr) throw itemErr;
+      }
+    }
+    created.push(estimate);
+  }
+
+  return created;
+}
+
+export async function createEmptyEstimateForConstruction(constructionId: string, title: string, createdByName?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: construction } = await supabase
+    .from("constructions")
+    .select("customer_id")
+    .eq("id", constructionId)
+    .single();
+  if (!construction) throw new Error("Construction not found");
+
+  const estimateNo = await nextEstimateNo(supabase, profile.company_id);
+
+  const { data: existingVersions } = await supabase
+    .from("estimates")
+    .select("version")
+    .eq("construction_id", constructionId)
+    .order("version", { ascending: false })
+    .limit(1);
+  const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
+
+  const { data: estimate, error } = await supabase
+    .from("estimates")
+    .insert({
+      company_id: profile.company_id,
+      customer_id: construction.customer_id,
+      construction_id: constructionId,
+      estimate_no: estimateNo,
+      title,
+      status: "draft",
+      version: nextVersion,
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      cost_total: 0,
+      gross_profit: 0,
+      gross_profit_rate: 0,
+      assigned_to: user.id,
+      notes: buildAuthorNotes(createdByName),
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+  return estimate;
+}
+
+export async function copyEstimateForConstruction(constructionId: string, sourceEstimateId: string, title: string, createdByName?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: source, error: sourceError } = await supabase
+    .from("estimates")
+    .select("*, categories:estimate_categories(*), items:estimate_items(*)")
+    .eq("id", sourceEstimateId)
+    .single();
+  throwIfSupabaseError(sourceError);
+  if (!source) throw new Error("Source estimate not found");
+
+  const { data: construction } = await supabase
+    .from("constructions")
+    .select("customer_id")
+    .eq("id", constructionId)
+    .single();
+  if (!construction) throw new Error("Construction not found");
+
+  const estimateNo = await nextEstimateNo(supabase, profile.company_id);
+
+  const { data: existingVersions } = await supabase
+    .from("estimates")
+    .select("version")
+    .eq("construction_id", constructionId)
+    .order("version", { ascending: false })
+    .limit(1);
+  const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
+
+  const { data: newEstimate, error } = await supabase
+    .from("estimates")
+    .insert({
+      company_id: profile.company_id,
+      customer_id: construction.customer_id,
+      construction_id: constructionId,
+      estimate_no: estimateNo,
+      title,
+      status: "draft",
+      version: nextVersion,
+      subtotal: source.subtotal,
+      tax: source.tax,
+      total: source.total,
+      cost_total: source.cost_total,
+      gross_profit: source.gross_profit,
+      gross_profit_rate: source.gross_profit_rate,
+      notes: buildAuthorNotes(createdByName, source.notes),
+      assigned_to: user.id,
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  const categoryMap = new Map<string, string>();
+  for (const cat of source.categories ?? []) {
+    const { data: newCat, error: catError } = await supabase
+      .from("estimate_categories")
+      .insert({
+        company_id: profile.company_id,
+        estimate_id: newEstimate.id,
+        name: cat.name,
+        sort_order: cat.sort_order,
+      })
+      .select()
+      .single();
+    throwIfSupabaseError(catError);
+    if (newCat) categoryMap.set(cat.id, newCat.id);
+  }
+
+  if (source.items?.length) {
+    const { error: itemsError } = await supabase.from("estimate_items").insert(
+      source.items.map((item: Record<string, unknown>, index: number) => ({
+        company_id: profile.company_id,
+        estimate_id: newEstimate.id,
+        category_id: item.category_id ? categoryMap.get(String(item.category_id)) ?? null : null,
+        name: item.name,
+        description: item.description,
+        specification: item.specification,
+        quantity: item.quantity,
+        unit: item.unit,
+        cost_price: item.cost_price,
+        cost_amount: item.cost_amount,
+        selling_price: item.selling_price,
+        selling_amount: item.selling_amount,
+        gross_profit: item.gross_profit,
+        gross_profit_rate: item.gross_profit_rate,
+        sort_order: (item.sort_order as number | undefined) ?? index,
+        notes: item.notes,
+      })),
+    );
+    throwIfSupabaseError(itemsError);
+  }
+
+  return newEstimate;
+}
+
+async function recalculateEstimateTotals(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  estimateId: string,
+) {
+  const { data: items, error: itemsError } = await supabase
+    .from("estimate_items")
+    .select("selling_amount, cost_amount")
+    .eq("estimate_id", estimateId);
+  throwIfSupabaseError(itemsError);
+
+  const subtotal = (items ?? []).reduce((sum, item) => sum + Number(item.selling_amount ?? 0), 0);
+  const costTotal = (items ?? []).reduce((sum, item) => sum + Number(item.cost_amount ?? 0), 0);
+  const tax = Math.floor(subtotal * 0.1);
+  const total = subtotal + tax;
+  const grossProfit = subtotal - costTotal;
+  const grossProfitRate = subtotal > 0 ? (grossProfit / subtotal) * 100 : 0;
+
+  const totals = { subtotal, tax, total, cost_total: costTotal, gross_profit: grossProfit, gross_profit_rate: grossProfitRate };
+
+  const { error } = await supabase
+    .from("estimates")
+    .update({
+      ...totals,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", estimateId);
+  throwIfSupabaseError(error);
+
+  return totals;
+}
+
+function calcItemAmounts(quantity: number, costPrice: number, sellingPrice: number) {
+  const qty = Number(quantity) || 0;
+  const cost = Number(costPrice) || 0;
+  const selling = Number(sellingPrice) || 0;
+  const costAmount = Math.round(qty * cost);
+  const sellingAmount = Math.round(qty * selling);
+  const grossProfit = sellingAmount - costAmount;
+  const grossProfitRate = sellingAmount > 0 ? (grossProfit / sellingAmount) * 100 : 0;
+  return {
+    cost_amount: costAmount,
+    selling_amount: sellingAmount,
+    gross_profit: grossProfit,
+    gross_profit_rate: grossProfitRate,
+  };
+}
+
+async function assertEstimateAccess(estimateId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: estimate, error } = await supabase
+    .from("estimates")
+    .select("id, company_id")
+    .eq("id", estimateId)
+    .single();
+  throwIfSupabaseError(error);
+  if (!estimate || estimate.company_id !== profile.company_id) throw new Error("見積が見つかりません");
+
+  return { supabase, companyId: profile.company_id };
+}
+
+export async function addEstimateCategory(estimateId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("大項目名を入力してください");
+
+  const { supabase, companyId } = await assertEstimateAccess(estimateId);
+
+  const { data: existing } = await supabase
+    .from("estimate_categories")
+    .select("sort_order")
+    .eq("estimate_id", estimateId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  const sortOrder = (existing?.[0]?.sort_order ?? -1) + 1;
+
+  const { data: category, error } = await supabase
+    .from("estimate_categories")
+    .insert({
+      company_id: companyId,
+      estimate_id: estimateId,
+      name: trimmed,
+      sort_order: sortOrder,
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  await supabase
+    .from("estimates")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
+
+  return category;
+}
+
+export async function addEstimateItem(estimateId: string, categoryId: string, name?: string) {
+  const trimmed = name?.trim();
+  if (!trimmed) throw new Error("詳細項目名を入力してください");
+
+  const { supabase, companyId } = await assertEstimateAccess(estimateId);
+
+  const [{ data: category, error: catError }, { data: existing }] = await Promise.all([
+    supabase
+      .from("estimate_categories")
+      .select("id")
+      .eq("id", categoryId)
+      .eq("estimate_id", estimateId)
+      .single(),
+    supabase
+      .from("estimate_items")
+      .select("sort_order")
+      .eq("estimate_id", estimateId)
+      .eq("category_id", categoryId)
+      .order("sort_order", { ascending: false })
+      .limit(1),
+  ]);
+  throwIfSupabaseError(catError);
+  if (!category) throw new Error("大項目が見つかりません");
+
+  const sortOrder = (existing?.[0]?.sort_order ?? -1) + 1;
+
+  const { data: item, error } = await supabase
+    .from("estimate_items")
+    .insert({
+      company_id: companyId,
+      estimate_id: estimateId,
+      category_id: categoryId,
+      name: trimmed,
+      quantity: 1,
+      unit: "式",
+      cost_price: 0,
+      cost_amount: 0,
+      selling_price: 0,
+      selling_amount: 0,
+      gross_profit: 0,
+      gross_profit_rate: 0,
+      sort_order: sortOrder,
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  await recalculateEstimateTotals(supabase, estimateId);
+  return item;
+}
+
+export type EstimateItemUpdatePatch = {
+  name?: string;
+  specification?: string | null;
+  notes?: string | null;
+  quantity?: number;
+  unit?: string | null;
+  cost_price?: number;
+  selling_price?: number;
+};
+
+export async function updateEstimateItem(itemId: string, patch: EstimateItemUpdatePatch) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { data: current, error: fetchError } = await supabase
+    .from("estimate_items")
+    .select("*")
+    .eq("id", itemId)
+    .single();
+  throwIfSupabaseError(fetchError);
+  if (!current || current.company_id !== profile.company_id) throw new Error("明細が見つかりません");
+
+  const quantity = patch.quantity ?? Number(current.quantity) ?? 0;
+  const costPrice = patch.cost_price ?? Number(current.cost_price) ?? 0;
+  const sellingPrice = patch.selling_price ?? Number(current.selling_price) ?? 0;
+  const amounts = calcItemAmounts(quantity, costPrice, sellingPrice);
+
+  const { data: item, error } = await supabase
+    .from("estimate_items")
+    .update({
+      name: patch.name ?? current.name,
+      specification: patch.specification !== undefined ? patch.specification : current.specification,
+      notes: patch.notes !== undefined ? patch.notes : current.notes,
+      quantity,
+      unit: patch.unit !== undefined ? patch.unit : current.unit,
+      cost_price: costPrice,
+      selling_price: sellingPrice,
+      ...amounts,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", itemId)
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  const totals = await recalculateEstimateTotals(supabase, current.estimate_id);
+  return { item, totals };
 }
 
 export async function getConstructionEstimate(estimateId: string) {

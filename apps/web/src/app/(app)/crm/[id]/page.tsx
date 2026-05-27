@@ -1,29 +1,27 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { format } from "date-fns";
-import { ja } from "date-fns/locale";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
+import { KpiRow } from "@/components/shared/kpi-row";
 import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
 import { DealsTimelineTab } from "@/components/crm/deals-timeline-tab";
 import { RecordingSummaryTab } from "@/components/crm/recording-summary-tab";
 import { CustomerTodoTab } from "@/components/crm/customer-todo-tab";
 import { SchedulingTab } from "@/components/crm/scheduling-tab";
 import { CustomerFilesTab } from "@/components/crm/customer-files-tab";
-import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Trash2, Phone, Mail, MapPin,
   Building2, Plus, FileText, Briefcase, HardHat, ClipboardList, ClipboardPen,
-  User, Calendar, Tag, ChevronRight, Inbox, Mic, ListTodo, Upload,
+  ChevronRight, ChevronDown, Inbox, Mic, ListTodo, Upload, Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomer, deleteCustomer, getCustomerRelated } from "@/lib/actions/customers";
@@ -47,40 +45,6 @@ const STATUS_LABELS_CONS: Record<string, string> = {
 const CUSTOMER_STATUS: Record<string, string> = {
   active: "アクティブ", inactive: "非アクティブ", pending: "保留",
 };
-
-function DetailRow({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
-  return (
-    <div className={cn("flex items-start justify-between gap-3 py-2.5 border-b border-border/50 last:border-0", className)}>
-      <span className="text-xs text-muted-foreground shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-right font-medium">{value || <span className="text-muted-foreground font-normal">—</span>}</span>
-    </div>
-  );
-}
-
-function KpiCard({ label, value, sub, icon: Icon, accent }: {
-  label: string; value: number | string; sub: string;
-  icon: React.ComponentType<{ className?: string }>; accent: string;
-}) {
-  return (
-    <Card variant="inset" className="py-0 overflow-hidden">
-      <CardContent className="p-0">
-        <div className="flex items-stretch">
-          <div className="w-1 shrink-0" style={{ background: accent }} />
-          <div className="flex-1 flex items-center gap-3 px-4 py-3.5">
-            <div className="size-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: accent + "18", color: accent }}>
-              <Icon className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">{label}</p>
-              <p className="text-xl font-bold tabular-nums leading-tight">{value}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{sub}</p>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function EmptyRelated({ message, action }: { message: string; action: ReactNode }) {
   return (
@@ -111,6 +75,8 @@ export default function CrmDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [mainTab, setMainTab] = useState("overview");
+  const [entryOpen, setEntryOpen] = useState(false);
+  const entryFormRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<CustomerDetail | null>(null);
   const [related, setRelated] = useState<Related | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,8 +84,21 @@ export default function CrmDetailPage() {
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
     const allowed = ["overview", "entry", "deals", "recording", "todo", "scheduling", "files"];
-    if (tab && allowed.includes(tab)) setMainTab(tab);
+    if (tab && allowed.includes(tab)) {
+      setMainTab(tab);
+      if (tab === "entry") setEntryOpen(true);
+    }
   }, []);
+
+  const handleMainTabChange = (tab: string) => {
+    setMainTab(tab);
+    if (tab === "entry") {
+      setEntryOpen(true);
+      requestAnimationFrame(() => {
+        entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  };
 
   const reloadCustomer = () => {
     if (!id) return;
@@ -141,7 +120,7 @@ export default function CrmDetailPage() {
   };
 
   if (loading) return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Skeleton className="h-5 w-24" />
       <Skeleton className="h-32 w-full rounded-xl" />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
@@ -150,7 +129,7 @@ export default function CrmDetailPage() {
   );
 
   if (!data) return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Link href="/crm" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
         <ArrowLeft className="h-4 w-4" />顧客一覧
       </Link>
@@ -158,84 +137,120 @@ export default function CrmDetailPage() {
     </div>
   );
 
-  const avatar = getCustomerAvatarColor(data.id);
   const isCorp = data.customer_type === "corporation" || !!data.company_name;
   const totalDeal = related?.deals.reduce((s, d) => s + (d.value ?? 0), 0) ?? 0;
   const totalEst = related?.estimates.reduce((s, e) => s + (e.total_amount ?? 0), 0) ?? 0;
   const totalCon = related?.contracts.reduce((s, c) => s + (c.amount ?? 0), 0) ?? 0;
-  const budgetLabel = data.budget_min || data.budget_max
-    ? `¥${(data.budget_min ?? 0).toLocaleString()}${data.budget_max ? ` 〜 ¥${data.budget_max.toLocaleString()}` : " 〜"}`
-    : null;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Link href="/crm" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />顧客一覧
       </Link>
 
-      {/* プロフィールヘッダー */}
+      {/* プロフィールヘッダー — クリックで記入フォームを展開 */}
       <Card className="overflow-hidden py-0">
-        <div className="h-1.5" style={{ background: avatar.avatarGradient }} />
-        <CardContent className="p-5">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-            <CustomerAvatar seed={data.id} name={data.name} size="lg" />
-            <div className="flex-1 min-w-0 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight">{data.name}</h1>
-                <Badge variant="outline" className="text-xs">{isCorp ? "法人" : "個人"}</Badge>
-                <Badge className={cn(
-                  "text-xs",
-                  data.status === "active" && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                  data.status === "inactive" && "bg-gray-100 text-gray-500 hover:bg-gray-100",
-                  data.status === "pending" && "bg-amber-100 text-amber-700 hover:bg-amber-100",
-                )}>
-                  {CUSTOMER_STATUS[data.status] ?? data.status}
-                </Badge>
-              </div>
-              {data.company_name && (
-                <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 shrink-0" />{data.company_name}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {data.phone && (
-                  <a href={`tel:${data.phone}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 hover:bg-muted transition-colors">
-                    <Phone className="h-3 w-3" />{data.phone}
-                  </a>
-                )}
-                {data.email && (
-                  <a href={`mailto:${data.email}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 hover:bg-muted transition-colors truncate max-w-xs">
-                    <Mail className="h-3 w-3 shrink-0" />{data.email}
-                  </a>
-                )}
-                {data.address && (
-                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 text-muted-foreground">
-                    <MapPin className="h-3 w-3 shrink-0" />{data.address}
-                  </span>
-                )}
-              </div>
-              {data.tags?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {data.tags.map(t => (
-                    <Badge key={t} variant="secondary" className="text-[10px] h-5 px-2 font-normal">{t}</Badge>
-                  ))}
+        <CardContent className="p-0">
+          <div className="flex items-start gap-2 p-5 pb-0 min-w-0">
+            <div className="flex-1 min-w-0">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setEntryOpen((open) => !open)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setEntryOpen((open) => !open);
+                  }
+                }}
+                aria-expanded={entryOpen}
+                className="w-full min-w-0 max-w-full overflow-hidden rounded-lg p-2 cursor-pointer"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start gap-4 min-w-0">
+                  <CustomerAvatar seed={data.id} name={data.name} size="lg" />
+                  <div className="flex-1 min-w-0 space-y-3 overflow-hidden">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <h1 className="text-2xl font-semibold tracking-tight truncate max-w-full text-[#0F5132]">{data.name}</h1>
+                        <Badge variant="outline" className="text-xs shrink-0">{isCorp ? "法人" : "個人"}</Badge>
+                        <Badge className={cn(
+                          "text-xs shrink-0",
+                          data.status === "active" && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                          data.status === "inactive" && "bg-gray-100 text-gray-500 hover:bg-gray-100",
+                          data.status === "pending" && "bg-amber-100 text-amber-700 hover:bg-amber-100",
+                        )}>
+                          {CUSTOMER_STATUS[data.status] ?? data.status}
+                        </Badge>
+                      </div>
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                        {entryOpen ? "記入フォームを閉じる" : "記入フォームを開く"}
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", entryOpen && "rotate-180")} />
+                      </span>
+                    </div>
+                    {data.company_name && (
+                      <p className="text-sm text-muted-foreground flex items-center gap-1.5 min-w-0">
+                        <Building2 className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{data.company_name}</span>
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 min-w-0 max-w-full">
+                      {data.phone && (
+                        <a
+                          href={`tel:${data.phone}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 hover:bg-muted transition-colors max-w-full min-w-0"
+                        >
+                          <Phone className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{data.phone}</span>
+                        </a>
+                      )}
+                      {data.email && (
+                        <a
+                          href={`mailto:${data.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 hover:bg-muted transition-colors max-w-full min-w-0"
+                        >
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{data.email}</span>
+                        </a>
+                      )}
+                      {data.address && (
+                        <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted/60 text-muted-foreground max-w-full min-w-0">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{data.address}</span>
+                        </span>
+                      )}
+                    </div>
+                    {data.tags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {data.tags.map(t => (
+                          <Badge key={t} variant="secondary" className="text-[10px] h-5 px-2 font-normal">{t}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <Button variant="outline" size="sm" onClick={() => setMainTab("entry")}>
-                <ClipboardPen className="h-4 w-4 mr-1.5" />記入画面
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleDelete} className="text-destructive hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" onClick={handleDelete} className="text-destructive hover:text-destructive shrink-0 mt-1">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div ref={entryFormRef} className={cn("px-5 pb-5 pt-4 mt-4 border-t border-border/50", !entryOpen && "hidden")}>
+            <CustomerEntryForm
+              mode="edit"
+              customerId={id as string}
+              initialCustomer={data}
+              showCard={false}
+              onSaved={() => reloadCustomer()}
+            />
           </div>
         </CardContent>
       </Card>
 
-      <Tabs value={mainTab} onValueChange={setMainTab}>
-        <TabsList className="h-auto flex flex-wrap gap-1">
+      <Tabs value={mainTab} onValueChange={handleMainTabChange}>
+        <TabsList className="h-auto flex flex-wrap gap-1 w-full justify-start">
           <TabsTrigger value="overview" className="text-xs px-3">概要</TabsTrigger>
           <TabsTrigger value="entry" className="text-xs px-3 gap-1"><ClipboardPen className="h-3 w-3" />記入画面</TabsTrigger>
           <TabsTrigger value="deals" className="text-xs px-3 gap-1"><Briefcase className="h-3 w-3" />商談</TabsTrigger>
@@ -246,7 +261,11 @@ export default function CrmDetailPage() {
         </TabsList>
 
         <TabsContent value="entry" className="mt-4">
-          <CustomerEntryForm mode="edit" customerId={id as string} onSaved={() => reloadCustomer()} />
+          {!entryOpen ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              上の顧客カードをクリックすると記入フォームが開きます。
+            </p>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="deals" className="mt-4">
@@ -270,73 +289,28 @@ export default function CrmDetailPage() {
         </TabsContent>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
-          {/* KPI */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiCard label="商談" value={related?.deals.length ?? 0} sub={`合計 ¥${(totalDeal / 10000).toFixed(0)}万`} icon={Briefcase} accent={avatar.progress} />
-            <KpiCard label="見積" value={related?.estimates.length ?? 0} sub={`合計 ¥${(totalEst / 10000).toFixed(0)}万`} icon={FileText} accent="#2563eb" />
-            <KpiCard label="契約" value={related?.contracts.length ?? 0} sub={`合計 ¥${(totalCon / 10000).toFixed(0)}万`} icon={ClipboardList} accent="#059669" />
-            <KpiCard label="工事" value={related?.constructions.length ?? 0} sub={`進行中 ${related?.constructions.filter(c => c.status === "in_progress").length ?? 0}件`} icon={HardHat} accent="#d97706" />
-          </div>
+          <KpiRow
+            items={[
+              { label: "商談", value: related?.deals.length ?? 0, sub: `¥${(totalDeal / 10000).toFixed(0)}万`, icon: Briefcase },
+              { label: "見積", value: related?.estimates.length ?? 0, sub: `¥${(totalEst / 10000).toFixed(0)}万`, icon: FileText },
+              { label: "契約", value: related?.contracts.length ?? 0, sub: `¥${(totalCon / 10000).toFixed(0)}万`, icon: ClipboardList },
+              {
+                label: "工事",
+                value: related?.constructions.length ?? 0,
+                sub: `進行中 ${related?.constructions.filter((c) => c.status === "in_progress").length ?? 0}件`,
+                icon: HardHat,
+              },
+            ]}
+          />
 
-          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
-            {/* 左: プロフィール詳細 */}
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-1 pt-4 px-4">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />基本情報
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <DetailRow label="担当者" value={data.assigned_to_profile?.display_name} />
-                  <DetailRow label="部門" value={data.department} />
-                  <DetailRow label="年齢" value={data.age != null ? `${data.age}歳` : null} />
-                  <DetailRow label="予算感" value={budgetLabel} />
-                  <DetailRow label="EIGHT-ID" value={data.eight_id} />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-1 pt-4 px-4">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />問い合わせ
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <DetailRow label="知ったきっかけ" value={data.source} />
-                  <DetailRow label="問い合わせ分類" value={data.inquiry_category} />
-                  <DetailRow label="問い合わせ日" value={data.inquiry_date ? format(new Date(data.inquiry_date), "yyyy/MM/dd", { locale: ja }) : null} />
-                  {data.inquiry_content && (
-                    <div className="pt-3 mt-1 border-t border-border/50">
-                      <p className="text-[11px] text-muted-foreground mb-1.5">問い合わせ内容</p>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{data.inquiry_content}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {(data.notes || (data.custom_fields && Object.keys(data.custom_fields).length > 0)) && (
-                <Card>
-                  <CardHeader className="pb-1 pt-4 px-4">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Tag className="h-4 w-4 text-muted-foreground" />備考・その他
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-3">
-                    {data.notes && <p className="text-sm leading-relaxed whitespace-pre-wrap">{data.notes}</p>}
-                    {data.custom_fields && Object.entries(data.custom_fields).map(([k, v]) => (
-                      <DetailRow key={k} label={k} value={v} />
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* 右: 関連データ */}
-            <Card variant="inset" className="py-0 overflow-hidden">
-              <Tabs defaultValue="deals">
+          <Card variant="inset" className="py-0 overflow-hidden min-w-0">
+            <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
+              <CardTitle className="text-sm font-semibold">取引・案件</CardTitle>
+              <CardDescription className="text-xs">商談 → 見積 → 契約 → 工事の流れで紐づくデータ</CardDescription>
+            </CardHeader>
+            <Tabs defaultValue="deals">
                 <div className="px-4 pt-3 pb-0 border-b border-border/40">
-                  <TabsList className="h-8 bg-transparent p-0 gap-1 w-full justify-start">
+                  <TabsList className="h-auto flex flex-wrap gap-1 w-full justify-start bg-transparent p-0">
                     {([
                       { value: "deals", icon: Briefcase, label: "商談", count: related?.deals.length },
                       { value: "estimates", icon: FileText, label: "見積", count: related?.estimates.length },
@@ -346,17 +320,19 @@ export default function CrmDetailPage() {
                       <TabsTrigger
                         key={value}
                         value={value}
-                        className="text-xs h-7 px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md gap-1"
+                        className="text-xs h-8 px-3 rounded-md gap-1.5 data-[state=active]:bg-[#D8EDE4] data-[state=active]:text-[#0F5132] data-[state=active]:shadow-none"
                       >
-                        <Icon className="h-3 w-3" />{label}{count ? ` (${count})` : ""}
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                        <span className="tabular-nums text-muted-foreground data-[state=active]:text-[#2A8055]">({count ?? 0})</span>
                       </TabsTrigger>
                     ))}
                   </TabsList>
                 </div>
 
                 <TabsContent value="deals" className="mt-0">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
-                    <p className="text-xs text-muted-foreground">紐づく商談</p>
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/10">
+                    <p className="text-xs font-medium text-slate-600">商談一覧</p>
                     <Link href={`/crm?view=pipeline`}>
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
                         <Plus className="h-3 w-3" />追加
@@ -379,8 +355,8 @@ export default function CrmDetailPage() {
                 </TabsContent>
 
                 <TabsContent value="estimates" className="mt-0">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
-                    <p className="text-xs text-muted-foreground">紐づく見積</p>
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/10">
+                    <p className="text-xs font-medium text-slate-600">見積一覧</p>
                     <Link href={`/quotes/new?customer_id=${id}`}>
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />作成</Button>
                     </Link>
@@ -404,8 +380,8 @@ export default function CrmDetailPage() {
                 </TabsContent>
 
                 <TabsContent value="contracts" className="mt-0">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
-                    <p className="text-xs text-muted-foreground">紐づく契約</p>
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/10">
+                    <p className="text-xs font-medium text-slate-600">契約一覧</p>
                     <Link href={`/contracts/new?customer_id=${id}`}>
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />追加</Button>
                     </Link>
@@ -429,8 +405,8 @@ export default function CrmDetailPage() {
                 </TabsContent>
 
                 <TabsContent value="constructions" className="mt-0">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
-                    <p className="text-xs text-muted-foreground">紐づく工事</p>
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/10">
+                    <p className="text-xs font-medium text-slate-600">工事一覧</p>
                     <Link href={`/constructions/new?customer_id=${id}`}>
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />追加</Button>
                     </Link>
@@ -451,8 +427,7 @@ export default function CrmDetailPage() {
                   ))}
                 </TabsContent>
               </Tabs>
-            </Card>
-          </div>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -38,7 +38,7 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         "data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring/60 focus-visible:ring-ring/40 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive flex w-fit items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm whitespace-nowrap transition-all duration-200 outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "bg-white/50 backdrop-blur-sm border border-white/50 dark:bg-white/5 dark:border-white/10 hover:bg-white/65 dark:hover:bg-white/10",
+        "bg-white border border-[rgba(0,0,0,0.09)] dark:bg-[#1F2937] dark:border-[rgba(255,255,255,0.08)] hover:bg-white dark:hover:bg-[#1F2937]",
         className
       )}
       {...props}

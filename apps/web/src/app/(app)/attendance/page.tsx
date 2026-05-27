@@ -184,29 +184,29 @@ export default function AttendancePage() {
   ];
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="勤怠管理" description="出退勤の管理と記録" />
 
       {/* 打刻カード＋月次サマリー */}
       <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
-          <div className="flex flex-col md:flex-row">
+          <div className="flex flex-col md:flex-row md:items-center">
             {/* 時計エリア */}
             {isCurrentMonth && (
-              <div className="flex items-center gap-4 px-5 py-4 bg-gradient-to-br from-primary/5 to-transparent border-b md:border-b-0 md:border-r border-border/60 md:w-auto md:shrink-0">
-                <AnalogClock size={72} />
-                <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex items-center gap-5 px-6 py-5 bg-gradient-to-br from-primary/5 to-transparent border-b md:border-b-0 md:border-r border-border/60 shrink-0">
+                <AnalogClock size={96} />
+                <div className="flex flex-col gap-1.5 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${clockedIn ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/40"}`} />
-                    <span className={`text-xs font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
+                    <span className={`text-sm font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
                       {clockedIn ? "勤務中" : "未出勤"}
                     </span>
                   </div>
-                  <p className="text-2xl font-bold tabular-nums tracking-tight leading-none">{format(now, "HH:mm")}</p>
-                  <p className="text-xs text-muted-foreground">{format(now, "yyyy年M月d日（EEE）", { locale: ja })}</p>
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
-                    <Clock className="h-3 w-3 shrink-0" />
-                    <span>所定 {attSettings.start_time} – {attSettings.end_time}</span>
+                  <p className="text-3xl font-bold tabular-nums tracking-tight leading-none">{format(now, "HH:mm")}</p>
+                  <p className="text-sm text-muted-foreground whitespace-nowrap">{format(now, "yyyy年M月d日（EEE）", { locale: ja })}</p>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">所定 {attSettings.start_time} – {attSettings.end_time}</span>
                   </div>
                 </div>
               </div>
@@ -214,7 +214,7 @@ export default function AttendancePage() {
 
             {/* 操作エリア */}
             {isCurrentMonth && (
-              <div className="flex flex-col justify-center gap-2.5 px-5 py-4 border-b md:border-b-0 md:border-r border-border/60 md:w-64 shrink-0">
+              <div className="flex flex-col justify-center gap-2 px-4 py-4 border-b md:border-b-0 md:border-r border-border/60 md:w-56 shrink-0">
                 <div className="space-y-1.5">
                   <p className="text-[11px] text-muted-foreground font-medium">勤務区分</p>
                   <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType} disabled={isOnLeaveToday}>
@@ -254,17 +254,21 @@ export default function AttendancePage() {
               </div>
             )}
 
-            {/* 月次サマリー（2×2グリッド） */}
-            <div className="grid grid-cols-2 gap-px flex-1 bg-border/40">
+            {/* 月次サマリー */}
+            <div
+              className={`grid grid-cols-2 gap-px bg-border/40 ${
+                isCurrentMonth ? "md:grid-cols-4 md:shrink-0 md:ml-auto" : "flex-1 md:grid-cols-4"
+              }`}
+            >
               {[
                 { label: "出勤日数",    value: `${totalDays}日`,                 cls: "" },
                 { label: "承認済",      value: `${approvedDays}日`,              cls: "text-emerald-600" },
                 { label: "実労働時間",  value: minutesToHM(totalWorkMins),       cls: "" },
                 { label: "残業時間",    value: minutesToHM(totalOvertimeMins),   cls: totalOvertimeMins > 0 ? "text-amber-600" : "" },
               ].map(({ label, value, cls }) => (
-                <div key={label} className="bg-card px-5 py-4 flex flex-col justify-center">
-                  <p className="text-[11px] text-muted-foreground font-medium">{label}</p>
-                  <p className={`text-xl font-bold tabular-nums mt-0.5 ${cls}`}>{value}</p>
+                <div key={label} className="bg-card px-3 py-2.5 md:px-4 md:py-3 flex flex-col justify-center md:min-w-[5.5rem]">
+                  <p className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">{label}</p>
+                  <p className={`text-base font-bold tabular-nums mt-0.5 ${cls}`}>{value}</p>
                 </div>
               ))}
             </div>
@@ -280,7 +284,7 @@ export default function AttendancePage() {
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => subMonths(d, 1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-medium tabular-nums w-20 text-center">
+            <span className="text-sm font-medium tabular-nums shrink-0 whitespace-nowrap text-center min-w-[6.5rem] px-1">
               {format(currentDate, "yyyy年M月", { locale: ja })}
             </span>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => addMonths(d, 1))} disabled={isCurrentMonth}>

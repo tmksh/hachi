@@ -27,16 +27,16 @@ export default function CraftsmanDetailPage() {
     try { await deleteCraftsman(id as string); toast.success("削除しました"); router.push("/craftsmen"); } catch { toast.error("削除に失敗"); }
   };
 
-  if (loading) return <div className="p-4 md:p-8 space-y-6"><Skeleton className="h-8 w-64" /><Skeleton className="h-64" /></div>;
+  if (loading) return <div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-64" /></div>;
   if (!data) return <div className="p-4 md:p-8"><Link href="/craftsmen" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="mt-4">見つかりません</p></div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Link href="/craftsmen" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />職人一覧</Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center"><HardHat className="h-7 w-7 text-primary" /></div>
-          <div><h1 className="text-2xl font-semibold tracking-tight">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
+          <div><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
           {data.specialty && <Badge variant="secondary">{SPEC_LABELS[data.specialty]}</Badge>}
           {data.rank && <Badge>{data.rank}ランク</Badge>}
         </div>

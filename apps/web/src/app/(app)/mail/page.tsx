@@ -190,9 +190,9 @@ function MailPageContent() {
   const hasAccounts = accounts.length > 0;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">メール</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">メール</h1>
         <div className="flex items-center gap-2">
           {accounts.map((acc) => (
             <DropdownMenu key={acc.id}>
@@ -302,7 +302,7 @@ function MailPageContent() {
                 {threads.map((t) => (
                   <div
                     key={t.id}
-                    className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors ${
+                    className={`flex items-start gap-3 p-3 cursor-pointer glass-row transition-colors ${
                       selected?.id === t.id ? "bg-accent/30" : ""
                     } ${!t.is_read ? "bg-primary/5" : ""}`}
                     onClick={() => selectThread(t)}
@@ -399,7 +399,7 @@ export default function MailPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-4 md:p-8 space-y-6">
+        <div className="p-4 md:p-6 space-y-4">
           <Skeleton className="h-8 w-32" />
           <Skeleton className="h-[600px]" />
         </div>

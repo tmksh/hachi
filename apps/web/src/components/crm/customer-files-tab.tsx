@@ -1,42 +1,77 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Upload, FileText } from "lucide-react";
 import { getCustomerDocuments } from "@/lib/actions/crm-features";
+import { createDocument } from "@/lib/actions/documents";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+
+const STORAGE_BUCKET = "documents";
 
 type DocRow = Awaited<ReturnType<typeof getCustomerDocuments>>[number];
 
 export function CustomerFilesTab({ customerId }: { customerId: string }) {
   const [docs, setDocs] = useState<DocRow[]>([]);
-  const [uploadName, setUploadName] = useState("");
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = () => getCustomerDocuments(customerId).then(setDocs).catch(() => {});
   useEffect(() => { load(); }, [customerId]);
 
-  const handleUpload = () => {
-    const file = fileRef.current?.files?.[0];
-    if (!file) { toast.error("ファイルを選択してください"); return; }
-    toast.success(`「${uploadName || file.name}」をアップロードしました（ストレージ連携は文書管理と共通）`);
-    setUploadName("");
-    if (fileRef.current) fileRef.current.value = "";
-    load();
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() ?? "bin";
+      const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "");
+      const path = `customers/${customerId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
+      const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file);
+      if (storageError) throw storageError;
+
+      await createDocument({
+        name: file.name,
+        customer_id: customerId,
+        storage_path: path,
+        file_name: file.name,
+        mime_type: file.type,
+        size: file.size,
+      });
+
+      toast.success(`「${file.name}」をアップロードしました`);
+      load();
+    } catch (err) {
+      toast.error(`アップロードに失敗しました: ${err instanceof Error ? err.message : "不明なエラー"}`);
+    } finally {
+      e.target.value = "";
+      setUploading(false);
+    }
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-end border rounded-lg p-4">
-        <div className="flex-1 min-w-[200px] space-y-1">
-          <label className="text-xs text-muted-foreground">表示名（任意）</label>
-          <Input value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder="ファイル名" className="h-9" />
-        </div>
-        <Input ref={fileRef} type="file" className="max-w-xs h-9" />
-        <Button size="sm" onClick={handleUpload} className="gap-1.5"><Upload className="h-4 w-4" />アップロード</Button>
+      <div>
+        <input
+          ref={fileRef}
+          type="file"
+          className="sr-only"
+          onChange={handleFileChange}
+          disabled={uploading}
+        />
+        <Button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="h-9 gap-1.5"
+          disabled={uploading}
+        >
+          <Upload className="h-4 w-4" />
+          {uploading ? "アップロード中..." : "アップロード"}
+        </Button>
       </div>
       <div className="space-y-2">
         {docs.length === 0 ? (

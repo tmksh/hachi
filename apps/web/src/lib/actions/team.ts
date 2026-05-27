@@ -3,8 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/lib/database.types";
+import type { AssignableRole } from "@/lib/constants";
 
-export type TeamRole = "hq_admin" | "contractor_admin" | "employee";
+export type TeamRole = AssignableRole;
 
 async function assertTenantAdmin(): Promise<{
   companyId: string;

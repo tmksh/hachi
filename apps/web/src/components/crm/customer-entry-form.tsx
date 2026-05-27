@@ -17,6 +17,8 @@ import { getCustomerTagMasters, getLeadSources } from "@/lib/actions/deals";
 import { getBiDepartmentNames } from "@/lib/actions/bi";
 import type { Customer } from "@/lib/database.types";
 
+const FIELD_SELECT_TRIGGER = "w-full min-w-0";
+
 const INQUIRY_CATEGORIES = [
   "新築相談",
   "リノベ相談",
@@ -32,6 +34,7 @@ type CustomerEntryFormProps = {
   mode: "create" | "edit";
   onSaved?: (id: string) => void;
   showCard?: boolean;
+  initialCustomer?: Customer;
 };
 
 type FormState = {
@@ -112,14 +115,15 @@ function formToPayload(form: FormState) {
   };
 }
 
-export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }: CustomerEntryFormProps) {
-  const [loading, setLoading] = useState(mode === "edit");
+export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, initialCustomer }: CustomerEntryFormProps) {
+  const [loading, setLoading] = useState(mode === "edit" && !initialCustomer);
   const [saving, setSaving] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [tagMasters, setTagMasters] = useState<{ id: string; label: string }[]>([]);
   const [leadSources, setLeadSources] = useState<{ id: string; label: string }[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
-  const [form, setForm] = useState<FormState>({
+  const [form, setForm] = useState<FormState>(() =>
+    initialCustomer ? customerToForm(initialCustomer) : {
     name: "",
     phone: "",
     email: "",
@@ -153,6 +157,10 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
   };
 
   useEffect(() => {
+    if (initialCustomer) setForm(customerToForm(initialCustomer));
+  }, [initialCustomer]);
+
+  useEffect(() => {
     Promise.all([
       getProfiles().then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name })))),
       getCustomerTagMasters().then(setTagMasters),
@@ -162,12 +170,12 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
   }, []);
 
   useEffect(() => {
-    if (mode !== "edit" || !customerId) return;
+    if (mode !== "edit" || !customerId || initialCustomer) return;
     getCustomer(customerId)
       .then(c => setForm(customerToForm(c)))
       .catch(() => toast.error("取得に失敗しました"))
       .finally(() => setLoading(false));
-  }, [customerId, mode]);
+  }, [customerId, mode, initialCustomer]);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -245,7 +253,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
         <div className="space-y-2">
           <Label>法人/個人</Label>
           <Select value={form.customer_type} onValueChange={v => set("customer_type", v as FormState["customer_type"])}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="individual">個人</SelectItem>
               <SelectItem value="corporation">法人</SelectItem>
@@ -261,7 +269,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
         <div className="space-y-2">
           <Label>部門（新築・リノベーション etc…）</Label>
           <Select value={form.department || "_none"} onValueChange={v => set("department", v === "_none" ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="_none">未選択</SelectItem>
               {departmentOptions.map(d => (
@@ -282,7 +290,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
           <Label>知ったきっかけ</Label>
           {leadSources.length > 0 ? (
             <Select value={form.source || "_none"} onValueChange={v => set("source", v === "_none" ? "" : v)}>
-              <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
+              <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="_none">未選択</SelectItem>
                 {leadSources.map(s => (
@@ -297,7 +305,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
         <div className="space-y-2">
           <Label>問い合わせ分類</Label>
           <Select value={form.inquiry_category || "_none"} onValueChange={v => set("inquiry_category", v === "_none" ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="_none">未選択</SelectItem>
               {INQUIRY_CATEGORIES.map(c => (
@@ -313,7 +321,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
         <div className="space-y-2">
           <Label>担当者</Label>
           <Select value={form.assigned_to || "_none"} onValueChange={v => set("assigned_to", v === "_none" ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="_none">未選択</SelectItem>
               {profiles.map(p => (
@@ -337,7 +345,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true }
         <div className="space-y-2">
           <Label>ステータス</Label>
           <Select value={form.status} onValueChange={v => set("status", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="active">アクティブ</SelectItem>
               <SelectItem value="inactive">非アクティブ</SelectItem>

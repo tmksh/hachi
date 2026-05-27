@@ -154,7 +154,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
 
   const sidebarActiveItem = "text-white font-medium shadow-sm";
   const sidebarActiveSubItem = "text-white font-medium shadow-sm";
-  const sidebarActiveIndicator = "bg-white/90";
+  const sidebarActiveIndicator = "hidden";
   const sidebarActiveStyle = {
     background: useBlueSidebar ? BLUE_ACTIVE_GRADIENT : TEAL_ACTIVE_GRADIENT,
   };

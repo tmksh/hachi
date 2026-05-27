@@ -48,7 +48,7 @@ export default function CrmPage() {
   const isPipeline = view === "pipeline";
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader
         title={isPipeline ? "商談パイプライン" : "顧客管理"}
         description={isPipeline ? "商談の進捗を管理" : "顧客情報の一覧と管理"}

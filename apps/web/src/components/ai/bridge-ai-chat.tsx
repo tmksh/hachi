@@ -9,17 +9,17 @@ import { Sparkles, Send } from "lucide-react";
 import { TEAL_ACTIVE_GRADIENT } from "@/lib/teal-theme";
 
 const GREETINGS: { match: RegExp; text: string }[] = [
-  { match: /\/quotes/, text: "見積もりについてお手伝いできますか？" },
-  { match: /\/constructions/, text: "工程表・工事管理についてお手伝いできますか？" },
-  { match: /\/contracts/, text: "契約・書類作成についてお手伝いできますか？" },
-  { match: /\/crm/, text: "顧客・商談についてお手伝いできますか？" },
-  { match: /\/craftsmen/, text: "職人管理についてお手伝いできますか？" },
-  { match: /\/workflow/, text: "ワークフローについてお手伝いできますか？" },
-  { match: /\/dashboard/, text: "ダッシュボードの見方についてお手伝いできますか？" },
+  { match: /\/quotes/, text: "見積もりについて\nお手伝いできますか？" },
+  { match: /\/constructions/, text: "工程表・工事管理について\nお手伝いできますか？" },
+  { match: /\/contracts/, text: "契約・書類作成について\nお手伝いできますか？" },
+  { match: /\/crm/, text: "顧客・商談について\nお手伝いできますか？" },
+  { match: /\/craftsmen/, text: "職人管理について\nお手伝いできますか？" },
+  { match: /\/workflow/, text: "ワークフローについて\nお手伝いできますか？" },
+  { match: /\/dashboard/, text: "ダッシュボードの見方について\nお手伝いできますか？" },
 ];
 
 function getGreeting(pathname: string) {
-  return GREETINGS.find((g) => g.match.test(pathname))?.text ?? "BRIDGE AI です。何かお手伝いできますか？";
+  return GREETINGS.find((g) => g.match.test(pathname))?.text ?? "BRIDGE AI です。\n何かお手伝いできますか？";
 }
 
 export function BridgeAiChat() {
@@ -38,6 +38,8 @@ export function BridgeAiChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const isInitial = messages.length === 1 && messages[0]?.role === "assistant";
 
   const send = () => {
     if (!input.trim()) return;
@@ -68,22 +70,42 @@ export function BridgeAiChat() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="w-full sm:max-w-md flex flex-col p-0">
           <SheetHeader className="px-4 py-3 border-b">
-            <SheetTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-primary" />BLIDGE AI
+            <SheetTitle className="flex items-center gap-2.5 text-base">
+              <span
+                className="h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0"
+                style={{ background: TEAL_ACTIVE_GRADIENT }}
+              >
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <span className="flex flex-col items-start leading-tight">
+                <span>BLIDGE AI</span>
+                <span className="text-[10px] font-normal text-emerald-600 flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  オンライン
+                </span>
+              </span>
             </SheetTitle>
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-                <span className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                  {m.text}
-                </span>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
+          {isInitial ? (
+            <div className="flex-1 flex items-center justify-center px-6">
+              <p className="text-center text-lg text-foreground/80 whitespace-pre-line leading-relaxed">
+                {messages[0]?.text}
+              </p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              {messages.map((m, i) => (
+                <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+                  <span className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                    {m.text}
+                  </span>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+          )}
           <div className="p-3 border-t flex gap-2">
-            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="メッセージ..." onKeyDown={(e) => e.key === "Enter" && send()} />
+            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="メッセージを入力..." onKeyDown={(e) => e.key === "Enter" && send()} />
             <Button size="icon" onClick={send}><Send className="h-4 w-4" /></Button>
           </div>
         </SheetContent>

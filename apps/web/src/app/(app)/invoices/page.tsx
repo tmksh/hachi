@@ -50,7 +50,7 @@ export default function InvoicesPage() {
   const draftCount = invoices.filter(i => i.status === "draft").length;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="請求管理" description="請求書の一覧と管理">
         <Link href="/invoices/new">
           <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規作成</Button>

@@ -10,10 +10,10 @@ export default function CrmNewPage() {
   const router = useRouter();
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-3">
         <Link href="/crm"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link>
-        <h1 className="text-2xl font-semibold tracking-tight">新規顧客登録</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">新規顧客登録</h1>
       </div>
       <CustomerEntryForm
         mode="create"

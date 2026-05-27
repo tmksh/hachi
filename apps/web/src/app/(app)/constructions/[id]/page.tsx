@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
-  ArrowLeft, Pencil, CheckCircle2, MapPin, CalendarRange,
+  ArrowLeft, MapPin, CalendarRange,
   Wallet, User2, FileText,
   PackageCheck, ExternalLink,
   Plus, Trash2, Loader2, Wand2,
@@ -40,17 +40,19 @@ import type { Craftsman } from "@/lib/database.types";
 import { getCompany } from "@/lib/actions/profiles";
 import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
-import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { ContractTab } from "@/components/constructions/contract-tab";
 import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
 import { InvoicesTab } from "@/components/constructions/invoices-tab";
+import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
 import { useAuth } from "@/hooks/use-auth";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   getConstructionEstimate,
   createOrdersFromEstimate,
+  seedConstructionEstimates,
+  createEmptyEstimateForConstruction,
+  copyEstimateForConstruction,
 } from "@/lib/actions/constructions";
-import { createEstimateRevision } from "@/lib/actions/estimates";
 import { getChangeOrders } from "@/lib/actions/change-orders";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 
@@ -73,12 +75,68 @@ function InfoCell({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 /* ──────────────────────────────────────────────────
+   見積もりタブ - 空状態モック（プロトタイプ表示）
+────────────────────────────────────────────────── */
+function EstimateEmptyMock({ constructionId }: { constructionId: string }) {
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const created = await seedConstructionEstimates(constructionId);
+      toast.success(`サンプル見積 ${created.length} 件を作成しました`);
+      window.location.reload();
+    } catch (e) {
+      toast.error(`サンプル作成に失敗: ${e instanceof Error ? e.message : "不明なエラー"}`);
+      setSeeding(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
+      <FileText className="h-12 w-12 text-muted-foreground/40" />
+      <div>
+        <p className="text-base font-semibold">見積もりデータがありません</p>
+        <p className="text-sm text-muted-foreground mt-1">サンプルデータを投入して機能を確認できます</p>
+      </div>
+      <Button size="sm" className="gap-1.5" disabled={seeding} onClick={() => void handleSeed()}>
+        {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+        {seeding ? "作成中..." : "サンプル見積を5件作成"}
+      </Button>
+      <p className="text-[11px] text-muted-foreground max-w-md">
+        ※ 初回提案・変更見積・追加工事・最終提案・追加変更の5バージョンを、明細・カテゴリ込みで生成します。
+      </p>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────
    見積もりタブ
 ────────────────────────────────────────────────── */
-function EstimateTab({ data, constructionId, onEstimateChange }: {
+type EstimateListItem = {
+  id: string;
+  estimate_no: string;
+  title: string | null;
+  version: number;
+  status: string;
+  total: number;
+  subtotal: number;
+  gross_profit_rate: number;
+  created_at: string;
+  updated_at: string;
+  created_by_name?: string | null;
+  assignee?: { id: string; display_name: string | null } | null;
+};
+
+const ESTIMATE_STATUS_MAP: Record<string, string> = {
+  draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
+};
+
+function EstimateTab({ data, constructionId, onEstimateChange, onRefresh }: {
   data: Detail;
   constructionId: string;
   onEstimateChange: (est: Detail["estimate"]) => void;
+  onRefresh?: () => void;
 }) {
   const contract = data.contract as (typeof data.contract & {
     amount?: number; contract_date?: string | null; notes?: string | null; estimate_id?: string | null;
@@ -91,28 +149,11 @@ function EstimateTab({ data, constructionId, onEstimateChange }: {
     reserve_fee_1_rate?: number; reserve_fee_2_rate?: number;
   }) | null }).estimate;
 
-  const estimateList = (data as Detail & { estimates?: Array<{
-    id: string; estimate_no: string; title: string | null; version: number;
-    status: string; total: number; subtotal: number; gross_profit_rate: number;
-  }> }).estimates ?? [];
+  const estimateList = ((data as Detail & { estimates?: EstimateListItem[] }).estimates ?? []) as EstimateListItem[];
 
   const [loadingEstimate, setLoadingEstimate] = useState(false);
-  const [creatingRevision, setCreatingRevision] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(estimate?.id ?? estimateList[0]?.id ?? null);
-
-  async function handleCreateRevision() {
-    if (!estimate?.id) return;
-    setCreatingRevision(true);
-    try {
-      const rev = await createEstimateRevision(estimate.id, constructionId);
-      await handleSelectEstimate(rev.id);
-      toast.success(`改訂版 v${rev.version} を作成しました`);
-    } catch {
-      toast.error("改訂版の作成に失敗しました");
-    } finally {
-      setCreatingRevision(false);
-    }
-  }
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   async function handleSelectEstimate(id: string) {
     setSelectedId(id);
@@ -124,17 +165,52 @@ function EstimateTab({ data, constructionId, onEstimateChange }: {
     finally { setLoadingEstimate(false); }
   }
 
-  if (!estimate && !contract) {
+  async function handleEstimateCreated(estimateId: string) {
+    setCreateOpen(false);
+    setLoadingEstimate(true);
+    try {
+      const est = await getConstructionEstimate(estimateId);
+      onEstimateChange(est as Detail["estimate"]);
+      setSelectedId(estimateId);
+      onRefresh?.();
+      toast.success("見積を作成しました");
+    } catch {
+      toast.error("見積の読み込みに失敗しました");
+    } finally {
+      setLoadingEstimate(false);
+    }
+  }
+
+  // 詳細モード（作成直後もここへ遷移）
+  if (selectedId && estimate?.id === selectedId) {
     return (
-      <div className="py-16 text-center text-sm text-muted-foreground">
-        <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
-        <p>見積もりデータがありません</p>
-        <p className="text-xs mt-1">契約書に見積もりを紐付けると明細が表示されます</p>
-      </div>
+      <EstimateDetailView
+        estimate={estimate as EstimateForView}
+        onBack={() => { setSelectedId(null); }}
+        loading={loadingEstimate}
+        onEstimateChange={(est) => onEstimateChange(est as Detail["estimate"])}
+      />
     );
   }
 
-  if (!estimate && contract) {
+  // データなし
+  if (estimateList.length === 0 && !contract) {
+    return (
+      <>
+        <EstimateEmptyMock constructionId={constructionId} />
+        <CreateEstimateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          constructionId={constructionId}
+          estimateList={estimateList}
+          onCreated={(id) => void handleEstimateCreated(id)}
+        />
+      </>
+    );
+  }
+
+  // 契約のみ
+  if (estimateList.length === 0 && contract) {
     return (
       <div className="space-y-4">
         <Card>
@@ -156,155 +232,182 @@ function EstimateTab({ data, constructionId, onEstimateChange }: {
     );
   }
 
-  if (!estimate) return null;
-
-  const statusMap: Record<string, string> = {
-    draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
-  };
-
-  const reserve1Rate = estimate.reserve_fee_1_rate ?? 0.02;
-  const reserve2Rate = estimate.reserve_fee_2_rate ?? 0.03;
-  const reserve1 = Math.round((estimate.subtotal ?? 0) * reserve1Rate);
-  const reserve2 = Math.round((estimate.subtotal ?? 0) * reserve2Rate);
-
-  // カテゴリ別に明細を整理
-  const categories: EstimateCategory[] = estimate.categories ?? [];
-  const items: EstimateItem[] = estimate.items ?? [];
-  const itemsByCategory = categories.map((cat: EstimateCategory) => ({
-    category: cat,
-    items: items.filter((item: EstimateItem) => item.category_id === cat.id),
-  }));
-  const uncategorized = items.filter((item: EstimateItem) => !item.category_id);
-
+  // 一覧モード
   return (
-    <div className="space-y-4">
-      {estimateList.length > 1 && (
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-muted-foreground">見積バージョン:</span>
-          {estimateList.map((e: (typeof estimateList)[number]) => (
-            <Button
-              key={e.id}
-              variant={selectedId === e.id ? "default" : "outline"}
-              size="sm"
-              className="text-xs h-7"
-              disabled={loadingEstimate}
-              onClick={() => handleSelectEstimate(e.id)}
-            >
-              v{e.version} ({e.estimate_no})
-            </Button>
-          ))}
-        </div>
-      )}
+    <>
+      <EstimateListView
+        estimateList={estimateList}
+        loadingEstimate={loadingEstimate}
+        onSelectEstimate={handleSelectEstimate}
+        onOpenCreate={() => setCreateOpen(true)}
+      />
+      <CreateEstimateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        constructionId={constructionId}
+        estimateList={estimateList}
+        onCreated={(id) => void handleEstimateCreated(id)}
+      />
+    </>
+  );
+}
 
-      {/* サマリーカード */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        {[
-          { label: "小計", value: `¥${(estimate.subtotal ?? 0).toLocaleString()}` },
-          { label: `予備費1（${(reserve1Rate * 100).toFixed(0)}%）`, value: `¥${reserve1.toLocaleString()}` },
-          { label: `予備費2（${(reserve2Rate * 100).toFixed(0)}%）`, value: `¥${reserve2.toLocaleString()}` },
-          { label: "消費税（10%）", value: `¥${(estimate.tax ?? 0).toLocaleString()}` },
-          { label: "合計金額", value: `¥${(estimate.total ?? 0).toLocaleString()}`, highlight: true },
-          { label: "粗利率", value: `${(estimate.gross_profit_rate ?? 0).toFixed(1)}%`, color: (estimate.gross_profit_rate ?? 0) >= 20 ? "text-green-600" : "text-amber-600" },
-        ].map(c => (
-          <div key={c.label} className={`rounded-xl border p-3 ${c.highlight ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`}>
-            <p className="text-[11px] text-muted-foreground">{c.label}</p>
-            <p className={`text-base font-bold mt-0.5 tabular-nums ${c.color ?? ""}`}>{c.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ステータス＋番号 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
-            {estimate.estimate_no}
-          </span>
-          {estimate.status && (
-            <Badge variant="outline" className="text-xs">{statusMap[estimate.status] ?? estimate.status}</Badge>
-          )}
+function EstimateListView({
+  estimateList, loadingEstimate, onSelectEstimate, onOpenCreate,
+}: {
+  estimateList: EstimateListItem[];
+  loadingEstimate: boolean;
+  onSelectEstimate: (id: string) => void;
+  onOpenCreate: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold">見積一覧</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">工事に関連する全ての見積を管理</p>
         </div>
-        <Link href={`/quotes`}>
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <ExternalLink className="h-4 w-4" />見積一覧を開く
-          </Button>
-        </Link>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          disabled={creatingRevision || !estimate?.id}
-          onClick={handleCreateRevision}
-        >
-          {creatingRevision ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          改訂版を作成
+        <Button size="sm" className="gap-1.5" onClick={onOpenCreate}>
+          <Plus className="h-4 w-4" />見積作成
         </Button>
       </div>
 
-      {/* 明細テーブル */}
-      <div className="rounded-xl border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-hidden bg-card">
         <table className="w-full text-sm border-collapse">
-          <thead className="bg-muted/60">
-            <tr>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">工種・品名</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground w-16">数量</th>
-              <th className="text-left px-2 py-2.5 text-xs font-semibold text-muted-foreground w-12">単位</th>
-              <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground w-28">単価</th>
-              <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground w-28">金額</th>
+          <thead className="bg-muted/40">
+            <tr className="text-xs text-muted-foreground">
+              <th className="text-left px-4 py-2.5 font-medium">見積名</th>
+              <th className="text-left px-3 py-2.5 font-medium">作成日</th>
+              <th className="text-left px-3 py-2.5 font-medium">最終更新日</th>
+              <th className="text-right px-3 py-2.5 font-medium">合計金額</th>
+              <th className="text-right px-3 py-2.5 font-medium">粗利率</th>
+              <th className="text-left px-3 py-2.5 font-medium">ステータス</th>
+              <th className="text-left px-3 py-2.5 font-medium">作成者</th>
             </tr>
           </thead>
           <tbody>
-            {itemsByCategory.map(({ category, items: catItems }: { category: EstimateCategory; items: EstimateItem[] }) => (
-              <>
-                <tr key={category.id} className="bg-muted/30">
-                  <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold text-slate-600">{category.name}</td>
-                </tr>
-                {catItems.map(item => (
-                  <tr key={item.id} className="border-t border-border/40 hover:bg-muted/20">
-                    <td className="px-4 py-2.5">
-                      <p className="text-sm">{item.name}</p>
-                      {item.specification && <p className="text-xs text-muted-foreground">{item.specification}</p>}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-sm">{item.quantity}</td>
-                    <td className="px-2 py-2.5 text-xs text-muted-foreground">{item.unit ?? ""}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-sm">¥{item.selling_price.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-sm font-medium">¥{item.selling_amount.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </>
-            ))}
-            {uncategorized.map(item => (
-              <tr key={item.id} className="border-t border-border/40 hover:bg-muted/20">
-                <td className="px-4 py-2.5">
-                  <p className="text-sm">{item.name}</p>
-                  {item.specification && <p className="text-xs text-muted-foreground">{item.specification}</p>}
+            {estimateList.map((r) => (
+              <tr
+                key={r.id}
+                className={cn("border-t border-border/40 hover:bg-muted/20 cursor-pointer", loadingEstimate && "opacity-60 pointer-events-none")}
+                onClick={() => onSelectEstimate(r.id)}
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm text-primary hover:underline">
+                      {r.estimate_no}{r.title ? `（${r.title}）` : ""}
+                    </span>
+                  </div>
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-sm">{item.quantity}</td>
-                <td className="px-2 py-2.5 text-xs text-muted-foreground">{item.unit ?? ""}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-sm">¥{item.selling_price.toLocaleString()}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-sm font-medium">¥{item.selling_amount.toLocaleString()}</td>
+                <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">
+                  {new Date(r.created_at).toLocaleDateString("ja-JP")}
+                </td>
+                <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">
+                  {new Date(r.updated_at ?? r.created_at).toLocaleDateString("ja-JP")}
+                </td>
+                <td className="px-3 py-3 text-right tabular-nums font-medium">¥{(r.total ?? 0).toLocaleString()}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-xs">{(r.gross_profit_rate ?? 0).toFixed(1)}%</td>
+                <td className="px-3 py-3">
+                  <Badge variant="outline" className="text-[10px] h-5">
+                    {ESTIMATE_STATUS_MAP[r.status] ?? r.status}
+                  </Badge>
+                </td>
+                <td className="px-3 py-3 text-xs">{r.created_by_name ?? r.assignee?.display_name ?? "—"}</td>
               </tr>
             ))}
-            {items.length === 0 && (
-              <tr><td colSpan={5} className="py-10 text-center text-sm text-muted-foreground">明細がありません</td></tr>
-            )}
           </tbody>
-          <tfoot className="bg-muted/40 border-t-2 border-border">
-            <tr>
-              <td colSpan={4} className="px-4 py-2.5 text-sm font-semibold text-right">小計</td>
-              <td className="px-4 py-2.5 text-right tabular-nums font-semibold">¥{(estimate.subtotal ?? 0).toLocaleString()}</td>
-            </tr>
-            <tr>
-              <td colSpan={4} className="px-4 py-1.5 text-xs text-right text-muted-foreground">消費税（10%）</td>
-              <td className="px-4 py-1.5 text-right tabular-nums text-xs text-muted-foreground">¥{(estimate.tax ?? 0).toLocaleString()}</td>
-            </tr>
-            <tr className="bg-primary/5">
-              <td colSpan={4} className="px-4 py-2.5 text-sm font-bold text-right">合計</td>
-              <td className="px-4 py-2.5 text-right tabular-nums font-bold text-base">¥{(estimate.total ?? 0).toLocaleString()}</td>
-            </tr>
-          </tfoot>
         </table>
       </div>
     </div>
+  );
+}
+
+
+function CreateEstimateDialog({
+  open, onOpenChange, constructionId, estimateList, onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  constructionId: string;
+  estimateList: EstimateListItem[];
+  onCreated: (estimateId: string) => void;
+}) {
+  const { user } = useAuth();
+  const defaultName = `No.${new Date().getFullYear()}-${String(estimateList.length + 1).padStart(3, "0")}`;
+  const defaultAuthor = (user?.user_metadata?.display_name as string | undefined) ?? user?.email ?? "";
+  const [title, setTitle] = useState(defaultName);
+  const [author, setAuthor] = useState(defaultAuthor);
+  const [sourceId, setSourceId] = useState<string>("none");
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(`No.${new Date().getFullYear()}-${String(estimateList.length + 1).padStart(3, "0")}`);
+    setAuthor((user?.user_metadata?.display_name as string | undefined) ?? user?.email ?? "");
+    setSourceId("none");
+  }, [open, estimateList.length, user]);
+
+  const handleCreate = async () => {
+    if (!title.trim()) { toast.error("見積名を入力してください"); return; }
+    setCreating(true);
+    try {
+      const created = sourceId === "none"
+        ? await createEmptyEstimateForConstruction(constructionId, title.trim(), author.trim() || undefined)
+        : await copyEstimateForConstruction(constructionId, sourceId, title.trim(), author.trim() || undefined);
+      onOpenChange(false);
+      onCreated(created.id);
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e && "message" in e
+            ? String((e as { message: unknown }).message)
+            : "不明なエラー";
+      toast.error(`作成に失敗: ${message}`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>見積を作成</DialogTitle></DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">見積名 *</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-9" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">作成者</Label>
+            <Input value={author} onChange={(e) => setAuthor(e.target.value)} className="h-9" placeholder="作成者名を入力" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">見積もりを参照</Label>
+            <Select value={sourceId} onValueChange={setSourceId}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">参照なし（空の見積を作成）</SelectItem>
+                {estimateList.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.estimate_no}{e.title ? `（${e.title}）` : ""}・¥{(e.total ?? 0).toLocaleString()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">既存の見積を選ぶと、明細を複製します</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>キャンセル</Button>
+          <Button onClick={() => void handleCreate()} disabled={creating}>
+            {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+            {creating ? "作成中..." : "作成する"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -715,7 +818,6 @@ export default function ConstructionDetailPage() {
   const [changeOrders, setChangeOrders] = useState<Awaited<ReturnType<typeof getChangeOrders>>>([]);
   const [closingDayLabel, setClosingDayLabel] = useState("月末締め");
   const [loading, setLoading] = useState(true);
-  const [completeOpen, setCompleteOpen] = useState(false);
 
   const reload = () => {
     if (!id) return;
@@ -747,7 +849,7 @@ export default function ConstructionDetailPage() {
   }, [id]);
 
   if (loading) return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Skeleton className="h-6 w-24" />
       <Skeleton className="h-10 w-64" />
       <Skeleton className="h-20" />
@@ -761,7 +863,6 @@ export default function ConstructionDetailPage() {
     </div>
   );
 
-  const isCompletable = data.status !== "completed" && data.status !== "cancelled";
   const customer = data.customer as (typeof data.customer & { address?: string | null }) | null;
   const contract = data.contract as (typeof data.contract & {
     amount?: number; contract_date?: string | null; start_date?: string | null;
@@ -770,7 +871,7 @@ export default function ConstructionDetailPage() {
   const estimate = (data as Detail & { estimate?: { id?: string } | null }).estimate;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <Link href="/constructions" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" />工事一覧
       </Link>
@@ -779,23 +880,18 @@ export default function ConstructionDetailPage() {
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">{data.construction_no}</span>
-              <StatusBadge status={data.status} />
-              {customer && <Badge variant="outline" className="text-xs">{customer.name}</Badge>}
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight mt-1.5">{data.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.title}</h1>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+              <span className="font-mono">{data.construction_no}</span>
+              {customer && (
+                <>
+                  <span aria-hidden className="text-border/80">·</span>
+                  <span>{customer.name}</span>
+                </>
+              )}
+            </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {isCompletable && (
-              <Button size="sm" variant="outline" className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50" onClick={() => setCompleteOpen(true)}>
-                <CheckCircle2 className="h-4 w-4" />完了にする
-              </Button>
-            )}
-            <Link href={`/constructions/${id}/edit`}>
-              <Button variant="outline" size="sm"><Pencil className="h-4 w-4 mr-1" />編集</Button>
-            </Link>
-          </div>
+          <StatusBadge status={data.status} className="shrink-0 mt-0.5" />
         </div>
 
         {/* 4カラム情報 */}
@@ -856,6 +952,7 @@ export default function ConstructionDetailPage() {
             data={{ ...data, contract }}
             constructionId={id as string}
             onEstimateChange={(est) => setData((prev: Detail | null) => prev ? { ...prev, estimate: est } : prev)}
+            onRefresh={reload}
           />
         </TabsContent>
 
@@ -924,21 +1021,6 @@ export default function ConstructionDetailPage() {
           />
         </TabsContent>
       </Tabs>
-
-      {completeOpen && (
-        <CompletionDialog
-          open={completeOpen}
-          onOpenChange={setCompleteOpen}
-          construction={{
-            id: data.id,
-            title: data.title,
-            order_amount: data.order_amount,
-            actual_cost: data.actual_cost,
-            customer: data.customer,
-          }}
-          onCompleted={reload}
-        />
-      )}
     </div>
   );
 }

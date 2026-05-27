@@ -3,13 +3,14 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
@@ -32,6 +33,15 @@ const SORT_LABELS: Record<SortKey, string> = {
   order_amount_desc: "受注額（高い順）",
   start_date: "着工日順",
 };
+
+function fmt(v: number) {
+  return `¥${Math.round(v / 10000).toLocaleString()}万`;
+}
+
+function fmtPeriod(start: string | null, end: string | null) {
+  if (!start && !end) return "-";
+  return `${start ?? "-"} 〜 ${end ?? "-"}`;
+}
 
 export default function ConstructionsPage() {
   const router = useRouter();
@@ -103,7 +113,7 @@ export default function ConstructionsPage() {
   }, [rows, search, tab, assigneeFilter, sortKey]);
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="工事管理" description="工事の進捗と原価を管理">
         <Link href="/constructions/new">
           <Button size="sm" className="gap-1.5">
@@ -122,120 +132,162 @@ export default function ConstructionsPage() {
         ]}
       />
 
-      {/* フィルタ行 */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="工事名・顧客名で検索..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="担当者" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">担当者：すべて</SelectItem>
-            <SelectItem value="_unassigned">未割り当て</SelectItem>
-            {profiles.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-          <SelectTrigger className="w-[180px]">
-            <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-              <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {(assigneeFilter !== "_all" || sortKey !== "created_at" || search) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground h-9"
-            onClick={() => { setAssigneeFilter("_all"); setSortKey("created_at"); setSearch(""); }}
-          >
-            リセット
-          </Button>
-        )}
-      </div>
-
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="all">すべて</TabsTrigger>
-          <TabsTrigger value="in_progress">施工中</TabsTrigger>
-          <TabsTrigger value="preparing">着工前</TabsTrigger>
-          <TabsTrigger value="completed">完了</TabsTrigger>
-        </TabsList>
-        <TabsContent value={tab} className="mt-4">
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              {search || assigneeFilter !== "_all" ? "検索条件に一致する工事がありません" : "該当なし"}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filtered.map((r) => (
-                <Card
-                  key={r.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow group/card"
-                  onClick={() => router.push(`/constructions/${r.id}`)}
-                >
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <HardHat className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{r.title}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {r.construction_no} · {r.customer?.name ?? "-"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <StatusSelect
-                          entity="construction"
-                          value={r.status}
-                          disabled={updating === r.id}
-                          onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
-                        />
-                        <span className="text-sm font-semibold tabular-nums">{r.progress}%</span>
-                        <button
-                          className="opacity-0 group-hover/card:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                          onClick={e => { e.stopPropagation(); setDeleteTarget(r); }}
-                        ><Trash2 className="h-3.5 w-3.5" /></button>
-                      </div>
-                    </div>
-                    <Progress value={r.progress} className="h-2" />
-                    <div className="flex flex-wrap gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>受注額: ¥{(r.order_amount ?? 0).toLocaleString()}</span>
-                      <span>工期: {r.start_date ?? "-"} ~ {r.end_date ?? "-"}</span>
-                      {r.assignee ? (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                          {r.assignee.display_name}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5 text-muted-foreground">
-                          未割り当て
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
+          <TabsList className="shrink-0">
+            <TabsTrigger value="all">すべて</TabsTrigger>
+            <TabsTrigger value="in_progress">施工中</TabsTrigger>
+            <TabsTrigger value="preparing">着工前</TabsTrigger>
+            <TabsTrigger value="completed">完了</TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">担当者</span>
+            <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="すべて" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">すべて</SelectItem>
+                <SelectItem value="_unassigned">未割り当て</SelectItem>
+                {profiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+              <SelectTrigger className="min-w-[12.5rem] w-auto [&_[data-slot=select-value]]:line-clamp-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                  <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {(assigneeFilter !== "_all" || sortKey !== "created_at" || search) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-xs text-muted-foreground h-9"
+              onClick={() => { setAssigneeFilter("_all"); setSortKey("created_at"); setSearch(""); }}
+            >
+              リセット
+            </Button>
           )}
+          <div className="relative w-full min-w-[200px] sm:w-auto sm:flex-1 sm:max-w-sm sm:ml-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="工事名・顧客名で検索..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+        <TabsContent value={tab} className="mt-4">
+          <Card variant="inset">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>工事番号</TableHead>
+                    <TableHead>件名</TableHead>
+                    <TableHead>顧客</TableHead>
+                    <TableHead className="text-right">受注額</TableHead>
+                    <TableHead>工期</TableHead>
+                    <TableHead className="w-[120px]">進捗</TableHead>
+                    <TableHead>担当</TableHead>
+                    <TableHead>ステータス</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-1.5 w-full" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                        <TableCell />
+                      </TableRow>
+                    ))
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        {search || assigneeFilter !== "_all" ? "検索条件に一致する工事がありません" : "該当なし"}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((r) => (
+                      <TableRow
+                        key={r.id}
+                        className="cursor-pointer glass-row group"
+                        onClick={() => router.push(`/constructions/${r.id}`)}
+                      >
+                        <TableCell>
+                          <Link
+                            href={`/constructions/${r.id}`}
+                            className="font-medium text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {r.construction_no}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="max-w-[220px] truncate">{r.title}</TableCell>
+                        <TableCell className="text-muted-foreground">{r.customer?.name ?? "-"}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">{fmt(r.order_amount ?? 0)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {fmtPeriod(r.start_date, r.end_date)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 min-w-[96px]">
+                            <Progress value={r.progress} className="h-1.5 flex-1" />
+                            <span className="text-xs tabular-nums text-muted-foreground w-8 shrink-0 text-right">
+                              {r.progress}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {r.assignee ? (
+                            <span className="text-sm">{r.assignee.display_name}</span>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal text-muted-foreground">
+                              未割り当て
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusSelect
+                            entity="construction"
+                            value={r.status}
+                            disabled={updating === r.id}
+                            onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(r); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
         </TabsContent>
       </Tabs>
       <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>

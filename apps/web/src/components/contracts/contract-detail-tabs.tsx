@@ -19,9 +19,11 @@ import {
   getContractPostSignInfo, saveContractPostSignInfo, getContractDocuments,
   getContractEstimates, submitContractWorkflow, sendContractCloudSign,
 } from "@/lib/actions/contract-features";
+import { getEstimate } from "@/lib/actions/estimates";
 import { CONTRACT_TEMPLATES } from "@/lib/contract-templates";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
+import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
 
 export function ContractDetailTabs({ data, contractId }: { data: ContractDetail; contractId: string }) {
   return (
@@ -212,15 +214,54 @@ function FilesTab({ contractId }: { contractId: string }) {
 
 function EstimatesTab({ contractId }: { contractId: string }) {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getContractEstimates>>>([]);
-  useEffect(() => { getContractEstimates(contractId).then(setRows).catch(() => {}); }, [contractId]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEstimate, setSelectedEstimate] = useState<EstimateForView | null>(null);
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
+
+  useEffect(() => {
+    getContractEstimates(contractId).then(setRows).catch(() => {});
+  }, [contractId]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedEstimate(null);
+      return;
+    }
+    setLoadingEstimate(true);
+    getEstimate(selectedId)
+      .then((est) => setSelectedEstimate(est as unknown as EstimateForView))
+      .catch(() => toast.error("見積の読み込みに失敗"))
+      .finally(() => setLoadingEstimate(false));
+  }, [selectedId]);
+
+  if (selectedId && selectedEstimate) {
+    return (
+      <EstimateDetailView
+        estimate={selectedEstimate}
+        loading={loadingEstimate}
+        onBack={() => setSelectedId(null)}
+        onEstimateChange={(est) => setSelectedEstimate(est)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-2">
-      {rows.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">見積なし</p> : rows.map((e) => (
-        <Link key={e.id} href={`/quotes/${e.id}`} className="flex items-center justify-between border rounded-lg px-3 py-2 hover:bg-muted/30 text-sm">
-          <span>{e.estimate_no} — {e.title}</span>
-          <StatusBadge status={e.status} />
-        </Link>
-      ))}
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">見積なし</p>
+      ) : (
+        rows.map((e) => (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => setSelectedId(e.id)}
+            className="w-full flex items-center justify-between border rounded-lg px-3 py-2 hover:bg-muted/30 text-sm text-left"
+          >
+            <span>{e.estimate_no} — {e.title}</span>
+            <StatusBadge status={e.status} />
+          </button>
+        ))
+      )}
     </div>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { NAV_ITEM_ROLES, type Role } from "@/lib/constants";
+import { NAV_ITEM_ROLES, SYSTEM_PERMISSION_ROLES, type AssignableRole, type Role } from "@/lib/constants";
 import { getCompany } from "@/lib/actions/profiles";
 
 export type CustomRole = {
   id: string;
   name: string;
-  base_role: "hq_admin" | "contractor_admin" | "employee";
+  base_role: AssignableRole;
   color: string;
 };
 
@@ -19,7 +19,7 @@ const CUSTOM_ROLES_KEY = "bridge_custom_roles";
 
 /** NAV_ITEM_ROLES から初期値を生成 */
 function buildDefaultPerms(): RolePermissions {
-  const all: Role[] = ["hq_admin", "contractor_admin", "employee"];
+  const all: Role[] = [...SYSTEM_PERMISSION_ROLES];
   const result: RolePermissions = {};
   const allKeys = [
     "dashboard", "bi", "crm", "deals", "quotes", "craftsmen",

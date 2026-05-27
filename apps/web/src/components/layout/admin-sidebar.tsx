@@ -99,7 +99,7 @@ export function AdminSidebar() {
                     {active && (
                       <motion.div
                         layoutId="admin-sidebar-active"
-                        className="absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-primary"
+                        className="hidden"
                         transition={{ type: "spring", stiffness: 300, damping: 30 }}
                       />
                     )}
@@ -122,7 +122,7 @@ export function AdminSidebar() {
                     {active && (
                       <motion.div
                         layoutId="admin-sidebar-active"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full bg-primary"
+                        className="hidden"
                         transition={{ type: "spring", stiffness: 300, damping: 30 }}
                       />
                     )}
