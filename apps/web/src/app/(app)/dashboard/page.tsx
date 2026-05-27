@@ -85,7 +85,7 @@ const MOCK_TREND_VALUES = [
   { 受注額: 5200, パイプライン: 4100 },
 ];
 
-function getTrendChartData(trend: DashboardData["monthlyTrend"]) {
+function getTrendChartData(trend: DashboardData["monthlyTrend"] | undefined) {
   return (trend ?? []).map((row, i) => ({
     month: row.month,
     ...(MOCK_TREND_VALUES[i] ?? { 受注額: 3000, パイプライン: 2500 }),
