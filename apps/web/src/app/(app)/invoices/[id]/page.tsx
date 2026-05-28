@@ -142,7 +142,7 @@ export default function InvoiceDetailPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-semibold tracking-tight tabular-nums text-[#0F5132]">{data.invoice_no ?? "INV-???"}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{data.invoice_no ?? "INV-???"}</h1>
             <Badge className={STATUS_CONFIG[data.status]?.color ?? ""}>
               {STATUS_CONFIG[data.status]?.label ?? data.status}
             </Badge>

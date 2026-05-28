@@ -59,6 +59,23 @@ export async function getConstructions() {
   return data;
 }
 
+/** 工事に紐づく見積を顧客横断で取得（工事管理の見積一覧用） */
+export async function getAllConstructionEstimates() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("estimates")
+    .select(
+      "id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at, updated_at, notes, construction_id, customer:customers(id, name), construction:constructions(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
+    )
+    .not("construction_id", "is", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((est) => ({
+    ...est,
+    created_by_name: resolveEstimateAuthor(est),
+  }));
+}
+
 export async function getConstruction(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -1023,7 +1040,6 @@ async function assertEstimateAccess(estimateId: string) {
 
 export async function addEstimateCategory(estimateId: string, name: string) {
   const trimmed = name.trim();
-  if (!trimmed) throw new Error("大項目名を入力してください");
 
   const { supabase, companyId } = await assertEstimateAccess(estimateId);
 
@@ -1056,8 +1072,7 @@ export async function addEstimateCategory(estimateId: string, name: string) {
 }
 
 export async function addEstimateItem(estimateId: string, categoryId: string, name?: string) {
-  const trimmed = name?.trim();
-  if (!trimmed) throw new Error("詳細項目名を入力してください");
+  const trimmed = name?.trim() ?? "";
 
   const { supabase, companyId } = await assertEstimateAccess(estimateId);
 

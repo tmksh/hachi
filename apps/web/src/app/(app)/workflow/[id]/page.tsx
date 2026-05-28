@@ -153,7 +153,7 @@ export default function WorkflowDetailPage() {
       </Link>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.title}</h1>
         <StatusBadge status={data.status} />
         {(data as Detail & { is_urgent?: boolean }).is_urgent && (
           <Badge variant="destructive">緊急</Badge>

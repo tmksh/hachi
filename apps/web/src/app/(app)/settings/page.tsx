@@ -506,7 +506,7 @@ export default function SettingsPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">設定</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">設定</h1>
         <p className="text-sm text-muted-foreground mt-1">アカウント・組織・各機能の設定</p>
       </div>
 

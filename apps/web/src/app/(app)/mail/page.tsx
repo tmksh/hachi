@@ -192,7 +192,7 @@ function MailPageContent() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">メール</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">メール</h1>
         <div className="flex items-center gap-2">
           {accounts.map((acc) => (
             <DropdownMenu key={acc.id}>

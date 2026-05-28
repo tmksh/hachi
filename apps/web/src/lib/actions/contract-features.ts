@@ -2,6 +2,50 @@
 
 import { createClient } from "@/lib/supabase/server";
 
+const AUTHOR_NOTE_PREFIX = "作成者:";
+
+function buildAuthorNotes(createdByName?: string, existingNotes?: string | null): string | null {
+  const name = createdByName?.trim();
+  if (!name) return existingNotes ?? null;
+  const authorLine = `${AUTHOR_NOTE_PREFIX} ${name}`;
+  const stripped = existingNotes?.replace(new RegExp(`^${AUTHOR_NOTE_PREFIX}\\s*.+?\\n?`), "").trim();
+  if (!stripped) return authorLine;
+  return `${authorLine}\n${stripped}`;
+}
+
+function resolveEstimateAuthor(est: {
+  created_by_name?: string | null;
+  notes?: string | null;
+  assignee?: { display_name?: string | null } | null;
+}): string | null {
+  if (est.created_by_name?.trim()) return est.created_by_name.trim();
+  const match = est.notes?.match(new RegExp(`^${AUTHOR_NOTE_PREFIX}\\s*(.+?)(?:\\n|$)`));
+  if (match?.[1]) return match[1].trim();
+  return est.assignee?.display_name ?? null;
+}
+
+function parseEstimateSequence(estimateNo: string): number {
+  const match = estimateNo.match(/^EST-(?:\d{4}-)?(\d+)$/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function throwIfSupabaseError(error: { message: string } | null): void {
+  if (error) throw new Error(error.message);
+}
+
+async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string) {
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("estimate_no")
+    .eq("company_id", companyId);
+  throwIfSupabaseError(error);
+
+  const max = (data ?? []).reduce((current, row) => {
+    return Math.max(current, parseEstimateSequence(row.estimate_no));
+  }, 0);
+  return `EST-${String(max + 1).padStart(4, "0")}`;
+}
+
 async function getCompanyContext() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -90,15 +134,191 @@ export async function getContractDocuments(contractId: string) {
 
 export async function getContractEstimates(contractId: string) {
   const { supabase } = await getCompanyContext();
-  const { data: contract } = await supabase.from("contracts").select("customer_id, estimate_id").eq("id", contractId).single();
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("customer_id, estimate_id")
+    .eq("id", contractId)
+    .single();
   if (!contract?.customer_id) return [];
+
   const { data, error } = await supabase
     .from("estimates")
-    .select("id, estimate_no, title, status, total, created_at")
+    .select(
+      "id, estimate_no, title, status, total, subtotal, gross_profit_rate, version, construction_id, created_at, updated_at, notes, assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
+    )
     .eq("customer_id", contract.customer_id)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data ?? [];
+
+  const rows = (data ?? []).map((row) => ({
+    ...row,
+    created_by_name: resolveEstimateAuthor(row),
+  }));
+
+  if (contract.estimate_id && !rows.some((r) => r.id === contract.estimate_id)) {
+    const { data: linked } = await supabase
+      .from("estimates")
+      .select(
+        "id, estimate_no, title, status, total, subtotal, gross_profit_rate, version, construction_id, created_at, updated_at, notes, assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
+      )
+      .eq("id", contract.estimate_id)
+      .maybeSingle();
+    if (linked) {
+      rows.unshift({ ...linked, created_by_name: resolveEstimateAuthor(linked) });
+    }
+  }
+
+  return rows;
+}
+
+export async function createEmptyEstimateForContract(contractId: string, title: string, createdByName?: string) {
+  const { supabase, company_id } = await getCompanyContext();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("customer_id")
+    .eq("id", contractId)
+    .single();
+  if (!contract?.customer_id) throw new Error("Contract not found");
+
+  const estimateNo = await nextEstimateNo(supabase, company_id);
+
+  const { data: existingVersions } = await supabase
+    .from("estimates")
+    .select("version")
+    .eq("customer_id", contract.customer_id)
+    .is("construction_id", null)
+    .order("version", { ascending: false })
+    .limit(1);
+  const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
+
+  const { data: estimate, error } = await supabase
+    .from("estimates")
+    .insert({
+      company_id,
+      customer_id: contract.customer_id,
+      construction_id: null,
+      estimate_no: estimateNo,
+      title,
+      status: "draft",
+      version: nextVersion,
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      cost_total: 0,
+      gross_profit: 0,
+      gross_profit_rate: 0,
+      assigned_to: user.id,
+      notes: buildAuthorNotes(createdByName),
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+  return estimate;
+}
+
+export async function copyEstimateForContract(
+  contractId: string,
+  sourceEstimateId: string,
+  title: string,
+  createdByName?: string,
+) {
+  const { supabase, company_id } = await getCompanyContext();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("customer_id")
+    .eq("id", contractId)
+    .single();
+  if (!contract?.customer_id) throw new Error("Contract not found");
+
+  const { data: source, error: sourceError } = await supabase
+    .from("estimates")
+    .select("*, categories:estimate_categories(*), items:estimate_items(*)")
+    .eq("id", sourceEstimateId)
+    .single();
+  throwIfSupabaseError(sourceError);
+  if (!source) throw new Error("Source estimate not found");
+
+  const estimateNo = await nextEstimateNo(supabase, company_id);
+
+  const { data: existingVersions } = await supabase
+    .from("estimates")
+    .select("version")
+    .eq("customer_id", contract.customer_id)
+    .is("construction_id", null)
+    .order("version", { ascending: false })
+    .limit(1);
+  const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
+
+  const { data: newEstimate, error } = await supabase
+    .from("estimates")
+    .insert({
+      company_id,
+      customer_id: contract.customer_id,
+      construction_id: null,
+      estimate_no: estimateNo,
+      title,
+      status: "draft",
+      version: nextVersion,
+      subtotal: source.subtotal,
+      tax: source.tax,
+      total: source.total,
+      cost_total: source.cost_total,
+      gross_profit: source.gross_profit,
+      gross_profit_rate: source.gross_profit_rate,
+      notes: buildAuthorNotes(createdByName, source.notes),
+      assigned_to: user.id,
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  const categoryMap = new Map<string, string>();
+  for (const cat of source.categories ?? []) {
+    const { data: newCat, error: catError } = await supabase
+      .from("estimate_categories")
+      .insert({
+        company_id,
+        estimate_id: newEstimate.id,
+        name: cat.name,
+        sort_order: cat.sort_order,
+      })
+      .select()
+      .single();
+    throwIfSupabaseError(catError);
+    if (newCat) categoryMap.set(cat.id, newCat.id);
+  }
+
+  if (source.items?.length) {
+    const { error: itemsError } = await supabase.from("estimate_items").insert(
+      source.items.map((item: Record<string, unknown>, index: number) => ({
+        company_id,
+        estimate_id: newEstimate.id,
+        category_id: item.category_id ? categoryMap.get(String(item.category_id)) ?? null : null,
+        name: item.name,
+        description: item.description,
+        specification: item.specification,
+        quantity: item.quantity,
+        unit: item.unit,
+        cost_price: item.cost_price,
+        cost_amount: item.cost_amount,
+        selling_price: item.selling_price,
+        selling_amount: item.selling_amount,
+        gross_profit: item.gross_profit,
+        gross_profit_rate: item.gross_profit_rate,
+        sort_order: (item.sort_order as number | undefined) ?? index,
+        notes: item.notes,
+      })),
+    );
+    throwIfSupabaseError(itemsError);
+  }
+
+  return newEstimate;
 }
 
 export async function submitContractWorkflow(contractId: string, title: string) {

@@ -8,7 +8,7 @@ export async function getEstimates() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("estimates")
-    .select("*, customer:customers(id, name, company_name), assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
+    .select("*, customer:customers(id, name, company_name), construction:constructions(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
@@ -52,9 +52,19 @@ export async function getEstimate(id: string) {
   };
 }
 
+export type CreateEstimateCategoryInput = {
+  name: string;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+    selling_price: number;
+  }>;
+};
+
 export async function createEstimate(
   input: { title: string; customer_id?: string; notes?: string; validity_date?: string; assigned_to?: string },
-  items: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">>
+  categories: CreateEstimateCategoryInput[],
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -63,6 +73,31 @@ export async function createEstimate(
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
+  const normalizedCategories = categories.length > 0 ? categories : [{ name: "明細", items: [] }];
+
+  const flatItems: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">> = [];
+  for (const category of normalizedCategories) {
+    for (const item of category.items.filter((row) => row.name.trim())) {
+      const sellingAmount = Math.round(item.quantity * item.selling_price);
+      flatItems.push({
+        name: item.name.trim(),
+        description: null,
+        specification: null,
+        quantity: item.quantity,
+        unit: item.unit,
+        cost_price: 0,
+        cost_amount: 0,
+        selling_price: item.selling_price,
+        selling_amount: sellingAmount,
+        gross_profit: sellingAmount,
+        gross_profit_rate: 100,
+        sort_order: flatItems.length,
+        notes: null,
+        category_id: null,
+      });
+    }
+  }
+
   // Generate estimate number
   const { count } = await supabase
     .from("estimates")
@@ -70,9 +105,9 @@ export async function createEstimate(
   const estimateNo = `EST-${String((count || 0) + 1).padStart(4, "0")}`;
 
   // Calculate totals
-  const subtotal = items.reduce((sum, item) => sum + (item.selling_amount || 0), 0);
+  const subtotal = flatItems.reduce((sum, item) => sum + (item.selling_amount || 0), 0);
   const tax = Math.floor(subtotal * 0.1);
-  const costTotal = items.reduce((sum, item) => sum + (item.cost_amount || 0), 0);
+  const costTotal = flatItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0);
 
   const { data: estimate, error } = await supabase
     .from("estimates")
@@ -96,15 +131,53 @@ export async function createEstimate(
     .single();
   if (error) throw error;
 
-  if (items.length > 0) {
-    const { error: itemsError } = await supabase
-      .from("estimate_items")
-      .insert(items.map((item, i) => ({
-        ...item,
+  const catMap = new Map<number, string>();
+  for (const [idx, category] of normalizedCategories.entries()) {
+    const { data: newCat, error: catError } = await supabase
+      .from("estimate_categories")
+      .insert({
         company_id: profile.company_id,
         estimate_id: estimate.id,
-        sort_order: i,
-      })));
+        name: category.name.trim() || "明細",
+        sort_order: idx,
+      })
+      .select()
+      .single();
+    if (catError) throw catError;
+    if (newCat) catMap.set(idx, newCat.id);
+  }
+
+  if (flatItems.length > 0) {
+    let sortOrder = 0;
+    const itemsToInsert = normalizedCategories.flatMap((category, catIdx) => {
+      const categoryId = catMap.get(catIdx) ?? null;
+      return category.items
+        .filter((row) => row.name.trim())
+        .map((item) => {
+          const sellingAmount = Math.round(item.quantity * item.selling_price);
+          const row = {
+            company_id: profile.company_id,
+            estimate_id: estimate.id,
+            category_id: categoryId,
+            name: item.name.trim(),
+            description: null,
+            specification: null,
+            quantity: item.quantity,
+            unit: item.unit,
+            cost_price: 0,
+            cost_amount: 0,
+            selling_price: item.selling_price,
+            selling_amount: sellingAmount,
+            gross_profit: sellingAmount,
+            gross_profit_rate: 100,
+            sort_order: sortOrder++,
+            notes: null,
+          };
+          return row;
+        });
+    });
+
+    const { error: itemsError } = await supabase.from("estimate_items").insert(itemsToInsert);
     if (itemsError) throw itemsError;
   }
 

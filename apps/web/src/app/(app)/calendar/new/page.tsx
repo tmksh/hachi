@@ -110,7 +110,7 @@ function CalendarNewPageContent() {
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">予定追加</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">予定追加</h1>
       </div>
       <Card>
         <CardHeader className="pb-3">

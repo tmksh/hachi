@@ -14,6 +14,27 @@ import {
 } from "@/lib/status-config";
 import { cn } from "@/lib/utils";
 
+const STATUS_BADGE_STYLES: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-600 border-slate-200/80",
+  pending: "bg-amber-50 text-amber-700 border-amber-200/80",
+  preparing: "bg-orange-50 text-orange-700 border-orange-200/80",
+  submitted: "bg-blue-50 text-blue-700 border-blue-200/80",
+  issued: "bg-blue-50 text-blue-700 border-blue-200/80",
+  sent: "bg-sky-50 text-sky-700 border-sky-200/80",
+  in_progress: "bg-blue-50 text-blue-700 border-blue-200/80",
+  executing: "bg-blue-50 text-blue-700 border-blue-200/80",
+  contracted: "bg-indigo-50 text-indigo-700 border-indigo-200/80",
+  approved: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+  accepted: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+  completed: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+  paid: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+  suspended: "bg-amber-50 text-amber-700 border-amber-200/80",
+  delayed: "bg-rose-50 text-rose-600 border-rose-200/80",
+  rejected: "bg-rose-50 text-rose-600 border-rose-200/80",
+  cancelled: "bg-gray-100 text-gray-500 border-gray-200/80",
+  active: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+};
+
 interface StatusSelectProps {
   entity: StatusEntity;
   value: string;
@@ -35,22 +56,34 @@ export function StatusSelect({
 }: StatusSelectProps) {
   const options = ENTITY_STATUS_OPTIONS[entity];
   const current = options.find((o) => o.value === value);
+  const badgeStyle = STATUS_BADGE_STYLES[value] ?? "bg-muted/60 text-muted-foreground border-border/60";
 
   const select = (
     <Select value={value} disabled={disabled} onValueChange={onValueChange}>
       <SelectTrigger
+        size="sm"
         className={cn(
-          "h-7 text-xs w-[118px]",
-          current?.color ?? "text-muted-foreground",
+          "h-6 min-h-6 w-auto min-w-[4.5rem] px-2.5 rounded-full border text-[11px] font-medium shadow-none",
+          "hover:opacity-90 focus-visible:ring-1 focus-visible:ring-ring/30",
+          "bg-transparent dark:bg-transparent dark:hover:bg-transparent",
+          "[&_svg]:size-3 [&_svg]:opacity-60",
+          badgeStyle,
           triggerClassName,
         )}
       >
         <SelectValue>{current?.label ?? getStatusLabel(value)}</SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent align="start">
         {options.map((opt) => (
           <SelectItem key={opt.value} value={opt.value} className="text-xs">
-            <span className={opt.color}>{opt.label}</span>
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                STATUS_BADGE_STYLES[opt.value] ?? "bg-muted text-muted-foreground border-border",
+              )}
+            >
+              {opt.label}
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

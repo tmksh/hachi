@@ -432,7 +432,7 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="flex items-center justify-between md:shrink-0">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">カレンダー</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">カレンダー</h1>
           <p className="text-sm text-muted-foreground mt-1">スケジュール管理</p>
         </div>
 

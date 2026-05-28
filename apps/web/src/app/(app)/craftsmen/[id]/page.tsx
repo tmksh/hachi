@@ -36,7 +36,7 @@ export default function CraftsmanDetailPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center"><HardHat className="h-7 w-7 text-primary" /></div>
-          <div><h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
+          <div><h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
           {data.specialty && <Badge variant="secondary">{SPEC_LABELS[data.specialty]}</Badge>}
           {data.rank && <Badge>{data.rank}ランク</Badge>}
         </div>

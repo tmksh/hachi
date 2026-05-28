@@ -97,7 +97,7 @@ export default function WorkflowNewPage() {
         <Link href="/workflow">
           <Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button>
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">新規申請</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">新規申請</h1>
       </div>
 
       {loadingOpts ? (

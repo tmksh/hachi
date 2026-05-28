@@ -68,7 +68,7 @@ export default function MailComposePage() {
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">メール作成</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">メール作成</h1>
       </div>
 
       <Card>

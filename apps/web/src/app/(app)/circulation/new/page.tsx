@@ -101,7 +101,7 @@ export default function CirculationNewPage() {
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">新規お知らせ</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">新規お知らせ</h1>
       </div>
 
       <Card>

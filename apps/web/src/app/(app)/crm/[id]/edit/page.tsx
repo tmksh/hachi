@@ -24,7 +24,7 @@ export default function CrmEditPage() {
       <div className="flex items-center gap-3">
         <Link href={`/crm/${id}`}><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link>
         {name && <CustomerAvatar seed={id as string} name={name} size="md" />}
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">顧客編集</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">顧客編集</h1>
       </div>
       <CustomerEntryForm
         mode="edit"

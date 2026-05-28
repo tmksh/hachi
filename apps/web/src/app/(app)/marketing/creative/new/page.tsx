@@ -64,7 +64,7 @@ export default function MarketingCreativeNewPage() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-3">
         <Link href="/marketing/creative"><Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button></Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">クリエイティブ追加</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">クリエイティブ追加</h1>
       </div>
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">素材情報</CardTitle></CardHeader>

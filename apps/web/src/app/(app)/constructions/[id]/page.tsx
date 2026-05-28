@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,8 @@ import { ContractTab } from "@/components/constructions/contract-tab";
 import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
 import { InvoicesTab } from "@/components/constructions/invoices-tab";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
+import { EstimateListView, type EstimateListItem } from "@/components/estimate/estimate-list-view";
+import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
@@ -52,6 +54,7 @@ import {
   seedConstructionEstimates,
   createEmptyEstimateForConstruction,
   copyEstimateForConstruction,
+  getAllConstructionEstimates,
 } from "@/lib/actions/constructions";
 import { getChangeOrders } from "@/lib/actions/change-orders";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
@@ -113,30 +116,13 @@ function EstimateEmptyMock({ constructionId }: { constructionId: string }) {
 /* ──────────────────────────────────────────────────
    見積もりタブ
 ────────────────────────────────────────────────── */
-type EstimateListItem = {
-  id: string;
-  estimate_no: string;
-  title: string | null;
-  version: number;
-  status: string;
-  total: number;
-  subtotal: number;
-  gross_profit_rate: number;
-  created_at: string;
-  updated_at: string;
-  created_by_name?: string | null;
-  assignee?: { id: string; display_name: string | null } | null;
-};
 
-const ESTIMATE_STATUS_MAP: Record<string, string> = {
-  draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
-};
-
-function EstimateTab({ data, constructionId, onEstimateChange, onRefresh }: {
+function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initialSelectedId }: {
   data: Detail;
   constructionId: string;
   onEstimateChange: (est: Detail["estimate"]) => void;
   onRefresh?: () => void;
+  initialSelectedId?: string | null;
 }) {
   const contract = data.contract as (typeof data.contract & {
     amount?: number; contract_date?: string | null; notes?: string | null; estimate_id?: string | null;
@@ -154,8 +140,41 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh }: {
   const [loadingEstimate, setLoadingEstimate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const openedEstimateRef = useRef<string | null>(null);
+
+  const [scope, setScope] = useState<"self" | "all">("self");
+  const [allEstimates, setAllEstimates] = useState<EstimateListItem[]>([]);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const [searchAll, setSearchAll] = useState("");
+
+  useEffect(() => {
+    if (scope !== "all" || allEstimates.length > 0) return;
+    setLoadingAll(true);
+    getAllConstructionEstimates()
+      .then((rows) => setAllEstimates(rows as EstimateListItem[]))
+      .catch(() => toast.error("見積一覧の読み込みに失敗しました"))
+      .finally(() => setLoadingAll(false));
+  }, [scope]);
+
+  const filteredAllEstimates = useMemo(() => {
+    const q = searchAll.trim().toLowerCase();
+    if (!q) return allEstimates;
+    return allEstimates.filter((r) =>
+      r.estimate_no.toLowerCase().includes(q) ||
+      (r.title ?? "").toLowerCase().includes(q) ||
+      (r.customer?.name ?? "").toLowerCase().includes(q) ||
+      (r.construction?.title ?? "").toLowerCase().includes(q) ||
+      (r.construction?.construction_no ?? "").toLowerCase().includes(q)
+    );
+  }, [allEstimates, searchAll]);
 
   async function handleSelectEstimate(id: string) {
+    const row = allEstimates.find((e) => e.id === id);
+    const targetConstructionId = row?.construction_id ?? row?.construction?.id ?? constructionId;
+    if (targetConstructionId !== constructionId) {
+      window.location.href = `/constructions/${targetConstructionId}?tab=estimate&estimateId=${id}`;
+      return;
+    }
     setSelectedId(id);
     setLoadingEstimate(true);
     try {
@@ -164,6 +183,12 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh }: {
     } catch { toast.error("見積もりの読み込みに失敗しました"); }
     finally { setLoadingEstimate(false); }
   }
+
+  useEffect(() => {
+    if (!initialSelectedId || openedEstimateRef.current === initialSelectedId) return;
+    openedEstimateRef.current = initialSelectedId;
+    void handleSelectEstimate(initialSelectedId);
+  }, [initialSelectedId]);
 
   async function handleEstimateCreated(estimateId: string) {
     setCreateOpen(false);
@@ -201,8 +226,13 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh }: {
         <CreateEstimateDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
-          constructionId={constructionId}
           estimateList={estimateList}
+          onCreate={async ({ title, author, sourceId }) => {
+            if (sourceId) {
+              return copyEstimateForConstruction(constructionId, sourceId, title, author);
+            }
+            return createEmptyEstimateForConstruction(constructionId, title, author);
+          }}
           onCreated={(id) => void handleEstimateCreated(id)}
         />
       </>
@@ -233,181 +263,54 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh }: {
   }
 
   // 一覧モード
+  const scopeTabs = (
+    <Tabs value={scope} onValueChange={(v) => setScope(v as "self" | "all")} className="gap-0">
+      <TabsList className="!h-8 p-0.5 group-data-[orientation=horizontal]/tabs:!h-8">
+        <TabsTrigger value="self" className="text-xs px-2.5 h-7 py-0">この工事</TabsTrigger>
+        <TabsTrigger value="all" className="text-xs px-2.5 h-7 py-0">全工事</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+
   return (
     <>
       <EstimateListView
-        estimateList={estimateList}
+        estimateList={scope === "self" ? estimateList : filteredAllEstimates}
         loadingEstimate={loadingEstimate}
+        loading={scope === "all" && loadingAll}
         onSelectEstimate={handleSelectEstimate}
         onOpenCreate={() => setCreateOpen(true)}
+        title="見積一覧"
+        description={scope === "self" ? "この工事に関連する見積を管理" : "工事管理で作成した見積を顧客横断で閲覧"}
+        showCustomer={scope === "all"}
+        showConstruction={scope === "all"}
+        hideCreate={scope === "all"}
+        headerExtra={scopeTabs}
+        toolbar={
+          scope === "all" ? (
+            <Input
+              placeholder="見積番号・件名・顧客名・工事名で検索..."
+              value={searchAll}
+              onChange={(e) => setSearchAll(e.target.value)}
+              className="h-9 max-w-md"
+            />
+          ) : undefined
+        }
       />
+
       <CreateEstimateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        constructionId={constructionId}
         estimateList={estimateList}
+        onCreate={async ({ title, author, sourceId }) => {
+          if (sourceId) {
+            return copyEstimateForConstruction(constructionId, sourceId, title, author);
+          }
+          return createEmptyEstimateForConstruction(constructionId, title, author);
+        }}
         onCreated={(id) => void handleEstimateCreated(id)}
       />
     </>
-  );
-}
-
-function EstimateListView({
-  estimateList, loadingEstimate, onSelectEstimate, onOpenCreate,
-}: {
-  estimateList: EstimateListItem[];
-  loadingEstimate: boolean;
-  onSelectEstimate: (id: string) => void;
-  onOpenCreate: () => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3 px-1">
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold">見積一覧</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">工事に関連する全ての見積を管理</p>
-        </div>
-        <Button size="sm" className="gap-1.5" onClick={onOpenCreate}>
-          <Plus className="h-4 w-4" />見積作成
-        </Button>
-      </div>
-
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
-        <table className="w-full text-sm border-collapse">
-          <thead className="bg-muted/40">
-            <tr className="text-xs text-muted-foreground">
-              <th className="text-left px-4 py-2.5 font-medium">見積名</th>
-              <th className="text-left px-3 py-2.5 font-medium">作成日</th>
-              <th className="text-left px-3 py-2.5 font-medium">最終更新日</th>
-              <th className="text-right px-3 py-2.5 font-medium">合計金額</th>
-              <th className="text-right px-3 py-2.5 font-medium">粗利率</th>
-              <th className="text-left px-3 py-2.5 font-medium">ステータス</th>
-              <th className="text-left px-3 py-2.5 font-medium">作成者</th>
-            </tr>
-          </thead>
-          <tbody>
-            {estimateList.map((r) => (
-              <tr
-                key={r.id}
-                className={cn("border-t border-border/40 hover:bg-muted/20 cursor-pointer", loadingEstimate && "opacity-60 pointer-events-none")}
-                onClick={() => onSelectEstimate(r.id)}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-sm text-primary hover:underline">
-                      {r.estimate_no}{r.title ? `（${r.title}）` : ""}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">
-                  {new Date(r.created_at).toLocaleDateString("ja-JP")}
-                </td>
-                <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">
-                  {new Date(r.updated_at ?? r.created_at).toLocaleDateString("ja-JP")}
-                </td>
-                <td className="px-3 py-3 text-right tabular-nums font-medium">¥{(r.total ?? 0).toLocaleString()}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-xs">{(r.gross_profit_rate ?? 0).toFixed(1)}%</td>
-                <td className="px-3 py-3">
-                  <Badge variant="outline" className="text-[10px] h-5">
-                    {ESTIMATE_STATUS_MAP[r.status] ?? r.status}
-                  </Badge>
-                </td>
-                <td className="px-3 py-3 text-xs">{r.created_by_name ?? r.assignee?.display_name ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-
-function CreateEstimateDialog({
-  open, onOpenChange, constructionId, estimateList, onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  constructionId: string;
-  estimateList: EstimateListItem[];
-  onCreated: (estimateId: string) => void;
-}) {
-  const { user } = useAuth();
-  const defaultName = `No.${new Date().getFullYear()}-${String(estimateList.length + 1).padStart(3, "0")}`;
-  const defaultAuthor = (user?.user_metadata?.display_name as string | undefined) ?? user?.email ?? "";
-  const [title, setTitle] = useState(defaultName);
-  const [author, setAuthor] = useState(defaultAuthor);
-  const [sourceId, setSourceId] = useState<string>("none");
-  const [creating, setCreating] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setTitle(`No.${new Date().getFullYear()}-${String(estimateList.length + 1).padStart(3, "0")}`);
-    setAuthor((user?.user_metadata?.display_name as string | undefined) ?? user?.email ?? "");
-    setSourceId("none");
-  }, [open, estimateList.length, user]);
-
-  const handleCreate = async () => {
-    if (!title.trim()) { toast.error("見積名を入力してください"); return; }
-    setCreating(true);
-    try {
-      const created = sourceId === "none"
-        ? await createEmptyEstimateForConstruction(constructionId, title.trim(), author.trim() || undefined)
-        : await copyEstimateForConstruction(constructionId, sourceId, title.trim(), author.trim() || undefined);
-      onOpenChange(false);
-      onCreated(created.id);
-    } catch (e) {
-      const message =
-        e instanceof Error
-          ? e.message
-          : typeof e === "object" && e && "message" in e
-            ? String((e as { message: unknown }).message)
-            : "不明なエラー";
-      toast.error(`作成に失敗: ${message}`);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>見積を作成</DialogTitle></DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">見積名 *</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-9" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">作成者</Label>
-            <Input value={author} onChange={(e) => setAuthor(e.target.value)} className="h-9" placeholder="作成者名を入力" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">見積もりを参照</Label>
-            <Select value={sourceId} onValueChange={setSourceId}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">参照なし（空の見積を作成）</SelectItem>
-                {estimateList.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.estimate_no}{e.title ? `（${e.title}）` : ""}・¥{(e.total ?? 0).toLocaleString()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">既存の見積を選ぶと、明細を複製します</p>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>キャンセル</Button>
-          <Button onClick={() => void handleCreate()} disabled={creating}>
-            {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-            {creating ? "作成中..." : "作成する"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -812,12 +715,20 @@ type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[numbe
 
 export default function ConstructionDetailPage() {
   const { id } = useParams();
+  const searchParams = useSearchParams();
   const { profile } = useAuth();
   const [data, setData] = useState<Detail | null>(null);
   const [docs, setDocs] = useState<ContractDoc[]>([]);
   const [changeOrders, setChangeOrders] = useState<Awaited<ReturnType<typeof getChangeOrders>>>([]);
   const [closingDayLabel, setClosingDayLabel] = useState("月末締め");
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") ?? "schedule");
+  const initialEstimateId = searchParams.get("estimateId");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
 
   const reload = () => {
     if (!id) return;
@@ -880,7 +791,7 @@ export default function ConstructionDetailPage() {
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-[#0F5132]">{data.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.title}</h1>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
               <span className="font-mono">{data.construction_no}</span>
               {customer && (
@@ -929,7 +840,7 @@ export default function ConstructionDetailPage() {
       </div>
 
       {/* ── タブ ── */}
-      <Tabs defaultValue="schedule">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
           <TabsTrigger value="schedule"  className="text-xs">工程表</TabsTrigger>
           <TabsTrigger value="estimate"  className="text-xs">見積もり</TabsTrigger>
@@ -953,6 +864,7 @@ export default function ConstructionDetailPage() {
             constructionId={id as string}
             onEstimateChange={(est) => setData((prev: Detail | null) => prev ? { ...prev, estimate: est } : prev)}
             onRefresh={reload}
+            initialSelectedId={initialEstimateId}
           />
         </TabsContent>
 

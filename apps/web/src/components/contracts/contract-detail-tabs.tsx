@@ -18,16 +18,31 @@ import {
   getContractCommunications, addContractCommunication, updateCommunicationAgreementStatus,
   getContractPostSignInfo, saveContractPostSignInfo, getContractDocuments,
   getContractEstimates, submitContractWorkflow, sendContractCloudSign,
+  createEmptyEstimateForContract, copyEstimateForContract,
 } from "@/lib/actions/contract-features";
 import { getEstimate } from "@/lib/actions/estimates";
 import { CONTRACT_TEMPLATES } from "@/lib/contract-templates";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
+import { EstimateListView, type EstimateListItem } from "@/components/estimate/estimate-list-view";
+import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
+import { StatusSelect } from "@/components/shared/status-select";
+import { Label } from "@/components/ui/label";
+import { updateContract } from "@/lib/actions/contracts";
+import { Calendar, FileText } from "lucide-react";
 
-export function ContractDetailTabs({ data, contractId }: { data: ContractDetail; contractId: string }) {
+export function ContractDetailTabs({
+  data,
+  contractId,
+  onRefresh,
+}: {
+  data: ContractDetail;
+  contractId: string;
+  onRefresh?: () => void;
+}) {
   return (
-    <Tabs defaultValue="customer" className="mt-6">
+    <Tabs defaultValue="customer">
       <TabsList className="flex flex-wrap h-auto gap-1">
         <TabsTrigger value="customer" className="text-xs">顧客情報</TabsTrigger>
         <TabsTrigger value="messaging" className="text-xs">やり取り管理</TabsTrigger>
@@ -38,11 +53,7 @@ export function ContractDetailTabs({ data, contractId }: { data: ContractDetail;
         <TabsTrigger value="estimates" className="text-xs">見積もり</TabsTrigger>
       </TabsList>
       <TabsContent value="customer" className="mt-4">
-        {data.customer_id ? (
-          <CustomerEntryForm mode="edit" customerId={data.customer_id} />
-        ) : (
-          <p className="text-sm text-muted-foreground">顧客が紐づいていません</p>
-        )}
+        <CustomerTab data={data} contractId={contractId} onRefresh={onRefresh} />
       </TabsContent>
       <TabsContent value="messaging" className="mt-4"><MessagingTab contractId={contractId} /></TabsContent>
       <TabsContent value="documents" className="mt-4"><DocumentsTab contractId={contractId} customerName={data.customer?.name} /></TabsContent>
@@ -51,6 +62,219 @@ export function ContractDetailTabs({ data, contractId }: { data: ContractDetail;
       <TabsContent value="files" className="mt-4"><FilesTab contractId={contractId} /></TabsContent>
       <TabsContent value="estimates" className="mt-4"><EstimatesTab contractId={contractId} /></TabsContent>
     </Tabs>
+  );
+}
+
+function CustomerTab({
+  data,
+  contractId,
+  onRefresh,
+}: {
+  data: ContractDetail;
+  contractId: string;
+  onRefresh?: () => void;
+}) {
+  const linkedEstimate = (data as ContractDetail & {
+    estimate?: { id: string; estimate_no: string; title: string | null; total: number } | null;
+    estimate_id?: string | null;
+  }).estimate;
+
+  const [status, setStatus] = useState(data.status);
+  const [estimateId, setEstimateId] = useState(data.estimate_id ?? "");
+  const [estimateOptions, setEstimateOptions] = useState<
+    { id: string; estimate_no: string; title: string | null; total: number }[]
+  >([]);
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStatus(data.status);
+    setEstimateId(data.estimate_id ?? "");
+  }, [data.status, data.estimate_id]);
+
+  useEffect(() => {
+    getContractEstimates(contractId)
+      .then((rows) =>
+        setEstimateOptions(
+          rows.map((r) => ({
+            id: r.id,
+            estimate_no: r.estimate_no,
+            title: r.title,
+            total: r.total ?? 0,
+          })),
+        ),
+      )
+      .catch(() => {});
+  }, [contractId]);
+
+  const patchContract = async (
+    patch: Parameters<typeof updateContract>[1],
+    field: string,
+  ) => {
+    setUpdating(field);
+    try {
+      await updateContract(contractId, patch);
+      onRefresh?.();
+      toast.success("契約情報を更新しました");
+    } catch {
+      setStatus(data.status);
+      setEstimateId(data.estimate_id ?? "");
+      toast.error("更新に失敗しました");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleStatusChange = (value: string) => {
+    setStatus(value);
+    void patchContract({ status: value as ContractDetail["status"] }, "status");
+  };
+
+  const handleEstimateChange = (value: string) => {
+    const id = value === "_none" ? "" : value;
+    const selected = estimateOptions.find((e) => e.id === id);
+    setEstimateId(id);
+    void patchContract(
+      {
+        estimate_id: id || null,
+        ...(selected?.total != null ? { amount: selected.total } : {}),
+      },
+      "estimate",
+    );
+  };
+
+  const selectedEstimate =
+    estimateOptions.find((e) => e.id === estimateId) ??
+    (linkedEstimate && estimateId === linkedEstimate.id ? linkedEstimate : null);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">契約基本情報</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="space-y-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground flex items-center gap-1.5 shrink-0">
+                  <FileText className="h-3.5 w-3.5" />件名
+                </dt>
+                <dd className="font-medium text-right">{data.title}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />契約日
+                </dt>
+                <dd className="tabular-nums">{data.contract_date ?? "-"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />工期
+                </dt>
+                <dd className="tabular-nums">{data.start_date ?? "-"} ~ {data.end_date ?? "-"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">進捗</dt>
+                <dd>{data.progress ?? 0}%</dd>
+              </div>
+              <div className="flex justify-between items-center gap-3">
+                <dt className="text-muted-foreground">契約金額</dt>
+                <dd className="font-semibold tabular-nums">¥{(data.amount ?? 0).toLocaleString()}</dd>
+              </div>
+            </dl>
+
+            <div className="pt-4 border-t space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">ステータス</Label>
+                <StatusSelect
+                  entity="contract"
+                  value={status}
+                  disabled={updating === "status"}
+                  onValueChange={handleStatusChange}
+                  className="w-full max-w-[200px]"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">関連見積</Label>
+                <Select
+                  value={estimateId || "_none"}
+                  disabled={updating === "estimate"}
+                  onValueChange={handleEstimateChange}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="見積を選択（任意）" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">未設定</SelectItem>
+                    {estimateOptions.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.estimate_no} — {e.title ?? "無題"}
+                        {e.total != null ? `（¥${e.total.toLocaleString()}）` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {estimateOptions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    見積がありません。
+                    <Link href="/quotes" className="text-primary hover:underline ml-1">
+                      見積管理
+                    </Link>
+                    または「見積もり」タブから作成できます
+                  </p>
+                )}
+                {selectedEstimate && (
+                  <p className="text-xs text-muted-foreground">
+                    <Link href={`/quotes/${selectedEstimate.id}`} className="text-primary hover:underline font-medium">
+                      {selectedEstimate.estimate_no}
+                    </Link>
+                    {" — "}
+                    {selectedEstimate.title ?? "無題"}
+                    {selectedEstimate.total != null && (
+                      <span className="tabular-nums ml-1">¥{selectedEstimate.total.toLocaleString()}</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {data.notes && (
+              <div className="pt-4 border-t">
+                <p className="text-sm text-muted-foreground">{data.notes}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">顧客情報</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.customer ? (
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-lg font-medium text-primary">{data.customer.name.charAt(0)}</span>
+                </div>
+                <div>
+                  <p className="font-medium">{data.customer.name}</p>
+                  <p className="text-sm text-muted-foreground">{data.customer.company_name ?? "個人"}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">顧客情報なし</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {data.customer_id ? (
+        <CustomerEntryForm mode="edit" customerId={data.customer_id} />
+      ) : (
+        <p className="text-sm text-muted-foreground">顧客が紐づいていません</p>
+      )}
+    </div>
   );
 }
 
@@ -213,13 +437,20 @@ function FilesTab({ contractId }: { contractId: string }) {
 }
 
 function EstimatesTab({ contractId }: { contractId: string }) {
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof getContractEstimates>>>([]);
+  const [rows, setRows] = useState<EstimateListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEstimate, setSelectedEstimate] = useState<EstimateForView | null>(null);
   const [loadingEstimate, setLoadingEstimate] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const loadRows = () => {
+    getContractEstimates(contractId)
+      .then((data) => setRows(data as EstimateListItem[]))
+      .catch(() => toast.error("見積一覧の読み込みに失敗"));
+  };
 
   useEffect(() => {
-    getContractEstimates(contractId).then(setRows).catch(() => {});
+    loadRows();
   }, [contractId]);
 
   useEffect(() => {
@@ -234,6 +465,11 @@ function EstimatesTab({ contractId }: { contractId: string }) {
       .finally(() => setLoadingEstimate(false));
   }, [selectedId]);
 
+  const handleCreated = (id: string) => {
+    loadRows();
+    setSelectedId(id);
+  };
+
   if (selectedId && selectedEstimate) {
     return (
       <EstimateDetailView
@@ -246,22 +482,28 @@ function EstimatesTab({ contractId }: { contractId: string }) {
   }
 
   return (
-    <div className="space-y-2">
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-6 text-center">見積なし</p>
-      ) : (
-        rows.map((e) => (
-          <button
-            key={e.id}
-            type="button"
-            onClick={() => setSelectedId(e.id)}
-            className="w-full flex items-center justify-between border rounded-lg px-3 py-2 hover:bg-muted/30 text-sm text-left"
-          >
-            <span>{e.estimate_no} — {e.title}</span>
-            <StatusBadge status={e.status} />
-          </button>
-        ))
-      )}
-    </div>
+    <>
+      <EstimateListView
+        estimateList={rows}
+        loadingEstimate={loadingEstimate}
+        onSelectEstimate={setSelectedId}
+        onOpenCreate={() => setCreateOpen(true)}
+        title="見積一覧"
+        description="契約前の営業見積を管理（同一顧客の見積を含む）"
+        showSource
+      />
+      <CreateEstimateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        estimateList={rows}
+        onCreate={async ({ title, author, sourceId }) => {
+          if (sourceId) {
+            return copyEstimateForContract(contractId, sourceId, title, author);
+          }
+          return createEmptyEstimateForContract(contractId, title, author);
+        }}
+        onCreated={handleCreated}
+      />
+    </>
   );
 }

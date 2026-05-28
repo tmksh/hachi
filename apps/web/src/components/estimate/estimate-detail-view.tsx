@@ -64,13 +64,13 @@ function recalcItemAmounts(item: EstimateItem): EstimateItem {
 }
 
 const ITEM_CELL =
-  "w-full bg-transparent border-0 border-b border-transparent hover:border-border/60 focus:border-primary outline-none text-xs leading-tight py-1 px-1 rounded-sm focus:bg-white focus:shadow-[0_0_0_2px_rgba(0,0,0,0.04)] whitespace-nowrap";
+  "w-full bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap";
 
 const ITEM_CELL_NUM =
-  "w-full min-w-[5rem] bg-transparent border-0 border-b border-transparent hover:border-border/60 focus:border-primary outline-none text-xs leading-tight py-1 px-1 rounded-sm focus:bg-white focus:shadow-[0_0_0_2px_rgba(0,0,0,0.04)] whitespace-nowrap text-right tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  "w-full min-w-[5rem] bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap text-right tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
 const ITEM_CELL_UNIT =
-  "w-full min-w-[2rem] bg-transparent border-0 border-b border-transparent hover:border-border/60 focus:border-primary outline-none text-xs leading-tight py-1 px-1 rounded-sm focus:bg-white focus:shadow-[0_0_0_2px_rgba(0,0,0,0.04)] whitespace-nowrap text-center text-muted-foreground";
+  "w-full min-w-[2rem] bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap text-center text-muted-foreground";
 
 function EstimateItemRow({
   item,
@@ -129,6 +129,7 @@ function EstimateItemRow({
           className={ITEM_CELL}
           value={draft.name}
           disabled={isTemp}
+          placeholder="詳細項目名"
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
           onBlur={() => void commit("name", draft.name)}
         />
@@ -253,12 +254,49 @@ export function EstimateDetailView({
   const [inlineAdd, setInlineAdd] = useState<"category" | string | null>(null);
   const [inlineName, setInlineName] = useState("");
   const [savingLine, setSavingLine] = useState(false);
+  const [seedingEmpty, setSeedingEmpty] = useState(false);
   const inlineInputRef = useRef<HTMLInputElement>(null);
+  const seededEstimateIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setCollapsedIds(new Set());
     setInlineAdd(null);
+    seededEstimateIdRef.current = null;
   }, [estimate.id]);
+
+  useEffect(() => {
+    if (loading || !estimate.id) return;
+    if (categories.length > 0 || items.length > 0) return;
+    if (seededEstimateIdRef.current === estimate.id) return;
+
+    seededEstimateIdRef.current = estimate.id;
+    let cancelled = false;
+    setSeedingEmpty(true);
+
+    void (async () => {
+      try {
+        const cat = await addEstimateCategory(estimate.id, "");
+        const item = await addEstimateItem(estimate.id, cat.id, "");
+        if (cancelled) return;
+        onEstimateChange({
+          ...estimate,
+          categories: [cat],
+          items: [item],
+        });
+      } catch (e) {
+        if (!cancelled) {
+          seededEstimateIdRef.current = null;
+          toast.error(e instanceof Error ? e.message : "初期行の作成に失敗しました");
+        }
+      } finally {
+        if (!cancelled) setSeedingEmpty(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, estimate, categories.length, items.length, onEstimateChange]);
 
   useEffect(() => {
     if (inlineAdd) inlineInputRef.current?.focus();
@@ -523,7 +561,9 @@ export function EstimateDetailView({
                       onClick={(e) => { e.stopPropagation(); toggleCategory(category.id); }}
                     >
                       <span className="text-slate-400 w-3 text-center">{collapsed ? "▸" : "▾"}</span>
-                      {category.name}
+                      {category.name.trim() || (
+                        <span className="text-muted-foreground font-normal">大項目名</span>
+                      )}
                     </button>
                     <span className="text-[10px] text-muted-foreground ml-2 font-normal">{catItems.length}項目</span>
                   </td>
@@ -589,9 +629,14 @@ export function EstimateDetailView({
             </tbody>
           )}
 
-          {items.length === 0 && inlineAdd === null && (
+          {seedingEmpty && (
             <tbody>
-              <tr><td colSpan={12} className="py-10 text-center text-sm text-muted-foreground">明細がありません</td></tr>
+              <tr>
+                <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" />
+                  入力欄を準備しています…
+                </td>
+              </tr>
             </tbody>
           )}
 

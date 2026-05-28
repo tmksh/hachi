@@ -171,7 +171,7 @@ export default function CrmDetailPage() {
                   <div className="flex-1 min-w-0 space-y-3 overflow-hidden">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 min-w-0">
-                        <h1 className="text-2xl font-semibold tracking-tight truncate max-w-full text-[#0F5132]">{data.name}</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight truncate max-w-full text-foreground">{data.name}</h1>
                         <Badge variant="outline" className="text-xs shrink-0">{isCorp ? "法人" : "個人"}</Badge>
                         <Badge className={cn(
                           "text-xs shrink-0",
