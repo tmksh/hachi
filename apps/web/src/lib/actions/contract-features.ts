@@ -13,15 +13,22 @@ function buildAuthorNotes(createdByName?: string, existingNotes?: string | null)
   return `${authorLine}\n${stripped}`;
 }
 
+type AssigneeShape = { display_name?: string | null } | null | undefined;
+
+function pickAssignee(assignee: AssigneeShape | AssigneeShape[]): AssigneeShape {
+  if (Array.isArray(assignee)) return assignee[0] ?? null;
+  return assignee;
+}
+
 function resolveEstimateAuthor(est: {
   created_by_name?: string | null;
   notes?: string | null;
-  assignee?: { display_name?: string | null } | null;
+  assignee?: AssigneeShape | AssigneeShape[];
 }): string | null {
   if (est.created_by_name?.trim()) return est.created_by_name.trim();
   const match = est.notes?.match(new RegExp(`^${AUTHOR_NOTE_PREFIX}\\s*(.+?)(?:\\n|$)`));
   if (match?.[1]) return match[1].trim();
-  return est.assignee?.display_name ?? null;
+  return pickAssignee(est.assignee)?.display_name ?? null;
 }
 
 function parseEstimateSequence(estimateNo: string): number {

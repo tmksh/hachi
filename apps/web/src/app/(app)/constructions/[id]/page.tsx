@@ -151,7 +151,7 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
     if (scope !== "all" || allEstimates.length > 0) return;
     setLoadingAll(true);
     getAllConstructionEstimates()
-      .then((rows) => setAllEstimates(rows as EstimateListItem[]))
+      .then((rows) => setAllEstimates(rows as unknown as EstimateListItem[]))
       .catch(() => toast.error("見積一覧の読み込みに失敗しました"))
       .finally(() => setLoadingAll(false));
   }, [scope]);

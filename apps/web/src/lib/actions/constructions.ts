@@ -7,15 +7,22 @@ import type { Construction, ConstructionTask, ContractorOrder } from "@/lib/data
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
+type AssigneeShape = { display_name?: string | null } | null | undefined;
+
+function pickAssignee(assignee: AssigneeShape | AssigneeShape[]): AssigneeShape {
+  if (Array.isArray(assignee)) return assignee[0] ?? null;
+  return assignee;
+}
+
 function resolveEstimateAuthor(est: {
   created_by_name?: string | null;
   notes?: string | null;
-  assignee?: { display_name?: string | null } | null;
+  assignee?: AssigneeShape | AssigneeShape[];
 }): string | null {
   if (est.created_by_name?.trim()) return est.created_by_name.trim();
   const match = est.notes?.match(new RegExp(`^${AUTHOR_NOTE_PREFIX}\\s*(.+?)(?:\\n|$)`));
   if (match?.[1]) return match[1].trim();
-  return est.assignee?.display_name ?? null;
+  return pickAssignee(est.assignee)?.display_name ?? null;
 }
 
 function buildAuthorNotes(createdByName?: string, existingNotes?: string | null): string | null {
@@ -70,10 +77,27 @@ export async function getAllConstructionEstimates() {
     .not("construction_id", "is", null)
     .order("updated_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((est) => ({
-    ...est,
-    created_by_name: resolveEstimateAuthor(est),
-  }));
+
+  type Rel<T> = T | T[] | null | undefined;
+  const pickOne = <T>(rel: Rel<T>): T | null => {
+    if (Array.isArray(rel)) return rel[0] ?? null;
+    return rel ?? null;
+  };
+
+  return (data ?? []).map((est) => {
+    const customer = pickOne(est.customer as Rel<{ id: string; name: string }>);
+    const construction = pickOne(
+      est.construction as Rel<{ id: string; title: string; construction_no?: string }>,
+    );
+    const assignee = pickOne(
+      est.assignee as Rel<{ id: string; display_name: string | null }>,
+    );
+    const normalized = { ...est, customer, construction, assignee };
+    return {
+      ...normalized,
+      created_by_name: resolveEstimateAuthor(normalized),
+    };
+  });
 }
 
 export async function getConstruction(id: string) {
@@ -122,10 +146,16 @@ export async function getConstruction(id: string) {
     .order("version", { ascending: false });
 
   if (linkedEstimates?.length) {
-    estimates = linkedEstimates.map((est) => ({
-      ...est,
-      created_by_name: resolveEstimateAuthor(est),
-    })) as typeof estimates;
+    estimates = linkedEstimates.map((est) => {
+      const assignee = Array.isArray(est.assignee)
+        ? est.assignee[0] ?? null
+        : est.assignee ?? null;
+      const normalized = { ...est, assignee };
+      return {
+        ...normalized,
+        created_by_name: resolveEstimateAuthor(normalized),
+      };
+    }) as unknown as typeof estimates;
   }
 
   if (contractData.contract_id) {

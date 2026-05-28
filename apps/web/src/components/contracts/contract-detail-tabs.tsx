@@ -445,7 +445,7 @@ function EstimatesTab({ contractId }: { contractId: string }) {
 
   const loadRows = () => {
     getContractEstimates(contractId)
-      .then((data) => setRows(data as EstimateListItem[]))
+      .then((data) => setRows(data as unknown as EstimateListItem[]))
       .catch(() => toast.error("見積一覧の読み込みに失敗"));
   };
 
