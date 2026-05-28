@@ -60,7 +60,12 @@ export function ContractDetailTabs({
       <TabsContent value="workflow" className="mt-4"><WorkflowTab contractId={contractId} title={data.title} /></TabsContent>
       <TabsContent value="esign" className="mt-4"><EsignTab contractId={contractId} customerEmail={data.customer?.email} /></TabsContent>
       <TabsContent value="files" className="mt-4"><FilesTab contractId={contractId} /></TabsContent>
-      <TabsContent value="estimates" className="mt-4"><EstimatesTab contractId={contractId} /></TabsContent>
+      <TabsContent value="estimates" className="mt-4">
+        <EstimatesTab
+          contractId={contractId}
+          pdfCustomer={data.customer ? { name: data.customer.name, company_name: data.customer.company_name } : null}
+        />
+      </TabsContent>
     </Tabs>
   );
 }
@@ -436,7 +441,13 @@ function FilesTab({ contractId }: { contractId: string }) {
   );
 }
 
-function EstimatesTab({ contractId }: { contractId: string }) {
+function EstimatesTab({
+  contractId,
+  pdfCustomer,
+}: {
+  contractId: string;
+  pdfCustomer?: { name?: string | null; company_name?: string | null } | null;
+}) {
   const [rows, setRows] = useState<EstimateListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEstimate, setSelectedEstimate] = useState<EstimateForView | null>(null);
@@ -477,6 +488,7 @@ function EstimatesTab({ contractId }: { contractId: string }) {
         loading={loadingEstimate}
         onBack={() => setSelectedId(null)}
         onEstimateChange={(est) => setSelectedEstimate(est)}
+        pdfCustomer={pdfCustomer}
       />
     );
   }

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, FileDown } from "lucide-react";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   addEstimateCategory,
@@ -13,6 +13,10 @@ import {
   updateEstimateItem,
   type EstimateItemUpdatePatch,
 } from "@/lib/actions/constructions";
+import {
+  EstimatePdfPreviewDialog,
+  toEstimatePdfPreviewData,
+} from "@/components/estimate/estimate-pdf-preview-dialog";
 
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
@@ -229,13 +233,16 @@ export function EstimateDetailView({
   loading,
   onEstimateChange,
   headerExtra,
+  pdfCustomer,
 }: {
   estimate: EstimateForView;
   onBack?: () => void;
   loading?: boolean;
   onEstimateChange: (est: EstimateForView) => void;
   headerExtra?: React.ReactNode;
+  pdfCustomer?: { name?: string | null; company_name?: string | null } | null;
 }) {
+  const [pdfOpen, setPdfOpen] = useState(false);
   const reserve1Rate = estimate.reserve_fee_1_rate ?? 0.02;
   const reserve2Rate = estimate.reserve_fee_2_rate ?? 0.03;
   const subtotal = estimate.subtotal ?? 0;
@@ -442,7 +449,12 @@ export function EstimateDetailView({
         {estimate.status && (
           <Badge variant="outline" className="text-xs">{ESTIMATE_STATUS_MAP[estimate.status] ?? estimate.status}</Badge>
         )}
-        {headerExtra && <div className="ml-auto flex items-center gap-2">{headerExtra}</div>}
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPdfOpen(true)}>
+            <FileDown className="h-4 w-4 mr-1" />PDFプレビュー
+          </Button>
+          {headerExtra}
+        </div>
       </div>
 
       {/* サマリー（KPI + 警告を1カードに統合） */}
@@ -698,6 +710,12 @@ export function EstimateDetailView({
           </tfoot>
         </table>
       </div>
+
+      <EstimatePdfPreviewDialog
+        open={pdfOpen}
+        onOpenChange={setPdfOpen}
+        data={toEstimatePdfPreviewData(estimate, pdfCustomer)}
+      />
     </div>
   );
 }

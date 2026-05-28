@@ -25,6 +25,51 @@ export type EstimatePdfPreviewData = {
   }>;
 };
 
+type EstimatePdfSource = {
+  estimate_no?: string;
+  title?: string | null;
+  notes?: string | null;
+  subtotal?: number;
+  tax?: number;
+  total?: number;
+  categories?: Array<{ id: string; name: string }>;
+  items?: Array<{
+    id: string;
+    category_id?: string | null;
+    name: string;
+    quantity?: number;
+    unit?: string | null;
+    selling_price?: number;
+    selling_amount?: number;
+  }>;
+};
+
+export function toEstimatePdfPreviewData(
+  estimate: EstimatePdfSource,
+  customer?: { name?: string | null; company_name?: string | null } | null,
+): EstimatePdfPreviewData {
+  return {
+    estimate_no: estimate.estimate_no,
+    title: estimate.title,
+    customer_name: customer?.name ?? null,
+    customer_company_name: customer?.company_name ?? null,
+    notes: estimate.notes,
+    subtotal: estimate.subtotal ?? 0,
+    tax: estimate.tax ?? 0,
+    total: estimate.total ?? 0,
+    categories: (estimate.categories ?? []).map((cat) => ({ id: cat.id, name: cat.name })),
+    items: (estimate.items ?? []).map((item) => ({
+      id: item.id,
+      category_id: item.category_id,
+      name: item.name,
+      quantity: Number(item.quantity) || 0,
+      unit: item.unit,
+      selling_price: Number(item.selling_price) || 0,
+      selling_amount: Number(item.selling_amount) || 0,
+    })),
+  };
+}
+
 type EstimatePdfPreviewDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;

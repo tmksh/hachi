@@ -214,6 +214,7 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
         onBack={() => { setSelectedId(null); }}
         loading={loadingEstimate}
         onEstimateChange={(est) => onEstimateChange(est as Detail["estimate"])}
+        pdfCustomer={data.customer ? { name: data.customer.name, company_name: (data.customer as { company_name?: string | null }).company_name } : null}
       />
     );
   }

@@ -5,42 +5,17 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Copy, FileDown } from "lucide-react";
+import { ArrowLeft, Copy } from "lucide-react";
 import { getEstimate } from "@/lib/actions/estimates";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
-import { EstimatePdfPreviewDialog, type EstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
 
 type EstimateDetail = Awaited<ReturnType<typeof getEstimate>>;
-
-function toPdfPreviewData(data: EstimateDetail): EstimatePdfPreviewData {
-  return {
-    estimate_no: data.estimate_no,
-    title: data.title,
-    customer_name: data.customer?.name ?? null,
-    customer_company_name: data.customer?.company_name ?? null,
-    notes: data.notes,
-    subtotal: data.subtotal ?? 0,
-    tax: data.tax ?? 0,
-    total: data.total ?? 0,
-    categories: (data.categories ?? []).map((cat) => ({ id: cat.id, name: cat.name })),
-    items: data.items.map((item) => ({
-      id: item.id,
-      category_id: item.category_id,
-      name: item.name,
-      quantity: Number(item.quantity) || 0,
-      unit: item.unit,
-      selling_price: Number(item.selling_price) || 0,
-      selling_amount: Number(item.selling_amount) || 0,
-    })),
-  };
-}
 
 export default function QuoteDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [data, setData] = useState<EstimateDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pdfOpen, setPdfOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -91,27 +66,17 @@ export default function QuoteDetailPage() {
       <EstimateDetailView
         estimate={data as unknown as EstimateForView}
         onEstimateChange={(est) => setData((prev) => ({ ...(prev as EstimateDetail), ...(est as unknown as EstimateDetail) }))}
+        pdfCustomer={data.customer ? { name: data.customer.name, company_name: data.customer.company_name } : null}
         headerExtra={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setPdfOpen(true)}>
-              <FileDown className="h-4 w-4 mr-1" />PDFプレビュー
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              title="開いている見積もりをもとに新規見積もりを作成"
-              onClick={() => router.push(`/quotes/new?copy_from=${id}`)}
-            >
-              <Copy className="h-4 w-4 mr-1" />見積書をコピー
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            title="開いている見積もりをもとに新規見積もりを作成"
+            onClick={() => router.push(`/quotes/new?copy_from=${id}`)}
+          >
+            <Copy className="h-4 w-4 mr-1" />見積書をコピー
+          </Button>
         }
-      />
-
-      <EstimatePdfPreviewDialog
-        open={pdfOpen}
-        onOpenChange={setPdfOpen}
-        data={toPdfPreviewData(data)}
       />
     </div>
   );
