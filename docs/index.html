@@ -181,13 +181,7 @@
     .prio-title { font-weight: 700; font-size: .95rem; margin-bottom: .35rem; }
     .prio-desc { font-size: .8rem; color: var(--muted); line-height: 1.6; }
 
-    .input-table th:nth-child(1) { width: 140px; }
-    .input-table th:nth-child(3) { width: 90px; text-align: center; }
-    .input-table td:nth-child(3) { text-align: center; }
-    .input-table ul { margin: 0; padding-left: 1.1rem; font-size: .83rem; line-height: 1.75; color: var(--text); }
-    .input-table li { margin-bottom: .15rem; }
-    .input-table li:last-child { margin-bottom: 0; }
-    .pri-chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; }
+    .pri-chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
     .pri-chip.p1 { background: #fee2e2; color: #b91c1c; }
     .pri-chip.p2 { background: var(--accent-light); color: var(--accent-dark); }
     .pri-chip.p3 { background: #f3f4f6; color: #4b5563; }
@@ -198,6 +192,137 @@
       font-size: .82rem; color: var(--accent-dark);
       border: 1px solid #b2e8d8; line-height: 1.7;
     }
+
+    /* KICKOFF CARDS */
+    .ki-toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.2rem;
+      margin-bottom: 1.4rem; padding: 1rem 1.2rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    }
+    .ki-toolbar-label { font-size: .75rem; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+    .ki-filter-group { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .ki-filter-btn {
+      padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--muted); font-size: .78rem; font-weight: 600;
+      cursor: pointer; transition: all .15s;
+    }
+    .ki-filter-btn:hover { border-color: var(--accent); color: var(--accent-dark); }
+    .ki-filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+    .ki-progress-wrap { margin-left: auto; display: flex; align-items: center; gap: .6rem; min-width: 140px; }
+    .ki-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; min-width: 80px; }
+    .ki-progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s; width: 0%; }
+    .ki-progress-text { font-size: .72rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+    .ki-bulk {
+      margin-bottom: 1.4rem; padding: 1rem 1.2rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    }
+    .ki-bulk-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
+    .ki-bulk-head h3 { margin: 0; font-size: .92rem; font-weight: 700; color: var(--text); }
+    .ki-bulk-toggle {
+      margin-left: auto; padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: .78rem; font-weight: 600; cursor: pointer;
+    }
+    .ki-bulk-toggle:hover { border-color: var(--accent); color: var(--accent-dark); }
+    .ki-bulk-panel { margin-top: .85rem; }
+    .ki-bulk-panel[hidden] { display: none; }
+    .ki-bulk-hint { font-size: .76rem; color: var(--muted); margin: 0 0 .5rem; line-height: 1.5; }
+    .ki-bulk-text {
+      width: 100%; min-height: 12rem; font-size: .8rem; line-height: 1.55;
+      border: 1px solid var(--border); border-radius: 8px; padding: .65rem .75rem; resize: vertical;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+    .ki-bulk-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+    .ki-bulk-actions button {
+      font-size: .76rem; padding: .35rem .75rem; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border); background: #fff; color: var(--text);
+    }
+    .ki-bulk-actions button.ki-bulk-primary {
+      background: var(--accent); border-color: var(--accent-dark); color: #fff; font-weight: 600;
+    }
+    .ki-bulk-msg { font-size: .74rem; color: var(--accent-dark); margin-left: .35rem; }
+
+    .ki-cards { display: flex; flex-direction: column; gap: 1rem; }
+    .ki-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      overflow: hidden; transition: box-shadow .2s, opacity .2s;
+    }
+    .ki-card.hidden { display: none; }
+    .ki-card.ki-card-done { border-color: #b2e8d8; }
+    .ki-card.ki-card-done .ki-card-head { background: linear-gradient(180deg, #f0fdf9 0%, var(--card) 100%); }
+    .ki-card-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+      padding: 1.1rem 1.25rem; background: linear-gradient(180deg, #fafbfc 0%, var(--card) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .ki-card-title { font-size: 1rem; font-weight: 700; margin: 0 0 .2rem; color: var(--text); }
+    .ki-card-sub { font-size: .78rem; color: var(--muted); margin: 0; line-height: 1.5; }
+    .ki-card-body { padding: 1rem 1.25rem 1.15rem; }
+    .ki-brief {
+      font-size: .84rem; color: var(--muted); line-height: 1.6;
+      margin: 0 0 .9rem;
+    }
+    .ki-card-body > .ki-panel {
+      display: block; border: none; margin: 0; background: transparent;
+    }
+    .ki-card-body > .ki-panel .ki-field:first-child { padding-top: 0; }
+    .ki-checklist {
+      list-style: none; margin: 0 0 .85rem; padding: 0;
+      display: grid; gap: .45rem;
+    }
+    .ki-checklist li {
+      display: flex; align-items: flex-start; gap: .55rem;
+      font-size: .84rem; line-height: 1.55; color: var(--text);
+      padding: .5rem .65rem; background: var(--bg); border-radius: 8px;
+      border: 1px solid transparent;
+    }
+    .ki-checklist li:hover { border-color: var(--border); }
+    .ki-check-icon {
+      flex-shrink: 0; width: 18px; height: 18px; margin-top: .1rem;
+      border-radius: 50%; border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .55rem; color: transparent;
+    }
+    .ki-checklist li.ki-new .ki-check-icon { border-color: var(--accent); background: var(--accent-light); color: var(--accent-dark); font-size: .5rem; font-weight: 700; }
+    .ki-checklist li.ki-new .ki-check-icon::after { content: "新"; }
+    .ki-tag-new {
+      display: inline-block; margin-left: .35rem; padding: 1px 6px;
+      background: var(--accent-light); color: var(--accent-dark);
+      border-radius: 4px; font-size: .62rem; font-weight: 700; vertical-align: middle;
+    }
+    .ki-card-actions { padding-top: .15rem; border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .75rem; }
+    .ki-paste-row { margin-top: .5rem; }
+    .ki-paste-toggle {
+      font-size: .78rem; color: var(--accent-dark); background: none; border: none;
+      padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+    }
+    .ki-paste-toggle:hover { color: var(--accent); }
+    .ki-paste-box {
+      margin-top: .5rem; padding: .65rem .75rem;
+      background: #f9fafb; border: 1px dashed var(--border); border-radius: 8px;
+    }
+    .ki-paste-box[hidden] { display: none; }
+    .ki-paste-hint { font-size: .72rem; color: var(--muted); margin: 0 0 .4rem; line-height: 1.45; }
+    .ki-paste-input {
+      width: 100%; min-height: 4.5rem; font-size: .78rem; font-family: ui-monospace, monospace;
+      border: 1px solid var(--border); border-radius: 6px; padding: .45rem .55rem; resize: vertical;
+    }
+    .ki-paste-actions { display: flex; gap: .4rem; margin-top: .4rem; flex-wrap: wrap; }
+    .ki-paste-actions button {
+      font-size: .76rem; padding: .3rem .65rem; border-radius: 5px; cursor: pointer;
+      border: 1px solid var(--border); background: #fff; color: var(--text);
+    }
+    .ki-paste-actions button.ki-paste-primary {
+      background: var(--accent-light); border-color: #b2e8d8; color: var(--accent-dark); font-weight: 600;
+    }
+    .ki-register-note {
+      font-size: .82rem; line-height: 1.65; color: var(--text);
+      padding: .75rem 1rem; margin-bottom: .85rem;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    }
+    .ki-register-note a { color: var(--accent-dark); font-weight: 600; }
+    .ki-checklist a { color: var(--accent-dark); font-weight: 600; text-decoration: none; }
+    .ki-checklist a:hover { text-decoration: underline; }
 
     /* KICKOFF INPUT PANELS */
     .ki-toggle {
@@ -324,7 +449,8 @@
       .auth-flow { flex-direction: column; }
       .auth-arrow { padding: .3rem; border-left: none; border-right: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
       .prio-grid { grid-template-columns: 1fr; }
-      .input-table th:nth-child(1) { width: auto; }
+      .ki-progress-wrap { margin-left: 0; width: 100%; }
+      .ki-card-head { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
@@ -339,9 +465,9 @@
     <a href="index.html#lead-flow">リードフロー</a>
           <a href="index.html#constructions">工事管理（7タブ）</a>
           <a href="index.html#cost">工事台帳</a>
-    <a href="index.html#kickoff-input">導入準備</a>
     <a href="features.html">機能一覧</a>
     <a href="api.html">外部連携</a>
+    <a href="index.html#kickoff-input">導入準備</a>
   </div>
 </nav>
 
@@ -1205,689 +1331,543 @@
   <section id="kickoff-input">
     <div class="section-label">Kickoff Input</div>
     <h2>導入準備｜ご提供いただきたい情報</h2>
-    <p class="section-desc">各機能を本番相当データでご利用いただくために、以下の資料・マスタ情報のご提供をお願いしております。優先度別に整理しています。</p>
+    <p class="section-desc">カテゴリごとに<strong>テキストで自由記入</strong>と<strong>ファイル・画像のアップロード</strong>をお願いしています。<strong>一括コピー / 貼り付け</strong>で全カテゴリをまとめて編集できます。表データは各カテゴリの「表を貼り付け」も利用できます。細かい項目が未定でも構いません。</p>
 
-    <!-- Priority Summary -->
-    <div class="prio-grid">
-      <div class="prio-item">
-        <div class="prio-label p1">■ 最優先 / Must</div>
-        <div class="prio-title">画面を実データで動かすための素材</div>
-        <div class="prio-desc">社員名簿・顧客サンプル・各種フォーマット類。揃い次第、順次反映します。</div>
+    <div id="ki-load-status" style="margin-bottom:1rem;padding:.6rem 1rem;background:#f3f4f6;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--muted)">
+      データを読み込み中…
+    </div>
+
+    <div class="ki-bulk">
+      <div class="ki-bulk-head">
+        <h3>一括コピー / 貼り付け</h3>
+        <button type="button" class="ki-bulk-toggle" id="ki-bulk-toggle-btn" onclick="kiToggleBulk()">開く</button>
       </div>
-      <div class="prio-item">
-        <div class="prio-label p2">■ 確認・決定が必要 / Decide</div>
-        <div class="prio-title">運用ルールの最終確認</div>
-        <div class="prio-desc">承認フロー／公開範囲／通知チャネル／連携先 SaaS など。ご確認いただき次第、設定を進めます。</div>
-      </div>
-      <div class="prio-item">
-        <div class="prio-label p3">■ フェーズ2 / Later</div>
-        <div class="prio-title">フェーズ2以降に対応する情報</div>
-        <div class="prio-desc">文書体系、マーケ KPI、既存システムからの移行データ等。</div>
+      <div class="ki-bulk-panel" id="ki-bulk-panel" hidden>
+        <p class="ki-bulk-hint">全カテゴリを1つのテキストにまとめます。Word・メール・スプレッドシートとのやり取りに使えます。区切り行 <code>===== カテゴリ名 =====</code> は消さずに編集してください。</p>
+        <textarea class="ki-bulk-text" id="ki-bulk-text" rows="14" placeholder="「すべてコピー」で現在の内容を取得 → 編集 →「貼り付け」で反映"></textarea>
+        <div class="ki-bulk-actions">
+          <button type="button" class="ki-bulk-primary" onclick="kiBulkCopy()">すべてコピー</button>
+          <button type="button" onclick="kiBulkApply(false)">貼り付け（追記）</button>
+          <button type="button" onclick="kiBulkApply(true)">貼り付け（置き換え）</button>
+          <button type="button" onclick="kiBulkSaveAll()">すべて保存</button>
+          <span class="ki-bulk-msg" id="ki-bulk-msg"></span>
+        </div>
       </div>
     </div>
 
-    <!-- Module × Items -->
-    <div class="table-wrap input-table">
-      <table>
-        <thead>
-          <tr>
-            <th>モジュール</th>
-            <th>ご提供いただきたい情報</th>
-            <th>優先度</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- 共通 / 組織 -->
-          <tr>
-            <td class="td-name">共通 / 組織</td>
-            <td>
-              <ul>
-                <li>会社情報（正式名称・住所・代表者・インボイス登録番号）</li>
-                <li>部署一覧／施工店（協力店）一覧とエリア</li>
-                <li>社員名簿（氏名・メール・部署・ロール・入社日）20〜30件</li>
-                <li>ロゴデータ（PNG / SVG、明暗対応あれば尚可）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-org" onclick="kiToggle('org')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-org">
+    <div class="ki-toolbar">
+      <span class="ki-toolbar-label">表示</span>
+      <div class="ki-filter-group" id="ki-filters">
+        <button type="button" class="ki-filter-btn active" data-filter="all">すべて</button>
+        <button type="button" class="ki-filter-btn" data-filter="p1">最優先</button>
+        <button type="button" class="ki-filter-btn" data-filter="p2">要確認</button>
+        <button type="button" class="ki-filter-btn" data-filter="p3">運用・中期</button>
+      </div>
+      <div class="ki-progress-wrap">
+        <div class="ki-progress-bar"><div class="ki-progress-fill" id="ki-progress-fill"></div></div>
+        <span class="ki-progress-text" id="ki-progress-text">0 / 0 完了</span>
+      </div>
+    </div>
+
+    <div class="ki-cards" id="ki-cards">
+          <article class="ki-card" data-priority="p1">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">共通 / 組織</h3>
+                <p class="ki-card-sub">会社の基本情報・名簿・ロゴなど</p>
+              </div>
+              <span class="pri-chip p1">最優先</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">会社名・住所・代表者・部署・社員名簿の有無など、わかる範囲で自由にご記入ください。</p>
+              <div class="ki-panel open" id="panel-org">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-org-0"></span>会社情報</div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem">
-                    <input class="ki-input" id="org-name" placeholder="正式名称" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
-                    <input class="ki-input" id="org-rep"  placeholder="代表者名" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
-                    <input class="ki-input" id="org-addr" placeholder="住所" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
-                    <input class="ki-input" id="org-inv"  placeholder="インボイス登録番号 T-XXXXXXXXXXXXXXX" oninput="kiMark('org-0','org-name','org-addr','org-rep','org-inv')">
-                  </div>
+                  <div class="ki-field-label"><span class="ki-status" id="st-org-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-org" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('org')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-org-1"></span>部署一覧 / 施工店一覧</div>
-                  <textarea class="ki-input" id="org-depts" rows="3" placeholder="例：営業部、工務部、設計部、総務部&#10;施工店：〇〇建設（東京）、△△工務（神奈川）" oninput="kiMark('org-1','org-depts')"></textarea>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-org-2"></span>社員名簿（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-org-staff" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-org-staff','fn-org-staff','st-org-2')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-org-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-org" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-org','fn-org','st-org-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-org-staff','fn-org-staff','st-org-2')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-org','fn-org','st-org-1')">
                   </div>
-                  <div class="ki-file-name" id="fn-org-staff"></div>
+                  <div class="ki-file-name" id="fn-org"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-org-3"></span>ロゴデータ（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-org-logo" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-org-logo','fn-org-logo','st-org-3')">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-org-logo','fn-org-logo','st-org-3')">
-                  </div>
-                  <div class="ki-file-name" id="fn-org-logo"></div>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-org" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('org')">保存</button><span class="ki-save-msg" id="msg-org">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p1">最優先</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 権限・ロール -->
-          <tr>
-            <td class="td-name">権限・ロール</td>
-            <td>
-              <ul>
-                <li>3ロール（本部管理者／施工店管理者／社員）の該当者一覧</li>
-                <li>ロール別の公開範囲最終確認（予算・BI・請求の見せ方）</li>
-                <li>ユーザー招待運用（人事一括 or 店舗個別）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-role" onclick="kiToggle('role')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
-              <div class="ki-panel" id="panel-role">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">権限・ロール</h3>
+                <p class="ki-card-sub">誰がどの権限で使うか</p>
+              </div>
+              <span class="pri-chip p2">要確認</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">ロールごとの担当者、公開範囲の考え方、ユーザー追加の運用など。</p>
+              <div class="ki-panel open" id="panel-role">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-role-0"></span>ロール別 該当者一覧</div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .7rem">
-                    <div><div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">本部管理者</div><textarea class="ki-input" id="role-hq" rows="2" placeholder="氏名・メール（複数行可）" oninput="kiMark('role-0','role-hq','role-ca','role-emp')"></textarea></div>
-                    <div><div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">施工店管理者</div><textarea class="ki-input" id="role-ca" rows="2" placeholder="氏名・メール（複数行可）" oninput="kiMark('role-0','role-hq','role-ca','role-emp')"></textarea></div>
-                    <div><div style="font-size:.7rem;color:var(--muted);margin-bottom:.25rem;">社員</div><textarea class="ki-input" id="role-emp" rows="2" placeholder="社員名簿ファイルで代替可" oninput="kiMark('role-0','role-hq','role-ca','role-emp')"></textarea></div>
-                  </div>
+                  <div class="ki-field-label"><span class="ki-status" id="st-role-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-role" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('role')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-role-1"></span>公開範囲 — 予算・BI・請求を閲覧できるロール（複数選択可）</div>
-                  <div class="ki-radio-group" id="rg-visibility">
-                    <span class="ki-radio-btn" data-val="hq_admin" onclick="kiMulti(this,'rg-visibility','st-role-1')">本部管理者</span>
-                    <span class="ki-radio-btn" data-val="contractor_admin" onclick="kiMulti(this,'rg-visibility','st-role-1')">施工店管理者</span>
-                    <span class="ki-radio-btn" data-val="employee" onclick="kiMulti(this,'rg-visibility','st-role-1')">社員</span>
+                  <div class="ki-field-label"><span class="ki-status" id="st-role-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-role" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-role','fn-role','st-role-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-role','fn-role','st-role-1')">
                   </div>
+                  <div class="ki-file-name" id="fn-role"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-role-2"></span>ユーザー招待の運用</div>
-                  <div style="font-size:.72rem;color:var(--muted);margin-bottom:.45rem">新しいユーザーをシステムへ追加する際、誰がどのように行うかをお選びください</div>
-                  <div class="ki-radio-group" id="rg-invite">
-                    <span class="ki-radio-btn" data-val="hq" onclick="kiSingle(this,'rg-invite','st-role-2')">本社・人事が一括管理<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">管理者がまとめて登録</span></span>
-                    <span class="ki-radio-btn" data-val="store" onclick="kiSingle(this,'rg-invite','st-role-2')">各店舗・部署が自己管理<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">担当者が自分で招待</span></span>
-                    <span class="ki-radio-btn" data-val="mixed" onclick="kiSingle(this,'rg-invite','st-role-2')">両方を使い分け<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">役割によって切替</span></span>
-                  </div>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-role" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('role')">保存</button><span class="ki-save-msg" id="msg-role">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">要確認</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- CRM / 商談 -->
-          <tr>
-            <td class="td-name">CRM / 商談</td>
-            <td>
-              <ul>
-                <li>商談ステージ名と順序／失注理由の選択肢</li>
-                <li>紹介元区分（HP・紹介・展示会・OB紹介…）／顧客タグ</li>
-                <li>実顧客サンプル 30〜50件（匿名化可）</li>
-                <li>「アクティブ顧客」の定義（最終連絡〇日以内 など）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-crm" onclick="kiToggle('crm')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-crm">
+          <article class="ki-card" data-priority="p1">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">CRM / 商談</h3>
+                <p class="ki-card-sub">顧客・商談の運用</p>
+              </div>
+              <span class="pri-chip p1">最優先</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">商談の流れ、顧客の持ち方、サンプルデータの有無など。</p>
+              <div class="ki-panel open" id="panel-crm">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-crm-0"></span>商談ステージ名（順番に記入）</div>
-                  <textarea class="ki-input" id="crm-stages" rows="2" placeholder="例：リード → 商談 → 見積提出 → 受注 → 失注" oninput="kiMark('crm-0','crm-stages')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-crm-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-crm" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('crm')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-crm-1"></span>失注理由 / 紹介元区分 / 顧客タグ</div>
-                  <textarea class="ki-input" id="crm-tags" rows="3" placeholder="失注理由：金額、競合、タイミング&#10;紹介元：HP、OB紹介、チラシ、展示場&#10;タグ：VIP、要フォロー" oninput="kiMark('crm-1','crm-tags')"></textarea>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-crm-2"></span>顧客サンプル（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-crm" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-crm','fn-crm','st-crm-2')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-crm-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-crm" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-crm','fn-crm','st-crm-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-crm','fn-crm','st-crm-2')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-crm','fn-crm','st-crm-1')">
                   </div>
                   <div class="ki-file-name" id="fn-crm"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-crm" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('crm')">保存</button><span class="ki-save-msg" id="msg-crm">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p1">最優先</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 見積管理 -->
-          <tr>
-            <td class="td-name">見積管理</td>
-            <td>
-              <ul>
-                <li>見積フォーマット（現行 Excel 可）／見積番号の採番ルール</li>
-                <li>単価マスタ（工種・部材単価・単位）</li>
-                <li>消費税・端数処理・値引き上限・有効期限デフォルト</li>
-                <li>実見積書サンプル 3〜5件（PDF）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-quote" onclick="kiToggle('quote')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-quote">
+          <article class="ki-card" data-priority="p1">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">見積管理</h3>
+                <p class="ki-card-sub">見積の作り方・フォーマット</p>
+              </div>
+              <span class="pri-chip p1">最優先</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">見積の形式、単価の持ち方、サンプル見積の有無など。</p>
+              <div class="ki-panel open" id="panel-quote">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-quote-0"></span>採番ルール / 消費税・端数・有効期限</div>
-                  <textarea class="ki-input" id="quote-rules" rows="3" placeholder="採番例：Q-2026-0001&#10;消費税：税抜 / 端数：切り捨て&#10;有効期限：30日" oninput="kiMark('quote-0','quote-rules')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-quote-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-quote" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('quote')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-quote-1"></span>見積フォーマット・単価マスタ・サンプル（複数ファイル可）</div>
+                  <div class="ki-field-label"><span class="ki-status" id="st-quote-1"></span>ファイル・画像（複数可）</div>
                   <div class="ki-file-zone" id="fz-quote" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-quote','fn-quote','st-quote-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-quote','fn-quote','st-quote-1')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-quote','fn-quote','st-quote-1')">
                   </div>
                   <div class="ki-file-name" id="fn-quote"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-quote" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('quote')">保存</button><span class="ki-save-msg" id="msg-quote">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p1">最優先</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 職人管理 -->
-          <tr>
-            <td class="td-name">職人管理</td>
-            <td>
-              <ul>
-                <li>職種区分・評価ランク（A/B/C）基準・資格の選択肢</li>
-                <li>契約形態（常用／一人親方／法人）・単価の持ち方</li>
-                <li>協力職人名簿 10〜20件</li>
-              </ul>
-              <button class="ki-toggle" id="tog-craft" onclick="kiToggle('craft')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-craft">
+          <article class="ki-card" data-priority="p1">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">職人管理</h3>
+                <p class="ki-card-sub">協力業者・職人</p>
+              </div>
+              <span class="pri-chip p1">最優先</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">職人・協力店の管理方法、名簿の有無など。</p>
+              <div class="ki-panel open" id="panel-craft">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-craft-0"></span>職種区分 / ランク基準 / 資格</div>
-                  <textarea class="ki-input" id="craft-defs" rows="3" placeholder="職種：大工、左官、電気、配管、内装、外構&#10;ランクA：品質・安全・納期すべて基準以上&#10;資格：建築士、施工管理技士、電気工事士" oninput="kiMark('craft-0','craft-defs')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-craft-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-craft" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('craft')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-craft-1"></span>協力職人名簿（複数ファイル可）</div>
+                  <div class="ki-field-label"><span class="ki-status" id="st-craft-1"></span>ファイル・画像（複数可）</div>
                   <div class="ki-file-zone" id="fz-craft" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-craft','fn-craft','st-craft-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-craft','fn-craft','st-craft-1')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-craft','fn-craft','st-craft-1')">
                   </div>
                   <div class="ki-file-name" id="fn-craft"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-craft" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('craft')">保存</button><span class="ki-save-msg" id="msg-craft">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p1">最優先</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 契約管理 -->
-          <tr>
-            <td class="td-name">契約管理</td>
-            <td>
-              <ul>
-                <li>契約書テンプレート（Word/PDF）／契約番号の採番ルール</li>
-                <li>支払条件の選択肢（前受・中間・完工・手形 等）</li>
-                <li>電子契約サービス利用有無（クラウドサイン等）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-contract" onclick="kiToggle('contract')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-contract">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">契約管理</h3>
+                <p class="ki-card-sub">契約書・電子契約</p>
+              </div>
+              <span class="pri-chip p2">運用</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">契約書の形式、支払条件、クラウドサイン等の利用有無など。</p>
+              <div class="ki-panel open" id="panel-contract">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-contract-0"></span>採番ルール / 支払条件</div>
-                  <textarea class="ki-input" id="contract-rules" rows="3" placeholder="採番例：C-2026-0001&#10;支払：前受20%、中間40%、完工40%" oninput="kiMark('contract-0','contract-rules')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-contract-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-contract" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('contract')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-contract-1"></span>電子契約サービス</div>
-                  <div class="ki-radio-group" id="rg-esign">
-                    <span class="ki-radio-btn" data-val="cloudsign" onclick="kiSingle(this,'rg-esign','st-contract-1')">クラウドサイン</span>
-                    <span class="ki-radio-btn" data-val="freesign" onclick="kiSingle(this,'rg-esign','st-contract-1')">freeeサイン</span>
-                    <span class="ki-radio-btn" data-val="docusign" onclick="kiSingle(this,'rg-esign','st-contract-1')">DocuSign</span>
-                    <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-esign','st-contract-1')">その他</span>
-                    <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-esign','st-contract-1')">利用しない</span>
-                  </div>
-                  <div class="ki-other-input" id="oi-rg-esign" style="display:none">
-                    <input class="ki-input" id="other-esign" placeholder="サービス名を入力">
-                  </div>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-contract-2"></span>契約書テンプレート（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-contract" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-contract','fn-contract','st-contract-2')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-contract-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-contract" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-contract','fn-contract','st-contract-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-contract','fn-contract','st-contract-2')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-contract','fn-contract','st-contract-1')">
                   </div>
                   <div class="ki-file-name" id="fn-contract"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-contract" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('contract')">保存</button><span class="ki-save-msg" id="msg-contract">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">運用</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 請求管理 -->
-          <tr>
-            <td class="td-name">請求管理</td>
-            <td>
-              <ul>
-                <li>請求書フォーマット・振込先口座・インボイス番号</li>
-                <li>請求サイクル（月末締め翌月末 等）／採番ルール</li>
-                <li>入金消込の運用・連携会計ソフト（freee / MF / 弥生 等）</li>
-                <li>実請求書サンプル 5件程度</li>
-              </ul>
-              <button class="ki-toggle" id="tog-invoice" onclick="kiToggle('invoice')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-invoice">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">AI・連携サービス</h3>
+                <p class="ki-card-sub">AI機能と外部登録</p>
+              </div>
+              <span class="pri-chip p2">要確認</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">使いたいAI機能、社内承認、APIキー・Google連携の状況など。</p>
+              <div class="ki-panel open" id="panel-ai">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-invoice-0"></span>請求サイクル / 採番ルール / 振込先</div>
-                  <textarea class="ki-input" id="invoice-rules" rows="3" placeholder="サイクル：月末締め翌月末払い&#10;採番例：INV-2026-0001&#10;振込先：〇〇銀行 △△支店 普通 1234567" oninput="kiMark('invoice-0','invoice-rules')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-ai-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-ai" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('ai')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-invoice-1"></span>連携会計ソフト</div>
-                  <div class="ki-radio-group" id="rg-accounting">
-                    <span class="ki-radio-btn" data-val="freee" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">freee</span>
-                    <span class="ki-radio-btn" data-val="mf" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">マネーフォワード</span>
-                    <span class="ki-radio-btn" data-val="yayoi" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">弥生会計</span>
-                    <span class="ki-radio-btn" data-val="kanjo" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">勘定奉行</span>
-                    <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">その他</span>
-                    <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-accounting','st-invoice-1')">連携なし</span>
-                  </div>
-                  <div class="ki-other-input" id="oi-rg-accounting" style="display:none">
-                    <input class="ki-input" id="other-accounting" placeholder="会計ソフト名を入力">
-                  </div>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-invoice-2"></span>請求書フォーマット・サンプル（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-invoice" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-invoice','fn-invoice','st-invoice-2')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-ai-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-ai" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-ai','fn-ai','st-ai-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-invoice','fn-invoice','st-invoice-2')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-ai','fn-ai','st-ai-1')">
+                  </div>
+                  <div class="ki-file-name" id="fn-ai"></div>
+                </div>
+                <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('ai')">保存</button><span class="ki-save-msg" id="msg-ai">保存しました</span></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="ki-card" data-priority="p1">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">請求管理</h3>
+                <p class="ki-card-sub">請求・会計</p>
+              </div>
+              <span class="pri-chip p1">最優先</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">請求サイクル、会計ソフト、請求書サンプルなど。※工事台帳でも管理予定</p>
+              <div class="ki-panel open" id="panel-invoice">
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-invoice-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-invoice" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('invoice')"></textarea>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-invoice-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-invoice" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-invoice','fn-invoice','st-invoice-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-invoice','fn-invoice','st-invoice-1')">
                   </div>
                   <div class="ki-file-name" id="fn-invoice"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-invoice" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('invoice')">保存</button><span class="ki-save-msg" id="msg-invoice">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p1">最優先</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 予算管理 -->
-          <tr>
-            <td class="td-name">予算管理</td>
-            <td>
-              <ul>
-                <li>予算区分（全社／部署／店舗／案件）と管理粒度（月／四半期／年）</li>
-                <li>科目マスタ（人件費・材料費・外注費・販管費…）</li>
-                <li>消化アラート閾値／直近年度の予算表 1 式</li>
-              </ul>
-              <button class="ki-toggle" id="tog-budget" onclick="kiToggle('budget')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-budget">
+          <article class="ki-card" data-priority="p3">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">予算管理</h3>
+                <p class="ki-card-sub">予算の持ち方（任意）</p>
+              </div>
+              <span class="pri-chip p3">中期</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">予算管理の要否・形式など。※メニュー削除予定</p>
+              <div class="ki-panel open" id="panel-budget">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-budget-0"></span>管理粒度 / 科目マスタ / アラート閾値</div>
-                  <textarea class="ki-input" id="budget-rules" rows="4" placeholder="管理粒度：月次&#10;科目：人件費、材料費、外注費、経費、販管費&#10;アラート：80%消化で警告" oninput="kiMark('budget-0','budget-rules')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-budget-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-budget" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('budget')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-budget-1"></span>予算表・科目一覧ファイル（複数ファイル可）</div>
+                  <div class="ki-field-label"><span class="ki-status" id="st-budget-1"></span>ファイル・画像（複数可）</div>
                   <div class="ki-file-zone" id="fz-budget" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-budget','fn-budget','st-budget-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-budget','fn-budget','st-budget-1')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-budget','fn-budget','st-budget-1')">
                   </div>
                   <div class="ki-file-name" id="fn-budget"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-budget" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('budget')">保存</button><span class="ki-save-msg" id="msg-budget">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">運用</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- カレンダー -->
-          <tr>
-            <td class="td-name">カレンダー</td>
-            <td>
-              <ul>
-                <li>カテゴリ最終ラベル（営業／工事／タスク／施設／機材…）</li>
-                <li>公開範囲ルール（個人 / 部署 / 全社）</li>
-                <li>Google カレンダー連携の要否（双方向 / 読取のみ）</li>
-                <li>会社休業日カレンダー</li>
-              </ul>
-              <button class="ki-toggle" id="tog-cal" onclick="kiToggle('cal')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
-              <div class="ki-panel" id="panel-cal">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">カレンダー</h3>
+                <p class="ki-card-sub">予定・休業日</p>
+              </div>
+              <span class="pri-chip p2">運用</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">カレンダーの使い方、Google連携の要否、休業日など。</p>
+              <div class="ki-panel open" id="panel-cal">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-cal-0"></span>カテゴリラベル（変更がある場合のみ）</div>
-                  <textarea class="ki-input" id="cal-cats" rows="2" placeholder="例：営業、工事、社内タスク、設備、機材管理" oninput="kiMark('cal-0','cal-cats')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-cal-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-cal" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('cal')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-cal-1"></span>Google カレンダー連携</div>
-                  <div class="ki-radio-group" id="rg-gcal">
-                    <span class="ki-radio-btn" data-val="bidirectional" onclick="kiSingle(this,'rg-gcal','st-cal-1')">双方向同期</span>
-                    <span class="ki-radio-btn" data-val="readonly" onclick="kiSingle(this,'rg-gcal','st-cal-1')">読み取りのみ</span>
-                    <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-gcal','st-cal-1')">連携しない</span>
-                  </div>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-cal-2"></span>会社休業日カレンダー（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-cal" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-cal','fn-cal','st-cal-2')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-cal-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-cal" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-cal','fn-cal','st-cal-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-cal','fn-cal','st-cal-2')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-cal','fn-cal','st-cal-1')">
                   </div>
                   <div class="ki-file-name" id="fn-cal"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-cal" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('cal')">保存</button><span class="ki-save-msg" id="msg-cal">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">運用</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- メール -->
-          <tr>
-            <td class="td-name">メール</td>
-            <td>
-              <ul>
-                <li>利用メールサービス（Gmail / M365 / Xserver 等）</li>
-                <li>連携方式（IMAP / OAuth / 手動フォワード）</li>
-                <li>共有メール（info@ 等）の扱い／署名テンプレート</li>
-                <li>CRM 自動ひも付けルール（From アドレス・件名キーワード）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-mail" onclick="kiToggle('mail')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
-              <div class="ki-panel" id="panel-mail">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">メール</h3>
+                <p class="ki-card-sub">メール連携</p>
+              </div>
+              <span class="pri-chip p2">運用</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">利用中のメール、共有アドレス、連携の希望など。</p>
+              <div class="ki-panel open" id="panel-mail">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-mail-0"></span>利用メールサービス</div>
-                  <div class="ki-radio-group" id="rg-mailsvc">
-                    <span class="ki-radio-btn" data-val="gmail" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">Gmail</span>
-                    <span class="ki-radio-btn" data-val="m365" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">Microsoft 365</span>
-                    <span class="ki-radio-btn" data-val="xserver" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">Xserver</span>
-                    <span class="ki-radio-btn" data-val="other" onclick="kiMulti(this,'rg-mailsvc','st-mail-0')">その他</span>
-                  </div>
-                  <div class="ki-other-input" id="oi-rg-mailsvc" style="display:none">
-                    <input class="ki-input" id="other-mailsvc" placeholder="メールサービス名を入力">
-                  </div>
+                  <div class="ki-field-label"><span class="ki-status" id="st-mail-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-mail" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('mail')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-mail-1"></span>連携方式</div>
-                  <div class="ki-radio-group" id="rg-mailconn">
-                    <span class="ki-radio-btn" data-val="oauth" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">OAuth（推奨）</span>
-                    <span class="ki-radio-btn" data-val="imap" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">IMAP</span>
-                    <span class="ki-radio-btn" data-val="forward" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">手動フォワード</span>
-                    <span class="ki-radio-btn" data-val="undecided" onclick="kiMulti(this,'rg-mailconn','st-mail-1')">未定</span>
+                  <div class="ki-field-label"><span class="ki-status" id="st-mail-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-mail" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-mail','fn-mail','st-mail-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-mail','fn-mail','st-mail-1')">
                   </div>
+                  <div class="ki-file-name" id="fn-mail"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-mail-2"></span>署名テンプレート・その他メモ</div>
-                  <textarea class="ki-input" id="mail-notes" rows="3" placeholder="共有メール：info@〇〇.co.jp → 全員閲覧&#10;署名：会社名、担当者名、Tel" oninput="kiMark('mail-2','mail-notes')"></textarea>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-mail" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('mail')">保存</button><span class="ki-save-msg" id="msg-mail">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">運用</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 勤怠 -->
-          <tr>
-            <td class="td-name">勤怠</td>
-            <td>
-              <ul>
-                <li>就業時間（始業・終業・休憩）・勤務体系パターン</li>
-                <li>休暇区分（有給・夏季・慶弔・特別…）</li>
-                <li>打刻方法（PC / スマホ / GPS / IC）／残業申請フロー</li>
-                <li>既存勤怠システム（KING OF TIME 等）連携有無</li>
-              </ul>
-              <button class="ki-toggle" id="tog-attend" onclick="kiToggle('attend')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
-              <div class="ki-panel" id="panel-attend">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">勤怠</h3>
+                <p class="ki-card-sub">勤怠・休暇</p>
+              </div>
+              <span class="pri-chip p2">運用</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">就業時間、打刻方法、既存勤怠システムなど。</p>
+              <div class="ki-panel open" id="panel-attend">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-attend-0"></span>就業時間 / 休暇区分</div>
-                  <textarea class="ki-input" id="attend-rules" rows="3" placeholder="始業：8:30　終業：17:30　休憩：12:00-13:00&#10;休暇：有給、慶弔、夏季（8/13-15）、年末年始" oninput="kiMark('attend-0','attend-rules')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-attend-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-attend" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('attend')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-attend-1"></span>打刻方法（複数選択可）</div>
-                  <div class="ki-radio-group" id="rg-clock">
-                    <span class="ki-radio-btn" data-val="pc" onclick="kiMulti(this,'rg-clock','st-attend-1')">PC</span>
-                    <span class="ki-radio-btn" data-val="sp" onclick="kiMulti(this,'rg-clock','st-attend-1')">スマホ</span>
-                    <span class="ki-radio-btn" data-val="gps" onclick="kiMulti(this,'rg-clock','st-attend-1')">GPS</span>
-                    <span class="ki-radio-btn" data-val="ic" onclick="kiMulti(this,'rg-clock','st-attend-1')">ICカード</span>
+                  <div class="ki-field-label"><span class="ki-status" id="st-attend-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-attend" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-attend','fn-attend','st-attend-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-attend','fn-attend','st-attend-1')">
                   </div>
+                  <div class="ki-file-name" id="fn-attend"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-attend-2"></span>既存勤怠システムとの連携</div>
-                  <div class="ki-radio-group" id="rg-hrtools">
-                    <span class="ki-radio-btn" data-val="kot" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">KING OF TIME</span>
-                    <span class="ki-radio-btn" data-val="jobkan" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">ジョブカン</span>
-                    <span class="ki-radio-btn" data-val="freee" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">freee人事</span>
-                    <span class="ki-radio-btn" data-val="other" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">その他</span>
-                    <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-hrtools','st-attend-2')">連携なし</span>
-                  </div>
-                  <div class="ki-other-input" id="oi-rg-hrtools" style="display:none">
-                    <input class="ki-input" id="other-hrtools" placeholder="システム名を入力">
-                  </div>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-attend" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('attend')">保存</button><span class="ki-save-msg" id="msg-attend">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">運用</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- ワークフロー -->
-          <tr>
-            <td class="td-name">ワークフロー</td>
-            <td>
-              <ul>
-                <li>申請種別の一覧（稟議・経費・有給・捺印・備品購入…）</li>
-                <li>種別ごとの承認ルート／金額別の分岐条件</li>
-                <li>承認期限・自動エスカレーション／電子印影の要否</li>
-                <li>現行の申請書テンプレート（紙 / Excel）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-wf" onclick="kiToggle('wf')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・ファイル提出</button>
-              <div class="ki-panel" id="panel-wf">
+          <article class="ki-card" data-priority="p1">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">ワークフロー</h3>
+                <p class="ki-card-sub">稟議・申請</p>
+              </div>
+              <span class="pri-chip p1">最優先</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">申請の種類、承認の流れ、テンプレートなど。</p>
+              <div class="ki-panel open" id="panel-wf">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-wf-0"></span>申請種別 / 承認ルート / 期限</div>
-                  <textarea class="ki-input" id="wf-routes" rows="4" placeholder="種別：稟議（申請者→部門長→経理→代表）&#10;経費精算（申請者→上司）&#10;有給（申請者→直属上司）&#10;金額10万以上：代表承認必要" oninput="kiMark('wf-0','wf-routes')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-wf-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-wf" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('wf')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-wf-1"></span>電子印影の要否</div>
-                  <div class="ki-radio-group" id="rg-stamp">
-                    <span class="ki-radio-btn" data-val="yes" onclick="kiSingle(this,'rg-stamp','st-wf-1')">必要</span>
-                    <span class="ki-radio-btn" data-val="no" onclick="kiSingle(this,'rg-stamp','st-wf-1')">不要</span>
-                    <span class="ki-radio-btn" data-val="undecided" onclick="kiSingle(this,'rg-stamp','st-wf-1')">未定</span>
-                  </div>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-wf-2"></span>申請書テンプレート（複数ファイル可）</div>
-                  <div class="ki-file-zone" id="fz-wf" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-wf','fn-wf','st-wf-2')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-wf-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-wf" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-wf','fn-wf','st-wf-1')">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
-                    <span>クリックまたはドラッグ&amp;ドロップ（複数可）</span>
-                    <input type="file" multiple onchange="kiFile(this,'fz-wf','fn-wf','st-wf-2')">
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-wf','fn-wf','st-wf-1')">
                   </div>
                   <div class="ki-file-name" id="fn-wf"></div>
                 </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-wf" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('wf')">保存</button><span class="ki-save-msg" id="msg-wf">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p1">最優先</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 回覧 / お知らせ -->
-          <tr>
-            <td class="td-name">回覧 / お知らせ</td>
-            <td>
-              <ul>
-                <li>「緊急」「ピン留め」の使用基準</li>
-                <li>既読必須扱い・期限超過者への催促有無</li>
-                <li>投稿権限（全員 / 管理者のみ）・追加カテゴリ</li>
-              </ul>
-              <button class="ki-toggle" id="tog-circ" onclick="kiToggle('circ')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>確認</button>
-              <div class="ki-panel" id="panel-circ">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">回覧 / お知らせ</h3>
+                <p class="ki-card-sub">社内連絡</p>
+              </div>
+              <span class="pri-chip p2">運用</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">お知らせの運用、投稿ルールなど。</p>
+              <div class="ki-panel open" id="panel-circ">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-circ-0"></span>投稿権限</div>
-                  <div class="ki-radio-group" id="rg-circpost">
-                    <span class="ki-radio-btn" data-val="all" onclick="kiSingle(this,'rg-circpost','st-circ-0')">全員が投稿可</span>
-                    <span class="ki-radio-btn" data-val="admin" onclick="kiSingle(this,'rg-circpost','st-circ-0')">管理者のみ</span>
-                    <span class="ki-radio-btn" data-val="role" onclick="kiSingle(this,'rg-circpost','st-circ-0')">ロール別に設定</span>
+                  <div class="ki-field-label"><span class="ki-status" id="st-circ-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-circ" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('circ')"></textarea>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-circ-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-circ" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-circ','fn-circ','st-circ-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-circ','fn-circ','st-circ-1')">
                   </div>
+                  <div class="ki-file-name" id="fn-circ"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-circ-1"></span>既読必須・催促</div>
-                  <div class="ki-radio-group" id="rg-circread">
-                    <span class="ki-radio-btn" data-val="required" onclick="kiSingle(this,'rg-circread','st-circ-1')">既読必須・期限で催促</span>
-                    <span class="ki-radio-btn" data-val="optional" onclick="kiSingle(this,'rg-circread','st-circ-1')">任意読み（催促なし）</span>
-                    <span class="ki-radio-btn" data-val="urgent_only" onclick="kiSingle(this,'rg-circread','st-circ-1')">緊急のみ必須</span>
-                  </div>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-circ-2"></span>追加カテゴリ（必要な場合のみ）</div>
-                  <textarea class="ki-input" id="circ-cats" rows="2" placeholder="例：社長通達、安全、総務、業務連絡" oninput="kiMark('circ-2','circ-cats')"></textarea>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-circ" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('circ')">保存</button><span class="ki-save-msg" id="msg-circ">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">運用</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 文書管理 -->
-          <tr>
-            <td class="td-name">文書管理</td>
-            <td>
-              <ul>
-                <li>フォルダ体系・カテゴリ（社内規程 / 議事録 / 図面 / 写真 等）</li>
-                <li>顧客・工事への紐付けルール（案件単位で集約するか等）</li>
-                <li>ファイル命名規約・閲覧権限・保存期間</li>
-                <li>既存保管場所（Dropbox / GDrive / ファイルサーバ）からの移行要否</li>
-              </ul>
-              <button class="ki-toggle" id="tog-doc" onclick="kiToggle('doc')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
-              <div class="ki-panel" id="panel-doc">
+          <article class="ki-card" data-priority="p3">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">文書管理</h3>
+                <p class="ki-card-sub">ファイル・資料</p>
+              </div>
+              <span class="pri-chip p3">中期</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">フォルダの持ち方、既存データの保管場所など。</p>
+              <div class="ki-panel open" id="panel-doc">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-doc-0"></span>フォルダ体系 / ファイル命名規約</div>
-                  <textarea class="ki-input" id="doc-structure" rows="4" placeholder="例：01_社内規程 / 02_議事録 / 03_図面 / 04_写真&#10;命名規約：YYYYMMDD_案件名_書類種別_v1" oninput="kiMark('doc-0','doc-structure')"></textarea>
+                  <div class="ki-field-label"><span class="ki-status" id="st-doc-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-doc" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('doc')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-doc-1"></span>移行元（複数選択可）</div>
-                  <div class="ki-radio-group" id="rg-docmigrate" style="margin-bottom:.5rem">
-                    <span class="ki-radio-btn" data-val="dropbox" onclick="kiMulti(this,'rg-docmigrate','st-doc-1')">Dropbox</span>
-                    <span class="ki-radio-btn" data-val="gdrive" onclick="kiMulti(this,'rg-docmigrate','st-doc-1')">Google Drive</span>
-                    <span class="ki-radio-btn" data-val="fileserver" onclick="kiMulti(this,'rg-docmigrate','st-doc-1')">ファイルサーバ</span>
-                    <span class="ki-radio-btn" data-val="none" onclick="kiMulti(this,'rg-docmigrate','st-doc-1')">移行なし</span>
+                  <div class="ki-field-label"><span class="ki-status" id="st-doc-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-doc" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-doc','fn-doc','st-doc-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-doc','fn-doc','st-doc-1')">
                   </div>
+                  <div class="ki-file-name" id="fn-doc"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-doc-2"></span>移行・アップロード方法（複数選択可）</div>
-                  <div style="font-size:.72rem;color:var(--muted);margin-bottom:.45rem">既存ファイルをどのように取り込むかお選びください</div>
-                  <div class="ki-radio-group" id="rg-docupload">
-                    <span class="ki-radio-btn" data-val="manual" onclick="kiMulti(this,'rg-docupload','st-doc-2')">手動アップロード<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">一つずつ選択</span></span>
-                    <span class="ki-radio-btn" data-val="bulk" onclick="kiMulti(this,'rg-docupload','st-doc-2')">一括アップロード<span style="display:block;font-size:.65rem;opacity:.7;margin-top:.1rem">ZIP / フォルダ</span></span>
-                    <span class="ki-radio-btn" data-val="undecided" onclick="kiMulti(this,'rg-docupload','st-doc-2')">未定</span>
-                  </div>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-doc" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('doc')">保存</button><span class="ki-save-msg" id="msg-doc">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p3">中期</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- 通知・外部連携 -->
-          <tr>
-            <td class="td-name">通知・外部連携</td>
-            <td>
-              <ul>
-                <li>通知チャネル：アプリ内通知のみ／メール併用／Slack・LINE WORKS 等との連携　→ どこまで連携するか要確認</li>
-                <li>リマインド頻度（毎朝〇時 / リアルタイム）</li>
-                <li>SSO の要否（Google / Microsoft 365）</li>
-                <li>外部 SaaS 連携の範囲（会計ソフト・電子契約・勤怠・チャットツール）　→ どこまで連携するか要確認</li>
-              </ul>
-              <button class="ki-toggle" id="tog-notify" onclick="kiToggle('notify')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>確認</button>
-              <div class="ki-panel" id="panel-notify">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">通知・外部連携</h3>
+                <p class="ki-card-sub">通知・他システム連携</p>
+              </div>
+              <span class="pri-chip p2">要確認</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">Slack/LINE、SSO、連携したいサービスなど。</p>
+              <div class="ki-panel open" id="panel-notify">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-notify-0"></span>通知チャネル（複数選択可）</div>
-                  <div class="ki-radio-group" id="rg-notifych">
-                    <span class="ki-radio-btn" data-val="inapp" onclick="kiMulti(this,'rg-notifych','st-notify-0')">アプリ内のみ</span>
-                    <span class="ki-radio-btn" data-val="email" onclick="kiMulti(this,'rg-notifych','st-notify-0')">メール併用</span>
-                    <span class="ki-radio-btn" data-val="slack" onclick="kiMulti(this,'rg-notifych','st-notify-0')">Slack</span>
-                    <span class="ki-radio-btn" data-val="lineworks" onclick="kiMulti(this,'rg-notifych','st-notify-0')">LINE WORKS</span>
-                    <span class="ki-radio-btn" data-val="chatwork" onclick="kiMulti(this,'rg-notifych','st-notify-0')">Chatwork</span>
+                  <div class="ki-field-label"><span class="ki-status" id="st-notify-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-notify" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('notify')"></textarea>
+                </div>
+                <div class="ki-field">
+                  <div class="ki-field-label"><span class="ki-status" id="st-notify-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-notify" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-notify','fn-notify','st-notify-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-notify','fn-notify','st-notify-1')">
                   </div>
+                  <div class="ki-file-name" id="fn-notify"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-notify-1"></span>SSO（シングルサインオン）</div>
-                  <div class="ki-radio-group" id="rg-sso">
-                    <span class="ki-radio-btn" data-val="google" onclick="kiSingle(this,'rg-sso','st-notify-1')">Google</span>
-                    <span class="ki-radio-btn" data-val="m365" onclick="kiSingle(this,'rg-sso','st-notify-1')">Microsoft 365</span>
-                    <span class="ki-radio-btn" data-val="none" onclick="kiSingle(this,'rg-sso','st-notify-1')">SSO なし</span>
-                    <span class="ki-radio-btn" data-val="undecided" onclick="kiSingle(this,'rg-sso','st-notify-1')">未定</span>
-                  </div>
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-notify-2"></span>リマインド頻度・その他メモ</div>
-                  <textarea class="ki-input" id="notify-notes" rows="2" placeholder="例：毎朝8時に未読お知らせをメール通知&#10;承認依頼は即時通知" oninput="kiMark('notify-2','notify-notes')"></textarea>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-notify" rows="2" placeholder="補足・確認事項・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('notify')">保存</button><span class="ki-save-msg" id="msg-notify">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">要確認</span></td>
-          </tr>
+            </div>
+          </article>
 
-          <!-- Google OAuth 審査 -->
-          <tr>
-            <td class="td-name">Google OAuth 審査</td>
-            <td>
-              <ul>
-                <li>calendar.readonly は機密スコープのため、Google の審査が必須（審査期間：約2〜6週間）</li>
-                <li>プライバシーポリシーの URL（公開ページ）</li>
-                <li>利用規約の URL</li>
-                <li>アプリのホームページ URL</li>
-                <li>デモ動画（YouTube 限定公開でOK・OAuth 同意フローを 5 分程度で説明）</li>
-                <li>アプリの説明（なぜカレンダー情報が必要か）</li>
-              </ul>
-              <button class="ki-toggle" id="tog-goauth" onclick="kiToggle('goauth')"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>入力・確認</button>
-              <div class="ki-panel" id="panel-goauth">
+          <article class="ki-card" data-priority="p2">
+            <div class="ki-card-head">
+              <div>
+                <h3 class="ki-card-title">Google OAuth 審査</h3>
+                <p class="ki-card-sub">カレンダー連携の審査</p>
+              </div>
+              <span class="pri-chip p2">要確認</span>
+            </div>
+            <div class="ki-card-body">
+              <p class="ki-brief">プライバシーポリシー・利用規約・デモ動画のURLなど（審査2〜6週間）。</p>
+              <div class="ki-panel open" id="panel-goauth">
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-0"></span>プライバシーポリシー URL</div>
-                  <input class="ki-input" id="goauth-pp" placeholder="https://example.com/privacy" oninput="kiMark('goauth-0','goauth-pp')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-0"></span>内容</div>
+                  <textarea class="ki-input ki-main-text" id="ki-text-goauth" rows="4" placeholder="テキストでご記入ください。細かい項目が未定でも構いません。" oninput="kiMarkCard('goauth')"></textarea>
                 </div>
                 <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-1"></span>利用規約 URL</div>
-                  <input class="ki-input" id="goauth-tos" placeholder="https://example.com/terms" oninput="kiMark('goauth-1','goauth-tos')">
+                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-1"></span>ファイル・画像（複数可）</div>
+                  <div class="ki-file-zone" id="fz-goauth" ondragover="event.preventDefault()" ondrop="kiDrop(event,'fz-goauth','fn-goauth','st-goauth-1')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0-8L5 5m3-3l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="10" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                    <span>クリックまたはドラッグ&amp;ドロップ</span>
+                    <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip" onchange="kiFile(this,'fz-goauth','fn-goauth','st-goauth-1')">
+                  </div>
+                  <div class="ki-file-name" id="fn-goauth"></div>
                 </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-2"></span>アプリのホームページ URL</div>
-                  <input class="ki-input" id="goauth-hp" placeholder="https://example.com" oninput="kiMark('goauth-2','goauth-hp')">
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-3"></span>デモ動画 URL（YouTube 限定公開）</div>
-                  <input class="ki-input" id="goauth-demo" placeholder="https://youtu.be/xxxxxxxxxx" oninput="kiMark('goauth-3','goauth-demo')">
-                </div>
-                <div class="ki-field">
-                  <div class="ki-field-label"><span class="ki-status" id="st-goauth-4"></span>アプリの説明（なぜカレンダー情報が必要か）</div>
-                  <textarea class="ki-input" id="goauth-desc" rows="4" placeholder="例：現場担当者が工事スケジュールとGoogleカレンダーを同期することで、社内外の予定を一元管理するため。カレンダーへの書き込みは行わず、読み取りのみ使用します。" oninput="kiMark('goauth-4','goauth-desc')"></textarea>
-                </div>
-                <div class="ki-field" style="margin-top:.25rem"><div class="ki-field-label" style="font-weight:400;color:var(--muted)">備考・メモ</div><textarea class="ki-input" id="note-goauth" rows="2" placeholder="審査状況・対応済み項目・その他メモ"></textarea></div>
                 <div style="display:flex;align-items:center"><button class="ki-save-btn" onclick="kiSave('goauth')">保存</button><span class="ki-save-msg" id="msg-goauth">保存しました</span></div>
               </div>
-            </td>
-            <td><span class="pri-chip p2">要確認</span></td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+          </article>
     </div>
 
     <div class="kickoff-note">
       <strong>お願い：</strong>
-      各項目について「① すぐにご用意いただけるもの／② ご相談のうえ決めたいもの／③ 現時点では難しいもの」の3段階でご回答いただけますと、優先度をつけて順次対応を進められます。
-      まずは「<strong>社員名簿・顧客サンプル・見積／請求／契約のフォーマット</strong>」が揃うと、システムの動作イメージが具体的になります。
+      各カードにテキストまたはファイルのどちらか一方でも構いません。Excel・PDF・画像をそのままアップロードいただいても大丈夫です。
+      まずは「<strong>共通 / 組織</strong>」「<strong>CRM / 商談</strong>」「<strong>見積管理</strong>」からご対応いただけるとスムーズです。
     </div>
   </section>
 
@@ -1954,6 +1934,74 @@ const _kiSupabase = (
   _KI_SUPABASE_URL !== 'YOUR_SUPABASE_URL'
 ) ? supabase.createClient(_KI_SUPABASE_URL, _KI_SUPABASE_KEY) : null;
 
+function _kiRestHeaders() {
+  return {
+    apikey: _KI_SUPABASE_KEY,
+    Authorization: 'Bearer ' + _KI_SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+}
+
+function _kiRowsToMap(rows) {
+  const map = {};
+  (rows || []).forEach(row => { map[row.key] = row.value; });
+  return map;
+}
+
+/** Supabase REST → 失敗時は同梱 JSON（必ず読める） */
+async function _kiLoadKickoffMap() {
+  const urls = [
+    _KI_SUPABASE_URL + '/rest/v1/kickoff_inputs?select=key,value&limit=2000',
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { headers: _kiRestHeaders() });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length) return { map: _kiRowsToMap(rows), source: 'supabase' };
+      }
+    } catch (e) {
+      console.warn('[kickoff] REST load failed', e);
+    }
+  }
+  if (_kiSupabase) {
+    try {
+      const { data, error } = await _kiSupabase.from('kickoff_inputs').select('key, value');
+      if (!error && data?.length) return { map: _kiRowsToMap(data), source: 'supabase-js' };
+    } catch (e) { /* ignore */ }
+  }
+  try {
+    const res = await fetch('kickoff-data.json', { cache: 'no-store' });
+    if (res.ok) {
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length) return { map: _kiRowsToMap(rows), source: 'json' };
+    }
+  } catch (e) {
+    console.warn('[kickoff] JSON fallback failed', e);
+  }
+  return { map: {}, source: 'none' };
+}
+
+async function _kiSaveKickoffRows(updates) {
+  if (!updates.length) return true;
+  try {
+    const res = await fetch(_KI_SUPABASE_URL + '/rest/v1/kickoff_inputs', {
+      method: 'POST',
+      headers: { ..._kiRestHeaders(), Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(updates.map(({ key, value }) => ({ key, value }))),
+    });
+    if (res.ok) return true;
+  } catch (e) {
+    console.warn('[kickoff] REST save failed', e);
+  }
+  if (_kiSupabase) {
+    const { error } = await _kiSupabase.from('kickoff_inputs').upsert(updates, { onConflict: 'key' });
+    return !error;
+  }
+  return false;
+}
+
 function kiToggle(id) {
   const panel = document.getElementById('panel-' + id);
   const btn   = document.getElementById('tog-'   + id);
@@ -1962,7 +2010,6 @@ function kiToggle(id) {
 }
 
 function kiMark(statusId) {
-  // Collect all value args (2nd onwards)
   const ids = Array.from(arguments).slice(1);
   const filled = ids.some(i => {
     const el = document.getElementById(i);
@@ -1970,6 +2017,13 @@ function kiMark(statusId) {
   });
   const dot = document.getElementById('st-' + statusId);
   if (dot) dot.classList.toggle('filled', filled);
+}
+
+function kiMarkCard(id) {
+  const text = document.getElementById('ki-text-' + id);
+  const dot0 = document.getElementById('st-' + id + '-0');
+  if (dot0 && text) dot0.classList.toggle('filled', text.value.trim().length > 0);
+  kiUpdateProgress();
 }
 
 // ─── File store (zone ID → File[]) ──────────────────────────────────────────
@@ -2029,6 +2083,8 @@ function _kiRenderFiles(zoneId, nameId, statusId) {
   const dot = document.getElementById(statusId);
   if (dot) dot.classList.add('filled');
   if (zone) { zone.style.borderColor = 'var(--accent)'; zone.style.background = 'var(--accent-light)'; }
+  const mid = zoneId.replace('fz-', '');
+  if (mid) kiUpdateProgress();
 }
 
 function kiSingle(el, groupId, statusId) {
@@ -2051,9 +2107,11 @@ function _kiCheckOther(groupId) {
   const box = document.getElementById('oi-' + groupId);
   if (!box) return;
   const sel = document.querySelector('#' + groupId + ' .ki-radio-btn.selected');
-  const hasOther = !!(sel && sel.dataset.val === 'other');
-  box.style.display = hasOther ? 'block' : 'none';
-  if (hasOther) box.querySelector('input,textarea')?.focus();
+  const show =
+    (sel && sel.dataset.val === 'other') ||
+    (groupId === 'rg-ai-billing' && sel && sel.dataset.val === 'customer');
+  box.style.display = show ? 'block' : 'none';
+  if (show) box.querySelector('input,textarea')?.focus();
 }
 
 async function kiSave(id) {
@@ -2070,10 +2128,8 @@ async function kiSave(id) {
       updates.push({ key: 'ki_sel_' + group.id + '_' + el.dataset.val, value: el.classList.contains('selected') ? '1' : null });
     });
   });
-  // Save to Supabase (or fall back to localStorage)
-  if (_kiSupabase) {
-    await _kiSupabase.from('kickoff_inputs').upsert(updates, { onConflict: 'key' });
-  } else {
+  const saved = await _kiSaveKickoffRows(updates);
+  if (!saved) {
     updates.forEach(({ key, value }) => {
       if (value) localStorage.setItem(key, value);
       else localStorage.removeItem(key);
@@ -2082,10 +2138,242 @@ async function kiSave(id) {
   // Show save message
   const msg = document.getElementById('msg-' + id);
   if (msg) { msg.classList.add('show'); setTimeout(() => msg.classList.remove('show'), 2000); }
-  // Mark toggle button as done if any field filled
-  const allDots = document.querySelectorAll('#panel-' + id + ' .ki-status.filled');
-  const btn = document.getElementById('tog-' + id);
-  if (btn && allDots.length > 0) btn.classList.add('done');
+  kiUpdateProgress();
+}
+
+function kiUpdateProgress() {
+  const cards = document.querySelectorAll('#ki-cards .ki-card');
+  let done = 0;
+  cards.forEach(card => {
+    const panel = card.querySelector('.ki-panel');
+    if (!panel) return;
+    const id = panel.id.replace('panel-', '');
+    const textEl = document.getElementById('ki-text-' + id);
+    const hasText = textEl && textEl.value.trim().length > 0;
+    const hasFiles = (_kiFileStore['fz-' + id] || []).length > 0;
+    const complete = hasText || hasFiles;
+    card.classList.toggle('ki-card-done', complete);
+    if (complete) done++;
+  });
+  const total = cards.length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const fill = document.getElementById('ki-progress-fill');
+  const text = document.getElementById('ki-progress-text');
+  if (fill) fill.style.width = pct + '%';
+  if (text) text.textContent = done + ' / ' + total + ' 件入力済';
+}
+
+function kiInitFilters() {
+  const btns = document.querySelectorAll('#ki-filters .ki-filter-btn');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const f = btn.dataset.filter;
+      document.querySelectorAll('#ki-cards .ki-card').forEach(card => {
+        const p = card.dataset.priority;
+        const show = f === 'all' || p === f;
+        card.classList.toggle('hidden', !show);
+      });
+    });
+  });
+}
+
+// ─── 一括コピー / 貼り付け ───────────────────────────────────────────────────
+function _kiCardCatalog() {
+  const list = [];
+  document.querySelectorAll('#ki-cards .ki-card').forEach(card => {
+    const title = card.querySelector('.ki-card-title')?.textContent?.trim();
+    const mod = card.querySelector('.ki-panel')?.id?.replace('panel-', '');
+    if (title && mod) list.push({ mod, title });
+  });
+  return list;
+}
+
+function _kiResolveBulkMod(label, catalog) {
+  const key = label.trim();
+  const hit = catalog.find(c => c.title === key || c.mod === key);
+  if (hit) return hit.mod;
+  const loose = catalog.find(c => key.includes(c.title) || c.title.includes(key));
+  return loose?.mod || null;
+}
+
+function kiBulkBuildText() {
+  const catalog = _kiCardCatalog();
+  const parts = catalog.map(({ mod, title }) => {
+    const body = (document.getElementById('ki-text-' + mod)?.value || '').trim();
+    return '===== ' + title + ' =====\n' + body;
+  });
+  return parts.join('\n\n');
+}
+
+function kiToggleBulk() {
+  const panel = document.getElementById('ki-bulk-panel');
+  const btn = document.getElementById('ki-bulk-toggle-btn');
+  if (!panel) return;
+  const open = panel.hidden;
+  panel.hidden = !open;
+  if (btn) btn.textContent = open ? '閉じる' : '開く';
+  if (open) {
+    const ta = document.getElementById('ki-bulk-text');
+    if (ta && !ta.value.trim()) ta.value = kiBulkBuildText();
+    ta?.focus();
+  }
+}
+
+function _kiBulkShowMsg(text, ok) {
+  const el = document.getElementById('ki-bulk-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = ok ? 'var(--accent-dark)' : '#b91c1c';
+  clearTimeout(el._kiBulkTimer);
+  el._kiBulkTimer = setTimeout(() => { el.textContent = ''; }, 3500);
+}
+
+async function kiBulkCopy() {
+  const text = kiBulkBuildText();
+  const ta = document.getElementById('ki-bulk-text');
+  if (ta) ta.value = text;
+  try {
+    await navigator.clipboard.writeText(text);
+    _kiBulkShowMsg('クリップボードにコピーしました', true);
+  } catch (e) {
+    ta?.select();
+    _kiBulkShowMsg('下の欄を選択して Ctrl+C でコピーしてください', true);
+  }
+}
+
+function _kiParseBulkText(raw) {
+  const text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const catalog = _kiCardCatalog();
+  const parts = text.split(/^===== ([^\n=]+?) =====\s*$/m);
+  if (parts.length < 3) return null;
+  const out = {};
+  for (let i = 1; i < parts.length; i += 2) {
+    const mod = _kiResolveBulkMod(parts[i], catalog);
+    if (mod) out[mod] = (parts[i + 1] || '').trim();
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function kiBulkApply(replace) {
+  const ta = document.getElementById('ki-bulk-text');
+  if (!ta) return;
+  const sections = _kiParseBulkText(ta.value);
+  if (!sections) {
+    alert('区切り形式が読み取れません。\n各行「===== カテゴリ名 =====」で区切ってください。\n（「すべてコピー」で形式を取得できます）');
+    return;
+  }
+  let n = 0;
+  Object.keys(sections).forEach(mod => {
+    const el = document.getElementById('ki-text-' + mod);
+    if (!el) return;
+    const incoming = sections[mod];
+    if (replace) el.value = incoming;
+    else {
+      const base = el.value.trim();
+      el.value = base ? base + '\n\n' + incoming : incoming;
+    }
+    kiMarkCard(mod);
+    n++;
+  });
+  kiUpdateProgress();
+  _kiBulkShowMsg(n + ' カテゴリに反映しました（保存ボタンで確定）', true);
+}
+
+async function kiBulkSaveAll() {
+  const catalog = _kiCardCatalog();
+  _kiBulkShowMsg('保存中…', true);
+  for (const { mod } of catalog) await kiSave(mod);
+  _kiBulkShowMsg('全カテゴリを保存しました', true);
+}
+
+// ─── スプレッドシート / CSV 貼り付け ─────────────────────────────────────────
+function _kiSplitCsvLine(line) {
+  const cells = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      cells.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function _kiParseSheetPaste(raw) {
+  const text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!text) return '';
+  const lines = text.split('\n').filter(l => l.trim().length);
+  if (!lines.length) return '';
+  const hasTab = lines.some(l => l.includes('\t'));
+  const delim = hasTab ? '\t' : ',';
+  const rows = lines.map(line => {
+    if (delim === '\t') return line.split('\t').map(c => c.trim());
+    return _kiSplitCsvLine(line);
+  });
+  const maxCols = Math.max(...rows.map(r => r.length));
+  if (maxCols <= 1) return rows.map(r => r[0]).filter(Boolean).join('\n');
+  return rows.map(r => {
+    while (r.length < maxCols) r.push('');
+    return r.join('\t');
+  }).join('\n');
+}
+
+function kiTogglePaste(mod) {
+  const box = document.getElementById('ki-paste-' + mod);
+  if (!box) return;
+  const open = box.hidden;
+  box.hidden = !open;
+  if (open) box.querySelector('.ki-paste-input')?.focus();
+}
+
+function kiApplyPaste(mod, replace) {
+  const pasteEl = document.querySelector('#ki-paste-' + mod + ' .ki-paste-input');
+  const mainEl = document.getElementById('ki-text-' + mod);
+  if (!pasteEl || !mainEl) return;
+  const formatted = _kiParseSheetPaste(pasteEl.value);
+  if (!formatted) {
+    alert('貼り付ける表データがありません。');
+    return;
+  }
+  const block = '【表から貼り付け】\n' + formatted;
+  if (replace) mainEl.value = block;
+  else {
+    const base = mainEl.value.trim();
+    mainEl.value = base ? base + '\n\n' + block : block;
+  }
+  pasteEl.value = '';
+  document.getElementById('ki-paste-' + mod).hidden = true;
+  kiMarkCard(mod);
+  mainEl.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function kiInitSheetPaste() {
+  document.querySelectorAll('.ki-main-text').forEach(el => {
+    const mod = el.id.replace('ki-text-', '');
+    if (!mod || document.getElementById('ki-paste-' + mod)) return;
+    const row = document.createElement('div');
+    row.className = 'ki-paste-row';
+    row.innerHTML = `
+      <button type="button" class="ki-paste-toggle" onclick="kiTogglePaste('${mod}')">表を貼り付け（Excel / スプレッドシート）</button>
+      <div class="ki-paste-box" id="ki-paste-${mod}" hidden>
+        <p class="ki-paste-hint">表をコピーして下の欄に Ctrl+V（Mac: ⌘V）→「追記」または「置き換え」。CSVファイルの中身もそのまま貼れます。</p>
+        <textarea class="ki-paste-input" rows="4" placeholder="ここに貼り付け"></textarea>
+        <div class="ki-paste-actions">
+          <button type="button" class="ki-paste-primary" onclick="kiApplyPaste('${mod}', false)">追記</button>
+          <button type="button" onclick="kiApplyPaste('${mod}', true)">置き換え</button>
+          <button type="button" onclick="kiTogglePaste('${mod}')">閉じる</button>
+        </div>
+      </div>`;
+    el.parentElement.appendChild(row);
+  });
 }
 
 // ─── localStorage → Supabase 移行 ───────────────────────────────────────────
@@ -2112,8 +2400,8 @@ async function _kiMigrateFromLocalStorage(lsKeys, lsMap) {
   const btn = document.getElementById('ki-migrate-btn');
   if (btn) { btn.textContent = '移行中…'; btn.disabled = true; }
   const updates = lsKeys.map(k => ({ key: k, value: lsMap[k] || null }));
-  const { error } = await _kiSupabase.from('kickoff_inputs').upsert(updates, { onConflict: 'key' });
-  if (!error) {
+  const ok = await _kiSaveKickoffRows(updates);
+  if (ok) {
     lsKeys.forEach(k => localStorage.removeItem(k));
     const banner = document.getElementById('ki-migrate-banner');
     if (banner) {
@@ -2166,8 +2454,144 @@ async function _kiMigrateFromLocalStorage(lsKeys, lsMap) {
   });
 })();
 
+// ─── 旧フォーム → 新カード形式へ復元 ─────────────────────────────────────────
+const _KI_LEGACY_FIELDS = {
+  org: ['org-name','org-rep','org-addr','org-inv','org-depts','note-org'],
+  role: ['role-hq','role-ca','role-emp','role-admin','role-exec','role-sales','role-field','role-designer','role-administration','role-partner','role-custom','role-admin-menu','note-role'],
+  crm: ['crm-stages','crm-tags','crm-detail-fields','note-crm'],
+  quote: ['quote-rules','quote-hierarchy','note-quote'],
+  craft: ['craft-defs','craft-skills','note-craft'],
+  contract: ['contract-rules','contract-postinfo','other-esign','note-contract'],
+  ai: ['custai-schedule','custai-blidge','note-custai','ai-approval-note','ai-api-provider','ai-api-contact','ai-usage-estimate','ai-register-status','note-aisetup'],
+  invoice: ['invoice-rules','other-accounting','note-invoice'],
+  budget: ['budget-rules','note-budget'],
+  cal: ['cal-cats','note-cal'],
+  mail: ['mail-notes','other-mailsvc','note-mail'],
+  attend: ['attend-rules','other-hrtools','note-attend'],
+  wf: ['wf-routes','note-wf'],
+  circ: ['circ-cats','note-circ'],
+  doc: ['doc-structure','note-doc'],
+  notify: ['notify-notes','note-notify'],
+  goauth: ['goauth-pp','goauth-tos','goauth-hp','goauth-demo','goauth-desc','note-goauth'],
+};
+
+const _KI_LEGACY_RADIOS = {
+  role: ['rg-visibility','rg-invite'],
+  crm: ['rg-eightid'],
+  contract: ['rg-esign','rg-comms'],
+  invoice: ['rg-accounting'],
+  cal: ['rg-gcal'],
+  mail: ['rg-mailsvc','rg-mailconn'],
+  attend: ['rg-clock','rg-hrtools'],
+  wf: ['rg-stamp'],
+  circ: ['rg-circpost','rg-circread'],
+  doc: ['rg-docmigrate','rg-docupload'],
+  notify: ['rg-notifych','rg-sso'],
+  ai: ['rg-custai-gcal','rg-ai-approval','rg-ai-features','rg-ai-billing','rg-ai-speech'],
+};
+
+const _KI_FIELD_LABELS = {
+  'org-name':'正式名称','org-rep':'代表者','org-addr':'住所','org-inv':'インボイス登録番号','org-depts':'部署・施工店',
+  'role-hq':'本部管理者','role-ca':'施工店管理者','role-emp':'社員','role-admin':'管理者','role-exec':'経営層','role-sales':'営業',
+  'role-field':'現場担当','role-designer':'設計士','role-administration':'総務','role-partner':'外部協力業者','role-custom':'追加ロール','role-admin-menu':'管理者設定',
+  'crm-stages':'商談ステージ','crm-tags':'失注理由・紹介元・タグ','crm-detail-fields':'顧客詳細項目',
+  'quote-rules':'見積ルール','quote-hierarchy':'見積階層',
+  'craft-defs':'職種・ランク','craft-skills':'スキル・エリア・単価',
+  'contract-rules':'契約ルール','contract-postinfo':'契約後情報','other-esign':'電子契約（その他）',
+  'custai-schedule':'スケジュール','custai-blidge':'BLIDGE AI','ai-approval-note':'AI承認メモ',
+  'ai-api-provider':'AI API','ai-api-contact':'API担当','ai-usage-estimate':'利用量','ai-register-status':'登録進捗',
+  'invoice-rules':'請求ルール','other-accounting':'会計ソフト（その他）',
+  'budget-rules':'予算ルール','cal-cats':'カレンダーカテゴリ','mail-notes':'メール','other-mailsvc':'メール（その他）',
+  'attend-rules':'勤怠','other-hrtools':'勤怠システム（その他）','wf-routes':'ワークフロー',
+  'circ-cats':'回覧カテゴリ','doc-structure':'文書体系',
+  'notify-notes':'通知','goauth-pp':'プライバシーポリシー','goauth-tos':'利用規約','goauth-hp':'ホームページ',
+  'goauth-demo':'デモ動画','goauth-desc':'アプリ説明',
+  'note-org':'備考','note-role':'備考','note-crm':'備考','note-quote':'備考','note-craft':'備考','note-contract':'備考',
+  'note-custai':'備考','note-aisetup':'備考','note-invoice':'備考','note-budget':'備考','note-cal':'備考','note-mail':'備考',
+  'note-attend':'備考','note-wf':'備考','note-circ':'備考','note-doc':'備考','note-notify':'備考','note-goauth':'備考',
+};
+
+const _KI_RADIO_GROUP_LABELS = {
+  'rg-visibility':'公開範囲','rg-invite':'ユーザー招待','rg-eightid':'EIGHT-ID','rg-esign':'電子契約','rg-comms':'やり取り連携',
+  'rg-accounting':'会計ソフト','rg-gcal':'Googleカレンダー','rg-mailsvc':'メールサービス','rg-mailconn':'メール連携方式',
+  'rg-clock':'打刻方法','rg-hrtools':'勤怠システム','rg-stamp':'電子印影','rg-circpost':'投稿権限','rg-circread':'既読必須',
+  'rg-docmigrate':'移行元','rg-docupload':'アップロード方法','rg-notifych':'通知チャネル','rg-sso':'SSO',
+  'rg-custai-gcal':'カレンダー・AI','rg-ai-approval':'AI承認','rg-ai-features':'AI機能','rg-ai-billing':'AI課金','rg-ai-speech':'文字起こし',
+};
+
+const _KI_RADIO_VAL_LABELS = {
+  hq_admin:'本部管理者',contractor_admin:'施工店管理者',employee:'社員',hq:'本社一括',store:'店舗個別',mixed:'併用',
+  yes:'はい',no:'いいえ',later:'後で検討',approved:'承認済',pending:'検討中',not_needed:'未利用',
+  cloudsign:'クラウドサイン',freesign:'freeeサイン',docusign:'DocuSign',other:'その他',none:'なし',
+  line:'LINE',slack:'Slack',email:'メール',freee:'freee',mf:'マネーフォワード',yayoi:'弥生',kanjo:'勘定奉行',
+  bidirectional:'双方向',readonly:'読取のみ',gmail:'Gmail',m365:'Microsoft 365',xserver:'Xserver',
+  oauth:'OAuth',imap:'IMAP',forward:'フォワード',undecided:'未定',pc:'PC',sp:'スマホ',gps:'GPS',ic:'ICカード',
+  kot:'KING OF TIME',jobkan:'ジョブカン',inapp:'アプリ内',lineworks:'LINE WORKS',chatwork:'Chatwork',google:'Google',
+  full:'候補日+AI最適化',basic:'候補日のみ',bridge:'BRIDGE一括',customer:'御社アカウント',
+  browser:'ブラウザ標準',cloud:'クラウドAPI',chat:'AIチャット',transcript:'議事録',writing:'文章改善',
+  schedule:'候補日最適化',todo:'ToDo抽出',all:'全員',admin:'管理者のみ',role:'ロール別',
+  required:'既読必須',optional:'任意',urgent_only:'緊急のみ',dropbox:'Dropbox',gdrive:'Google Drive',
+  fileserver:'ファイルサーバ',manual:'手動',bulk:'一括',
+};
+
+function _kiLegacyRadioLines(map, groupId) {
+  const prefix = 'ki_sel_' + groupId + '_';
+  const vals = [];
+  Object.keys(map).forEach(k => {
+    if (k.startsWith(prefix) && map[k] === '1') {
+      const v = k.slice(prefix.length);
+      vals.push(_KI_RADIO_VAL_LABELS[v] || v);
+    }
+  });
+  if (!vals.length) return null;
+  const title = _KI_RADIO_GROUP_LABELS[groupId] || groupId;
+  return '【' + title + '】 ' + vals.join('、');
+}
+
+function _kiBuildModuleText(mod, map) {
+  const parts = [];
+  (_KI_LEGACY_FIELDS[mod] || []).forEach(fid => {
+    const v = map['ki_' + fid] ?? map[fid];
+    if (v != null && String(v).trim()) {
+      parts.push('【' + (_KI_FIELD_LABELS[fid] || fid) + '】\n' + String(v).trim());
+    }
+  });
+  (_KI_LEGACY_RADIOS[mod] || []).forEach(gid => {
+    const line = _kiLegacyRadioLines(map, gid);
+    if (line) parts.push(line);
+  });
+  return parts.join('\n\n');
+}
+
+function _kiRestoreAllCards(map) {
+  let restored = 0;
+  Object.keys(_KI_LEGACY_FIELDS).forEach(mod => {
+    const el = document.getElementById('ki-text-' + mod);
+    if (!el) return;
+    const legacyText = _kiBuildModuleText(mod, map);
+    const newKey = 'ki_' + el.id;
+    const newText = map[newKey] != null ? String(map[newKey]).trim() : '';
+    if (newText) {
+      el.value = newText;
+      restored++;
+    } else if (legacyText) {
+      el.value = legacyText;
+      restored++;
+    }
+    if (el.value.trim()) kiMarkCard(mod);
+  });
+  return restored;
+}
+
 // ─── Restore on load ────────────────────────────────────────────────────────
 function _kiApplyData(map) {
+  document.querySelectorAll('.ki-main-text').forEach(el => {
+    const val = map['ki_' + el.id];
+    if (val != null && String(val).trim()) {
+      el.value = val;
+      kiMarkCard(el.id.replace('ki-text-', ''));
+    }
+  });
   document.querySelectorAll('.ki-input').forEach(el => {
     const val = map['ki_' + el.id];
     if (val) { el.value = val; el.dispatchEvent(new Event('input')); }
@@ -2198,28 +2622,37 @@ function _kiLocalStorageMap() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  let restoredFromSupabase = false;
+  kiInitFilters();
+  kiInitSheetPaste();
+  const statusEl = document.getElementById('ki-load-status');
+  const lsMap = _kiLocalStorageMap();
+  const { map: remoteMap, source } = await _kiLoadKickoffMap();
+  const merged = { ...remoteMap, ...lsMap };
 
-  if (_kiSupabase) {
-    const { data } = await _kiSupabase.from('kickoff_inputs').select('key, value');
-    if (data && data.length > 0) {
-      const map = {};
-      data.forEach(row => { map[row.key] = row.value; });
-      _kiApplyData(map);
-      restoredFromSupabase = true;
+  const restored = _kiRestoreAllCards(merged);
+  const keyCount = Object.keys(merged).filter(k => merged[k] != null && String(merged[k]).trim()).length;
+
+  if (statusEl) {
+    if (restored > 0) {
+      statusEl.style.background = '#ecfdf5';
+      statusEl.style.borderColor = '#6ee7b7';
+      statusEl.style.color = '#065f46';
+      statusEl.textContent = '保存データを復元しました（' + restored + ' カテゴリ・' + keyCount + ' 項目・取得元: ' + source + '）';
+    } else if (keyCount > 0) {
+      statusEl.textContent = 'データは取得できましたが表示に失敗しました。ページを再読み込みしてください。（' + keyCount + ' 項目）';
+    } else {
+      statusEl.style.background = '#fef2f2';
+      statusEl.style.borderColor = '#fecaca';
+      statusEl.style.color = '#991b1b';
+      statusEl.textContent = '保存データを読み込めませんでした。ネットワーク接続を確認するか、しばらくしてから再読み込みしてください。';
     }
   }
 
-  const lsMap = _kiLocalStorageMap();
-  const lsKeys = Object.keys(lsMap);
-
-  if (!restoredFromSupabase && lsKeys.length > 0) {
-    _kiApplyData(lsMap);
+  if (Object.keys(lsMap).length > 0 && source === 'none') {
+    _kiShowMigrationBanner(Object.keys(lsMap), lsMap);
   }
 
-  if (_kiSupabase && lsKeys.length > 0) {
-    _kiShowMigrationBanner(lsKeys, lsMap);
-  }
+  kiUpdateProgress();
 });
 </script>
 </body>
