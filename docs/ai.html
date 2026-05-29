@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BRIDGE - AI 機能・プロバイダ方針</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #6BC9B3;
+      --accent-dark: #4aab96;
+      --accent-light: #e6f7f3;
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+
+    /* NAV */
+    nav {
+      background: #fff; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      padding: 0 2rem; display: flex; align-items: center; height: 56px;
+    }
+    .nav-logo { font-weight: 700; font-size: .95rem; letter-spacing: .1em; text-transform: uppercase; margin-right: 2.5rem; color: var(--text); text-decoration: none; }
+    .nav-links { display: flex; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 500;
+      padding: 0 1.2rem; height: 56px; display: flex; align-items: center;
+      border-bottom: 2px solid transparent; transition: all .2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent-dark); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* HERO */
+    .hero { background: #fff; border-bottom: 1px solid var(--border); padding: 4.5rem 2rem 3.5rem; }
+    .hero-inner { max-width: 900px; margin: 0 auto; }
+    .hero-eyebrow { font-size: .72rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 1rem; }
+    .hero h1 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 700; line-height: 1.2; margin-bottom: .8rem; }
+    .hero h1 em { font-style: normal; color: var(--accent-dark); }
+    .hero-desc { font-size: .97rem; color: var(--muted); max-width: 620px; line-height: 1.85; }
+
+    /* MAIN */
+    .main { max-width: 900px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+
+    /* SECTION */
+    .sec { margin-bottom: 4rem; }
+    .sec-eyebrow { font-size: .7rem; font-weight: 700; color: var(--accent-dark); letter-spacing: .12em; text-transform: uppercase; margin-bottom: .6rem; }
+    .sec h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; }
+    .sec p { color: #374151; line-height: 1.85; margin-bottom: .9rem; }
+    .sec p:last-child { margin-bottom: 0; }
+    .sec h3 { font-size: 1rem; font-weight: 700; margin: 1.8rem 0 .6rem; }
+
+    /* CARD GRID */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+    .card {
+      background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--accent);
+      border-radius: 10px; padding: 1.4rem;
+    }
+    .card h3 { font-size: .95rem; font-weight: 700; margin-bottom: .5rem; margin-top: 0; }
+    .card p { font-size: .84rem; color: var(--muted); line-height: 1.65; margin: 0; }
+
+    /* TABLE */
+    .tbl-wrap { overflow-x: auto; margin: 1.5rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th { background: var(--accent-light); color: var(--accent-dark); font-weight: 700; padding: .65rem 1rem; text-align: left; border: 1px solid #b2e8d8; }
+    td { padding: .6rem 1rem; border: 1px solid var(--border); vertical-align: top; line-height: 1.7; }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    /* PHASE */
+    .phase-list { display: flex; flex-direction: column; gap: .75rem; margin: 1.5rem 0; }
+    .phase-item { display: flex; gap: 1.2rem; align-items: flex-start; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.4rem; }
+    .phase-num { flex-shrink: 0; width: 2rem; height: 2rem; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; }
+    .phase-body h3 { font-size: .95rem; font-weight: 700; margin-bottom: .3rem; margin-top: 0; }
+    .phase-body p { font-size: .84rem; color: var(--muted); line-height: 1.65; margin: 0; }
+
+    /* TIP */
+    .tip { background: var(--accent-light); border: 1px solid #b2e8d8; border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1.5rem 0; font-size: .87rem; line-height: 1.75; }
+    .tip strong { color: var(--accent-dark); }
+
+    /* NOTICE */
+    .notice { background: #fffbeb; border: 1px solid #fbd38d; border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1.5rem 0; font-size: .87rem; line-height: 1.75; }
+    .notice strong { color: #b45309; }
+
+    /* TAG */
+    .tag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-right: .3rem; }
+    .tag-must { background: #fee2e2; color: #b91c1c; }
+    .tag-later { background: #fff7e6; color: #b45309; }
+    .tag-decide { background: var(--accent-light); color: var(--accent-dark); }
+    .tag-low { background: #f3f4f6; color: #6b7280; }
+
+    /* DIAGRAM */
+    .diagram {
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      padding: 1.75rem 2rem; margin: 1.5rem 0;
+      font-family: 'IBM Plex Mono', monospace; font-size: .82rem; line-height: 1.9;
+      color: #374151; overflow-x: auto;
+    }
+    .diagram .accent { color: var(--accent-dark); font-weight: 600; }
+
+    /* CHECK LIST */
+    .check-list { list-style: none; padding: 0; margin: 1.2rem 0; display: flex; flex-direction: column; gap: .55rem; }
+    .check-list li { display: flex; gap: .75rem; align-items: flex-start; font-size: .9rem; line-height: 1.7; }
+    .check-list li::before { content: '□'; font-size: 1.1rem; color: var(--accent-dark); flex-shrink: 0; margin-top: .05rem; }
+
+    /* FOOTER */
+    footer { padding: 2.5rem 2rem; border-top: 1px solid var(--border); text-align: center; }
+    footer p { font-size: .83rem; color: var(--muted); }
+    footer a { color: var(--accent-dark); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">BRIDGE</span>
+  <div class="nav-links">
+    <a href="index.html">仕様書</a>
+    <a href="index.html#kickoff-input">導入準備</a>
+    <a href="features.html">機能一覧</a>
+    <a href="api.html">外部連携</a>
+    <a href="ai.html" class="active">BRIDGE AI</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">AI Integration — Provider &amp; Billing Policy</div>
+    <h1>BRIDGE <em>AI</em></h1>
+    <p class="hero-desc">BRIDGEのAI機能の用途・推奨プロバイダ・費用負担の方針をまとめたページです。営業議事録から社内AIチャットまで、どのAIをどう使うか、先方にご確認いただきたいことも整理しています。</p>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ① AIを使う場面 -->
+  <div class="sec">
+    <div class="sec-eyebrow">① Where — Use Cases</div>
+    <h2>BRIDGEのどこでAIを使うか</h2>
+    <p>現在の仕様・タスクリストをもとに整理した、AI活用の場面一覧です。優先度の高いものから順に並んでいます。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>機能</th><th>画面・場所</th><th>AIの役割</th><th>技術</th><th>優先度</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>議事録（録音→文字起こし→要約）</strong></td>
+            <td>顧客詳細 > 録音・要約タブ</td>
+            <td>面談をリアルタイムで文字化し、要約を生成。全商談の履歴一覧にも対応</td>
+            <td>STT（音声認識）＋ LLM（要約）</td>
+            <td><span class="tag tag-must">高</span></td>
+          </tr>
+          <tr>
+            <td><strong>メモの「文章を改善」</strong></td>
+            <td>顧客詳細 > 録音・要約タブ</td>
+            <td>営業が手入力したメモをAIが読みやすく整える</td>
+            <td>LLM（テキスト生成）</td>
+            <td><span class="tag tag-must">高</span></td>
+          </tr>
+          <tr>
+            <td><strong>やり取り管理の合意事項自動抽出</strong></td>
+            <td>契約管理 > やり取り管理タブ</td>
+            <td>LINE・Slack・メールなどのやり取りから「重要な合意事項」を自動でリストアップ</td>
+            <td>LLM（長文理解・構造化抽出）</td>
+            <td><span class="tag tag-later">中</span></td>
+          </tr>
+          <tr>
+            <td><strong>AIチャット（BLIDGE AI）</strong></td>
+            <td>全画面・右下のボタン</td>
+            <td>開いている画面に応じた社内サポートチャット（例：「工程表についてお手伝いできますか？」）</td>
+            <td>LLM（チャット）</td>
+            <td><span class="tag tag-later">中</span></td>
+          </tr>
+          <tr>
+            <td><strong>顧客入力のAI補助</strong></td>
+            <td>顧客詳細 > 記入項目タブ</td>
+            <td>入力欄をAIが補助・提案</td>
+            <td>LLM（軽量）</td>
+            <td><span class="tag tag-later">中</span></td>
+          </tr>
+          <tr>
+            <td><strong>候補日のAI最適化</strong></td>
+            <td>顧客詳細 > スケジューリングタブ</td>
+            <td>Googleカレンダーと移動を考慮して最適な候補日を提案</td>
+            <td>現状はルールベースで対応可。本格化はLLM</td>
+            <td><span class="tag tag-low">低</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip">
+      <strong>💡 現在の実装状況</strong><br>
+      録音・要約タブとAIチャットはプロトタイプとして画面は存在しますが、<strong>AI本番連携はまだ未実装</strong>です（「AI連携は準備中です」の表示のみ）。候補日の最適化はルールベースで動作しており、外部LLMは使っていません。
+    </div>
+  </div>
+
+  <!-- ② AIの2レイヤー -->
+  <div class="sec">
+    <div class="sec-eyebrow">② Structure — 2 Layers</div>
+    <h2>AIは「音声→文字」と「文字→理解」の2段階</h2>
+    <p>「どのAIを使うか」を考えるとき、BRIDGEのAIは性質の異なる2つのレイヤーに分かれます。プロバイダ選びはこの2つを別々に考えることが重要です。</p>
+
+    <div class="diagram">
+<pre>
+【レイヤー 1 — 音声認識（STT: Speech to Text）】
+
+  面談の音声 ────→  STT API  ────→  文字起こしテキスト
+  録音データ          （Whisper 等）
+
+  ※ Claude・Gemini等のLLMは「音声→文字」の変換機能を持っていない
+  ※ 議事録機能を使う場合、<span class="accent">STTプロバイダは必須</span>（OpenAI Whisper が業界標準）
+
+【レイヤー 2 — 大規模言語モデル（LLM）】
+
+  文字起こしテキスト ─→  LLM API  ─→  要約・文章改善・合意抽出・チャット
+  メモ・やり取りログ       （GPT / Claude 等）
+</pre>
+    </div>
+
+    <p>つまり、<strong>「Claude だけで全部」は現時点では成立しません</strong>。Claude は LLM（レイヤー2）は得意ですが、STT（レイヤー1）の公式APIを持っていないため、議事録の文字起こしは別プロバイダが必要です。</p>
+  </div>
+
+  <!-- ③ プロバイダ比較 -->
+  <div class="sec">
+    <div class="sec-eyebrow">③ Provider — Comparison</div>
+    <h2>推奨プロバイダとその比較</h2>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>OpenAI</th><th>Anthropic（Claude）</th><th>Google（Gemini + Speech）</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>音声認識（STT）</strong></td>
+            <td>◎ <strong>Whisper API</strong>（業界標準）</td>
+            <td>✗ 公式STT APIなし<br><span style="font-size:.8rem;color:var(--muted)">別途Whisper等が必要</span></td>
+            <td>○ Cloud Speech-to-Text</td>
+          </tr>
+          <tr>
+            <td><strong>要約・文章改善</strong></td>
+            <td>◎ GPT-4o</td>
+            <td>◎ Claude 3.5/4<br><span style="font-size:.8rem;color:var(--muted)">文章の質・丁寧さで優位</span></td>
+            <td>○ Gemini</td>
+          </tr>
+          <tr>
+            <td><strong>合意事項の抽出</strong><br><span style="font-size:.8rem;color:var(--muted)">長いやり取りログ</span></td>
+            <td>○</td>
+            <td>◎ <strong>長文・構造化が得意</strong></td>
+            <td>○</td>
+          </tr>
+          <tr>
+            <td><strong>AIチャット</strong></td>
+            <td>◎</td>
+            <td>◎</td>
+            <td>○</td>
+          </tr>
+          <tr>
+            <td><strong>日本語の議事録精度</strong></td>
+            <td>◎（実績多）</td>
+            <td>◎</td>
+            <td>○</td>
+          </tr>
+          <tr>
+            <td><strong>APIキーの数</strong></td>
+            <td><strong>1本で完結</strong></td>
+            <td>STT別途で2社以上</td>
+            <td>サービスが多く3系統になりがち</td>
+          </tr>
+          <tr>
+            <td><strong>運用・管理の複雑さ</strong></td>
+            <td>低 ✅</td>
+            <td>中（STTを別途組み合わせる場合）</td>
+            <td>中〜高</td>
+          </tr>
+          <tr>
+            <td><strong>こんな場合に向く</strong></td>
+            <td>議事録を使う・シンプルに1社で揃えたい</td>
+            <td>合意抽出・長文処理の質を重視したい</td>
+            <td>Gmail・Googleカレンダーをフル活用する場合</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>推奨構成</h3>
+
+    <div class="phase-list">
+      <div class="phase-item">
+        <div class="phase-num">A</div>
+        <div class="phase-body">
+          <h3>標準案（推奨）— OpenAI 一本 <span class="tag tag-decide">推奨</span></h3>
+          <p>音声認識（Whisper）も要約・文章改善・チャット（GPT-4o）もOpenAI一社で完結。APIキー1本・課金1箇所・運用がシンプル。BRIDGEのCSVタスク（議事録・メモ改善・チャット）の8割をこれで対応できます。<strong>最初の実装はこの構成を推奨します。</strong></p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">B</div>
+        <div class="phase-body">
+          <h3>品質重視案 — Whisper（OpenAI）＋ Claude（Anthropic）<span class="tag tag-later">後から追加可</span></h3>
+          <p>音声認識はOpenAI Whisper、要約・合意抽出・文章改善はClaude。長いやり取りの合意抽出や丁寧な文章生成の品質を重視する場合の選択肢。最初からBで始める必要はなく、<strong>Aで実装後に合意抽出だけClaudeに切り替える形が現実的</strong>です。</p>
+        </div>
+      </div>
+      <div class="phase-item">
+        <div class="phase-num">C</div>
+        <div class="phase-body">
+          <h3>Google寄せ — Gemini ＋ Google Speech <span class="tag tag-low">条件付き</span></h3>
+          <p>Gmail・Googleカレンダーを本番でフル連携する先方でGoogleで統一したい場合のみ検討。CSVのAI要件だけで見るとGoogleを選ぶ積極的な理由は薄い。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="notice">
+      <strong>⚠ Claudeだけでは議事録が完結しません</strong><br>
+      Claude は LLM（文章理解・生成）は強力ですが、面談の音声を文字に変換するSTT機能は持っていません。「全部Claude」にすると、文字起こしだけ別サービス（OpenAI Whisper・Google Speech等）が必要になり、結果的に2社以上になります。最初はOpenAI一本の方がシンプルです。
+    </div>
+  </div>
+
+  <!-- ④ 課金・費用負担 -->
+  <div class="sec">
+    <div class="sec-eyebrow">④ Billing — Who Pays?</div>
+    <h2>AI利用料の費用負担とStripe対応</h2>
+    <p>AI（文字起こし・要約など）は<strong>使った分だけ料金がかかる従量制</strong>です。面談の件数・時間・AIチャットの利用回数によって毎月の金額が変動します。費用の負担方法は次の2パターンから選択します。</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h3>A. 先方が直接AIを契約<span class="tag tag-decide" style="margin-left:.4rem">推奨</span></h3>
+        <p>OpenAI等のアカウントを先方名義で作成し、APIキーをBRIDGEの設定画面に登録。AI利用料は先方からAI事業者へ直接お支払い。<br><br>BRIDGEは利用料を預からないため価格が透明。<strong>Stripe連携は不要。実装がシンプル。</strong></p>
+      </div>
+      <div class="card">
+        <h3>B. BRIDGEが一括管理→月次請求<span class="tag tag-later" style="margin-left:.4rem">複数テナント向け</span></h3>
+        <p>BRIDGE側でAI費用をまとめ、利用量に応じて月々ご請求。この場合、<strong>Stripe Metered Billing（従量課金）</strong>の導入が必要。<br><br>「基本料金＋利用量に応じた変動分」の形で請求。</p>
+      </div>
+    </div>
+
+    <h3>Stripe連携の必要性</h3>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>パターン</th><th>Stripe（従量課金）</th><th>必要な開発</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>A. 先方が直接契約</strong></td>
+            <td>✗ 不要</td>
+            <td>APIキー登録画面のみ（設定 > 会社情報）。現在の設定画面を拡張するだけ</td>
+          </tr>
+          <tr>
+            <td><strong>B. BRIDGE一括→月次請求</strong></td>
+            <td>✅ <strong>必要</strong></td>
+            <td>利用量カウント（文字起こし時間・トークン数の記録）＋ Stripe Metered Billing ＋ Webhook ＋ 請求書連携の新規開発が必要</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram">
+<pre>
+【A. 先方が直接契約（推奨・シンプル）】
+
+  先方 ──→ OpenAI（直接契約・直接支払い）
+   │
+   └──→ BRIDGEの設定画面にAPIキーを登録するだけ
+
+【B. BRIDGE一括管理（複数テナント対応時）】
+
+  ユーザーがAI機能を使う
+   │
+   └──→ BRIDGE がトークン数・秒数をカウント
+            │
+            └──→ Stripe Metered Billing
+                     │
+                     └──→ 月次で先方に自動請求
+</pre>
+    </div>
+
+    <div class="tip">
+      <strong>💡 推奨の進め方</strong><br>
+      まず<strong>A（先方直契約）でローンチ</strong>し、複数テナントに展開して「使った分だけ自動請求」が必要になった段階でB＋Stripeを検討。最初からStripe従量課金を作り込むとリリースが重くなります。
+    </div>
+  </div>
+
+  <!-- ⑤ ご確認事項 -->
+  <div class="sec">
+    <div class="sec-eyebrow">⑤ Next Steps — Checklist</div>
+    <h2>先方にご確認いただきたいこと</h2>
+    <p>AIプロバイダよりも先に、次の点を教えていただけると実装・見積もりが具体化できます。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>確認事項</th><th>なぜ必要か</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>①</td>
+            <td>本番で使いたいAI機能はどれか<br><span style="font-size:.8rem;color:var(--muted)">議事録 / 文章改善 / やり取り合意抽出 / AIチャット / 顧客入力補助</span></td>
+            <td>実装優先順位・必要なプロバイダが決まるため</td>
+          </tr>
+          <tr>
+            <td>②</td>
+            <td>面談の録音はPCマイクでのその場録音か、電話録音の取り込みも必要か</td>
+            <td>電話録音の取り込みは別途仕様・コストが増えるため。CSVは「リアルタイム変換」中心＝当面はPC想定</td>
+          </tr>
+          <tr>
+            <td>③</td>
+            <td>顧客の音声・個人情報をAIに渡すことの社内承認は取れているか</td>
+            <td>議事録機能はお客様の音声がAI事業者のサーバーに送られるため、社内規程・コンプライアンス確認が必要</td>
+          </tr>
+          <tr>
+            <td>④</td>
+            <td>すでにOpenAI・Claude・Googleなどの契約・利用があるか</td>
+            <td>既存契約があればAPIキーをそのまま使え、新規登録が不要なため</td>
+          </tr>
+          <tr>
+            <td>⑤</td>
+            <td>APIアカウントは貴社名義か、BRIDGE一括か</td>
+            <td>費用負担の方式とStripe連携の要否が決まるため</td>
+          </tr>
+          <tr>
+            <td>⑥</td>
+            <td>月間の面談本数・AI機能を使う営業人数</td>
+            <td>月額コスト（利用量）の概算を出すために必要</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>使いたい機能の選択リスト（先方確認用）</h3>
+    <ul class="check-list">
+      <li>議事録（面談の録音 → 文字起こし → 要約）　※優先度高・費用もかかるため社内承認要</li>
+      <li>メモの「文章を改善」　※議事録と同じプロバイダで対応可</li>
+      <li>商談タイムラインの要約</li>
+      <li>やり取り管理の「重要な合意事項」自動抽出（LINE / Slack / メール）</li>
+      <li>BLIDGE AIチャット（画面右下の社内アシスタント）</li>
+      <li>顧客入力のAI補助（記入項目タブ）</li>
+      <li>候補日のAI最適化　※現状はルールで対応中のため、すぐには不要</li>
+    </ul>
+  </div>
+
+  <!-- ⑥ コスト感 -->
+  <div class="sec">
+    <div class="sec-eyebrow">⑥ Cost — Rough Estimate</div>
+    <h2>AI利用コストの目安</h2>
+    <p>OpenAI（Whisper + GPT-4o）を使った場合の概算です。利用量・プランによって変動します。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>機能</th><th>課金単位</th><th>目安</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>議事録（Whisper）</strong></td>
+            <td>音声1分あたり約$0.006</td>
+            <td>1時間の面談 ≒ 約50〜60円。月10件なら数百円〜</td>
+          </tr>
+          <tr>
+            <td><strong>要約・文章改善（GPT-4o）</strong></td>
+            <td>トークン数に比例</td>
+            <td>1件の要約 ≒ 数円〜十数円。利用頻度で変動</td>
+          </tr>
+          <tr>
+            <td><strong>やり取り合意抽出</strong></td>
+            <td>トークン数（ログが長いほど増加）</td>
+            <td>長いやり取りは1件あたり数十円になる場合あり</td>
+          </tr>
+          <tr>
+            <td><strong>AIチャット</strong></td>
+            <td>メッセージ数・長さに比例</td>
+            <td>軽い質問なら1件数円以下</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip">
+      <strong>💡 月額コストのイメージ</strong><br>
+      営業5人、月20件の面談（各1時間）、議事録＋要約＋軽いチャット利用の場合、<strong>月数千円〜1万円台</strong>が目安です。利用量が少なければもっと安く、やり取りログが大量なら増えます。正確な見積もりは月間の面談本数と人数を教えていただければ算出できます。
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>BRIDGE 統合業務支援システム &copy; 2026 &nbsp;&nbsp;
+    <a href="index.html">仕様書</a> &nbsp;&nbsp;
+    <a href="features.html">機能一覧</a> &nbsp;&nbsp;
+    <a href="api.html">外部連携</a> &nbsp;&nbsp;
+    <a href="ai.html">BRIDGE AI</a>
+  </p>
+</footer>
+
+</body>
+</html>
