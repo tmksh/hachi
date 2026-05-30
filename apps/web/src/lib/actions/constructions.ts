@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
-import type { Construction, ConstructionTask, ContractorOrder } from "@/lib/database.types";
+import type { Construction, ConstructionTask, ContractorOrder, EstimateCategory, EstimateItem } from "@/lib/database.types";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -1221,6 +1221,83 @@ export async function linkEstimateToConstruction(estimateId: string, constructio
     .update({ construction_id: constructionId })
     .eq("id", estimateId);
   if (error) throw error;
+}
+
+export async function importCategoryFromReference(
+  estimateId: string,
+  categoryName: string,
+  itemsData: Array<{
+    name: string;
+    specification?: string | null;
+    notes?: string | null;
+    quantity: number;
+    unit: string | null;
+    cost_price: number;
+    cost_amount: number;
+    selling_price: number;
+    selling_amount: number;
+    gross_profit: number;
+    gross_profit_rate: number;
+  }>,
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const { count: catCount } = await supabase
+    .from("estimate_categories")
+    .select("*", { count: "exact", head: true })
+    .eq("estimate_id", estimateId);
+
+  const { data: category, error: catError } = await supabase
+    .from("estimate_categories")
+    .insert({
+      company_id: profile.company_id,
+      estimate_id: estimateId,
+      name: categoryName,
+      sort_order: catCount ?? 0,
+    })
+    .select()
+    .single();
+  throwIfSupabaseError(catError);
+
+  const { count: itemCount } = await supabase
+    .from("estimate_items")
+    .select("*", { count: "exact", head: true })
+    .eq("estimate_id", estimateId);
+
+  let items: EstimateItem[] = [];
+  if (itemsData.length > 0) {
+    const { data: inserted, error: itemsError } = await supabase
+      .from("estimate_items")
+      .insert(
+        itemsData.map((item, i) => ({
+          company_id: profile.company_id,
+          estimate_id: estimateId,
+          category_id: (category as EstimateCategory).id,
+          name: item.name,
+          specification: item.specification ?? null,
+          notes: item.notes ?? null,
+          quantity: item.quantity,
+          unit: item.unit,
+          cost_price: item.cost_price,
+          cost_amount: item.cost_amount,
+          selling_price: item.selling_price,
+          selling_amount: item.selling_amount,
+          gross_profit: item.gross_profit,
+          gross_profit_rate: item.gross_profit_rate,
+          sort_order: (itemCount ?? 0) + i,
+        })),
+      )
+      .select();
+    throwIfSupabaseError(itemsError);
+    items = (inserted ?? []) as EstimateItem[];
+  }
+
+  const totals = await recalculateEstimateTotals(supabase, estimateId);
+  return { category: category as EstimateCategory, items, totals };
 }
 
 export async function createOrdersFromEstimate(constructionId: string, estimateId: string) {

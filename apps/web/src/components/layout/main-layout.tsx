@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { BridgeAiChat } from "@/components/ai/bridge-ai-chat";
+import { BridgeAiChat, BRIDGE_AI_PANEL_WIDTH } from "@/components/ai/bridge-ai-chat";
 import { Sidebar } from "./sidebar";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
@@ -19,6 +19,7 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const { profile, loading, signOut } = useAuth();
   const [expanded, setExpanded] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const pathname = usePathname();
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
@@ -68,7 +69,10 @@ export function MainLayout({ children }: MainLayoutProps) {
       <MobileNav />
       {/* Desktop */}
       <motion.main
-        animate={{ paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12 }}
+        animate={{
+          paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12,
+          paddingRight: chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0,
+        }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="hidden md:block"
       >
@@ -76,12 +80,11 @@ export function MainLayout({ children }: MainLayoutProps) {
           {children}
         </div>
       </motion.main>
-      <BridgeAiChat />
+      <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />
       {/* Mobile */}
       <main className="md:hidden pb-32">
         {children}
       </main>
-      <BridgeAiChat />
     </div>
   );
 }

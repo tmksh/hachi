@@ -9,8 +9,6 @@ import {
   isSameDay,
   addMonths,
   subMonths,
-  addWeeks,
-  subWeeks,
   addDays,
   addMinutes,
   subDays,
@@ -157,7 +155,7 @@ export default function CalendarPage() {
   const { profile } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [view, setView] = useState<View>("month");
+  const [view, setView] = useState<View>("week");
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<Ev[]>([]);
   const [googleEvents, setGoogleEvents] = useState<MappedGoogleEvent[]>([]);
@@ -197,8 +195,8 @@ export default function CalendarPage() {
     }
     if (view === "week") {
       return {
-        rangeStart: startOfWeek(currentDate, { weekStartsOn: 0 }),
-        rangeEnd: endOfWeek(currentDate, { weekStartsOn: 0 }),
+        rangeStart: startOfMonth(currentDate),
+        rangeEnd: endOfMonth(currentDate),
       };
     }
     const ms = startOfMonth(currentDate);
@@ -400,8 +398,6 @@ export default function CalendarPage() {
     setCurrentDate(
       view === "day"
         ? subDays(currentDate, 1)
-        : view === "week"
-        ? subWeeks(currentDate, 1)
         : subMonths(currentDate, 1)
     );
   };
@@ -409,8 +405,6 @@ export default function CalendarPage() {
     setCurrentDate(
       view === "day"
         ? addDays(currentDate, 1)
-        : view === "week"
-        ? addWeeks(currentDate, 1)
         : addMonths(currentDate, 1)
     );
   };
@@ -418,8 +412,6 @@ export default function CalendarPage() {
   const titleText =
     view === "day"
       ? format(currentDate, "yyyy年M月d日（E）", { locale: ja })
-      : view === "week"
-      ? `${format(startOfWeek(currentDate, { weekStartsOn: 0 }), "M月d日", { locale: ja })} - ${format(endOfWeek(currentDate, { weekStartsOn: 0 }), "M月d日", { locale: ja })}`
       : format(currentDate, "yyyy年M月", { locale: ja });
 
   const selectedDateEvents = useMemo(
@@ -1070,7 +1062,10 @@ function MonthView({
   );
 }
 
-/* ──────────────────── Week View (Google Calendar style) ──────────────────── */
+/* ──────────────────── Week View (Google Calendar style, horizontal scroll) ──────────────────── */
+const DAY_COL_W = 160; // px per day column
+const TIME_W    = 52;  // px for time label gutter
+
 function WeekView({
   date,
   selected,
@@ -1088,31 +1083,50 @@ function WeekView({
   onRefresh: () => void;
   onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
-  const ws = startOfWeek(date, { weekStartsOn: 0 });
-  const days = eachDayOfInterval({ start: ws, end: addDays(ws, 6) });
+  const days = eachDayOfInterval({ start: startOfMonth(date), end: endOfMonth(date) });
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const gridRef  = useRef<HTMLDivElement>(null);
+  const gridRef   = useRef<HTMLDivElement>(null);
+
+  /* Column width — fit exactly 7 days into the visible scroll area */
+  const [colW, setColW] = useState(120);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const calc = () => {
+      const available = el.clientWidth - TIME_W;
+      setColW(Math.max(80, Math.floor(available / 7)));
+    };
+    calc();
+    const ro = new ResizeObserver(calc);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const DAY_COL_W_DYN = colW;
 
   const [dragging, setDragging] = useState<DragInfo | null>(null);
   const dragRef = useRef<DragInfo | null>(null);
 
-  /* Scroll to 8am on mount */
+  /* Scroll to 8am (vertical) and center today/selected date (horizontal) on mount or month change */
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 8 * HOUR_H });
-  }, []);
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = 7.5 * HOUR_H; // 7:30 start → 8:00 label is clearly below the sticky header
+    const todayIdx = days.findIndex((d) => isToday(d));
+    const targetIdx = todayIdx >= 0 ? todayIdx : 0;
+    const targetX = TIME_W + targetIdx * DAY_COL_W_DYN - (el.clientWidth - DAY_COL_W_DYN * 3.5);
+    el.scrollLeft = Math.max(0, targetX);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   /* Current time indicator */
-  const [nowMin, setNowMin] = useState(() => {
-    const n = new Date();
-    return toMin(n);
-  });
+  const [nowMin, setNowMin] = useState(() => toMin(new Date()));
   useEffect(() => {
     const id = setInterval(() => setNowMin(toMin(new Date())), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  /* Coordinate helpers */
+  /* Coordinate helpers — account for scroll offset */
   const getMinFromY = useCallback((clientY: number) => {
     const scroll = scrollRef.current;
     if (!scroll) return 0;
@@ -1122,11 +1136,11 @@ function WeekView({
   }, []);
 
   const getDayFromX = useCallback((clientX: number): Date => {
-    const grid = gridRef.current;
-    if (!grid) return days[0];
-    const rect = grid.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const idx = Math.max(0, Math.min(6, Math.floor((x / rect.width) * 7)));
+    const scroll = scrollRef.current;
+    if (!scroll) return days[0];
+    const rect = scroll.getBoundingClientRect();
+    const x = clientX - rect.left + scroll.scrollLeft - TIME_W;
+    const idx = Math.max(0, Math.min(days.length - 1, Math.floor(x / DAY_COL_W_DYN)));
     return days[idx];
   }, [days]);
 
@@ -1136,7 +1150,6 @@ function WeekView({
     ev: AnyEv,
     type: "move" | "resize",
   ) => {
-    /* Google イベントはドラッグ不可 */
     if ((ev as MappedGoogleEvent)._isGoogle) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1221,176 +1234,203 @@ function WeekView({
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const isDraggingRef = useRef(false);
+  const innerW = TIME_W + days.length * DAY_COL_W_DYN;
 
   return (
     <Card className="overflow-hidden py-0 select-none md:flex md:flex-col md:h-full md:min-h-0">
-      {/* Sticky day header */}
-      <div className="grid border-b md:shrink-0" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
-        <div className="border-r bg-background" />
-        {days.map((d) => {
-          const today   = isToday(d);
-          const isSel   = isSameDay(d, selected);
-          const weekday = d.getDay();
-          return (
-            <button
-              key={d.toISOString()}
-              onClick={() => onSelect(d)}
-              className={cn(
-                "flex flex-col items-center gap-0.5 py-2 border-r last:border-r-0 transition-colors hover:bg-muted/40",
-                isSel && "bg-primary/5",
-              )}
-            >
-              <span className={cn(
-                "text-[10px] font-medium",
-                weekday === 0 ? "text-rose-500" : weekday === 6 ? "text-blue-500" : "text-muted-foreground",
-              )}>
-                {format(d, "E", { locale: ja })}
-              </span>
-              <span className={cn(
-                "text-base font-semibold tabular-nums h-7 w-7 rounded-full flex items-center justify-center",
-                today && "bg-primary text-primary-foreground",
-              )}>
-                {format(d, "d")}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Single scroll container — both X (day columns) and Y (time) */}
+      <div
+        ref={scrollRef}
+        className="overflow-auto md:flex-1 md:min-h-0 max-h-[600px] md:!max-h-none"
+      >
+        <div style={{ minWidth: innerW }}>
 
-      {/* Scrollable time grid */}
-      <div ref={scrollRef} className="overflow-y-auto md:flex-1 md:min-h-0 md:!max-h-none max-h-[580px]">
-        <div style={{ display: "flex" }}>
-          {/* Time labels */}
-          <div className="shrink-0 border-r relative" style={{ width: 52, height: 24 * HOUR_H }}>
-            {hours.map((h) => (
-              <div
-                key={h}
-                className="absolute text-[10px] text-muted-foreground text-right"
-                style={{ top: h * HOUR_H - 6, right: 6, lineHeight: "12px" }}
-              >
-                {h === 0 ? "" : `${String(h).padStart(2, "0")}:00`}
-              </div>
-            ))}
-          </div>
-
-          {/* Day columns */}
+          {/* Sticky day header row */}
           <div
-            ref={gridRef}
-            className="flex-1 grid"
-            style={{ gridTemplateColumns: "repeat(7, 1fr)", cursor: dragging ? "grabbing" : "default" }}
+            className="grid border-b bg-background"
+            style={{
+              gridTemplateColumns: `${TIME_W}px repeat(${days.length}, ${DAY_COL_W_DYN}px)`,
+              position: "sticky",
+              top: 0,
+              zIndex: 10,
+            }}
           >
+            <div
+              className="border-r bg-background"
+              style={{ position: "sticky", left: 0, zIndex: 15, width: TIME_W }}
+            />
             {days.map((d) => {
-              const today = isToday(d);
-
-              /* events to render in this column:
-                 - dragged event follows currentDay, not original day */
-              const colEvents = events.filter((e) => {
-                if (e.all_day) return false;
-                if (dragging?.ev.id === e.id) return isSameDay(dragging!.currentDay, d);
-                return isSameDay(parseISO(e.start_at), d);
-              }).sort((a, b) => a.start_at.localeCompare(b.start_at));
-
+              const today   = isToday(d);
+              const isSel   = isSameDay(d, selected);
+              const weekday = d.getDay();
               return (
-                <div
+                <button
                   key={d.toISOString()}
-                  className="relative border-r last:border-r-0 cursor-pointer"
-                  style={{ height: 24 * HOUR_H }}
-                  title="クリックで予定を追加"
-                  onClick={(e) => {
-                    if (isDraggingRef.current || dragRef.current) return;
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                    const y = e.clientY - rect.top;
-                    const min = Math.max(0, Math.min(1439, Math.floor(y / PX_PER_MIN)));
-                    const snapped = snapTo(min);
-                    const hh = String(Math.floor(snapped / 60)).padStart(2, "0");
-                    const mm = String(snapped % 60).padStart(2, "0");
-                    onCreateAt(d, `${hh}:${mm}`);
-                  }}
-                >
-                  {/* Hour / half-hour lines */}
-                  {hours.map((h) => (
-                    <div key={h}>
-                      <div className="absolute w-full border-t border-slate-300/70" style={{ top: h * HOUR_H }} />
-                      <div className="absolute w-full border-t border-slate-200/40 border-dashed" style={{ top: h * HOUR_H + HOUR_H / 2 }} />
-                    </div>
-                  ))}
-
-                  {/* Current time indicator */}
-                  {today && (
-                    <div
-                      className="absolute w-full z-20 pointer-events-none"
-                      style={{ top: nowMin * PX_PER_MIN }}
-                    >
-                      <div className="relative flex items-center">
-                        <div className="absolute -left-1 h-2.5 w-2.5 rounded-full bg-red-500 z-10" />
-                        <div className="w-full h-px bg-red-500" />
-                      </div>
-                    </div>
+                  onClick={() => onSelect(d)}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 py-2 border-r last:border-r-0 transition-colors hover:bg-muted/40",
+                    isSel && "bg-primary/5",
                   )}
-
-                  {/* Events */}
-                  {colEvents.map((ev) => {
-                    const isDraggingThis = dragging?.ev.id === ev.id;
-                    const startDt = parseISO(ev.start_at);
-                    const endDt   = ev.end_at ? parseISO(ev.end_at) : addMinutes(startDt, 60);
-                    const sMin = isDraggingThis ? dragging!.currentStart : toMin(startDt);
-                    const eMin = isDraggingThis ? dragging!.currentEnd   : toMin(endDt);
-                    const top    = sMin * PX_PER_MIN;
-                    const height = Math.max(20, (eMin - sMin) * PX_PER_MIN);
-                    const memberColor = (ev as AnyEv)._memberColor;
-
-                    return (
-                      <div
-                        key={ev.id}
-                        className={cn(
-                          "absolute left-0.5 right-0.5 rounded border text-[10px] overflow-hidden z-10",
-                          !memberColor && (CAT_CHIP[ev.category ?? ""] || "bg-muted text-foreground border-border"),
-                          isDraggingThis ? "opacity-60 cursor-grabbing shadow-lg" : "cursor-grab hover:brightness-95 hover:shadow-sm",
-                        )}
-                        style={{
-                          top, height,
-                          ...(memberColor ? {
-                            backgroundColor: `${memberColor}22`,
-                            color: memberColor,
-                            borderColor: `${memberColor}55`,
-                          } : {}),
-                        }}
-                        onMouseDown={(e) => {
-                          isDraggingRef.current = false;
-                          startDrag(e, ev, "move");
-                        }}
-                        onClick={(e) => {
-                          if (!isDraggingRef.current) {
-                            e.stopPropagation();
-                            onEventClick(ev);
-                          }
-                        }}
-                      >
-                        <div className="px-1 pt-0.5 flex flex-col h-full">
-                          <div className="font-semibold tabular-nums shrink-0">
-                            {isDraggingThis
-                              ? minToTimeStr(dragging!.currentStart)
-                              : format(startDt, "HH:mm")}
-                          </div>
-                          <div className="truncate">{ev.title}</div>
-                        </div>
-                        {/* Resize handle */}
-                        <div
-                          className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize hover:bg-black/10 rounded-b"
-                          title="ドラッグして長さを変更"
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            isDraggingRef.current = true;
-                            startDrag(e, ev, "resize");
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+                >
+                  <span className={cn(
+                    "text-[10px] font-medium",
+                    weekday === 0 ? "text-rose-500" : weekday === 6 ? "text-blue-500" : "text-muted-foreground",
+                  )}>
+                    {format(d, "E", { locale: ja })}
+                  </span>
+                  <span className={cn(
+                    "text-base font-semibold tabular-nums h-7 w-7 rounded-full flex items-center justify-center",
+                    today && "bg-primary text-primary-foreground",
+                  )}>
+                    {format(d, "d")}
+                  </span>
+                </button>
               );
             })}
           </div>
+
+          {/* Time grid */}
+          <div className="flex relative">
+            {/* Sticky time label gutter */}
+            <div
+              className="shrink-0 border-r bg-background relative"
+              style={{
+                width: TIME_W,
+                height: 24 * HOUR_H,
+                position: "sticky",
+                left: 0,
+                zIndex: 5,
+              }}
+            >
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="absolute text-[10px] text-muted-foreground text-right"
+                  style={{ top: h * HOUR_H - 6, right: 6, lineHeight: "12px" }}
+                >
+                  {h === 0 ? "" : `${String(h).padStart(2, "0")}:00`}
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns */}
+            <div
+              ref={gridRef}
+              className="flex"
+              style={{ cursor: dragging ? "grabbing" : "default" }}
+            >
+              {days.map((d) => {
+                const today = isToday(d);
+
+                const colEvents = events.filter((e) => {
+                  if (e.all_day) return false;
+                  if (dragging?.ev.id === e.id) return isSameDay(dragging!.currentDay, d);
+                  return isSameDay(parseISO(e.start_at), d);
+                }).sort((a, b) => a.start_at.localeCompare(b.start_at));
+
+                return (
+                  <div
+                    key={d.toISOString()}
+                    className="relative border-r last:border-r-0 cursor-pointer"
+                    style={{ width: DAY_COL_W_DYN, flexShrink: 0, height: 24 * HOUR_H }}
+                    title="クリックで予定を追加"
+                    onClick={(e) => {
+                      if (isDraggingRef.current || dragRef.current) return;
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const y = e.clientY - rect.top;
+                      const min = Math.max(0, Math.min(1439, Math.floor(y / PX_PER_MIN)));
+                      const snapped = snapTo(min);
+                      const hh = String(Math.floor(snapped / 60)).padStart(2, "0");
+                      const mm = String(snapped % 60).padStart(2, "0");
+                      onCreateAt(d, `${hh}:${mm}`);
+                    }}
+                  >
+                    {/* Hour / half-hour lines */}
+                    {hours.map((h) => (
+                      <div key={h}>
+                        <div className="absolute w-full border-t border-slate-300/70" style={{ top: h * HOUR_H }} />
+                        <div className="absolute w-full border-t border-slate-200/40 border-dashed" style={{ top: h * HOUR_H + HOUR_H / 2 }} />
+                      </div>
+                    ))}
+
+                    {/* Current time indicator */}
+                    {today && (
+                      <div
+                        className="absolute w-full z-20 pointer-events-none"
+                        style={{ top: nowMin * PX_PER_MIN }}
+                      >
+                        <div className="relative flex items-center">
+                          <div className="absolute -left-1 h-2.5 w-2.5 rounded-full bg-red-500 z-10" />
+                          <div className="w-full h-px bg-red-500" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Events */}
+                    {colEvents.map((ev) => {
+                      const isDraggingThis = dragging?.ev.id === ev.id;
+                      const startDt = parseISO(ev.start_at);
+                      const endDt   = ev.end_at ? parseISO(ev.end_at) : addMinutes(startDt, 60);
+                      const sMin = isDraggingThis ? dragging!.currentStart : toMin(startDt);
+                      const eMin = isDraggingThis ? dragging!.currentEnd   : toMin(endDt);
+                      const top    = sMin * PX_PER_MIN;
+                      const height = Math.max(20, (eMin - sMin) * PX_PER_MIN);
+                      const memberColor = (ev as AnyEv)._memberColor;
+
+                      return (
+                        <div
+                          key={ev.id}
+                          className={cn(
+                            "absolute left-0.5 right-0.5 rounded border text-[10px] overflow-hidden z-10",
+                            !memberColor && (CAT_CHIP[ev.category ?? ""] || "bg-muted text-foreground border-border"),
+                            isDraggingThis ? "opacity-60 cursor-grabbing shadow-lg" : "cursor-grab hover:brightness-95 hover:shadow-sm",
+                          )}
+                          style={{
+                            top, height,
+                            ...(memberColor ? {
+                              backgroundColor: `${memberColor}22`,
+                              color: memberColor,
+                              borderColor: `${memberColor}55`,
+                            } : {}),
+                          }}
+                          onMouseDown={(e) => {
+                            isDraggingRef.current = false;
+                            startDrag(e, ev, "move");
+                          }}
+                          onClick={(e) => {
+                            if (!isDraggingRef.current) {
+                              e.stopPropagation();
+                              onEventClick(ev);
+                            }
+                          }}
+                        >
+                          <div className="px-1 pt-0.5 flex flex-col h-full">
+                            <div className="font-semibold tabular-nums shrink-0">
+                              {isDraggingThis
+                                ? minToTimeStr(dragging!.currentStart)
+                                : format(startDt, "HH:mm")}
+                            </div>
+                            <div className="truncate">{ev.title}</div>
+                          </div>
+                          {/* Resize handle */}
+                          <div
+                            className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize hover:bg-black/10 rounded-b"
+                            title="ドラッグして長さを変更"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              isDraggingRef.current = true;
+                              startDrag(e, ev, "resize");
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
         </div>
       </div>
     </Card>

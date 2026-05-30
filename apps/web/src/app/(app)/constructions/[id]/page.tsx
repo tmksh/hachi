@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -54,7 +54,6 @@ import {
   seedConstructionEstimates,
   createEmptyEstimateForConstruction,
   copyEstimateForConstruction,
-  getAllConstructionEstimates,
 } from "@/lib/actions/constructions";
 import { getChangeOrders } from "@/lib/actions/change-orders";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
@@ -142,39 +141,7 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
   const [createOpen, setCreateOpen] = useState(false);
   const openedEstimateRef = useRef<string | null>(null);
 
-  const [scope, setScope] = useState<"self" | "all">("self");
-  const [allEstimates, setAllEstimates] = useState<EstimateListItem[]>([]);
-  const [loadingAll, setLoadingAll] = useState(false);
-  const [searchAll, setSearchAll] = useState("");
-
-  useEffect(() => {
-    if (scope !== "all" || allEstimates.length > 0) return;
-    setLoadingAll(true);
-    getAllConstructionEstimates()
-      .then((rows) => setAllEstimates(rows as unknown as EstimateListItem[]))
-      .catch(() => toast.error("見積一覧の読み込みに失敗しました"))
-      .finally(() => setLoadingAll(false));
-  }, [scope]);
-
-  const filteredAllEstimates = useMemo(() => {
-    const q = searchAll.trim().toLowerCase();
-    if (!q) return allEstimates;
-    return allEstimates.filter((r) =>
-      r.estimate_no.toLowerCase().includes(q) ||
-      (r.title ?? "").toLowerCase().includes(q) ||
-      (r.customer?.name ?? "").toLowerCase().includes(q) ||
-      (r.construction?.title ?? "").toLowerCase().includes(q) ||
-      (r.construction?.construction_no ?? "").toLowerCase().includes(q)
-    );
-  }, [allEstimates, searchAll]);
-
   async function handleSelectEstimate(id: string) {
-    const row = allEstimates.find((e) => e.id === id);
-    const targetConstructionId = row?.construction_id ?? row?.construction?.id ?? constructionId;
-    if (targetConstructionId !== constructionId) {
-      window.location.href = `/constructions/${targetConstructionId}?tab=estimate&estimateId=${id}`;
-      return;
-    }
     setSelectedId(id);
     setLoadingEstimate(true);
     try {
@@ -264,39 +231,19 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
   }
 
   // 一覧モード
-  const scopeTabs = (
-    <Tabs value={scope} onValueChange={(v) => setScope(v as "self" | "all")} className="gap-0">
-      <TabsList className="!h-8 p-0.5 group-data-[orientation=horizontal]/tabs:!h-8">
-        <TabsTrigger value="self" className="text-xs px-2.5 h-7 py-0">この工事</TabsTrigger>
-        <TabsTrigger value="all" className="text-xs px-2.5 h-7 py-0">全工事</TabsTrigger>
-      </TabsList>
-    </Tabs>
-  );
-
   return (
     <>
       <EstimateListView
-        estimateList={scope === "self" ? estimateList : filteredAllEstimates}
+        estimateList={estimateList}
         loadingEstimate={loadingEstimate}
-        loading={scope === "all" && loadingAll}
+        loading={false}
         onSelectEstimate={handleSelectEstimate}
         onOpenCreate={() => setCreateOpen(true)}
         title="見積一覧"
-        description={scope === "self" ? "この工事に関連する見積を管理" : "工事管理で作成した見積を顧客横断で閲覧"}
-        showCustomer={scope === "all"}
-        showConstruction={scope === "all"}
-        hideCreate={scope === "all"}
-        headerExtra={scopeTabs}
-        toolbar={
-          scope === "all" ? (
-            <Input
-              placeholder="見積番号・件名・顧客名・工事名で検索..."
-              value={searchAll}
-              onChange={(e) => setSearchAll(e.target.value)}
-              className="h-9 max-w-md"
-            />
-          ) : undefined
-        }
+        description="この工事に関連する見積を管理"
+        showCustomer={false}
+        showConstruction={false}
+        hideCreate={false}
       />
 
       <CreateEstimateDialog

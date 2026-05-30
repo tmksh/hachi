@@ -695,7 +695,7 @@ export default function DashboardPage() {
 
       {/* Header */}
       <div>
-        <h1 className={`text-2xl font-semibold tracking-tight ${TEAL_TITLE}`}>ダッシュボード</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">ダッシュボード</h1>
         <p className={`text-sm mt-1 ${TEAL_MUTED}`}>{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
       </div>
 

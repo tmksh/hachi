@@ -5,22 +5,150 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Loader2, FileDown } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown } from "lucide-react";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   addEstimateCategory,
   addEstimateItem,
   updateEstimateItem,
+  importCategoryFromReference,
   type EstimateItemUpdatePatch,
 } from "@/lib/actions/constructions";
 import {
   EstimatePdfPreviewDialog,
   toEstimatePdfPreviewData,
 } from "@/components/estimate/estimate-pdf-preview-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { getEstimates } from "@/lib/actions/estimates";
+import { getEstimate } from "@/lib/actions/estimates";
 
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
 };
+
+// ---- 見積参照パネル -------------------------------------------------------
+
+type RefEstimate = {
+  id: string;
+  estimate_no: string | null;
+  title: string | null;
+  status: string | null;
+  total: number | null;
+  gross_profit_rate: number | null;
+  categories: EstimateCategory[];
+  items: EstimateItem[];
+};
+
+type EstimateListItem = {
+  id: string;
+  estimate_no: string | null;
+  title: string | null;
+  status: string | null;
+  total: number | null;
+  customer?: { name?: string | null; company_name?: string | null } | null;
+};
+
+function RefPanel({
+  refEstimate,
+  onClose,
+  onDragStart,
+}: {
+  refEstimate: RefEstimate;
+  onClose: () => void;
+  onDragStart: (e: React.DragEvent, categoryId: string) => void;
+}) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  const toggle = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const categoriesWithItems = refEstimate.categories.map((cat) => ({
+    category: cat,
+    items: refEstimate.items.filter((i) => i.category_id === cat.id),
+  }));
+
+  return (
+    <div className="w-[260px] shrink-0 rounded-xl border border-border bg-card flex flex-col overflow-hidden">
+      {/* ヘッダー */}
+      <div className="px-3 py-2 border-b border-border/60 flex items-start gap-1.5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-mono text-muted-foreground">{refEstimate.estimate_no}</span>
+            <span className="text-xs font-semibold truncate">{refEstimate.title ?? "—"}</span>
+            <Badge variant="outline" className="text-[10px] py-0">参照元</Badge>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            合計 ¥{(refEstimate.total ?? 0).toLocaleString()} ・ 粗利率 {(refEstimate.gross_profit_rate ?? 0).toFixed(1)}%
+            &nbsp;・ {refEstimate.categories.length}大項目
+          </p>
+        </div>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
+          onClick={onClose}
+          aria-label="参照パネルを閉じる"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-b border-dashed border-border/40">
+        大項目をドラッグして右側の見積に追加できます
+      </p>
+
+      {/* カテゴリ一覧 */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {categoriesWithItems.length === 0 && (
+          <p className="px-3 py-4 text-xs text-muted-foreground text-center">大項目がありません</p>
+        )}
+        {categoriesWithItems.map(({ category, items: catItems }) => {
+          const expanded = expandedIds.has(category.id);
+          const catSell = catItems.reduce((s, i) => s + (i.selling_amount ?? 0), 0);
+          return (
+            <div key={category.id}>
+              <div
+                draggable
+                onDragStart={(e) => onDragStart(e, category.id)}
+                className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-muted/30 cursor-grab active:cursor-grabbing rounded-sm mx-1 group"
+              >
+                <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                <button
+                  type="button"
+                  className="text-muted-foreground/70 hover:text-foreground shrink-0"
+                  onClick={() => toggle(category.id)}
+                >
+                  {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                </button>
+                <span className="flex-1 text-xs font-medium truncate">
+                  {category.name.trim() || <span className="text-muted-foreground font-normal">大項目名</span>}
+                </span>
+                <span className="text-[10px] text-muted-foreground shrink-0">{catItems.length}項目</span>
+                <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">¥{catSell.toLocaleString()}</span>
+              </div>
+              {expanded && catItems.map((item) => (
+                <div key={item.id} className="pl-9 pr-3 py-0.5 flex justify-between gap-2">
+                  <span className="text-[10px] text-muted-foreground truncate">{item.name}</span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">¥{(item.selling_amount ?? 0).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export type EstimateTotalsPatch = {
   subtotal: number;
@@ -243,6 +371,13 @@ export function EstimateDetailView({
   pdfCustomer?: { name?: string | null; company_name?: string | null } | null;
 }) {
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [refSelectOpen, setRefSelectOpen] = useState(false);
+  const [refEstimateList, setRefEstimateList] = useState<EstimateListItem[]>([]);
+  const [refListLoading, setRefListLoading] = useState(false);
+  const [refEstimate, setRefEstimate] = useState<RefEstimate | null>(null);
+  const [refLoading, setRefLoading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [refSearch, setRefSearch] = useState("");
   const reserve1Rate = estimate.reserve_fee_1_rate ?? 0.02;
   const reserve2Rate = estimate.reserve_fee_2_rate ?? 0.03;
   const subtotal = estimate.subtotal ?? 0;
@@ -310,6 +445,110 @@ export function EstimateDetailView({
   }, [inlineAdd]);
 
   const companyId = estimate.company_id ?? "";
+
+  const openRefSelect = async () => {
+    setRefSelectOpen(true);
+    if (refEstimateList.length > 0) return;
+    setRefListLoading(true);
+    try {
+      const list = await getEstimates();
+      setRefEstimateList(
+        list
+          .filter((e) => e.id !== estimate.id)
+          .map((e) => ({
+            id: e.id,
+            estimate_no: e.estimate_no ?? null,
+            title: (e as { title?: string | null }).title ?? null,
+            status: (e as { status?: string | null }).status ?? null,
+            total: (e as { total?: number | null }).total ?? null,
+            customer: (e as { customer?: { name?: string | null; company_name?: string | null } | null }).customer ?? null,
+          })),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "見積一覧の取得に失敗しました");
+    } finally {
+      setRefListLoading(false);
+    }
+  };
+
+  const handleRefSelect = async (id: string) => {
+    setRefSelectOpen(false);
+    setRefLoading(true);
+    try {
+      const data = await getEstimate(id);
+      setRefEstimate({
+        id: data.id,
+        estimate_no: data.estimate_no ?? null,
+        title: (data as { title?: string | null }).title ?? null,
+        status: (data as { status?: string | null }).status ?? null,
+        total: (data as { total?: number | null }).total ?? null,
+        gross_profit_rate: (data as { gross_profit_rate?: number | null }).gross_profit_rate ?? null,
+        categories: data.categories ?? [],
+        items: data.items ?? [],
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "見積の読み込みに失敗しました");
+    } finally {
+      setRefLoading(false);
+    }
+  };
+
+  const handleRefCatDragStart = (e: React.DragEvent, categoryId: string) => {
+    if (!refEstimate) return;
+    const cat = refEstimate.categories.find((c) => c.id === categoryId);
+    if (!cat) return;
+    const catItems = refEstimate.items.filter((i) => i.category_id === categoryId);
+    e.dataTransfer.setData("application/x-estimate-cat", JSON.stringify({ cat, items: catItems }));
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
+  const handleTableDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-estimate-cat")) {
+      e.preventDefault();
+      setIsDragOver(true);
+    }
+  };
+
+  const handleTableDragLeave = () => setIsDragOver(false);
+
+  const handleTableDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const raw = e.dataTransfer.getData("application/x-estimate-cat");
+    if (!raw) return;
+    let payload: { cat: EstimateCategory; items: EstimateItem[] };
+    try { payload = JSON.parse(raw) as { cat: EstimateCategory; items: EstimateItem[] }; }
+    catch { return; }
+
+    try {
+      const { category: newCat, items: newItems, totals } = await importCategoryFromReference(
+        estimate.id,
+        payload.cat.name,
+        payload.items.map((item) => ({
+          name: item.name,
+          specification: item.specification ?? null,
+          notes: item.notes ?? null,
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit ?? null,
+          cost_price: Number(item.cost_price) || 0,
+          cost_amount: Number(item.cost_amount) || 0,
+          selling_price: Number(item.selling_price) || 0,
+          selling_amount: Number(item.selling_amount) || 0,
+          gross_profit: Number(item.gross_profit) || 0,
+          gross_profit_rate: Number(item.gross_profit_rate) || 0,
+        })),
+      );
+      onEstimateChange({
+        ...estimate,
+        ...totals,
+        categories: [...categories, newCat],
+        items: [...items, ...newItems],
+      });
+      toast.success(`「${payload.cat.name || "大項目"}」を追加しました`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "大項目の追加に失敗しました");
+    }
+  };
 
   const startAddCategory = () => {
     setInlineName("");
@@ -450,6 +689,84 @@ export function EstimateDetailView({
           <Badge variant="outline" className="text-xs">{ESTIMATE_STATUS_MAP[estimate.status] ?? estimate.status}</Badge>
         )}
         <div className="ml-auto flex items-center gap-2">
+          <Popover open={refSelectOpen} onOpenChange={(o) => { setRefSelectOpen(o); if (!o) setRefSearch(""); }}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openRefSelect}
+                disabled={refLoading}
+              >
+                {refLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <BookOpen className="h-4 w-4 mr-1" />
+                }
+                見積参照
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[380px] p-3" align="end">
+              <div className="space-y-2">
+                <div>
+                  <p className="text-sm font-semibold">どの見積もりを参照しますか？</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">大項目をドラッグ&amp;ドロップで追加できます</p>
+                </div>
+                {refListLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />読み込み中…
+                  </div>
+                ) : (
+                  <>
+                    <Input
+                      placeholder="見積番号・件名・顧客名で検索..."
+                      value={refSearch}
+                      onChange={(e) => setRefSearch(e.target.value)}
+                      className="h-8 text-xs"
+                      autoFocus
+                    />
+                    <div className="max-h-[280px] overflow-y-auto -mx-1">
+                      {(() => {
+                        const q = refSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? refEstimateList.filter((e) =>
+                              (e.estimate_no ?? "").toLowerCase().includes(q) ||
+                              (e.title ?? "").toLowerCase().includes(q) ||
+                              (e.customer?.name ?? "").toLowerCase().includes(q) ||
+                              (e.customer?.company_name ?? "").toLowerCase().includes(q)
+                            )
+                          : refEstimateList;
+                        if (filtered.length === 0) {
+                          return (
+                            <p className="py-4 text-center text-xs text-muted-foreground">
+                              {refEstimateList.length === 0 ? "見積がありません" : "検索結果がありません"}
+                            </p>
+                          );
+                        }
+                        return filtered.map((e) => (
+                          <button
+                            key={e.id}
+                            type="button"
+                            onClick={() => handleRefSelect(e.id)}
+                            className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-mono text-muted-foreground shrink-0">{e.estimate_no ?? "—"}</span>
+                              <span className="text-xs font-medium truncate flex-1">{e.title ?? <span className="text-muted-foreground">無題</span>}</span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">¥{(e.total ?? 0).toLocaleString()}</span>
+                            </div>
+                            {(e.customer?.name || e.customer?.company_name) && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 ml-0.5">
+                                {e.customer.company_name ?? e.customer.name}
+                              </p>
+                            )}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
           <Button variant="outline" size="sm" onClick={() => setPdfOpen(true)}>
             <FileDown className="h-4 w-4 mr-1" />PDFプレビュー
           </Button>
@@ -494,7 +811,29 @@ export function EstimateDetailView({
       </div>
 
       {/* 明細テーブル */}
-      <div className="rounded-xl border border-border overflow-x-auto">
+      <div className={cn("flex gap-3 items-start", !refEstimate && "block")}>
+        {refEstimate && (
+          <RefPanel
+            refEstimate={refEstimate}
+            onClose={() => setRefEstimate(null)}
+            onDragStart={handleRefCatDragStart}
+          />
+        )}
+        <div
+          className={cn(
+            "rounded-xl border border-border overflow-x-auto transition-colors",
+            refEstimate && "flex-1 min-w-0",
+            isDragOver && "ring-2 ring-primary/40 border-primary/40 bg-primary/5",
+          )}
+          onDragOver={handleTableDragOver}
+          onDragLeave={handleTableDragLeave}
+          onDrop={handleTableDrop}
+        >
+          {isDragOver && (
+            <div className="px-4 py-2 text-xs text-primary font-medium text-center border-b border-dashed border-primary/30">
+              ここにドロップして大項目を追加
+            </div>
+          )}
         <table className="w-full text-xs border-collapse min-w-[1100px] table-fixed">
           <colgroup>
             <col className="w-8" />
@@ -709,6 +1048,7 @@ export function EstimateDetailView({
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
 
       <EstimatePdfPreviewDialog
