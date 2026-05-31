@@ -14,7 +14,7 @@ ALTER TABLE craftsmen
   ADD COLUMN IF NOT EXISTS payment_notes TEXT;
 
 CREATE TABLE IF NOT EXISTS craftsman_payments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   craftsman_id UUID NOT NULL REFERENCES craftsmen(id) ON DELETE CASCADE,
   amount NUMERIC NOT NULL DEFAULT 0,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS craftsman_payments (
 CREATE INDEX IF NOT EXISTS idx_craftsman_payments_craftsman ON craftsman_payments(craftsman_id);
 
 CREATE TABLE IF NOT EXISTS customer_recordings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   deal_id UUID REFERENCES deals(id) ON DELETE SET NULL,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS customer_recordings (
 CREATE INDEX IF NOT EXISTS idx_customer_recordings_customer ON customer_recordings(customer_id);
 
 CREATE TABLE IF NOT EXISTS customer_scheduling_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   meeting_type TEXT NOT NULL CHECK (meeting_type IN ('in_person','online','phone')) DEFAULT 'in_person',
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS customer_scheduling_requests (
 );
 
 CREATE TABLE IF NOT EXISTS contract_communications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
   platform TEXT NOT NULL CHECK (platform IN ('line','slack','email')),
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS contract_communications (
 );
 
 CREATE TABLE IF NOT EXISTS contract_post_sign_info (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
   label TEXT NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS contract_post_sign_info (
 );
 
 CREATE TABLE IF NOT EXISTS partner_access_tokens (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   token TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL,

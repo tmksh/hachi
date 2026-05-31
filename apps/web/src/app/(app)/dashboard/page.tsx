@@ -28,7 +28,15 @@ import {
   FileText,
   Receipt,
   ClipboardList,
+  Settings2,
+  RotateCcw,
+  MessageSquare,
+  Clock,
+  ClipboardCheck,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import { toast } from "sonner";
 import { getDashboardData } from "@/lib/actions/dashboard";
@@ -38,6 +46,7 @@ import { KpiRow } from "@/components/shared/kpi-row";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import { AdaptiveList } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
+import { useBrandColor } from "@/hooks/use-brand-color";
 import {
   DndContext,
   closestCorners,
@@ -50,16 +59,7 @@ import {
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
-import {
-  TEAL,
-  TEAL_HOVER,
-  TEAL_TITLE,
-  TEAL_MUTED,
-  TEAL_ACTIVE_GRADIENT,
-  TEAL_WON_GRADIENT,
-  CHART_WON_LEGEND,
-  CHART_PIPELINE_LEGEND,
-} from "@/lib/teal-theme";
+import { computeBrandFromHex, type BrandColors } from "@/lib/brand-color";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
@@ -90,8 +90,10 @@ function getTrendChartData(trend: DashboardData["monthlyTrend"] | undefined) {
 /** カードの空きスペースに合わせて高さが伸びる売上トレンドチャート */
 function ResponsiveTrendChart({
   data,
+  brandColors,
 }: {
   data: ReturnType<typeof getTrendChartData>;
+  brandColors: BrandColors;
 }) {
   return (
     <div className="flex-1 min-h-[180px] w-full">
@@ -99,20 +101,20 @@ function ResponsiveTrendChart({
         <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
           <defs>
             <linearGradient id="chartWonGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={TEAL[500]} />
-              <stop offset="100%" stopColor={TEAL[700]} />
+              <stop offset="0%" style={{ stopColor: "var(--brand-light)" }} />
+              <stop offset="100%" style={{ stopColor: "var(--brand-dark)" }} />
             </linearGradient>
             <linearGradient id="chartPipelineGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={TEAL[50]} />
-              <stop offset="100%" stopColor={TEAL[100]} />
+              <stop offset="0%" style={{ stopColor: "var(--brand-accent)" }} />
+              <stop offset="100%" style={{ stopColor: "var(--brand-mid)" }} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={TEAL[50]} vertical={false} />
-          <XAxis dataKey="month" tick={{ fontSize: 11, fill: TEAL[500] }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fontSize: 11, fill: TEAL[500] }} axisLine={false} tickLine={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={brandColors.accent} vertical={false} />
+          <XAxis dataKey="month" tick={{ fontSize: 11, fill: brandColors.light }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: brandColors.light }} axisLine={false} tickLine={false} />
           <Tooltip
-            cursor={{ fill: `${TEAL[50]}88` }}
-            contentStyle={{ background: "#fff", border: `1px solid ${TEAL[100]}`, borderRadius: 10, fontSize: 12, boxShadow: "0 4px 16px rgba(15,81,50,0.08)" }}
+            cursor={{ fill: brandColors.accent + "88" }}
+            contentStyle={{ background: "#fff", border: `1px solid ${brandColors.mid}`, borderRadius: 10, fontSize: 12, boxShadow: `0 4px 16px rgba(var(--primary-rgb),0.08)` }}
             formatter={(v, name) => [`¥${v}万`, name ?? ""]}
           />
           <Bar dataKey="パイプライン" fill="url(#chartPipelineGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
@@ -154,7 +156,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const now = new Date();
 
-  const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths } = useWidgets();
+  const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths, toggleVisible, reset } = useWidgets();
+  const { gradientHex, solidHex, mode: brandMode, setGradientColor, setSolidColor, switchMode, reset: resetColor } = useBrandColor();
+  const brandHex = brandMode === "solid" ? solidHex : gradientHex;
+  const brandColors = computeBrandFromHex(brandHex);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -203,10 +208,14 @@ export default function DashboardPage() {
   const urgentCount = todos.filter((t) => t.priority === "high" && t.status !== "completed").length;
 
   const kpis = [
-    { label: "受注額",      value: formatYen(data?.kpis.wonValue ?? 0),          sub: "今月",   icon: TrendingUp },
-    { label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0),     sub: "見込み", icon: BarChart3 },
-    { label: "顧客数",      value: String(data?.kpis.customerCount ?? 0),          sub: "社",     icon: Users },
-    { label: "進行案件",    value: String(data?.kpis.activeConstructions ?? 0),    sub: "件",     icon: Briefcase },
+    { id: "kpi-won",           label: "受注額",      value: formatYen(data?.kpis.wonValue ?? 0),                              sub: "今月",   icon: TrendingUp },
+    { id: "kpi-pipeline",      label: "パイプライン", value: formatYen(data?.kpis.pipelineValue ?? 0),                        sub: "見込み", icon: BarChart3 },
+    { id: "kpi-customers",     label: "顧客数",      value: String(data?.kpis.customerCount ?? 0),                            sub: "社",     icon: Users },
+    { id: "kpi-constructions", label: "進行案件",     value: String(data?.kpis.activeConstructions ?? 0),                     sub: "件",     icon: Briefcase },
+    { id: "kpi-deals",         label: "商談数",      value: String(data?.kpis.dealCount ?? 0),                                sub: "件",     icon: MessageSquare },
+    { id: "kpi-unpaid",        label: "未入金",      value: formatYen(data?.productionSummary.invoiceUnpaidTotal ?? 0),       sub: "請求中", icon: Receipt },
+    { id: "kpi-approvals",     label: "承認待ち",    value: String(data?.workflow.pendingApprovals ?? 0),                     sub: "件",     icon: Clock },
+    { id: "kpi-contracts",     label: "進行中契約",  value: String(data?.productionSummary.activeContracts ?? 0),             sub: "件",     icon: ClipboardCheck },
   ];
 
   const renderCard = (id: string) => {
@@ -215,7 +224,7 @@ export default function DashboardPage() {
         return !isVisible("attendance") ? null : (
           <div
             className="rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full overflow-hidden"
-            style={{ background: TEAL_WON_GRADIENT }}
+            style={{ background: "var(--brand-gradient)" }}
           >
             <div className="flex items-center justify-between pb-2.5 border-b border-white/20 shrink-0">
               <span className="text-xs font-bold text-white">勤怠打刻</span>
@@ -267,8 +276,8 @@ export default function DashboardPage() {
         return !isVisible("workflow") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${TEAL_TITLE}`}>ワークフロー</span>
-              <Link href="/workflow"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <span className={`text-xs font-bold text-slate-800`}>ワークフロー</span>
+              <Link href="/workflow"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             <div className="flex flex-col gap-2 flex-1">
               {[
@@ -293,7 +302,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />
-                <span className={`text-xs font-bold ${TEAL_TITLE}`}>今日のフォーカス</span>
+                <span className={`text-xs font-bold text-slate-800`}>今日のフォーカス</span>
                 {!loading && todos.length > 0 && (
                   <span className="text-[10px] font-bold text-slate-400 tabular-nums">{todos.length}件</span>
                 )}
@@ -302,7 +311,7 @@ export default function DashboardPage() {
                 {urgentCount > 0 && (
                   <span className="text-[9px] font-bold text-rose-500 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5">急ぎ{urgentCount}</span>
                 )}
-                <Link href="/bi"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+                <Link href="/bi"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
@@ -339,12 +348,12 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
-                <span className={`text-xs font-bold ${TEAL_TITLE}`}>お知らせ</span>
+                <span className={`text-xs font-bold text-slate-800`}>お知らせ</span>
                 {!loading && data?.announcements && data.announcements.length > 0 && (
                   <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 tabular-nums shadow-sm">{data.announcements.length}</span>
                 )}
               </div>
-              <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             {loading ? (
               <div className="flex flex-col gap-2 flex-1 min-h-0">
@@ -384,8 +393,8 @@ export default function DashboardPage() {
         return !isVisible("customers") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${TEAL_TITLE}`}>最近の顧客</span>
-              <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <span className={`text-xs font-bold text-slate-800`}>最近の顧客</span>
+              <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             {loading ? (
               <div className="flex flex-col gap-1 flex-1 min-h-0">
@@ -431,20 +440,20 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2 min-w-0">
-                <span className={`text-xs font-bold ${TEAL_TITLE}`}>売上トレンド</span>
-                <span className={`text-[11px] ${TEAL_MUTED} opacity-70 hidden sm:inline truncate`}>直近7ヶ月 / 万円</span>
+                <span className={`text-xs font-bold text-slate-800`}>売上トレンド</span>
+                <span className={`text-[11px] text-primary/80 opacity-70 hidden sm:inline truncate`}>直近7ヶ月 / 万円</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`flex items-center gap-2 text-[11px] ${TEAL_MUTED}`}>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block" style={{ background: CHART_WON_LEGEND }} />受注額</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block" style={{ background: CHART_PIPELINE_LEGEND }} />パイプライン</span>
+                <div className={`flex items-center gap-2 text-[11px] text-primary/80`}>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block" style={{ background: "var(--brand-gradient)" }} />受注額</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block" style={{ background: `linear-gradient(180deg, var(--brand-accent) 0%, var(--brand-mid) 100%)` }} />パイプライン</span>
                 </div>
               </div>
             </div>
             {loading ? (
               <Skeleton className="flex-1 min-h-[180px] w-full" />
             ) : (
-              <ResponsiveTrendChart data={getTrendChartData(data?.monthlyTrend)} />
+              <ResponsiveTrendChart data={getTrendChartData(data?.monthlyTrend)} brandColors={brandColors} />
             )}
           </div>
         );
@@ -453,8 +462,8 @@ export default function DashboardPage() {
         return !isVisible("deals") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${TEAL_TITLE}`}>商談パイプライン</span>
-              <Link href="/deals"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <span className={`text-xs font-bold text-slate-800`}>商談パイプライン</span>
+              <Link href="/deals"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             {loading ? (
               <div className="flex flex-col gap-1 flex-1 min-h-0">
@@ -510,8 +519,8 @@ export default function DashboardPage() {
         return !isVisible("quotes") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${TEAL_TITLE}`}>最近の見積</span>
-              <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <span className={`text-xs font-bold text-slate-800`}>最近の見積</span>
+              <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             {loading ? (
               <div className="flex flex-col gap-1 flex-1 min-h-0">
@@ -550,8 +559,8 @@ export default function DashboardPage() {
         return !isVisible("production") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${TEAL_TITLE}`}>生産サマリー</span>
-              <Link href="/contracts"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <span className={`text-xs font-bold text-slate-800`}>生産サマリー</span>
+              <Link href="/contracts"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             <div className="flex flex-col gap-1">
               {[
@@ -608,8 +617,8 @@ export default function DashboardPage() {
         return !isVisible("constructions") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${TEAL_TITLE}`}>進行中の工事</span>
-              <Link href="/constructions"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2A8055] transition-colors" /></Link>
+              <span className={`text-xs font-bold text-slate-800`}>進行中の工事</span>
+              <Link href="/constructions"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-x-2 gap-y-1 flex-1 min-h-0 overflow-y-auto content-start">
               {loading ? Array.from({ length: 5 }).map((_, i) => (
@@ -636,14 +645,14 @@ export default function DashboardPage() {
                       <svg viewBox="0 0 100 56" className="w-full h-full block" preserveAspectRatio="xMidYMax meet">
                         <defs>
                           <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor={TEAL[500]} />
-                            <stop offset="100%" stopColor={TEAL[700]} />
+                            <stop offset="0%" style={{ stopColor: "var(--brand-light)" }} />
+                            <stop offset="100%" style={{ stopColor: "var(--brand-dark)" }} />
                           </linearGradient>
                         </defs>
                         <path
                           d={`M 12 50 A ${radius} ${radius} 0 0 1 88 50`}
                           fill="none"
-                          stroke={TEAL[50]}
+                          stroke={brandColors.accent}
                           strokeWidth="11"
                           strokeLinecap="round"
                         />
@@ -661,7 +670,7 @@ export default function DashboardPage() {
                           x="50"
                           y="47"
                           textAnchor="middle"
-                          fill={TEAL[700]}
+                          style={{ fill: "var(--brand-dark)" }}
                           fontSize="18"
                           fontWeight="700"
                           className="tabular-nums"
@@ -694,18 +703,110 @@ export default function DashboardPage() {
     <div className="p-4 md:p-6 space-y-4 min-h-screen">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">ダッシュボード</h1>
-        <p className={`text-sm mt-1 ${TEAL_MUTED}`}>{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">ダッシュボード</h1>
+          <p className="text-sm mt-1 text-muted-foreground">{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5 shrink-0 mt-1">
+              <Settings2 className="h-4 w-4" />
+              表示設定
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 p-3 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold">表示設定</p>
+            </div>
+
+            {/* カラーテーマ セクション */}
+            <div className="flex items-center justify-between px-2 mb-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">テーマカラー</p>
+              <button
+                onClick={resetColor}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                title="デフォルトに戻す"
+              >
+                <RotateCcw className="h-3 w-3" />リセット
+              </button>
+            </div>
+
+            {/* グラデーション */}
+            <div
+              className={`flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${brandMode === "gradient" ? "bg-muted/60" : "hover:bg-muted/30"}`}
+              onClick={() => switchMode("gradient")}
+            >
+              <label className="relative cursor-pointer group shrink-0" onClick={(e) => e.stopPropagation()}>
+                <span
+                  className={`h-9 w-9 rounded-full block shadow-sm transition-all group-hover:scale-105 ${brandMode === "gradient" ? "scale-105" : ""}`}
+                  style={{ background: (() => { const c = computeBrandFromHex(gradientHex); return `linear-gradient(135deg, ${c.light} 0%, ${c.dark} 100%)`; })() }}
+                />
+                <input type="color" value={gradientHex} onChange={(e) => { switchMode("gradient"); setGradientColor(e.target.value); }} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+              </label>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium leading-tight">グラデーション</p>
+                <p className="text-[11px] text-muted-foreground uppercase">{gradientHex.toUpperCase()}</p>
+              </div>
+              {brandMode === "gradient" && <span className="h-1.5 w-1.5 rounded-full bg-foreground shrink-0" />}
+            </div>
+
+            {/* 単色 */}
+            <div
+              className={`flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-colors mb-1 ${brandMode === "solid" ? "bg-muted/60" : "hover:bg-muted/30"}`}
+              onClick={() => switchMode("solid")}
+            >
+              <label className="relative cursor-pointer group shrink-0" onClick={(e) => e.stopPropagation()}>
+                <span
+                  className={`h-9 w-9 rounded-full block shadow-sm transition-all group-hover:scale-105 ${brandMode === "solid" ? "scale-105" : ""}`}
+                  style={{ background: solidHex }}
+                />
+                <input type="color" value={solidHex} onChange={(e) => { switchMode("solid"); setSolidColor(e.target.value); }} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+              </label>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium leading-tight">単色</p>
+                <p className="text-[11px] text-muted-foreground uppercase">{solidHex.toUpperCase()}</p>
+              </div>
+              {brandMode === "solid" && <span className="h-1.5 w-1.5 rounded-full bg-foreground shrink-0" />}
+            </div>
+
+            <div className="border-t border-border/60 mb-3" />
+
+            {/* KPI セクション */}
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">KPI指標</p>
+            <div className="space-y-0.5 mb-3">
+              {widgets.filter((w) => w.id.startsWith("kpi-")).map((w) => (
+                <div key={w.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <span className={`text-sm ${w.visible ? "text-foreground" : "text-muted-foreground"}`}>{w.label}</span>
+                  <Switch checked={w.visible} onCheckedChange={() => toggleVisible(w.id)} className="scale-90" />
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-border/60 mb-3" />
+
+            {/* ウィジェット セクション */}
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">ウィジェット</p>
+            <div className="space-y-0.5">
+              {widgets.filter((w) => !w.id.startsWith("kpi-")).map((w) => (
+                <div key={w.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <span className={`text-sm ${w.visible ? "text-foreground" : "text-muted-foreground"}`}>{w.label}</span>
+                  <Switch checked={w.visible} onCheckedChange={() => toggleVisible(w.id)} className="scale-90" />
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {/* KPI row */}
-      <KpiRow loading={loading} items={kpis.map((kpi) => ({
-        label: kpi.label,
-        value: kpi.value,
-        sub: kpi.sub,
-        icon: kpi.icon,
-      }))} />
+      {/* KPI row — 個別表示制御 */}
+      {kpis.some((k) => isVisible(k.id)) && (
+        <KpiRow
+          loading={loading}
+          items={kpis.filter((k) => isVisible(k.id))}
+          columns={4}
+        />
+      )}
 
       {/* Sortable widget grid */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>

@@ -5,8 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { TEAL_ACTIVE_GRADIENT, TEAL_TITLE } from "@/lib/teal-theme";
-import { BLUE_ACTIVE_GRADIENT } from "@/lib/blue-theme";
+import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, canAccessNavItem, ROLE_LABELS } from "@/lib/constants";
 import { useKpiColor } from "@/hooks/use-kpi-color";
@@ -116,7 +115,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
 
   const unreadCount = notifications.length;
 
-  const useBlueSidebar = pathname.startsWith("/dashboard2");
+  const useBlueSidebar = false;
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
@@ -155,12 +154,9 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
   const sidebarActiveItem = "text-white font-medium shadow-sm";
   const sidebarActiveSubItem = "text-white font-medium shadow-sm";
   const sidebarActiveIndicator = "hidden";
-  const sidebarActiveStyle = {
-    background: useBlueSidebar ? BLUE_ACTIVE_GRADIENT : TEAL_ACTIVE_GRADIENT,
-  };
-  const groupActiveText = useBlueSidebar
-    ? "text-slate-800 dark:text-slate-200"
-    : `${TEAL_TITLE} dark:text-[#D8EDE4]`;
+  // CSS 変数参照にすることで全インスタンス即時反映
+  const sidebarActiveStyle = { background: "var(--brand-gradient)" } as const;
+  const groupActiveText = `${TEAL_TITLE} dark:text-[#D8EDE4]`;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -169,7 +165,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className={cn(
           "fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl",
-          useBlueSidebar && "sidebar-theme-blue",
+          false && "sidebar-theme-blue",
         )}
       >
         {/* Logo — クリックでサイドバー開閉 */}
@@ -205,7 +201,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
           className={cn(
             "flex-1 flex flex-col gap-1 min-h-0 overflow-y-auto",
             expanded ? "py-3 px-2" : "py-2 px-1 items-center",
-            useBlueSidebar && "text-slate-800",
+            false && "text-slate-800",
           )}
         >
           {visibleGroups.map((group) => {

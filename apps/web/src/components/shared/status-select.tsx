@@ -63,10 +63,10 @@ export function StatusSelect({
       <SelectTrigger
         size="sm"
         className={cn(
-          "h-6 min-h-6 w-auto min-w-[4.5rem] px-2.5 rounded-full border text-[11px] font-medium shadow-none",
+          "h-7 min-h-7 w-auto min-w-[5rem] px-3 rounded-full border-0 text-xs font-medium shadow-none justify-center",
           "hover:opacity-90 focus-visible:ring-1 focus-visible:ring-ring/30",
           "bg-transparent dark:bg-transparent dark:hover:bg-transparent",
-          "[&_svg]:size-3 [&_svg]:opacity-60",
+          "[&>svg]:hidden",
           badgeStyle,
           triggerClassName,
         )}
@@ -78,7 +78,7 @@ export function StatusSelect({
           <SelectItem key={opt.value} value={opt.value} className="text-xs">
             <span
               className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                "inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-medium",
                 STATUS_BADGE_STYLES[opt.value] ?? "bg-muted text-muted-foreground border-border",
               )}
             >

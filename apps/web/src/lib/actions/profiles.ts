@@ -68,6 +68,7 @@ export async function updateCompany(input: {
   attendance_settings?: Record<string, unknown>;
   role_permissions?: Record<string, string[]>;
   custom_roles?: Array<{ id: string; name: string; base_role: string; color: string }>;
+  pdf_templates?: Record<string, unknown>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -96,6 +97,7 @@ export async function updateCompany(input: {
     ...(input.attendance_settings !== undefined ? { attendance_settings: input.attendance_settings } : {}),
     ...(input.role_permissions !== undefined ? { role_permissions: input.role_permissions } : {}),
     ...(input.custom_roles !== undefined ? { custom_roles: input.custom_roles } : {}),
+    ...(input.pdf_templates !== undefined ? { pdf_templates: input.pdf_templates } : {}),
   };
 
   const updatePayload: Record<string, unknown> = { settings: newSettings };

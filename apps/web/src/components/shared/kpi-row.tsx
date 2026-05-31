@@ -1,11 +1,10 @@
+"use client";
+
 import type { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  TEAL_CARD_SM,
-  TEAL_KPI_ICON,
-  TEAL_KPI_ICON_STYLE,
-} from "@/lib/teal-theme";
+import { TEAL_CARD_SM, TEAL_KPI_ICON } from "@/lib/teal-theme";
+import { useKpiColor } from "@/hooks/use-kpi-color";
 
 export type KpiItem = {
   label: string;
@@ -36,6 +35,9 @@ export function KpiRow({
   className,
   columns = 4,
 }: KpiRowProps) {
+  useKpiColor(); // CSS 変数初期化のためマウント
+  const iconStyle = { background: "var(--brand-gradient)" } as const;
+
   return (
     <div className={cn(GRID_CLASS[columns], className)}>
       {loading
@@ -55,7 +57,7 @@ export function KpiRow({
                 )}
               >
                 {Icon && (
-                  <div className={TEAL_KPI_ICON} style={TEAL_KPI_ICON_STYLE}>
+                  <div className={TEAL_KPI_ICON} style={iconStyle}>
                     <Icon className={KPI_ICON_INNER} />
                   </div>
                 )}

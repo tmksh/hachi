@@ -90,10 +90,19 @@ export default function ContractsListPage() {
         ]}
       />
 
-      <div className="relative max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" /></div>
-
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList><TabsTrigger value="all">すべて</TabsTrigger><TabsTrigger value="active">有効</TabsTrigger><TabsTrigger value="preparing">準備中</TabsTrigger><TabsTrigger value="completed">完了</TabsTrigger></TabsList>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <TabsList className="shrink-0">
+            <TabsTrigger value="all">すべて</TabsTrigger>
+            <TabsTrigger value="active">有効</TabsTrigger>
+            <TabsTrigger value="preparing">準備中</TabsTrigger>
+            <TabsTrigger value="completed">完了</TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value={tab} className="mt-4">
           <Card variant="inset"><div className="overflow-x-auto">
             <Table><TableHeader><TableRow><TableHead>契約番号</TableHead><TableHead>顧客名</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>契約日</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>

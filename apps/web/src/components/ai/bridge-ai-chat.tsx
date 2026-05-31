@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles, Send, X } from "lucide-react";
-import { TEAL_ACTIVE_GRADIENT } from "@/lib/teal-theme";
 
 export const BRIDGE_AI_PANEL_WIDTH = 400;
 
@@ -28,6 +27,7 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const TEAL_ACTIVE_GRADIENT = "var(--brand-gradient)";
 
   useEffect(() => {
     if (open && messages.length === 0) {
@@ -62,11 +62,11 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="fixed bottom-6 right-6 z-50 size-14 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform"
+          className="fixed bottom-6 right-6 z-50 size-10 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform"
           style={{ background: TEAL_ACTIVE_GRADIENT }}
           aria-label="BRIDGE AI"
         >
-          <Sparkles className="h-6 w-6" />
+          <Sparkles className="h-4 w-4" />
         </button>
       )}
 

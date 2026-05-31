@@ -37,28 +37,30 @@ export default function CraftsmenPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="職人管理" description="協力業者・職人の一覧"><Link href="/craftsmen/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規登録</Button></Link></PageHeader>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px] max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="名前・会社名で検索..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9" /></div>
-        <div className="flex gap-1">{["all","carpenter","electrical","interior","plumbing","general"].map(s => <Button key={s} size="sm" variant={specFilter===s?"default":"outline"} onClick={()=>setSpecFilter(s)}>{s === "all" ? "すべて" : SPEC_LABELS[s]}</Button>)}</div>
-        <div className="segmented-control shrink-0 text-xs ml-auto">
-          {([
-            { key: "grid", label: "カード", Icon: LayoutGrid },
-            { key: "list", label: "一覧", Icon: List },
-          ] as const).map(({ key, label, Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setView(key)}
-              className={cn(
-                "segmented-control-btn",
-                view === key && "segmented-control-btn-active",
-              )}
-              aria-label={`${label}表示`}
-            >
-              <Icon className="shrink-0" />{label}
-            </button>
-          ))}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 min-w-[240px] max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="名前・会社名で検索..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9" /></div>
+          <div className="segmented-control shrink-0 text-xs ml-auto">
+            {([
+              { key: "grid", label: "カード", Icon: LayoutGrid },
+              { key: "list", label: "一覧", Icon: List },
+            ] as const).map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setView(key)}
+                className={cn(
+                  "segmented-control-btn",
+                  view === key && "segmented-control-btn-active",
+                )}
+                aria-label={`${label}表示`}
+              >
+                <Icon className="shrink-0" />{label}
+              </button>
+            ))}
+          </div>
         </div>
+        <div className="flex gap-1">{["all","carpenter","electrical","interior","plumbing","general"].map(s => <Button key={s} size="sm" variant={specFilter===s?"default":"outline"} onClick={()=>setSpecFilter(s)}>{s === "all" ? "すべて" : SPEC_LABELS[s]}</Button>)}</div>
       </div>
       {loading ? (
         view === "grid" ? (

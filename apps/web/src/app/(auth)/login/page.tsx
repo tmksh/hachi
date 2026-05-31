@@ -13,8 +13,11 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { useBrandColor } from "@/hooks/use-brand-color";
+import Image from "next/image";
 
 export default function LoginPage() {
+  useBrandColor(); // localStorage からブランドカラーを読み込んで CSS 変数を適用
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const supabase = createClient();
@@ -68,8 +71,8 @@ export default function LoginPage() {
       <Card className="border-0 shadow-xl shadow-primary/5">
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex items-center justify-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">B</span>
+            <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: "var(--brand-gradient)" }}>
+              <Image src="/logo.png" alt="BRIDGE" width={28} height={28} className="object-contain w-7 h-auto" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">BRIDGE</h1>
           </div>

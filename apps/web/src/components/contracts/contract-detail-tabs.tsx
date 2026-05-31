@@ -153,12 +153,22 @@ function CustomerTab({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+      <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">契約基本情報</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {data.customer && (
+              <div className="flex items-center gap-3 pb-4 border-b border-border/50">
+                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <span className="text-base font-medium text-primary">{data.customer.name.charAt(0)}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">{data.customer.name}</p>
+                  <p className="text-xs text-muted-foreground">{data.customer.company_name ?? "個人"}</p>
+                </div>
+              </div>
+            )}
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground flex items-center gap-1.5 shrink-0">
@@ -251,28 +261,6 @@ function CustomerTab({
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">顧客情報</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.customer ? (
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-lg font-medium text-primary">{data.customer.name.charAt(0)}</span>
-                </div>
-                <div>
-                  <p className="font-medium">{data.customer.name}</p>
-                  <p className="text-sm text-muted-foreground">{data.customer.company_name ?? "個人"}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">顧客情報なし</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
       {data.customer_id ? (
         <CustomerEntryForm mode="edit" customerId={data.customer_id} />

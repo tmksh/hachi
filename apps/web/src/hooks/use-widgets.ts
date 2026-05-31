@@ -19,17 +19,24 @@ export interface WidgetConfig {
 }
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
-  { id: "ai-focus",       label: "AIフォーカス",     visible: true,  order: 0 },
-  { id: "attendance",     label: "勤怠",             visible: true,  order: 1 },
-  { id: "mail",           label: "お知らせ",          visible: true,  order: 2 },
-  { id: "workflow",       label: "ワークフロー",      visible: true,  order: 3 },
-  { id: "kpi",            label: "KPI指標",           visible: true,  order: 4 },
-  { id: "trend",          label: "売上トレンド",      visible: true,  order: 5 },
-  { id: "deals",          label: "商談パイプライン",  visible: true,  order: 6 },
-  { id: "quotes",         label: "最近の見積",        visible: true,  order: 7 },
-  { id: "customers",      label: "最近の顧客",        visible: true,  order: 8 },
-  { id: "production",     label: "生産サマリー",      visible: true,  order: 9 },
-  { id: "constructions",  label: "進行中の工事",      visible: true,  order: 10 },
+  { id: "ai-focus",        label: "AIフォーカス",     visible: true,  order: 0 },
+  { id: "attendance",      label: "勤怠",             visible: true,  order: 1 },
+  { id: "mail",            label: "お知らせ",          visible: true,  order: 2 },
+  { id: "workflow",        label: "ワークフロー",      visible: true,  order: 3 },
+  { id: "kpi-won",           label: "受注額",          visible: true,  order: 4 },
+  { id: "kpi-pipeline",     label: "パイプライン",    visible: true,  order: 5 },
+  { id: "kpi-customers",    label: "顧客数",          visible: true,  order: 6 },
+  { id: "kpi-constructions", label: "進行案件",       visible: true,  order: 7 },
+  { id: "kpi-deals",        label: "商談数",          visible: true,  order: 8 },
+  { id: "kpi-unpaid",       label: "未入金",          visible: true,  order: 9 },
+  { id: "kpi-approvals",    label: "承認待ち",        visible: true,  order: 10 },
+  { id: "kpi-contracts",    label: "進行中契約",      visible: true,  order: 11 },
+  { id: "trend",           label: "売上トレンド",      visible: true,  order: 12 },
+  { id: "deals",           label: "商談パイプライン",  visible: true,  order: 13 },
+  { id: "quotes",          label: "最近の見積",        visible: true,  order: 14 },
+  { id: "customers",       label: "最近の顧客",        visible: true,  order: 15 },
+  { id: "production",      label: "生産サマリー",      visible: true,  order: 16 },
+  { id: "constructions",   label: "進行中の工事",      visible: true,  order: 17 },
 ];
 
 const STORAGE_KEY = "dashboard-widgets-v1";

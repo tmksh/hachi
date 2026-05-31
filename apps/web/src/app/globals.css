@@ -90,6 +90,14 @@
   /* Primary color RGB for rgba() usage — #0F5132 dark forest green */
   --primary-rgb: 15, 81, 50;
   --primary-dark-rgb: 8, 44, 27;
+  /* Brand tokens — overridden by JS (applyBrandPreset) at runtime */
+  --brand-gradient: linear-gradient(135deg, #2a8055 0%, #0f5132 100%);
+  --brand-light: #2a8055;
+  --brand-dark: #0f5132;
+  --brand-accent: #d8ede4;
+  --brand-mid: #a8d4bc;
+  --brand-accent-rgb: 216, 237, 228;
+  --brand-light-rgb: 42, 128, 85;
   /* Background: near-white #F8F9FA */
   --background: oklch(0.980 0.002 240);
   --foreground: oklch(0.15 0.01 240);
@@ -295,16 +303,10 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
   .sidebar-nav-hover:hover {
-    background: rgba(216, 237, 228, 0.75);
+    background: rgba(var(--brand-accent-rgb), 0.75);
   }
   .dark .sidebar-nav-hover:hover {
-    background: rgba(42, 128, 85, 0.22);
-  }
-  .sidebar-theme-blue .sidebar-nav-hover:hover {
-    background: rgba(163, 218, 246, 0.75);
-  }
-  .dark .sidebar-theme-blue .sidebar-nav-hover:hover {
-    background: rgba(43, 110, 168, 0.22);
+    background: rgba(var(--brand-light-rgb), 0.22);
   }
 
   /* ── Input ── */
@@ -329,10 +331,10 @@
     transition: background 0.15s ease;
   }
   .glass-row:hover {
-    background: rgba(216, 237, 228, 0.45) !important;
+    background: rgba(var(--brand-accent-rgb), 0.45) !important;
   }
   .dark .glass-row:hover {
-    background: rgba(42, 128, 85, 0.12) !important;
+    background: rgba(var(--brand-light-rgb), 0.12) !important;
   }
 
   /* ── frost-card-inset 内のテーブル ── */
@@ -387,7 +389,7 @@
     border-bottom: 1px solid #F3F4F6;
   }
   .frost-card-inset tbody .glass-row:hover td {
-    background: rgba(216, 237, 228, 0.45) !important;
+    background: rgba(var(--brand-accent-rgb), 0.45) !important;
   }
   .frost-card-inset tbody tr:last-child td {
     border-bottom: none;
@@ -460,10 +462,10 @@
     color: #111827;
   }
   .segmented-control-btn-active {
-    background: #D8EDE4;
-    color: #0F5132;
+    background: var(--brand-accent);
+    color: var(--brand-dark);
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(15, 81, 50, 0.10);
+    box-shadow: 0 1px 2px rgba(var(--primary-rgb), 0.10);
   }
   .dark .segmented-control,
   .dark .glass-tabs {
@@ -478,8 +480,8 @@
     color: #F9FAFB;
   }
   .dark .segmented-control-btn-active {
-    background: rgba(42, 128, 85, 0.25);
-    color: #A8D4BC;
+    background: rgba(var(--brand-light-rgb), 0.25);
+    color: var(--brand-mid);
     box-shadow: none;
   }
 
@@ -507,7 +509,7 @@
 
   /* ── Icon container ── */
   .neumorph-icon {
-    background: linear-gradient(135deg, #1a7a52 0%, #0a3d26 100%);
+    background: var(--brand-gradient);
     border-radius: 50%;
     border: none;
     display: flex;
@@ -516,7 +518,7 @@
     flex-shrink: 0;
   }
   .dark .neumorph-icon {
-    background: linear-gradient(135deg, #22a068 0%, #0f5132 100%);
+    background: var(--brand-gradient);
   }
 
   /* ── Button overrides ── */
@@ -527,6 +529,28 @@
   .neumorph-btn-primary {
     box-shadow: none !important;
     transition: opacity 0.15s ease !important;
+  }
+
+  /* ── デフォルトボタン — ブランドカラー（CSS変数で動的切替） ── */
+  .btn-brand {
+    background: var(--brand-gradient);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.18),
+      0 1px 3px rgba(var(--primary-rgb), 0.40),
+      0 2px 6px rgba(0,0,0,0.12);
+  }
+  .btn-brand:hover {
+    filter: brightness(1.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 8px rgba(var(--primary-rgb), 0.50),
+      0 3px 8px rgba(0,0,0,0.14);
+  }
+  .btn-brand:active {
+    filter: brightness(0.95);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.20),
+      inset 0 1px 2px rgba(0,0,0,0.10);
   }
 
   /* ── Safe area utility ── */

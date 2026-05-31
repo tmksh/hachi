@@ -15,6 +15,7 @@ import { CraftsmenMasterTab } from "@/components/settings/craftsmen-master-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { AppIntegrationsTab } from "@/components/settings/app-integrations-tab";
 import { WorkflowTypesTab } from "@/components/settings/workflow-types-tab";
+import { PdfBuilderTab } from "@/components/settings/pdf-builder-tab";
 import {
   Select,
   SelectContent,
@@ -513,7 +514,7 @@ export default function SettingsPage() {
       {/* ── 大項目タブ（上部ナビ） ─── */}
       <Tabs defaultValue="personal" className="w-full">
         <TabsList className="w-full justify-start gap-0 border-b rounded-none bg-transparent h-auto pb-0 border-border/60">
-          <TabsTrigger value="personal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">個人</TabsTrigger>
+          <TabsTrigger value="personal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">概要</TabsTrigger>
           {canManageMembers && (
             <>
               <TabsTrigger value="organization" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">組織</TabsTrigger>
@@ -531,6 +532,7 @@ export default function SettingsPage() {
               <TabsTrigger value="security">セキュリティ</TabsTrigger>
               <TabsTrigger value="notifications">通知</TabsTrigger>
               <TabsTrigger value="mail_signature">メール署名</TabsTrigger>
+              {canManageMembers && <TabsTrigger value="pdf_builder">PDF編集</TabsTrigger>}
             </TabsList>
 
         {/* ── アカウント（プロフィール + 会社情報） ─── */}
@@ -817,6 +819,12 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* ── PDF編集 ─── */}
+        {canManageMembers && (
+          <TabsContent value="pdf_builder" className="mt-3">
+            <PdfBuilderTab />
+          </TabsContent>
+        )}
 
       </Tabs> {/* ── 個人 inner Tabs ── */}
     </TabsContent> {/* ── personal outer group ── */}
@@ -899,7 +907,7 @@ export default function SettingsPage() {
                                     onValueChange={(v) => void handleChangeRole(m, v as TeamRole)}
                                     disabled={updatingRoleId === m.id}
                                   >
-                                    <SelectTrigger className={`h-7 text-xs px-2 border ${ROLE_COLOR[m.role]}`}>
+                                    <SelectTrigger className={`h-7 data-[size=default]:h-7 py-0 text-xs px-2 border gap-1 [&>svg:last-child]:hidden ${ROLE_COLOR[m.role]}`}>
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -909,7 +917,7 @@ export default function SettingsPage() {
                                     </SelectContent>
                                   </Select>
                                 ) : (
-                                  <Badge variant="outline" className={`text-xs ${ROLE_COLOR[m.role]}`}>
+                                  <Badge variant="outline" className={`h-7 px-2 text-xs rounded-md ${ROLE_COLOR[m.role]}`}>
                                     {ROLE_LABELS[m.role]}
                                     {isSelf && <span className="ml-1">（自分）</span>}
                                   </Badge>
@@ -950,20 +958,20 @@ export default function SettingsPage() {
                     </CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">クリックで各ロールの機能アクセスを切り替えられます。</p>
                   </div>
-                  <Button size="sm" className="ml-auto shrink-0" onClick={handleSaveRoleSettings} disabled={savingRolePerms}>
-                    <Save className="size-4 mr-1" />
-                    {savingRolePerms ? "保存中..." : "権限を保存"}
-                  </Button>
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
+                    <Button size="sm" variant="outline" className="gap-1" onClick={() => { setEditingRole(null); setNewRoleName(""); setNewRoleBase("employee"); setNewRoleColor("slate"); setAddRoleOpen(true); }}>
+                      <UserPlus className="size-4 mr-1" />ロールを追加
+                    </Button>
+                    <Button size="sm" onClick={handleSaveRoleSettings} disabled={savingRolePerms}>
+                      <Save className="size-4 mr-1" />
+                      {savingRolePerms ? "保存中..." : "権限を保存"}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">ロール一覧</p>
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => { setEditingRole(null); setNewRoleName(""); setNewRoleBase("employee"); setNewRoleColor("slate"); setAddRoleOpen(true); }}>
-                      <UserPlus className="h-3.5 w-3.5" />ロールを追加
-                    </Button>
-                  </div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">ロール一覧</p>
                   <div className="flex flex-wrap gap-2">
                     {SYSTEM_PERMISSION_ROLES.map((role) => (
                       <div key={role} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${ROLE_COLOR[role]}`}>
