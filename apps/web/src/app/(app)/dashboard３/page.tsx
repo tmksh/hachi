@@ -91,7 +91,7 @@ export default function DashboardPage() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const { widgets, hydrated, toggleVisible, moveUp, moveDown, reset } = useWidgets();
-  const { color: kpiColor, setColor: setKpiColor, reset: resetKpiColor } = useKpiColor();
+  const { color: kpiColor, setGradientColor: setKpiColor, reset: resetKpiColor } = useKpiColor();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
