@@ -146,16 +146,7 @@ function ResponsiveClock() {
 
   return (
     <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
-      <AnalogClock
-        size={size}
-        variant="blue"
-        hourColor="#0f172a"
-        minuteColor="#334155"
-        secondColor="#64748b"
-        centerColor="#0f172a"
-        numColor="#475569"
-        tickColor="#cbd5e1"
-      />
+      <AnalogClock size={size} />
     </div>
   );
 }
