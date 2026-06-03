@@ -46,7 +46,7 @@ export async function clockIn() {
 
   const { data: existing } = await supabase
     .from("attendance_entries")
-    .select("id, leave_type")
+    .select("id, leave_type, clock_in_at")
     .eq("user_id", user.id)
     .eq("work_date", today)
     .maybeSingle();

@@ -115,7 +115,7 @@ async function main() {
     confirmDealWon,
     reviewStageProposal,
     getPendingStageProposals,
-  } = await import("../src/lib/actions/sales-flow.ts");
+  } = await import("../src/lib/actions/sales-flow");
 
   // 1-3 processRecordingComplete
   const { data: recording } = await admin.from("customer_recordings").insert({
