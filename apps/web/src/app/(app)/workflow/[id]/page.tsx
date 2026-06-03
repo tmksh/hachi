@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { ArrowLeft, Check, X, CornerUpLeft, MessageSquare, Send } from "lucide-react";
+import { ArrowLeft, Check, X, CornerUpLeft, MessageSquare, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -23,10 +23,13 @@ import {
 import {
   getWorkflowRequest,
   approveWorkflowStep,
+  approveWorkflowStepConditional,
   rejectWorkflowStep,
   remandWorkflowStep,
   addWorkflowComment,
+  getWorkflowApprovalSupport,
 } from "@/lib/actions/workflow";
+import type { ApprovalSupportResult } from "@/lib/integrations/linq-ai/types";
 import { useAuth } from "@/hooks/use-auth";
 
 type Detail = Awaited<ReturnType<typeof getWorkflowRequest>>;
@@ -45,7 +48,7 @@ type Comment = {
   user: { id: string; display_name: string } | null;
 };
 
-type ActionType = "reject" | "remand";
+type ActionType = "reject" | "remand" | "conditional";
 
 export default function WorkflowDetailPage() {
   const { id } = useParams();
@@ -63,11 +66,25 @@ export default function WorkflowDetailPage() {
   const [commentBody, setCommentBody] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const commentRef = useRef<HTMLTextAreaElement>(null);
+  const [approvalSupport, setApprovalSupport] = useState<ApprovalSupportResult | null>(null);
+  const [loadingSupport, setLoadingSupport] = useState(false);
 
   const load = () => {
     if (id) {
       getWorkflowRequest(id as string)
-        .then(setData)
+        .then((detail) => {
+          setData(detail);
+          const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;
+          if (payload?.estimate_id) {
+            setLoadingSupport(true);
+            getWorkflowApprovalSupport(id as string)
+              .then(setApprovalSupport)
+              .catch(() => setApprovalSupport(null))
+              .finally(() => setLoadingSupport(false));
+          } else {
+            setApprovalSupport(null);
+          }
+        })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
@@ -85,7 +102,9 @@ export default function WorkflowDetailPage() {
   };
 
   const openActionDialog = (type: ActionType, stepId: string) => {
-    setActionComment("");
+    setActionComment(type === "conditional" && approvalSupport?.suggestedComment
+      ? approvalSupport.suggestedComment
+      : "");
     setActionDialog({ type, stepId });
   };
 
@@ -96,6 +115,9 @@ export default function WorkflowDetailPage() {
       if (actionDialog.type === "reject") {
         await rejectWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
         toast.success("却下しました");
+      } else if (actionDialog.type === "conditional") {
+        await approveWorkflowStepConditional(actionDialog.stepId, actionComment.trim());
+        toast.success("条件付きで承認しました");
       } else {
         await remandWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
         toast.success("差戻しました");
@@ -229,10 +251,15 @@ export default function WorkflowDetailPage() {
                     )}
                   </div>
                   {canAct && (
-                    <div className="flex gap-1.5 shrink-0">
+                    <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
                       <Button size="sm" onClick={() => handleApprove(step.id)} className="gap-1 h-8">
                         <Check className="h-3.5 w-3.5" />承認
                       </Button>
+                      {(approvalSupport?.recommendation === "conditional" || approvalSupport?.suggestedComment) && (
+                        <Button size="sm" variant="secondary" onClick={() => openActionDialog("conditional", step.id)} className="gap-1 h-8">
+                          <AlertTriangle className="h-3.5 w-3.5" />条件付き
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => openActionDialog("remand", step.id)} className="gap-1 h-8">
                         <CornerUpLeft className="h-3.5 w-3.5" />差戻し
                       </Button>
@@ -247,6 +274,44 @@ export default function WorkflowDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {loadingSupport && (
+        <Card><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
+      )}
+      {approvalSupport && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              承認支援（AIプロバイダーは後日選定・現状はルールベース）
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>{approvalSupport.analysis}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={
+                approvalSupport.recommendation === "approve" ? "default"
+                  : approvalSupport.recommendation === "conditional" ? "secondary"
+                    : "destructive"
+              }>
+                推奨: {
+                  approvalSupport.recommendation === "approve" ? "承認"
+                    : approvalSupport.recommendation === "conditional" ? "条件付き承認"
+                      : approvalSupport.recommendation === "return" ? "差戻し" : "却下"
+                }
+              </Badge>
+              {approvalSupport.suggestedComment && (
+                <span className="text-xs text-muted-foreground">提案コメント: {approvalSupport.suggestedComment}</span>
+              )}
+            </div>
+            {approvalSupport.similarEstimates.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                類似見積: {approvalSupport.similarEstimates.map((e) => `${e.title}(${e.grossProfitRate.toFixed(1)}%)`).join(" / ")}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* コメント */}
       <Card>
@@ -305,18 +370,26 @@ export default function WorkflowDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionDialog?.type === "reject" ? "却下する" : "差戻しする"}
+              {actionDialog?.type === "reject" ? "却下する"
+                : actionDialog?.type === "conditional" ? "条件付きで承認する"
+                  : "差戻しする"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
               {actionDialog?.type === "reject"
                 ? "この申請を却下します。理由があればコメントを入力してください。"
-                : "この申請を申請者に差戻します。修正を依頼する内容を入力してください。"}
+                : actionDialog?.type === "conditional"
+                  ? "条件をコメントに記載して承認します。"
+                  : "この申請を申請者に差戻します。修正を依頼する内容を入力してください。"}
             </p>
             <Textarea
               rows={3}
-              placeholder={actionDialog?.type === "reject" ? "却下理由（任意）" : "差戻し理由・修正依頼内容（任意）"}
+              placeholder={
+                actionDialog?.type === "reject" ? "却下理由（任意）"
+                  : actionDialog?.type === "conditional" ? "承認条件（必須）"
+                    : "差戻し理由・修正依頼内容（任意）"
+              }
               value={actionComment}
               onChange={(e) => setActionComment(e.target.value)}
               autoFocus
@@ -329,9 +402,12 @@ export default function WorkflowDetailPage() {
             <Button
               variant={actionDialog?.type === "reject" ? "destructive" : "default"}
               onClick={handleAction}
-              disabled={actioning}
+              disabled={actioning || (actionDialog?.type === "conditional" && !actionComment.trim())}
             >
-              {actioning ? "処理中..." : actionDialog?.type === "reject" ? "却下する" : "差戻しする"}
+              {actioning ? "処理中..."
+                : actionDialog?.type === "reject" ? "却下する"
+                  : actionDialog?.type === "conditional" ? "条件付き承認する"
+                    : "差戻しする"}
             </Button>
           </DialogFooter>
         </DialogContent>

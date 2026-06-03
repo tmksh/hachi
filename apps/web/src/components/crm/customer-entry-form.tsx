@@ -15,6 +15,7 @@ import { getCustomer, updateCustomer, createCustomer } from "@/lib/actions/custo
 import { getProfiles } from "@/lib/actions/profiles";
 import { getCustomerTagMasters, getLeadSources } from "@/lib/actions/deals";
 import { getBiDepartmentNames } from "@/lib/actions/bi";
+import { suggestLeadAssignee } from "@/lib/actions/sales-flow";
 import type { Customer } from "@/lib/database.types";
 
 const FIELD_SELECT_TRIGGER = "w-full min-w-0";
@@ -122,6 +123,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
   const [tagMasters, setTagMasters] = useState<{ id: string; label: string }[]>([]);
   const [leadSources, setLeadSources] = useState<{ id: string; label: string }[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
+  const [assignSuggesting, setAssignSuggesting] = useState(false);
   const [form, setForm] = useState<FormState>(() =>
     initialCustomer ? customerToForm(initialCustomer) : {
     name: "",
@@ -154,6 +156,24 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
       ...prev,
       tags: prev.tags.includes(label) ? prev.tags.filter(t => t !== label) : [...prev.tags, label],
     }));
+  };
+
+  const suggestAssignee = async () => {
+    setAssignSuggesting(true);
+    try {
+      const result = await suggestLeadAssignee(form.inquiry_content);
+      if (result.recommendedId) {
+        set("assigned_to", result.recommendedId);
+        const top = result.candidates[0];
+        toast.success(`担当者を提案: ${top?.displayName ?? ""}（適合度 ${top?.score ?? 0}）`);
+      } else {
+        toast.info("担当者候補が見つかりませんでした");
+      }
+    } catch {
+      toast.error("担当者提案に失敗しました");
+    } finally {
+      setAssignSuggesting(false);
+    }
   };
 
   useEffect(() => {
@@ -319,7 +339,22 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
           <Input type="date" value={form.inquiry_date} onChange={e => set("inquiry_date", e.target.value)} />
         </div>
         <div className="space-y-2">
-          <Label>担当者</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label>担当者</Label>
+            {mode === "create" && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={assignSuggesting}
+                onClick={() => void suggestAssignee()}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {assignSuggesting ? "提案中..." : "AI担当提案"}
+              </Button>
+            )}
+          </div>
           <Select value={form.assigned_to || "_none"} onValueChange={v => set("assigned_to", v === "_none" ? "" : v)}>
             <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
             <SelectContent>

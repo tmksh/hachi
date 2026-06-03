@@ -1,4 +1,19 @@
+import type { FontSize } from "@/lib/font-size";
+
 export type PdfDocType = "estimate" | "contract" | "invoice";
+
+/** PDF本文の文字サイズ（小・中・大） */
+export const PDF_BODY_FONT_SIZE: Record<FontSize, number> = {
+  sm: 9,
+  md: 11,
+  lg: 13,
+};
+
+export function inferPdfFontSizePreset(px: number): FontSize {
+  if (px <= 9) return "sm";
+  if (px >= 13) return "lg";
+  return "md";
+}
 
 export const PDF_DOC_TYPES: { value: PdfDocType; label: string }[] = [
   { value: "estimate", label: "見積書" },
@@ -20,7 +35,9 @@ export type PdfTemplate = {
   accentColor: string;
   /** 基本フォント */
   fontFamily: string;
-  /** 本文のフォントサイズ(px) */
+  /** 本文の文字サイズ（小・中・大） */
+  fontSizePreset: FontSize;
+  /** 本文のフォントサイズ(px) — preset から自動設定 */
   fontSize: number;
 
   /** 発行元（自社）情報を表示するか */
@@ -68,7 +85,8 @@ const baseTemplate = (): PdfTemplate => ({
   showLogo: false,
   accentColor: "#0F5132",
   fontFamily: "sans-serif",
-  fontSize: 11,
+  fontSizePreset: "md",
+  fontSize: PDF_BODY_FONT_SIZE.md,
   showIssuer: true,
   issuerUseCompany: true,
   issuerName: "",
@@ -125,12 +143,22 @@ export const DEFAULT_PDF_TEMPLATES: PdfTemplates = {
 /** company.settings.pdf_templates から安全に取り出し、欠損キーをデフォルトで補完する */
 export function resolvePdfTemplates(raw: unknown): PdfTemplates {
   const source = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<PdfDocType, Partial<PdfTemplate>>>;
-  const merge = (type: PdfDocType): PdfTemplate => ({
-    ...DEFAULT_PDF_TEMPLATES[type],
-    ...(source[type] ?? {}),
-    columns: { ...DEFAULT_PDF_TEMPLATES[type].columns, ...(source[type]?.columns ?? {}) },
-    sealColumns: source[type]?.sealColumns ?? DEFAULT_PDF_TEMPLATES[type].sealColumns,
-  });
+  const merge = (type: PdfDocType): PdfTemplate => {
+    const partial = source[type] ?? {};
+    const fontSize = typeof partial.fontSize === "number" ? partial.fontSize : DEFAULT_PDF_TEMPLATES[type].fontSize;
+    const fontSizePreset =
+      partial.fontSizePreset === "sm" || partial.fontSizePreset === "md" || partial.fontSizePreset === "lg"
+        ? partial.fontSizePreset
+        : inferPdfFontSizePreset(fontSize);
+    return {
+      ...DEFAULT_PDF_TEMPLATES[type],
+      ...partial,
+      fontSizePreset,
+      fontSize: PDF_BODY_FONT_SIZE[fontSizePreset] ?? fontSize,
+      columns: { ...DEFAULT_PDF_TEMPLATES[type].columns, ...(partial.columns ?? {}) },
+      sealColumns: partial.sealColumns ?? DEFAULT_PDF_TEMPLATES[type].sealColumns,
+    };
+  };
   return {
     estimate: merge("estimate"),
     contract: merge("contract"),

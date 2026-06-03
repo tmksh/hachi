@@ -14,6 +14,7 @@ import { KpiRow } from "@/components/shared/kpi-row";
 import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
 import { DealsTimelineTab } from "@/components/crm/deals-timeline-tab";
 import { RecordingSummaryTab } from "@/components/crm/recording-summary-tab";
+import { StageProposalBanner } from "@/components/crm/stage-proposal-banner";
 import { CustomerTodoTab } from "@/components/crm/customer-todo-tab";
 import { SchedulingTab } from "@/components/crm/scheduling-tab";
 import { CustomerFilesTab } from "@/components/crm/customer-files-tab";
@@ -139,7 +140,7 @@ export default function CrmDetailPage() {
 
   const isCorp = data.customer_type === "corporation" || !!data.company_name;
   const totalDeal = related?.deals.reduce((s, d) => s + (d.value ?? 0), 0) ?? 0;
-  const totalEst = related?.estimates.reduce((s, e) => s + (e.total_amount ?? 0), 0) ?? 0;
+  const totalEst = related?.estimates.reduce((s, e) => s + (e.total ?? 0), 0) ?? 0;
   const totalCon = related?.contracts.reduce((s, c) => s + (c.amount ?? 0), 0) ?? 0;
 
   return (
@@ -249,6 +250,8 @@ export default function CrmDetailPage() {
         </CardContent>
       </Card>
 
+      <StageProposalBanner customerId={id as string} />
+
       <Tabs value={mainTab} onValueChange={handleMainTabChange}>
         <TabsList className="h-auto flex flex-wrap gap-1 w-full justify-start">
           <TabsTrigger value="overview" className="text-xs px-3">概要</TabsTrigger>
@@ -273,7 +276,10 @@ export default function CrmDetailPage() {
         </TabsContent>
 
         <TabsContent value="recording" className="mt-4">
-          <RecordingSummaryTab customerId={id as string} />
+          <RecordingSummaryTab
+            customerId={id as string}
+            dealId={related?.deals?.find((d) => d.stage !== "won" && d.stage !== "lost")?.id}
+          />
         </TabsContent>
 
         <TabsContent value="todo" className="mt-4">
@@ -320,7 +326,7 @@ export default function CrmDetailPage() {
                       <TabsTrigger
                         key={value}
                         value={value}
-                        className="text-xs h-8 px-3 rounded-md gap-1.5 data-[state=active]:bg-[#D8EDE4] data-[state=active]:text-[#0F5132] data-[state=active]:shadow-none"
+                        className="text-xs h-8 px-3 rounded-md gap-1.5 border-transparent data-[state=active]:ui-choice-active data-[state=active]:text-[#0F5132]"
                       >
                         <Icon className="h-3.5 w-3.5" />
                         {label}
@@ -373,7 +379,7 @@ export default function CrmDetailPage() {
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <StatusBadge status={e.status ?? "draft"} />
-                        {e.total_amount != null && <span className="text-xs font-semibold tabular-nums">¥{e.total_amount.toLocaleString()}</span>}
+                        {e.total != null && <span className="text-xs font-semibold tabular-nums">¥{e.total.toLocaleString()}</span>}
                       </div>
                     </RelatedRow>
                   ))}
@@ -421,7 +427,7 @@ export default function CrmDetailPage() {
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="outline" className="text-[10px] h-5">{STATUS_LABELS_CONS[c.status ?? ""] ?? c.status}</Badge>
                         {c.start_date && <span className="text-[11px] text-muted-foreground">{c.start_date}</span>}
-                        <span className="text-xs font-semibold tabular-nums ml-auto">{c.progress_pct ?? 0}%</span>
+                        <span className="text-xs font-semibold tabular-nums ml-auto">{c.progress ?? 0}%</span>
                       </div>
                     </RelatedRow>
                   ))}

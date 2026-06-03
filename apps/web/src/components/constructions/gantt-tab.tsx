@@ -50,7 +50,10 @@ function parseDate(s: string | null): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 function fmtShort(d: Date): string {
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
 }
 function addDays(d: Date, n: number): Date {
   const r = new Date(d); r.setDate(r.getDate() + n); return r;
@@ -69,7 +72,7 @@ function getDaysInMonth(d: Date): number {
 const CELL_W: Record<ViewMode, number> = { day: 32, week: 52, month: 28 };
 /* 左固定エリア幅（名前列 + 日付2列） */
 const COL_NAME  = 200;
-const COL_DATE  = 90;
+const COL_DATE  = 100;
 const LEFT_W    = COL_NAME + COL_DATE * 2;
 const ROW_H     = 44;
 const HEADER_H  = 58; // 月ラベル行 + 日付行
@@ -78,10 +81,10 @@ const EMPTY_FORM = { name: "", start_date: "", end_date: "", status: "not_starte
 
 /* ステータス色 */
 const BAR_COLORS: Record<string, string> = {
-  not_started: "bg-slate-400",
-  in_progress:  "bg-[#6BC9B3]",
+  not_started: "bg-slate-300",
+  in_progress:  "bg-slate-400",
   completed:    "bg-slate-300",
-  on_hold:      "bg-amber-400",
+  on_hold:      "bg-amber-300",
 };
 
 export function GanttTab({ constructionId, initialTasks }: Props) {
@@ -206,14 +209,17 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
         <Button size="sm" onClick={openAdd} className="gap-1.5 h-8 text-xs">
           <Plus className="h-3.5 w-3.5" />工程追加
         </Button>
-        <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
+        <div className="segmented-control">
           {(["day", "week", "month"] as ViewMode[]).map(m => (
-            <button key={m} onClick={() => setViewMode(m)}
-              className={cn("px-3 py-1 text-xs rounded-md font-medium transition-all",
-                viewMode === m
-                  ? "bg-white shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}>
+            <button
+              key={m}
+              type="button"
+              onClick={() => setViewMode(m)}
+              className={cn(
+                "segmented-control-btn text-xs",
+                viewMode === m && "segmented-control-btn-active",
+              )}
+            >
               {m === "day" ? "日" : m === "week" ? "週" : "月"}
             </button>
           ))}
@@ -233,9 +239,9 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                 <div className="sticky left-0 z-30 border-r-2 border-border flex-shrink-0" style={{ width: LEFT_W, backgroundColor: "#F8FAFB" }}>
                   <div className="h-full flex items-end">
                     <div className="flex w-full border-t border-border/50">
-                      <div className="flex-1 px-3 py-2 text-xs font-semibold text-slate-500 border-r border-border/50">工程内容</div>
-                      <div style={{ width: COL_DATE }} className="px-2 py-2 text-xs font-semibold text-slate-500 border-r border-border/50 text-center">開始日</div>
-                      <div style={{ width: COL_DATE }} className="px-2 py-2 text-xs font-semibold text-slate-500 text-center">終了日</div>
+                      <div className="flex-1 px-3 py-2 text-[11px] font-semibold text-slate-500 border-r border-border/50">工程内容</div>
+                      <div style={{ width: COL_DATE }} className="px-2 py-2 text-[11px] font-semibold text-slate-500 border-r border-border/50 text-center">開始日</div>
+                      <div style={{ width: COL_DATE }} className="px-2 py-2 text-[11px] font-semibold text-slate-500 text-center">終了日</div>
                     </div>
                   </div>
                 </div>
@@ -263,7 +269,7 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                         <div key={i} style={{ width: cw }}
                           className={cn(
                             "flex-shrink-0 flex items-center justify-center text-[10px] border-r border-border/30 font-medium select-none",
-                            wknd   ? "bg-rose-50/60 text-rose-400" : "text-slate-400",
+                            wknd   ? "bg-slate-200 text-slate-600" : "text-slate-400",
                             today  && "bg-blue-500 text-white font-bold rounded-sm",
                           )}>
                           {show ? d.getDate() : ""}
@@ -350,7 +356,7 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                       {Array.from({ length: timelineDays }).map((_, i) => {
                         const d = addDays(timelineStart, i);
                         if (!isWeekend(d)) return null;
-                        return <div key={i} className="absolute top-0 bottom-0" style={{ left: i * cw, width: cw, backgroundColor: "#FFF1F2" }} />;
+                        return <div key={i} className="absolute top-0 bottom-0 bg-slate-200" style={{ left: i * cw, width: cw }} />;
                       })}
                       {/* 月区切り縦線 */}
                       {monthHeaders.map((m, i) => (
@@ -377,7 +383,7 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                           title={`${task.name}  ${task.start_date ?? ""} → ${task.end_date ?? ""}`}
                         >
                           {bar.width > 50 && (
-                            <span className="px-2.5 text-[11px] text-white font-semibold truncate drop-shadow-sm">
+                            <span className="px-2.5 text-[11px] text-white/90 font-medium truncate drop-shadow-sm">
                               {task.name}
                             </span>
                           )}

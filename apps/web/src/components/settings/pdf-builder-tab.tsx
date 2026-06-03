@@ -17,24 +17,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Save, FileText, RotateCcw, Plus, X } from "lucide-react";
+import { CONTRACT_TEMPLATES } from "@/lib/contract-templates";
+import {
+  buildSampleContractForm,
+  SAMPLE_CONTRACT_CTX,
+} from "@/lib/contract-pdf";
+import { ContractContentPreview } from "@/components/contracts/contract-content-preview";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { getCompany, updateCompany } from "@/lib/actions/profiles";
 import type { Company } from "@/lib/database.types";
 import {
   PDF_DOC_TYPES,
+  PDF_BODY_FONT_SIZE,
   type PdfDocType,
   type PdfTemplate,
   type PdfTemplates,
   DEFAULT_PDF_TEMPLATES,
   resolvePdfTemplates,
 } from "@/lib/pdf-template";
+import { FONT_SIZE_LABELS, type FontSize } from "@/lib/font-size";
+import { useFontSize } from "@/components/providers/font-size-provider";
 
 const FONT_OPTIONS = [
   { value: "sans-serif", label: "ゴシック体（標準）" },
-  { value: "serif", label: "明朝体" },
-  { value: "'Hiragino Sans', sans-serif", label: "ヒラギノ角ゴ" },
-  { value: "'Yu Gothic', sans-serif", label: "游ゴシック" },
+  { value: "'Yu Gothic', 'Hiragino Sans', sans-serif", label: "ゴシック体（游ゴシック）" },
+  { value: "serif", label: "明朝体（標準）" },
+  { value: "'Yu Mincho', 'YuMincho', '游明朝', 'Hiragino Mincho ProN', serif", label: "明朝体（游明朝）" },
 ];
+
+const FONT_SIZE_PRESETS: FontSize[] = ["sm", "md", "lg"];
 
 const SAMPLE = {
   customer: "サンプル商事 株式会社",
@@ -61,6 +73,7 @@ export function PdfBuilderTab() {
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<PdfTemplates>(DEFAULT_PDF_TEMPLATES);
   const [active, setActive] = useState<PdfDocType>("estimate");
+  const [previewContractId, setPreviewContractId] = useState(CONTRACT_TEMPLATES[0]?.id ?? "construction_contract");
 
   useEffect(() => {
     getCompany()
@@ -125,7 +138,7 @@ export function PdfBuilderTab() {
             PDFテンプレート編集
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            見積書・契約書・請求書のレイアウトを帳票ごとに編集できます。右側はサンプルデータでのプレビューです。
+            見積書・請求書は明細レイアウト、契約書は工事の「契約書作成」と同じ条文プレビューに連携します。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -153,17 +166,49 @@ export function PdfBuilderTab() {
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,420px)_1fr] gap-4">
               {/* ── 編集パネル ── */}
               <div className="space-y-4">
-                <Editor tpl={tpl} update={update} />
+                <Editor tpl={tpl} update={update} docType={d.value} />
               </div>
 
               {/* ── ライブプレビュー ── */}
               <Card className="overflow-hidden">
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 space-y-2">
                   <CardTitle className="text-sm text-muted-foreground">プレビュー（サンプル）</CardTitle>
+                  {d.value === "contract" && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-muted-foreground">
+                        工事詳細の「テンプレートを選択」と同じ契約書種別です
+                      </p>
+                      <div className="segmented-control w-full max-w-md">
+                        {CONTRACT_TEMPLATES.map((ct) => (
+                          <button
+                            key={ct.id}
+                            type="button"
+                            onClick={() => setPreviewContractId(ct.id)}
+                            className={cn(
+                              "segmented-control-btn text-xs flex-1",
+                              previewContractId === ct.id && "segmented-control-btn-active",
+                            )}
+                          >
+                            {ct.name.replace(/契約書$/, "")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-auto rounded-lg border bg-slate-200 p-4 flex justify-center">
-                    <DocPreview tpl={tpl} companyInfo={companyInfo} />
+                    {d.value === "contract" ? (
+                      <ContractContentPreview
+                        pdf={tpl}
+                        contractTemplateId={previewContractId}
+                        form={buildSampleContractForm(previewContractId)}
+                        ctx={SAMPLE_CONTRACT_CTX}
+                        className="shadow-lg w-[595px] min-h-[842px] shrink-0"
+                      />
+                    ) : (
+                      <DocPreview tpl={tpl} companyInfo={companyInfo} />
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -196,7 +241,21 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Editor({ tpl, update }: { tpl: PdfTemplate; update: (p: Partial<PdfTemplate>) => void }) {
+function Editor({
+  tpl,
+  update,
+  docType,
+}: {
+  tpl: PdfTemplate;
+  update: (p: Partial<PdfTemplate>) => void;
+  docType: PdfDocType;
+}) {
+  const { fontSize: appFontSize } = useFontSize();
+
+  const setFontSizePreset = (preset: FontSize) => {
+    update({ fontSizePreset: preset, fontSize: PDF_BODY_FONT_SIZE[preset] });
+  };
+
   return (
     <>
       <Section title="基本">
@@ -229,17 +288,35 @@ function Editor({ tpl, update }: { tpl: PdfTemplate; update: (p: Partial<PdfTemp
             </Select>
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">本文サイズ: {tpl.fontSize}px</Label>
-          <input
-            type="range"
-            min={9}
-            max={14}
-            step={1}
-            value={tpl.fontSize}
-            onChange={(e) => update({ fontSize: Number(e.target.value) })}
-            className="w-full accent-[#0F5132]"
-          />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">文字サイズ</Label>
+            <span className="text-[10px] text-muted-foreground">本文 {tpl.fontSize}px</span>
+          </div>
+          <div className="segmented-control w-full">
+            {FONT_SIZE_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setFontSizePreset(preset)}
+                className={cn(
+                  "segmented-control-btn flex-1 text-sm",
+                  tpl.fontSizePreset === preset && "segmented-control-btn-active",
+                )}
+              >
+                {FONT_SIZE_LABELS[preset]}
+              </button>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs w-full"
+            onClick={() => setFontSizePreset(appFontSize)}
+          >
+            アカウント設定の文字サイズ（{FONT_SIZE_LABELS[appFontSize]}）を反映
+          </Button>
         </div>
       </Section>
 
@@ -310,6 +387,13 @@ function Editor({ tpl, update }: { tpl: PdfTemplate; update: (p: Partial<PdfTemp
         )}
       </Section>
 
+      {docType === "contract" && (
+        <p className="text-[11px] text-muted-foreground rounded-lg border border-dashed border-border px-3 py-2 bg-muted/30">
+          契約書ではフォント・文字サイズ・色が工事の契約書プレビュー／PDF出力に反映されます。明細表の設定は見積・請求書用です。
+        </p>
+      )}
+
+      {docType !== "contract" && (
       <Section title="明細表">
         {([
           ["quantity", "数量"],
@@ -337,7 +421,9 @@ function Editor({ tpl, update }: { tpl: PdfTemplate; update: (p: Partial<PdfTemp
           />
         </div>
       </Section>
+      )}
 
+      {docType !== "contract" && (
       <Section title="期限・振込・備考">
         <Row label="期限を表示">
           <Switch checked={tpl.showValidity} onCheckedChange={(v) => update({ showValidity: v })} />
@@ -368,6 +454,7 @@ function Editor({ tpl, update }: { tpl: PdfTemplate; update: (p: Partial<PdfTemp
           <Input value={tpl.footerText} onChange={(e) => update({ footerText: e.target.value })} placeholder="ご不明な点はお問い合わせください" className="h-8 text-xs" />
         </div>
       </Section>
+      )}
     </>
   );
 }
@@ -423,20 +510,10 @@ function DocPreview({
               {SAMPLE.customer} 御中
             </p>
             <p style={{ color: "#475569" }}>件名: {SAMPLE.title}</p>
-            <div
-              style={{
-                marginTop: "12px",
-                border: `1px solid ${tpl.accentColor}55`,
-                padding: "6px 12px",
-                background: `${tpl.accentColor}0d`,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+            <p style={{ marginTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
               <span style={{ fontWeight: 600 }}>金額（税込）</span>
               <span style={{ fontSize: "15px", fontWeight: "bold" }}>¥{SAMPLE.total.toLocaleString()}</span>
-            </div>
+            </p>
           </div>
 
           <div style={{ textAlign: "right", color: "#475569", minWidth: "190px" }}>

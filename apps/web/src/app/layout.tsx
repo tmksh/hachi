@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { FontSizeProvider } from "@/components/providers/font-size-provider";
+import { FONT_SIZE_INIT_SCRIPT } from "@/lib/font-size";
 import "./globals.css";
 
 const inter = Inter({
@@ -28,13 +30,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: FONT_SIZE_INIT_SCRIPT }} />
+      </head>
       <body
         className={`${inter.variable} ${notoSansJP.variable} font-sans antialiased`}
       >
-        <TooltipProvider delayDuration={300}>
-          {children}
-        </TooltipProvider>
-        <Toaster position="top-right" richColors />
+        <FontSizeProvider>
+          <TooltipProvider delayDuration={300}>
+            {children}
+          </TooltipProvider>
+          <Toaster position="top-right" richColors />
+        </FontSizeProvider>
       </body>
     </html>
   );

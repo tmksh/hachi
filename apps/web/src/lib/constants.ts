@@ -23,6 +23,8 @@ export const NAV_GROUPS = [
     items: [
       { key: "contracts", label: "契約管理", href: "/contracts" },
       { key: "constructions", label: "工事管理", href: "/constructions" },
+      { key: "invoices", label: "請求管理", href: "/invoices" },
+      { key: "budget", label: "予算管理", href: "/budget" },
     ],
   },
   {
@@ -127,6 +129,9 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   quotes:             ["hq_admin", "contractor_admin"],
   craftsmen:          ["hq_admin", "contractor_admin"],
   contracts:          ["hq_admin", "contractor_admin", "admin", "sales"],
+  constructions:      ["hq_admin", "contractor_admin", "admin", "sales", "field_manager"],
+  invoices:           ["hq_admin", "contractor_admin", "admin", "administration"],
+  budget:             ["hq_admin", "contractor_admin", "admin", "executive"],
   "marketing-email":  ["hq_admin"],
   "marketing-sns":    ["hq_admin"],
   "marketing-roi":    ["hq_admin"],

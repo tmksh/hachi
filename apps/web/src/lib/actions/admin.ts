@@ -2,6 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getPlatformLinqAiPublicConfig,
+  savePlatformLinqAiConfig,
+  resolveLinqAiConfig,
+} from "@/lib/integrations/linq-ai/platform-config";
 
 const SUPER_ADMIN_EMAIL = "super-admin@example.com";
 
@@ -491,4 +496,49 @@ export async function deleteAdminCompany(companyId: string) {
   if (companyData?.slug) {
     await netlifyRemoveDomain(companyData.slug).catch(() => {});
   }
+}
+
+/* ─────────────────────── プラットフォーム AI（全テナント共通） ─────────────────────── */
+
+export async function getAdminLinqAiSettings() {
+  await assertSuperAdmin();
+  return getPlatformLinqAiPublicConfig();
+}
+
+export async function updateAdminLinqAiSettings(input: {
+  enabled: boolean;
+  provider?: "openai" | "anthropic" | "google" | "azure";
+  model?: string;
+  apiKey?: string;
+  sttProvider?: "whisper" | "google_speech" | "web_speech";
+}) {
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  await assertSuperAdmin();
+  await savePlatformLinqAiConfig(input, user?.id);
+  return getPlatformLinqAiPublicConfig();
+}
+
+export async function testAdminLinqAiConnection() {
+  await assertSuperAdmin();
+  const config = await resolveLinqAiConfig();
+  if (!config.enabled || !config.apiKey) {
+    return { ok: false, message: "AI が無効、または API キーが未設定です" };
+  }
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: "OK とだけ返してください" }] }],
+        generationConfig: { maxOutputTokens: 16 },
+      }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, message: `Gemini API エラー (${res.status}): ${body.slice(0, 200)}` };
+  }
+  return { ok: true, message: `接続成功 (${config.model})` };
 }

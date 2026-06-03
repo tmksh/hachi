@@ -41,7 +41,14 @@ export async function getWorkflowRequest(id: string) {
     .eq("request_id", id)
     .order("created_at");
 
-  return { ...data, steps: steps || [], comments: comments || [] };
+  return {
+    ...data,
+    steps: steps || [],
+    comments: (comments || []).map((c) => ({
+      ...c,
+      body: (c as { message?: string }).message ?? "",
+    })),
+  };
 }
 
 export async function createWorkflowRequest(input: {
@@ -93,11 +100,53 @@ export async function createWorkflowRequest(input: {
   return data as WorkflowRequest;
 }
 
+async function syncWorkflowPayloadSideEffects(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  requestId: string,
+  outcome: "approved" | "rejected" | "returned",
+) {
+  const { data: request } = await supabase
+    .from("workflow_requests")
+    .select("payload")
+    .eq("id", requestId)
+    .single();
+  if (!request?.payload) return;
+
+  const payload = request.payload as Record<string, unknown>;
+  const estimateId = payload.estimate_id as string | undefined;
+  if (!estimateId) return;
+
+  const statusMap = {
+    approved: "approved",
+    rejected: "rejected",
+    returned: "returned",
+  } as const;
+
+  await supabase.from("estimates").update({
+    approval_status: statusMap[outcome],
+    updated_at: new Date().toISOString(),
+  }).eq("id", estimateId);
+}
+
 export async function approveWorkflowStep(stepId: string, comment?: string) {
+  return approveWorkflowStepInternal(stepId, "approved", comment);
+}
+
+export async function approveWorkflowStepConditional(stepId: string, condition: string) {
+  const trimmed = condition.trim();
+  if (!trimmed) throw new Error("条件付き承認には条件コメントが必要です");
+  return approveWorkflowStepInternal(stepId, "approved", `【条件付き承認】${trimmed}`);
+}
+
+async function approveWorkflowStepInternal(
+  stepId: string,
+  status: "approved",
+  comment?: string,
+) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("workflow_steps")
-    .update({ status: "approved", comment: comment || null, decided_at: new Date().toISOString() })
+    .update({ status, comment: comment || null, decided_at: new Date().toISOString() })
     .eq("id", stepId);
   if (error) throw error;
 
@@ -126,6 +175,7 @@ export async function approveWorkflowStep(stepId: string, comment?: string) {
           id: step.request_id,
           title: request.title,
         });
+        await syncWorkflowPayloadSideEffects(supabase, step.request_id, "approved");
       }
     }
   }
@@ -156,6 +206,7 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
         id: step.request_id,
         title: request.title,
       });
+      await syncWorkflowPayloadSideEffects(supabase, step.request_id, "rejected");
     }
   }
 }
@@ -174,6 +225,7 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
       .from("workflow_requests")
       .update({ status: "submitted", decided_at: null })
       .eq("id", step.request_id);
+    await syncWorkflowPayloadSideEffects(supabase, step.request_id, "returned");
     // 後続ステップをリセット
     await supabase
       .from("workflow_steps")
@@ -225,9 +277,56 @@ export async function addWorkflowComment(requestId: string, body: string) {
     company_id: profile.company_id,
     request_id: requestId,
     user_id: user.id,
-    body,
+    message: body,
   });
   if (error) throw error;
+}
+
+export async function getWorkflowApprovalSupport(requestId: string) {
+  const supabase = await createClient();
+  const { data: request } = await supabase
+    .from("workflow_requests")
+    .select("payload, amount, title")
+    .eq("id", requestId)
+    .single();
+  if (!request) throw new Error("申請が見つかりません");
+
+  const payload = (request.payload ?? {}) as Record<string, unknown>;
+  const estimateId = payload.estimate_id as string | undefined;
+  if (!estimateId) return null;
+
+  const { data: estimate } = await supabase
+    .from("estimates")
+    .select("id, title, gross_profit_rate, total, customer_id")
+    .eq("id", estimateId)
+    .single();
+  if (!estimate) return null;
+
+  const { data: similar } = await supabase
+    .from("estimates")
+    .select("id, title, gross_profit_rate, total")
+    .eq("customer_id", estimate.customer_id ?? "")
+    .neq("id", estimateId)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+
+  const { generateApprovalSupport, resolveLinqAiConfig } = await import("@/lib/integrations/linq-ai");
+  return generateApprovalSupport(
+    {
+      id: estimate.id,
+      title: estimate.title ?? "",
+      grossProfitRate: estimate.gross_profit_rate ?? 0,
+      total: Number(estimate.total ?? 0),
+    },
+    (similar ?? []).map((e) => ({
+      id: e.id,
+      title: e.title ?? "",
+      grossProfitRate: e.gross_profit_rate ?? 0,
+      total: Number(e.total ?? 0),
+    })),
+    String(payload.application_comment ?? ""),
+    await resolveLinqAiConfig(),
+  );
 }
 
 export async function getWorkflowTypes() {

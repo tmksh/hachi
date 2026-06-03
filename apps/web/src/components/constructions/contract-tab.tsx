@@ -9,6 +9,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import {
   Plus, FileText, Pencil, Trash2, ChevronRight, Loader2,
   X, Download, RefreshCw, CheckCircle2, RotateCcw,
   Calendar, CalendarRange, User, MapPin, Wallet,
@@ -23,6 +28,11 @@ import {
 import {
   createContractDoc, updateContractDoc, deleteContractDoc,
 } from "@/lib/actions/constructions";
+import { getCompany } from "@/lib/actions/profiles";
+import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
+import { buildContractPrintHtml } from "@/lib/contract-pdf";
+import { ContractContentPreview } from "@/components/contracts/contract-content-preview";
+import Link from "next/link";
 
 type ContractDoc = {
   id: string;
@@ -174,9 +184,41 @@ function getFieldIcon(fieldName: string, fieldType: string): LucideIcon {
 }
 
 /* ────────────────────────────────────────────
-   カード型フォームフィールドコンポーネント
+   フォームセクション分け
 ──────────────────────────────────────────── */
-import type { TemplateField, FormValues as FV } from "@/lib/contract-templates";
+import type { TemplateField } from "@/lib/contract-templates";
+
+type FieldGroup = { title: string; description?: string; names: string[] };
+
+const FIELD_GROUP_DEFS: FieldGroup[] = [
+  { title: "契約基本", names: ["contract_date", "original_date"] },
+  { title: "当事者", description: "甲（発注者）と乙（請負者）の情報", names: ["kou_name", "kou_address", "otsu_name", "otsu_address"] },
+  { title: "工事・業務", names: ["work_name", "work_location", "original_work", "change_summary", "scope"] },
+  { title: "金額・工期", description: "工期は工程表と連携されます", names: ["amount_excl_tax", "tax_rate", "start_date", "end_date"] },
+  { title: "支払・条件", names: ["payment_terms", "warranty_years", "warranty_include"] },
+  { title: "その他", names: ["special_notes"] },
+];
+
+function groupFields(fields: TemplateField[]): { group: FieldGroup; fields: TemplateField[] }[] {
+  const used = new Set<string>();
+  const result: { group: FieldGroup; fields: TemplateField[] }[] = [];
+
+  for (const def of FIELD_GROUP_DEFS) {
+    const matched = fields.filter(f => def.names.includes(f.name) && !used.has(f.name));
+    if (matched.length === 0) continue;
+    matched.forEach(f => used.add(f.name));
+    result.push({ group: def, fields: matched });
+  }
+
+  const rest = fields.filter(f => !used.has(f.name));
+  if (rest.length > 0) {
+    result.push({ group: { title: "その他", names: [] }, fields: rest });
+  }
+  return result;
+}
+
+const INPUT_CLS =
+  "w-full rounded-lg border border-border/80 bg-white px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/45 focus:border-primary/50 focus:ring-2 focus:ring-primary/10";
 
 function ContractFormField({
   field,
@@ -190,55 +232,224 @@ function ContractFormField({
   const Icon = getFieldIcon(field.name, field.type);
   const isToggle = field.type === "toggle";
   const isChecked = isToggle ? (Number(value) !== 0) : false;
+  const isDate = field.type === "date";
+
+  if (isToggle) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border/80 bg-white px-3 py-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm font-medium text-foreground">
+            {field.label}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={cn("text-xs font-medium", isChecked ? "text-green-600" : "text-muted-foreground")}>
+            {isChecked ? "有効" : "無効"}
+          </span>
+          <Switch checked={isChecked} onCheckedChange={v => onChange(v ? 1 : 0)} />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-xl border border-border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] overflow-hidden">
-      {/* ラベル行 */}
-      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground/70 flex-shrink-0" />
-        <span className="text-[11px] font-medium text-muted-foreground leading-none">
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+        <label className="text-xs font-semibold text-slate-600">
           {field.label}
           {field.required && <span className="text-red-500 ml-0.5">*</span>}
-        </span>
+        </label>
         {field.synced && (
-          <span className="ml-1 text-[10px] text-blue-600 font-medium flex items-center gap-0.5">
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100">
             <CalendarRange className="h-3 w-3" />
-            工程表連携中
+            工程表連携
           </span>
         )}
-        {isToggle && (
-          <div className="ml-auto flex items-center gap-2 pb-1">
-            <Switch
-              checked={isChecked}
-              onCheckedChange={v => onChange(v ? 1 : 0)}
-            />
-            <span className="text-xs text-muted-foreground">{isChecked ? "有効" : "無効"}</span>
-          </div>
-        )}
       </div>
-      {/* 入力欄 */}
-      {!isToggle && (
-        <div className="px-3 pb-2.5">
-          {field.type === "textarea" ? (
-            <textarea
-              value={String(value ?? "")}
-              onChange={e => onChange(e.target.value)}
-              placeholder={field.placeholder}
-              rows={3}
-              className="w-full text-sm bg-transparent resize-none outline-none placeholder:text-muted-foreground/50 leading-relaxed"
-            />
-          ) : (
-            <input
-              type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-              value={String(value ?? "")}
-              onChange={e => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)}
-              placeholder={field.placeholder}
-              className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground/50"
-            />
+      {field.type === "textarea" ? (
+        <textarea
+          value={String(value ?? "")}
+          onChange={e => onChange(e.target.value)}
+          placeholder={field.placeholder ?? "入力してください"}
+          rows={3}
+          className={cn(INPUT_CLS, "resize-none leading-relaxed min-h-[72px]")}
+        />
+      ) : (
+        <div className="relative">
+          {isDate && (
+            <Calendar className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
           )}
+          <input
+            type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+            value={String(value ?? "")}
+            onChange={e => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)}
+            placeholder={field.placeholder ?? "入力してください"}
+            className={cn(INPUT_CLS, isDate && "pl-9", field.type === "number" && "tabular-nums")}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+function ContractFormSection({
+  title,
+  description,
+  fields,
+  form,
+  onChange,
+}: {
+  title: string;
+  description?: string;
+  fields: TemplateField[];
+  form: Record<string, string | number | undefined>;
+  onChange: (name: string, v: string | number) => void;
+}) {
+  const names = new Set(fields.map(f => f.name));
+  const pairAmount = names.has("amount_excl_tax") && names.has("tax_rate");
+  const pairDates = names.has("start_date") && names.has("end_date");
+  const rendered = new Set<string>();
+
+  const fieldEl = (field: TemplateField) => (
+    <ContractFormField
+      key={field.name}
+      field={field}
+      value={form[field.name]}
+      onChange={v => onChange(field.name, v)}
+    />
+  );
+
+  const amountField = fields.find(f => f.name === "amount_excl_tax");
+  const taxField = fields.find(f => f.name === "tax_rate");
+  const startField = fields.find(f => f.name === "start_date");
+  const endField = fields.find(f => f.name === "end_date");
+  const kouFields = fields.filter(f => f.name.startsWith("kou_"));
+  const otsuFields = fields.filter(f => f.name.startsWith("otsu_"));
+  const workName = fields.find(f => f.name === "work_name");
+  const workLoc = fields.find(f => f.name === "work_location");
+  const paymentField = fields.find(f => f.name === "payment_terms");
+  const warrantyYears = fields.find(f => f.name === "warranty_years");
+  const warrantyToggle = fields.find(f => f.name === "warranty_include");
+
+  function renderDefaultFields() {
+    return fields.map(field => {
+      if (rendered.has(field.name)) return null;
+
+      if (pairAmount && field.name === "amount_excl_tax" && amountField && taxField) {
+        rendered.add("amount_excl_tax");
+        rendered.add("tax_rate");
+        return (
+          <div key="amount-row" className="grid grid-cols-1 min-[400px]:grid-cols-[minmax(0,1fr)_minmax(120px,32%)] gap-3">
+            {fieldEl(amountField)}
+            {fieldEl(taxField)}
+          </div>
+        );
+      }
+
+      if (pairDates && field.name === "start_date" && startField && endField) {
+        rendered.add("start_date");
+        rendered.add("end_date");
+        return (
+          <div key="dates-row" className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3">
+            {fieldEl(startField)}
+            {fieldEl(endField)}
+          </div>
+        );
+      }
+
+      rendered.add(field.name);
+      return fieldEl(field);
+    });
+  }
+
+  function renderBody() {
+    /* 当事者：甲・乙を左右2列 */
+    if (title === "当事者" && kouFields.length > 0 && otsuFields.length > 0) {
+      kouFields.forEach(f => rendered.add(f.name));
+      otsuFields.forEach(f => rendered.add(f.name));
+      return (
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-4">
+          <div className="space-y-3 min-w-0">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">甲（発注者）</p>
+            {kouFields.map(fieldEl)}
+          </div>
+          <div className="space-y-3 min-w-0">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">乙（請負者）</p>
+            {otsuFields.map(fieldEl)}
+          </div>
+        </div>
+      );
+    }
+
+    /* 工事・業務：名称と場所を横並び（あれば） */
+    if (title === "工事・業務" && workName && workLoc) {
+      const others = fields.filter(f => f.name !== "work_name" && f.name !== "work_location");
+      rendered.add("work_name");
+      rendered.add("work_location");
+      return (
+        <div className="space-y-3.5">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
+            {fieldEl(workName)}
+            {fieldEl(workLoc)}
+          </div>
+          {others.map(f => {
+            rendered.add(f.name);
+            return fieldEl(f);
+          })}
+        </div>
+      );
+    }
+
+    /* 支払・条件：支払条件は全幅、瑕疵は横並び */
+    if (title === "支払・条件") {
+      const rest = fields.filter(
+        f => f.name !== "payment_terms" && f.name !== "warranty_years" && f.name !== "warranty_include",
+      );
+      return (
+        <div className="space-y-3.5">
+          {paymentField && fieldEl(paymentField)}
+          {(warrantyYears || warrantyToggle) && (
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+              {warrantyYears && fieldEl(warrantyYears)}
+              {warrantyToggle && fieldEl(warrantyToggle)}
+            </div>
+          )}
+          {rest.map(f => {
+            if (rendered.has(f.name)) return null;
+            rendered.add(f.name);
+            return fieldEl(f);
+          })}
+        </div>
+      );
+    }
+
+    /* 契約基本：複数フィールドは横並び */
+    if (title === "契約基本" && fields.length > 1) {
+      return (
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
+          {fields.map(f => {
+            rendered.add(f.name);
+            return fieldEl(f);
+          })}
+        </div>
+      );
+    }
+
+    return <div className="space-y-3.5">{renderDefaultFields()}</div>;
+  }
+
+  return (
+    <section className="rounded-xl border border-border/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden w-full">
+      <div className="px-4 py-2.5 border-b border-border/60 bg-slate-50/80">
+        <h4 className="text-xs font-bold text-slate-700 tracking-wide">{title}</h4>
+        {description && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">{description}</p>
+        )}
+      </div>
+      <div className="px-4 py-3.5 w-full">{renderBody()}</div>
+    </section>
   );
 }
 
@@ -258,6 +469,13 @@ function TemplatePicker({
         <DialogHeader>
           <DialogTitle>テンプレートを選択</DialogTitle>
         </DialogHeader>
+        <p className="text-xs text-muted-foreground pb-2">
+          フォント・文字サイズは
+          <Link href="/settings" className="text-primary underline underline-offset-2 mx-0.5">
+            設定 → PDF編集 → 契約書
+          </Link>
+          と連携します。
+        </p>
         <div className="space-y-2 py-1">
           {CONTRACT_TEMPLATES.map(tpl => (
             <button
@@ -297,13 +515,23 @@ function ContractEditor({
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [status, setStatus] = useState(doc.status);
   const [docId, setDocId] = useState(doc.id);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [pdfTpl, setPdfTpl] = useState<PdfTemplate | null>(null);
 
   const tpl = useMemo(() => findTemplate(tplId)!, [tplId]);
-  const previewHtml = useMemo(() => renderPreview(tpl, form, ctx), [tpl, form, ctx]);
   const isNew = docId === "__new__";
+
+  useEffect(() => {
+    getCompany()
+      .then((c) => {
+        const raw = (c.settings as Record<string, unknown> | null)?.pdf_templates;
+        setPdfTpl(resolvePdfTemplates(raw).contract);
+      })
+      .catch(() => setPdfTpl(resolvePdfTemplates(null).contract));
+  }, []);
 
   // テンプレ切替時：未入力のフィールドだけ初期値で埋める
   useEffect(() => {
@@ -389,14 +617,25 @@ function ContractEditor({
     if (saved) onClose(saved);
   }
 
-  async function handleDelete() {
-    if (isNew) { onClose(); return; }
-    if (!confirm("この契約書を削除します。よろしいですか？")) return;
+  async function executeDelete() {
+    setDeleteOpen(false);
+    if (isNew) {
+      onClose();
+      return;
+    }
     setDeleting(true);
     try {
-      await deleteContractDoc(docId);
+      await deleteContractDoc(docId, constructionId);
+      toast.success("契約書を削除しました");
       onClose(undefined, docId);
-    } catch (e) { console.error(e); } finally { setDeleting(false); }
+    } catch (e) {
+      console.error(e);
+      toast.error("削除に失敗しました", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function handleSyncSchedule() {
@@ -407,28 +646,11 @@ function ContractEditor({
   }
 
   function handlePdfPrint() {
+    const pdf = pdfTpl ?? resolvePdfTemplates(null).contract;
+    const bodyHtml = renderPreview(tpl, form, ctx);
     const win = window.open("", "_blank", "width=900,height=1200");
     if (!win) return;
-    win.document.write(`
-      <!doctype html><html><head><meta charset="utf-8"><title>${tpl.name}</title>
-      <style>
-        body { font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; padding: 48px 56px; color: #111; }
-        h2 { text-align: center; font-size: 22px; letter-spacing: 0.1em; margin-bottom: 32px; }
-        h3 { font-weight: bold; margin: 0 0 8px; font-size: 14px; }
-        p { margin: 4px 0; line-height: 1.7; font-size: 13px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 48px; }
-        .right { text-align: right; }
-        .whitespace-pre-line { white-space: pre-line; }
-        .space-y-6 > * + * { margin-top: 24px; }
-        .font-semibold { font-weight: 600; }
-        .font-bold { font-weight: bold; }
-        .text-sm { font-size: 12px; }
-        .pt-4 { padding-top: 16px; }
-        .pt-8 { padding-top: 32px; }
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-      </style></head><body>${previewHtml}</body></html>
-    `);
+    win.document.write(buildContractPrintHtml(bodyHtml, pdf, tpl.name));
     win.document.close();
     setTimeout(() => win.print(), 300);
   }
@@ -468,23 +690,62 @@ function ContractEditor({
             {confirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             確定する
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" title="削除" onClick={handleDelete} disabled={deleting}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
+            title="削除"
+            onClick={() => setDeleteOpen(true)}
+            disabled={deleting}
+          >
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </Button>
         </div>
       </div>
 
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isNew ? "下書きを破棄しますか？" : "契約書を削除しますか？"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {isNew
+                ? "保存していない契約書の入力内容は失われます。"
+                : "この操作は取り消せません。契約書データが完全に削除されます。"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => void executeDelete()}
+            >
+              {isNew ? "破棄する" : "削除する"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* ── 2カラムレイアウト ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-[calc(100vh-220px)] overflow-hidden rounded-xl border border-border">
         {/* 左：入力フォーム */}
-        <div className="border-r border-border bg-slate-50/40 px-4 md:px-5 py-4 overflow-y-auto h-full">
-          <div className="space-y-2.5 max-w-[520px]">
-            {tpl.fields.map(field => (
-              <ContractFormField
-                key={field.name}
-                field={field}
-                value={form[field.name]}
-                onChange={v => set(field.name, v)}
+        <div className="border-r border-border bg-[#F4F6F8] px-3 md:px-4 py-4 overflow-y-auto h-full min-w-0">
+          <div className="w-full space-y-3.5">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">入力項目</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                入力内容は右のプレビューにリアルタイム反映されます
+              </p>
+            </div>
+            {groupFields(tpl.fields).map(({ group, fields }) => (
+              <ContractFormSection
+                key={group.title}
+                title={group.title}
+                description={group.description}
+                fields={fields}
+                form={form}
+                onChange={set}
               />
             ))}
           </div>
@@ -493,12 +754,26 @@ function ContractEditor({
         {/* 右：プレビュー */}
         <div className="px-4 md:px-6 py-5 overflow-y-auto bg-muted/20 h-full">
           <h3 className="text-sm font-semibold mb-4 text-muted-foreground">プレビュー</h3>
-          <div className="bg-white rounded-xl border border-border shadow-sm p-8 md:p-10 max-w-[640px] mx-auto">
-            <div
-              className="prose prose-sm max-w-none [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-center [&_h2]:tracking-wider [&_h2]:mb-6 [&_h3]:font-bold [&_h3]:text-sm [&_h3]:mb-2 [&_p]:text-[13px] [&_p]:leading-relaxed [&_p]:my-1"
-              dangerouslySetInnerHTML={{ __html: previewHtml }}
+          {pdfTpl ? (
+            <ContractContentPreview
+              pdf={pdfTpl}
+              contractTemplateId={tplId}
+              form={form}
+              ctx={ctx}
+              className="rounded-xl border border-border shadow-sm max-w-[640px] mx-auto"
             />
-          </div>
+          ) : (
+            <div className="rounded-xl border border-border shadow-sm p-8 max-w-[640px] mx-auto text-sm text-muted-foreground">
+              プレビューを読み込み中...
+            </div>
+          )}
+          <p className="text-[10px] text-muted-foreground text-center mt-2 max-w-[640px] mx-auto">
+            表示は
+            <Link href="/settings" className="text-primary underline underline-offset-2 mx-0.5">
+              設定のPDF編集（契約書）
+            </Link>
+            のフォント・サイズ設定に連動しています
+          </p>
         </div>
       </div>
 

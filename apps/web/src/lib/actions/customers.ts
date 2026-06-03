@@ -56,6 +56,24 @@ export async function createCustomer(input: Omit<Customer, "id" | "company_id" |
     company_name: data.company_name,
     status: data.status,
   });
+
+  if (input.inquiry_content?.trim() || input.inquiry_category?.trim()) {
+    const { data: deal } = await supabase.from("deals").insert({
+      company_id: profile.company_id,
+      customer_id: data.id,
+      title: `${data.name} 様 問い合わせ`,
+      stage: "inquiry",
+      assigned_to: input.assigned_to ?? user.id,
+    }).select().single();
+    if (deal) {
+      void dispatchWebhook(profile.company_id, "deal.created", {
+        id: deal.id,
+        customer_id: data.id,
+        title: deal.title,
+      });
+    }
+  }
+
   return data as Customer;
 }
 
@@ -94,9 +112,9 @@ export async function getCustomerRelated(customerId: string) {
   const supabase = await createClient();
   const [dealsRes, estimatesRes, contractsRes, constructionsRes] = await Promise.all([
     supabase.from("deals").select("id, title, stage, value, created_at").eq("customer_id", customerId).order("created_at", { ascending: false }),
-    supabase.from("estimates").select("id, estimate_no, title, total_amount, status, created_at").eq("customer_id", customerId).order("created_at", { ascending: false }),
+    supabase.from("estimates").select("id, estimate_no, title, total, status, created_at").eq("customer_id", customerId).order("created_at", { ascending: false }),
     supabase.from("contracts").select("id, contract_no, title, amount, status, contract_date").eq("customer_id", customerId).order("created_at", { ascending: false }),
-    supabase.from("constructions").select("id, title, status, start_date, end_date, progress_pct").eq("customer_id", customerId).order("created_at", { ascending: false }),
+    supabase.from("constructions").select("id, title, status, start_date, end_date, progress").eq("customer_id", customerId).order("created_at", { ascending: false }),
   ]);
   return {
     deals: dealsRes.data ?? [],

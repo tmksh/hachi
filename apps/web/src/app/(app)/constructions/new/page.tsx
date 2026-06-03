@@ -42,8 +42,14 @@ function ConstructionNewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCustomerId = searchParams.get("customer_id") ?? "";
+  const initialDealId = searchParams.get("deal_id") ?? "";
+  const initialContractId = searchParams.get("contract_id") ?? "";
+  const initialEstimateId = searchParams.get("estimate_id") ?? "";
   const initialTitle = searchParams.get("title") ?? "";
   const initialOrderAmount = searchParams.get("order_amount") ?? "";
+  const initialStartDate = searchParams.get("start_date") ?? "";
+  const initialEndDate = searchParams.get("end_date") ?? "";
+  const initialAssignedTo = searchParams.get("assigned_to") ?? "";
 
   const [saving, setSaving] = useState(false);
   const [contracts, setContracts] = useState<EligibleContract[]>([]);
@@ -52,9 +58,9 @@ function ConstructionNewPageContent() {
   const [titleTouched, setTitleTouched] = useState(Boolean(initialTitle));
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [contractId, setContractId] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [assignedTo, setAssignedTo] = useState(initialAssignedTo);
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
   const [orderAmount, setOrderAmount] = useState(initialOrderAmount);
   const [budgetCost, setBudgetCost] = useState("");
   const [departmentName, setDepartmentName] = useState("");
@@ -88,7 +94,7 @@ function ConstructionNewPageContent() {
     Promise.all([getContracts(), getProfiles(), getBiDepartmentNames()])
       .then(([allContracts, p, depts]) => {
         const eligible = allContracts
-          .filter((c) => ELIGIBLE_STATUSES.has(c.status))
+          .filter((c) => ELIGIBLE_STATUSES.has(c.status) || c.id === initialContractId)
           .map((c) => ({
             id: c.id,
             contract_no: c.contract_no,
@@ -114,13 +120,19 @@ function ConstructionNewPageContent() {
           ? eligible.filter((c) => c.customer_id === initialCustomerId)
           : eligible;
 
-        if (filtered.length === 1) {
+        if (initialContractId) {
+          const fromUrl = eligible.find((c) => c.id === initialContractId);
+          if (fromUrl) {
+            setContractId(fromUrl.id);
+            applyContract(fromUrl);
+          }
+        } else if (filtered.length === 1) {
           setContractId(filtered[0].id);
           applyContract(filtered[0]);
         }
       })
       .catch(() => {});
-  }, [applyContract, initialCustomerId]);
+  }, [applyContract, initialCustomerId, initialContractId]);
 
   const visibleContracts = useMemo(() => {
     if (!initialCustomerId) return contracts;
@@ -164,6 +176,8 @@ function ConstructionNewPageContent() {
         title: title.trim(),
         customer_id: customerId || undefined,
         contract_id: contractId,
+        deal_id: initialDealId || undefined,
+        estimate_id: initialEstimateId || undefined,
         assigned_to: assignedTo || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
@@ -190,6 +204,17 @@ function ConstructionNewPageContent() {
         </Link>
         <h1 className="text-xl font-semibold tracking-tight text-foreground">新規工事登録</h1>
       </div>
+
+      {initialDealId && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900">
+          受注確定フローから遷移しました。契約・見積・顧客情報が自動転記されています。
+          {initialStartDate && initialEndDate && (
+            <span className="block text-xs mt-1 text-emerald-800/80">
+              AI推定工期: {initialStartDate} 〜 {initialEndDate}
+            </span>
+          )}
+        </div>
+      )}
 
       <Card className="py-3 gap-2">
         <CardHeader className="px-4 py-0 pb-2">

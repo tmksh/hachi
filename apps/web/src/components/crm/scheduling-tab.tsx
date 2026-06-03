@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import {
   proposeSchedulingCandidates,
   saveSchedulingRequest,
+  confirmSchedulingCandidate,
   type SchedulingCandidate,
 } from "@/lib/actions/crm-features";
 
@@ -24,6 +25,7 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
   const [calendarLinked, setCalendarLinked] = useState(false);
   const [loadingMode, setLoadingMode] = useState<"basic" | "ai" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const proposeDates = async (optimized: boolean) => {
     setLoadingMode(optimized ? "ai" : "basic");
@@ -33,12 +35,13 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
         time_slot: timeSlot,
         duration_minutes: Number(duration),
         ai_optimized: optimized,
+        customer_id: customerId,
       });
       setCandidates(result.candidates);
       setAiOptimized(result.usedAi);
       setCalendarLinked(result.calendarLinked);
       if (result.candidates.length === 0) {
-        toast.error("空きのある候補日が見つかりませんでした");
+        toast.error("空きのある候補日が見つかりませんでした（ToDo・お知らせに通知しました）");
         return;
       }
       toast.success(
@@ -70,6 +73,23 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
       toast.error("保存に失敗しました。DBマイグレーション（00037）が未適用の可能性があります");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmCandidate = async (candidate: SchedulingCandidate) => {
+    setConfirmingId(candidate.id);
+    try {
+      await confirmSchedulingCandidate({
+        customer_id: customerId,
+        candidate,
+        meeting_type: meetingType,
+        duration_minutes: Number(duration),
+      });
+      toast.success("カレンダーに登録しました");
+    } catch {
+      toast.error("カレンダー登録に失敗しました");
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -189,6 +209,15 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
                       {c.aiScore != null && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">適合度 {c.aiScore}</p>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 h-7 text-xs"
+                        disabled={confirmingId === c.id}
+                        onClick={() => void confirmCandidate(c)}
+                      >
+                        {confirmingId === c.id ? "登録中..." : "この日時で確定 → カレンダー登録"}
+                      </Button>
                     </div>
                   </div>
                 </li>

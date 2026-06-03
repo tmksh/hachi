@@ -6,7 +6,7 @@ import { ja } from "date-fns/locale";
 
 export type Notification = {
   id: string;
-  type: "announcement" | "workflow" | "calendar";
+  type: "announcement" | "workflow" | "calendar" | "sales_flow";
   title: string;
   body?: string;
   href: string;
@@ -37,11 +37,12 @@ export async function getNotifications(): Promise<Notification[]> {
     { data: upcomingEvents },
     { data: decidedRequests },
     { data: remandedSteps },
+    { data: urgentSalesTodos },
   ] = await Promise.all([
     supabase.from("announcement_reads").select("announcement_id").eq("user_id", user.id),
     supabase
       .from("announcements")
-      .select("id, title, body, is_urgent, published_at, target_type, target_roles")
+      .select("id, title, body, is_urgent, published_at, target_type, target_roles, target_user_ids")
       .order("published_at", { ascending: false })
       .limit(30),
     supabase.from("workflow_steps").select("id, request_id").eq("approver_id", user.id).eq("status", "pending").limit(10),
@@ -71,6 +72,15 @@ export async function getNotifications(): Promise<Notification[]> {
       .gte("decided_at", in7daysAgo.toISOString())
       .order("decided_at", { ascending: false })
       .limit(10),
+    supabase
+      .from("todos")
+      .select("id, title, description, due_date, customer_id, deal_id, created_at")
+      .eq("assigned_to", user.id)
+      .eq("priority", "high")
+      .neq("status", "completed")
+      .contains("tags", ["sales_flow"])
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   const readIdSet = new Set((readRecords || []).map((r) => r.announcement_id));
@@ -79,6 +89,10 @@ export async function getNotifications(): Promise<Notification[]> {
   const announcementNotifs: Notification[] = (announcements || [])
     .filter((a) => !readIdSet.has(a.id))
     .filter((a) => {
+      if (a.target_type === "individuals") {
+        const targets: string[] = (a.target_user_ids as string[] | null) ?? [];
+        return targets.length === 0 || targets.includes(user.id);
+      }
       if (a.target_type !== "roles") return true;
       const targets: string[] = (a.target_roles as string[] | null) ?? [];
       if (targets.length === 0) return true;
@@ -159,7 +173,17 @@ export async function getNotifications(): Promise<Notification[]> {
     };
   });
 
-  return [...announcementNotifs, ...workflowNotifs, ...decidedNotifs, ...remandNotifs, ...calendarNotifs]
+  const salesFlowNotifs: Notification[] = (urgentSalesTodos ?? []).map((t) => ({
+    id: `sf_${t.id}`,
+    type: "sales_flow" as const,
+    title: t.title,
+    body: t.description ?? undefined,
+    href: t.customer_id ? `/crm/${t.customer_id}` : "/dashboard",
+    created_at: t.created_at,
+    is_urgent: true,
+  }));
+
+  return [...announcementNotifs, ...workflowNotifs, ...decidedNotifs, ...remandNotifs, ...salesFlowNotifs, ...calendarNotifs]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 20);
 }

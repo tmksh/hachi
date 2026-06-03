@@ -26,6 +26,7 @@ import {
   Wallet, User2, FileText,
   PackageCheck, ExternalLink,
   Plus, Trash2, Loader2, Wand2,
+  CalendarDays, ScrollText, PencilLine, BookOpen, Receipt, FolderOpen,
 } from "lucide-react";
 import {
   getConstruction,
@@ -790,13 +791,13 @@ export default function ConstructionDetailPage() {
       {/* ── タブ ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
-          <TabsTrigger value="schedule"  className="text-xs">工程表</TabsTrigger>
-          <TabsTrigger value="estimate"  className="text-xs">見積もり</TabsTrigger>
-          <TabsTrigger value="contract"  className="text-xs">契約書</TabsTrigger>
-          <TabsTrigger value="change"    className="text-xs">追加変更</TabsTrigger>
-          <TabsTrigger value="budget"    className="text-xs">工事台帳</TabsTrigger>
-          <TabsTrigger value="orders"    className="text-xs">発注書</TabsTrigger>
-          <TabsTrigger value="invoices"  className="text-xs">請求書</TabsTrigger>
+          <TabsTrigger value="schedule"  className="text-xs gap-1.5"><CalendarDays className="h-3.5 w-3.5" />工程表</TabsTrigger>
+          <TabsTrigger value="estimate"  className="text-xs gap-1.5"><FileText     className="h-3.5 w-3.5" />見積もり</TabsTrigger>
+          <TabsTrigger value="contract"  className="text-xs gap-1.5"><ScrollText   className="h-3.5 w-3.5" />契約書</TabsTrigger>
+          <TabsTrigger value="change"    className="text-xs gap-1.5"><PencilLine   className="h-3.5 w-3.5" />追加変更</TabsTrigger>
+          <TabsTrigger value="budget"    className="text-xs gap-1.5"><BookOpen     className="h-3.5 w-3.5" />工事台帳</TabsTrigger>
+          <TabsTrigger value="orders"    className="text-xs gap-1.5"><PackageCheck className="h-3.5 w-3.5" />発注書・請書</TabsTrigger>
+          <TabsTrigger value="invoices"  className="text-xs gap-1.5"><Receipt      className="h-3.5 w-3.5" />請求書</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schedule" className="mt-4">

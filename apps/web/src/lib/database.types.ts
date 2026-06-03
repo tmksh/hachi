@@ -346,6 +346,7 @@ export type Announcement = {
   target_type: 'all' | 'roles' | 'departments' | 'individuals';
   target_roles: string[];
   target_departments: string[];
+  target_user_ids: string[];
   due_date: string | null;
   published_at: string;
   created_at: string;

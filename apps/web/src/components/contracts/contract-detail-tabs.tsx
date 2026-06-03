@@ -21,7 +21,17 @@ import {
   createEmptyEstimateForContract, copyEstimateForContract,
 } from "@/lib/actions/contract-features";
 import { getEstimate } from "@/lib/actions/estimates";
-import { CONTRACT_TEMPLATES } from "@/lib/contract-templates";
+import { Calendar, FileText } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, type FormValues, type RenderContext } from "@/lib/contract-templates";
+import { ContractContentPreview } from "@/components/contracts/contract-content-preview";
+import { getCompany } from "@/lib/actions/profiles";
+import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
+import { buildContractPrintHtml } from "@/lib/contract-pdf";
+import { autoFillContractFields } from "@/lib/integrations/linq-ai";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
@@ -30,7 +40,6 @@ import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dial
 import { StatusSelect } from "@/components/shared/status-select";
 import { Label } from "@/components/ui/label";
 import { updateContract } from "@/lib/actions/contracts";
-import { Calendar, FileText } from "lucide-react";
 
 export function ContractDetailTabs({
   data,
@@ -56,7 +65,9 @@ export function ContractDetailTabs({
         <CustomerTab data={data} contractId={contractId} onRefresh={onRefresh} />
       </TabsContent>
       <TabsContent value="messaging" className="mt-4"><MessagingTab contractId={contractId} /></TabsContent>
-      <TabsContent value="documents" className="mt-4"><DocumentsTab contractId={contractId} customerName={data.customer?.name} /></TabsContent>
+      <TabsContent value="documents" className="mt-4">
+        <DocumentsTab contractId={contractId} data={data} onRefresh={onRefresh} />
+      </TabsContent>
       <TabsContent value="workflow" className="mt-4"><WorkflowTab contractId={contractId} title={data.title} /></TabsContent>
       <TabsContent value="esign" className="mt-4"><EsignTab contractId={contractId} customerEmail={data.customer?.email} /></TabsContent>
       <TabsContent value="files" className="mt-4"><FilesTab contractId={contractId} /></TabsContent>
@@ -351,47 +362,185 @@ function MessagingTab({ contractId }: { contractId: string }) {
   );
 }
 
-function DocumentsTab({ contractId, customerName }: { contractId: string; customerName?: string }) {
-  const [templateId, setTemplateId] = useState(CONTRACT_TEMPLATES[0]?.id ?? "");
+function parseContractDraft(notes: string | null | undefined): { template_id: string; form: FormValues } | null {
+  if (!notes) return null;
+  try {
+    const parsed = JSON.parse(notes) as { contract_draft?: { template_id: string; form: FormValues } };
+    if (parsed.contract_draft?.template_id) return parsed.contract_draft;
+  } catch {
+    // plain text notes
+  }
+  return null;
+}
+
+function DocumentsTab({
+  contractId,
+  data,
+  onRefresh,
+}: {
+  contractId: string;
+  data: ContractDetail;
+  onRefresh?: () => void;
+}) {
+  const draft = parseContractDraft(data.notes);
+  const [templateId, setTemplateId] = useState(draft?.template_id ?? CONTRACT_TEMPLATES[0]?.id ?? "");
   const tpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId);
+  const renderCtx: RenderContext = {
+    construction: {
+      title: data.title,
+      start_date: data.start_date ?? null,
+      end_date: data.end_date ?? null,
+      order_amount: data.amount ?? null,
+    },
+    customer: data.customer ? {
+      name: data.customer.name,
+      address: null,
+    } : null,
+  };
+  const [form, setForm] = useState<FormValues>(() => draft?.form ?? (tpl ? buildDefaults(tpl, renderCtx) : {}));
+  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getCompany().then((c) => {
+      const templates = resolvePdfTemplates((c?.settings as Record<string, unknown> | undefined)?.pdf_templates);
+      setPdfTemplate(templates.contract ?? templates.estimate ?? null);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!tpl) return;
+    setForm((prev) => ({ ...buildDefaults(tpl, renderCtx), ...prev }));
+  }, [templateId]);
+
+  const persistDraft = async (nextForm: FormValues, nextTemplateId = templateId) => {
+    setSaving(true);
+    try {
+      let notesPayload: Record<string, unknown> = {};
+      try {
+        notesPayload = data.notes ? JSON.parse(data.notes) as Record<string, unknown> : {};
+      } catch {
+        notesPayload = { legacy_notes: data.notes };
+      }
+      notesPayload.contract_draft = { template_id: nextTemplateId, form: nextForm };
+      await updateContract(contractId, { notes: JSON.stringify(notesPayload) });
+      onRefresh?.();
+    } catch {
+      toast.error("保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const autoFill = async () => {
+    if (!tpl) return;
+    const mappings = tpl.fields.map((f) => ({ fieldKey: f.name, source: "customer" as const }));
+    const baseValues = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, String(v)]));
+    const result = await autoFillContractFields(mappings, baseValues);
+    const next = { ...form };
+    for (const field of result.fields) next[field.fieldKey] = field.value;
+    setForm(next);
+    void persistDraft(next);
+    toast.success("顧客情報を転記しました");
+  };
+
+  const previewPdf = async () => {
+    if (!tpl || !pdfTemplate) {
+      toast.error("プレビュー準備中です");
+      return;
+    }
+    const html = buildContractPrintHtml(renderPreview(tpl, form, renderCtx), pdfTemplate, tpl.name);
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  };
 
   return (
     <Card><CardContent className="p-4 space-y-4">
-      <p className="text-sm text-muted-foreground">テンプレートを選択すると顧客情報が自動転記されます</p>
-      <Select value={templateId} onValueChange={setTemplateId}>
-        <SelectTrigger><SelectValue placeholder="テンプレート" /></SelectTrigger>
-        <SelectContent>
-          {CONTRACT_TEMPLATES.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <p className="text-sm text-muted-foreground">テンプレートを選択すると顧客情報が自動転記されます（編集は自動保存）</p>
+      <div className="flex flex-wrap gap-2">
+        <Select value={templateId} onValueChange={(v) => { setTemplateId(v); void persistDraft(form, v); }}>
+          <SelectTrigger className="max-w-xs"><SelectValue placeholder="テンプレート" /></SelectTrigger>
+          <SelectContent>
+            {CONTRACT_TEMPLATES.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={() => void autoFill()}>AI自動入力</Button>
+        {saving && <span className="text-xs text-muted-foreground self-center">保存中...</span>}
+      </div>
+      {tpl && pdfTemplate && (
+        <div className="rounded-lg border overflow-auto max-h-[480px] bg-white">
+          <ContractContentPreview pdf={pdfTemplate} contractTemplateId={templateId} form={form} ctx={renderCtx} />
+        </div>
+      )}
       {tpl && (
-        <div className="rounded-lg border p-4 bg-muted/20 text-sm space-y-2">
-          <p className="font-semibold">{tpl.name}</p>
-          <p>契約者: {customerName ?? "—"}</p>
-          <p className="text-xs text-muted-foreground whitespace-pre-wrap">{tpl.description}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {tpl.fields.slice(0, 8).map((field) => (
+            <div key={field.name} className="space-y-1">
+              <Label className="text-xs">{field.label}</Label>
+              <Input
+                value={String(form[field.name] ?? "")}
+                onChange={(e) => {
+                  const next = { ...form, [field.name]: e.target.value };
+                  setForm(next);
+                  void persistDraft(next);
+                }}
+              />
+            </div>
+          ))}
         </div>
       )}
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => toast.info("PDFプレビューを表示（印刷ダイアログ）")}>PDFプレビュー</Button>
-        <Button size="sm" onClick={() => toast.success("PDFをダウンロードしました")}>ダウンロード</Button>
-        <Button size="sm" variant="secondary" onClick={() => toast.success("送付処理を開始しました")}>送付</Button>
+        <Button size="sm" variant="outline" onClick={() => void previewPdf()}>PDFプレビュー</Button>
+        <Button size="sm" onClick={() => void previewPdf()}>ダウンロード（印刷）</Button>
       </div>
     </CardContent></Card>
   );
 }
 
 function WorkflowTab({ contractId, title }: { contractId: string; title: string }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const req = await submitContractWorkflow(contractId, title);
+      toast.success(`申請しました（${req.id.slice(0, 8)}…）`);
+      setConfirmOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "申請に失敗");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <Card><CardContent className="p-4 space-y-3">
-      <p className="text-sm">最新契約書の内容でワークフロー申請を行います</p>
-      <Button size="sm" onClick={async () => {
-        try {
-          const req = await submitContractWorkflow(contractId, title);
-          toast.success(`申請しました（${req.id.slice(0, 8)}…）`);
-        } catch (e) { toast.error(e instanceof Error ? e.message : "申請に失敗"); }
-      }}>承認ワークフローに申請</Button>
-      <Link href="/workflow" className="text-xs text-primary hover:underline block">ワークフロー履歴を見る →</Link>
-    </CardContent></Card>
+    <>
+      <Card><CardContent className="p-4 space-y-3">
+        <p className="text-sm">最新契約書の内容でワークフロー申請を行います</p>
+        <Button size="sm" onClick={() => setConfirmOpen(true)}>承認ワークフローに申請</Button>
+        <Link href="/workflow" className="text-xs text-primary hover:underline block">ワークフロー履歴を見る →</Link>
+      </CardContent></Card>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>社内承認を取りますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              契約書の内容を確定し、社内承認ワークフロー（営業部長 / 工事課長 / 取締役 等）に申請します。よろしいですか？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction disabled={submitting} onClick={(e) => { e.preventDefault(); void submit(); }}>
+              {submitting ? "申請中..." : "申請する"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

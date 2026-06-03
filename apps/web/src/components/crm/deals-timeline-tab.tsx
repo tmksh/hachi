@@ -12,8 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { DealActivity } from "@/lib/database.types";
-import { getCustomerDealsWithActivities, updateDealSummary } from "@/lib/actions/crm-features";
-import { Briefcase, Clock, Inbox, Plus, Save } from "lucide-react";
+import { getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo } from "@/lib/actions/crm-features";
+import { Briefcase, Clock, Inbox, Plus, Save, ListTodo, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -51,6 +51,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [summaryDraft, setSummaryDraft] = useState("");
+  const [selection, setSelection] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -85,6 +86,27 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       toast.error("保存に失敗しました");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const addTodoFromSelection = async () => {
+    const text = selection || summaryDraft;
+    if (!text.trim()) {
+      toast.error("テキストを選択するか要約を入力してください");
+      return;
+    }
+    if (!selectedId) return;
+    try {
+      await createCustomerTodo({
+        customer_id: customerId,
+        deal_id: selectedId,
+        title: text.slice(0, 80),
+        description: text,
+        source: "deal_timeline",
+      });
+      toast.success("ToDoに追加しました");
+    } catch {
+      toast.error("ToDo追加に失敗しました");
     }
   };
 
@@ -156,6 +178,21 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               )}
             </div>
             <CardTitle className="text-base truncate">{selected.title}</CardTitle>
+            <div className="flex flex-wrap gap-1.5">
+              {(selected.tags ?? []).map((tag: string) => (
+                <Badge key={tag} variant="secondary" className="text-[10px] h-5 font-normal">{tag}</Badge>
+              ))}
+            </div>
+            {selected.next_action && (
+              <p className="text-xs text-muted-foreground">
+                次アクション: <span className="text-foreground">{selected.next_action}</span>
+              </p>
+            )}
+            {selected.expected_close_date && (
+              <p className="text-xs text-muted-foreground">
+                見込みクローズ: {format(new Date(selected.expected_close_date), "yyyy/MM/dd", { locale: ja })}
+              </p>
+            )}
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span>更新 {format(new Date(selected.updated_at), "yyyy/MM/dd HH:mm", { locale: ja })}</span>
               {assigneeName && <span>担当 {assigneeName}</span>}
@@ -167,13 +204,29 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       <CardContent className="px-4 py-4 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="deal-summary" className="text-sm font-semibold">商談要約</Label>
-          <Textarea
-            id="deal-summary"
-            value={summaryDraft}
-            onChange={(e) => setSummaryDraft(e.target.value)}
-            rows={4}
-            placeholder="商談の要点・次のアクションなどを記録..."
-          />
+          <div className="relative">
+            <Textarea
+              id="deal-summary"
+              value={summaryDraft}
+              onChange={(e) => setSummaryDraft(e.target.value)}
+              onSelect={(e) => setSelection((e.target as HTMLTextAreaElement).value.substring(
+                (e.target as HTMLTextAreaElement).selectionStart,
+                (e.target as HTMLTextAreaElement).selectionEnd,
+              ))}
+              rows={4}
+              placeholder="商談の要点・次のアクションなどを記録..."
+            />
+            {(selection || summaryDraft) && (
+              <div className="absolute bottom-2 right-2 flex gap-1 rounded-lg border bg-background shadow-sm p-1">
+                <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
+                  <ListTodo className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection || summaryDraft); toast.success("コピーしました"); }}>
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
           <div className="flex justify-end">
             <Button size="sm" onClick={saveSummary} disabled={saving} className="gap-1.5">
               <Save className="h-3.5 w-3.5" />

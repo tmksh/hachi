@@ -8,7 +8,7 @@ export async function getEstimates() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("estimates")
-    .select("*, customer:customers(id, name, company_name), construction:constructions(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
+    .select("*, customer:customers(id, name, company_name), construction:constructions!construction_id(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
@@ -194,7 +194,7 @@ export async function createEstimate(
 
 export async function updateEstimate(
   id: string,
-  input: Partial<Pick<Estimate, "title" | "customer_id" | "notes" | "validity_date" | "assigned_to" | "status">>,
+  input: Partial<Pick<Estimate, "title" | "customer_id" | "notes" | "validity_date" | "assigned_to" | "status" | "reserve_fee_1_rate" | "reserve_fee_2_rate">>,
   items?: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">>
 ) {
   const supabase = await createClient();

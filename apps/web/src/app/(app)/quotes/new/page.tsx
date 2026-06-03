@@ -9,9 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, FileDown } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, FileDown, Sparkles, Loader2 } from "lucide-react";
 import { createEstimate, getEstimate, type CreateEstimateCategoryInput } from "@/lib/actions/estimates";
 import { getCustomers } from "@/lib/actions/customers";
+import { generateEstimateDraftForCustomer } from "@/lib/actions/sales-flow";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { EstimatePdfPreviewDialog, type EstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
 
@@ -83,6 +84,8 @@ function QuoteNewPageContent() {
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [customerId, setCustomerId] = useState(preCustomerId);
   const [copyCustomerOpen, setCopyCustomerOpen] = useState(!!copyFromId && !preCustomerId);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiNotes, setAiNotes] = useState<string | null>(null);
 
   const [title, setTitle] = useState(dealTitle ? `${dealTitle} 見積書` : "");
   const [notes, setNotes] = useState("");
@@ -204,6 +207,44 @@ function QuoteNewPageContent() {
     );
   };
 
+  const handleAiDraft = async () => {
+    if (!customerId) return;
+    setAiLoading(true);
+    try {
+      const draft = await generateEstimateDraftForCustomer(customerId);
+      if (draft.title) setTitle(draft.title);
+      if (draft.notes) {
+        setNotes(draft.notes);
+        setAiNotes(draft.notes);
+      }
+      if (draft.items.length > 0) {
+        const grouped = new Map<string, typeof draft.items>();
+        for (const item of draft.items) {
+          const key = item.categoryName || "本体工事";
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key)!.push(item);
+        }
+        setCategories([...grouped.entries()].map(([name, items]) => ({
+          id: uid(),
+          name,
+          collapsed: false,
+          items: items.map((item) => ({
+            id: uid(),
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            selling_price: item.sellingPrice,
+          })),
+        })));
+      }
+      toast.success("AIドラフトを反映しました（要確認・調整）");
+    } catch {
+      toast.error("AIドラフト生成に失敗しました");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!customerId) {
       toast.error("顧客を選択してください");
@@ -310,6 +351,7 @@ function QuoteNewPageContent() {
 
       <EstimatePdfPreviewDialog open={pdfOpen} onOpenChange={setPdfOpen} data={pdfPreviewData} />
 
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_minmax(240px,25%)] gap-4 items-start">
       <Card variant="inset" className="overflow-hidden">
         <CardContent className="p-0">
           <div className="px-5 py-4 border-b border-border/60 bg-muted/20">
@@ -464,6 +506,26 @@ function QuoteNewPageContent() {
           </div>
         </CardContent>
       </Card>
+
+      <Card variant="inset" className="overflow-hidden sticky top-4">
+        <CardContent className="p-4 space-y-3">
+          <p className="text-sm font-semibold flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AIで作成
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            商談録音・問い合わせ内容から見積ドラフトを生成します（AIプロバイダーは後日選定・現状はルールベース）。
+          </p>
+          <Button className="w-full" variant="outline" disabled={aiLoading || !customerId} onClick={() => void handleAiDraft()}>
+            {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            ドラフト生成
+          </Button>
+          {aiNotes && (
+            <p className="text-xs text-muted-foreground border-t pt-3">{aiNotes}</p>
+          )}
+        </CardContent>
+      </Card>
+      </div>
     </div>
   );
 }

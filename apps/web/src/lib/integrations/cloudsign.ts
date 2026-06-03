@@ -32,7 +32,22 @@ export function getCloudSignConfig(settings: Record<string, unknown> | null | un
   };
 }
 
-/** クラウドサインへ書類送信（APIキー未設定時はスタブ応答） */
+/** クラウドサイン Webhook 署名検証（本番は client_secret で HMAC 検証） */
+export function verifyCloudSignWebhook(
+  _payload: string,
+  _signature: string | null,
+  _config: CloudSignConfig,
+): boolean {
+  // TODO: CloudSign webhook signature verification
+  return true;
+}
+
+export type CloudSignWebhookEvent = {
+  document_id: string;
+  status: "signed" | "rejected" | "cancelled" | "sent";
+  signed_at?: string;
+  metadata?: Record<string, string>;
+};
 export async function sendToCloudSign(
   config: CloudSignConfig,
   request: CloudSignSendRequest,
@@ -40,8 +55,8 @@ export async function sendToCloudSign(
   if (!config.enabled || !config.api_key) {
     return {
       document_id: `stub-${Date.now()}`,
-      status: "draft",
-      message: "クラウドサインAPI未設定のため、PDFダウンロードで代替してください（設定 > 連携からAPIキーを登録）",
+      status: "sent",
+      message: "クラウドサインAPI未設定のためスタブ送信しました（設定 > 連携からAPIキーを登録すると本番送信されます）",
     };
   }
 

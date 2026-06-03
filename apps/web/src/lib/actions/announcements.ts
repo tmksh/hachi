@@ -25,6 +25,10 @@ export async function getAnnouncements() {
 
   // クライアント側でロールターゲティングを適用（target_type='roles' のみ絞り込み）
   return (data || []).filter((a) => {
+    if (a.target_type === "individuals") {
+      const targets: string[] = (a.target_user_ids as string[] | null) ?? [];
+      return targets.length === 0 || targets.includes(user.id);
+    }
     if (a.target_type !== "roles") return true;
     if (!role) return false;
     const targets: string[] = (a.target_roles as string[] | null) ?? [];

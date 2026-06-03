@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown } from "lucide-react";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
@@ -14,6 +14,7 @@ import {
   importCategoryFromReference,
   type EstimateItemUpdatePatch,
 } from "@/lib/actions/constructions";
+import { updateEstimate } from "@/lib/actions/estimates";
 import {
   EstimatePdfPreviewDialog,
   toEstimatePdfPreviewData,
@@ -23,7 +24,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { getEstimates } from "@/lib/actions/estimates";
 import { getEstimate } from "@/lib/actions/estimates";
 
@@ -174,6 +175,7 @@ export type EstimateForView = {
   cost_total?: number;
   reserve_fee_1_rate?: number;
   reserve_fee_2_rate?: number;
+  default_gross_profit_rate?: number;
   categories?: EstimateCategory[];
   items?: EstimateItem[];
 };
@@ -378,12 +380,25 @@ export function EstimateDetailView({
   const [refLoading, setRefLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [refSearch, setRefSearch] = useState("");
-  const reserve1Rate = estimate.reserve_fee_1_rate ?? 0.02;
-  const reserve2Rate = estimate.reserve_fee_2_rate ?? 0.03;
+  const [reserve1Rate, setReserve1Rate] = useState(estimate.reserve_fee_1_rate ?? 0.02);
+  const [reserve2Rate, setReserve2Rate] = useState(estimate.reserve_fee_2_rate ?? 0.03);
+  const [savingReserve, setSavingReserve] = useState(false);
   const subtotal = estimate.subtotal ?? 0;
   const reserve1 = Math.round(subtotal * reserve1Rate);
   const reserve2 = Math.round(subtotal * reserve2Rate);
   const costTotal = estimate.cost_total ?? 0;
+
+  const saveReserveRates = async (r1: number, r2: number) => {
+    setSavingReserve(true);
+    try {
+      await updateEstimate(estimate.id, { reserve_fee_1_rate: r1, reserve_fee_2_rate: r2 });
+      onEstimateChange({ ...estimate, reserve_fee_1_rate: r1, reserve_fee_2_rate: r2 });
+    } catch {
+      toast.error("予備費率の保存に失敗しました");
+    } finally {
+      setSavingReserve(false);
+    }
+  };
 
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = estimate.items ?? [];
@@ -404,6 +419,8 @@ export function EstimateDetailView({
     setCollapsedIds(new Set());
     setInlineAdd(null);
     seededEstimateIdRef.current = null;
+    setReserve1Rate(estimate.reserve_fee_1_rate ?? 0.02);
+    setReserve2Rate(estimate.reserve_fee_2_rate ?? 0.03);
   }, [estimate.id]);
 
   useEffect(() => {
@@ -666,7 +683,8 @@ export function EstimateDetailView({
   const sumSell = (list: EstimateItem[]) => list.reduce((s, i) => s + (i.selling_amount ?? 0), 0);
   const calcRate = (cost: number, sell: number) => sell > 0 ? ((sell - cost) / sell) * 100 : 0;
   const grossRate = estimate.gross_profit_rate ?? 0;
-  const isLowMargin = grossRate < 50;
+  const marginThreshold = (estimate.default_gross_profit_rate ?? 0.5) * 100;
+  const isLowMargin = grossRate < marginThreshold;
 
   return (
     <div className={cn("space-y-3", loading && "opacity-60")}>
@@ -797,7 +815,7 @@ export function EstimateDetailView({
             </p>
           </div>
           <div className="px-3 py-2">
-            <p className="text-[10px] leading-tight text-muted-foreground">粗利率<span className="ml-1">(基準 50%)</span></p>
+            <p className="text-[10px] leading-tight text-muted-foreground">粗利率<span className="ml-1">(基準 {marginThreshold.toFixed(0)}%)</span></p>
             <p className="text-base font-bold tabular-nums leading-tight mt-px">
               {grossRate.toFixed(1)}%
             </p>
@@ -805,7 +823,7 @@ export function EstimateDetailView({
         </div>
         {isLowMargin && (
           <div className="border-t border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] leading-tight text-muted-foreground">
-            ⚠ 粗利率が基準(50%)を下回っています。上司への承認申請が必要です。
+            ⚠ 粗利率が基準({marginThreshold.toFixed(0)}%)を下回っています。上司への承認申請が必要です。
           </div>
         )}
       </div>
@@ -1033,8 +1051,41 @@ export function EstimateDetailView({
             ) : null}
             <tr className="bg-amber-50/30 border-t border-border/40">
               <td colSpan={6} className="px-3 py-2 text-right text-xs text-muted-foreground">
-                予備費① <span className="text-blue-600 font-medium">{(reserve1Rate * 100).toFixed(0)}%</span>
-                <span className="text-[10px] ml-1">(原価の{(reserve1Rate * 100).toFixed(0)}% / 下記 {(reserve2Rate * 100).toFixed(0)}%)</span>
+                予備費①
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  className="inline-block w-14 h-7 mx-1 text-xs text-center"
+                  value={Math.round(reserve1Rate * 1000) / 10}
+                  disabled={savingReserve}
+                  onChange={(e) => {
+                    const pct = Number(e.target.value);
+                    if (Number.isNaN(pct)) return;
+                    const next = pct / 100;
+                    setReserve1Rate(next);
+                  }}
+                  onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
+                />
+                %
+                <span className="text-[10px] ml-1">／ ②</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  className="inline-block w-14 h-7 mx-1 text-xs text-center"
+                  value={Math.round(reserve2Rate * 1000) / 10}
+                  disabled={savingReserve}
+                  onChange={(e) => {
+                    const pct = Number(e.target.value);
+                    if (Number.isNaN(pct)) return;
+                    setReserve2Rate(pct / 100);
+                  }}
+                  onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
+                />
+                %
               </td>
               <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-sm text-amber-700">¥{reserve1.toLocaleString()}</td>
               <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">原価のみ</td>

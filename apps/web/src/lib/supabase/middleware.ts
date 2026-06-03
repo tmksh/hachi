@@ -166,7 +166,19 @@ export async function updateSession(request: NextRequest) {
   }
   // ── ここから下は従来のシングルドメイン動作（現状と完全に同一） ─────────────
 
-  const publicPaths = ["/login", "/admin/login", "/api/auth/callback", "/api/auth/accept-invite", "/unauthorized", "/reset-password", "/update-password", "/onboarding", "/partner"];
+  const publicPaths = [
+    "/login",
+    "/admin/login",
+    "/api/auth/callback",
+    "/api/auth/accept-invite",
+    "/api/webhooks/",
+    "/unauthorized",
+    "/reset-password",
+    "/update-password",
+    "/onboarding",
+    "/partner",
+    ...(process.env.NODE_ENV === "development" ? ["/api/dev/"] : []),
+  ];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );

@@ -146,8 +146,9 @@ export async function proposeSchedulingCandidates(input: {
   time_slot: "morning" | "afternoon" | "evening" | "anytime";
   duration_minutes: number;
   ai_optimized?: boolean;
+  customer_id?: string;
 }) {
-  const { supabase, user_id } = await getCompanyContext();
+  const { supabase, user_id, company_id } = await getCompanyContext();
   const rangeStart = startOfDay(new Date());
   const rangeEnd = addDays(rangeStart, 21);
   const { blocks, calendarLinked } = await fetchBusyBlocks(supabase, user_id, rangeStart, rangeEnd);
@@ -187,10 +188,22 @@ export async function proposeSchedulingCandidates(input: {
     : options
   ).slice(0, 5);
 
+  if (candidates.length === 0) {
+    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+    await notifySalesFlowUser(supabase, company_id, user_id, {
+      title: "スケジュール調整: 空き候補なし",
+      description: "今後3週間で空き時間が見つかりませんでした。カレンダーを確認するか、手動で調整してください。",
+      href: input.customer_id ? `/crm/${input.customer_id}?tab=scheduling` : "/calendar",
+      customerId: input.customer_id,
+      urgent: true,
+    }, user_id);
+  }
+
   return {
     candidates,
     calendarLinked,
     usedAi: !!input.ai_optimized,
+    exhausted: candidates.length === 0,
   };
 }
 
@@ -267,6 +280,7 @@ export async function getCustomerTodos(customerId: string) {
 
 export async function createCustomerTodo(input: {
   customer_id: string;
+  deal_id?: string;
   title: string;
   description?: string;
   due_date?: string;
@@ -276,6 +290,7 @@ export async function createCustomerTodo(input: {
   const { data, error } = await supabase.from("todos").insert({
     company_id,
     customer_id: input.customer_id,
+    deal_id: input.deal_id ?? null,
     assigned_to: user_id,
     title: input.title,
     description: input.description ?? null,
@@ -333,6 +348,46 @@ export async function saveSchedulingRequest(input: {
   }).select().single();
   if (error) throw error;
   return data;
+}
+
+export async function confirmSchedulingCandidate(input: {
+  customer_id: string;
+  candidate: SchedulingCandidate;
+  meeting_type: "in_person" | "online" | "phone";
+  duration_minutes: number;
+  title?: string;
+}) {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const [hourStr, minuteStr] = input.candidate.timeLabel.split(":");
+  const hour = Number(hourStr) || 10;
+  const minute = Number(minuteStr) || 0;
+  const startAt = new Date(`${input.candidate.date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
+  const endAt = new Date(startAt.getTime() + input.duration_minutes * 60_000);
+
+  const { data: event, error: eventErr } = await supabase.from("calendar_events").insert({
+    company_id,
+    title: input.title ?? `面談: ${input.candidate.displayLabel}`,
+    description: `面談区分: ${input.meeting_type}`,
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString(),
+    customer_id: input.customer_id,
+    assigned_to: user_id,
+    created_by: user_id,
+    category: "meeting",
+  }).select().single();
+  if (eventErr) throw eventErr;
+
+  await supabase.from("customer_scheduling_requests").insert({
+    company_id,
+    customer_id: input.customer_id,
+    meeting_type: input.meeting_type,
+    time_slot: "anytime",
+    duration_minutes: input.duration_minutes,
+    candidate_dates: [input.candidate.displayLabel],
+    status: "confirmed",
+  });
+
+  return event;
 }
 
 export async function getCustomerDealsWithActivities(customerId: string) {

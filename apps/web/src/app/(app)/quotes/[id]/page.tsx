@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Copy } from "lucide-react";
 import { getEstimate } from "@/lib/actions/estimates";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
+import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 
 type EstimateDetail = Awaited<ReturnType<typeof getEstimate>>;
 
@@ -68,14 +69,20 @@ export default function QuoteDetailPage() {
         onEstimateChange={(est) => setData((prev) => ({ ...(prev as EstimateDetail), ...(est as unknown as EstimateDetail) }))}
         pdfCustomer={data.customer ? { name: data.customer.name, company_name: data.customer.company_name } : null}
         headerExtra={
-          <Button
-            variant="outline"
-            size="sm"
-            title="開いている見積もりをもとに新規見積もりを作成"
-            onClick={() => router.push(`/quotes/new?copy_from=${id}`)}
-          >
-            <Copy className="h-4 w-4 mr-1" />見積書をコピー
-          </Button>
+          <>
+            <EstimateApprovalActions
+              estimateId={id as string}
+              grossProfitRate={data.gross_profit_rate ?? 0}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              title="開いている見積もりをもとに新規見積もりを作成"
+              onClick={() => router.push(`/quotes/new?copy_from=${id}`)}
+            >
+              <Copy className="h-4 w-4 mr-1" />見積書をコピー
+            </Button>
+          </>
         }
       />
     </div>

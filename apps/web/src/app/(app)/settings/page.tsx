@@ -70,6 +70,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Company, Profile } from "@/lib/database.types";
 import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, ASSIGNABLE_TEAM_ROLES, SYSTEM_PERMISSION_ROLES, type Role } from "@/lib/constants";
 import { useCompanyPermissions, type CustomRole, type RolePermissions, DEFAULT_PERMISSIONS } from "@/hooks/use-company-permissions";
+import { FontSizeSelector } from "@/components/settings/font-size-selector";
 
 const ROLE_COLOR: Record<Role, string> = {
   hq_admin: "bg-blue-100 text-blue-800 border-blue-200",
@@ -569,6 +570,7 @@ export default function SettingsPage() {
                   <Input value={profile?.role ?? ""} disabled />
                 </div>
               </div>
+              <FontSizeSelector />
               <div className="flex justify-end">
                 <Button onClick={handleSave} disabled={saving}>
                   <Save className="size-4 mr-1" />

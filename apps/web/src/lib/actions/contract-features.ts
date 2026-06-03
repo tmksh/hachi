@@ -1,6 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCloudSignConfig, sendToCloudSign } from "@/lib/integrations/cloudsign";
+import { createWorkflowRequest } from "@/lib/actions/workflow";
+import { dispatchWebhook } from "@/lib/webhooks";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -59,7 +62,27 @@ async function getCompanyContext() {
   if (!user) throw new Error("Not authenticated");
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
-  return { supabase, company_id: profile.company_id };
+  return { supabase, company_id: profile.company_id, user_id: user.id };
+}
+
+async function resolveDefaultApprovalApprovers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+): Promise<string[]> {
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("company_id", companyId);
+
+  const roleOrder = ["admin", "field_manager", "contractor_admin", "hq_admin", "executive"] as const;
+  const ids: string[] = [];
+  for (const role of roleOrder) {
+    const match = profiles?.find((p) => p.role === role);
+    if (match && !ids.includes(match.id)) ids.push(match.id);
+    if (ids.length >= 3) break;
+  }
+  if (ids.length === 0 && profiles?.[0]) ids.push(profiles[0].id);
+  return ids;
 }
 
 export async function getContractCommunications(contractId: string) {
@@ -328,32 +351,99 @@ export async function copyEstimateForContract(
   return newEstimate;
 }
 
-export async function submitContractWorkflow(contractId: string, title: string) {
-  const { supabase, company_id } = await getCompanyContext();
-  const { data: types } = await supabase.from("workflow_types").select("id").eq("company_id", company_id).limit(1);
-  const typeId = types?.[0]?.id;
-  if (!typeId) throw new Error("ワークフロー種別がありません");
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data, error } = await supabase.from("workflow_requests").insert({
-    company_id,
-    type_id: typeId,
-    requester_id: user!.id,
+export async function submitContractWorkflow(contractId: string, title: string, workflowTypeKey = "contract_08") {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const { data: wfType } = await supabase
+    .from("workflow_types")
+    .select("id, approval_route")
+    .eq("company_id", company_id)
+    .eq("key", workflowTypeKey)
+    .maybeSingle();
+
+  const fallback = wfType
+    ? null
+    : (await supabase.from("workflow_types").select("id, approval_route").eq("company_id", company_id).limit(1).maybeSingle()).data;
+
+  const type = wfType ?? fallback;
+  if (!type) throw new Error("ワークフロー種別がありません");
+
+  const approvalRoute = (type.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
+  let approverIds = approvalRoute.length > 0
+    ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
+    : await resolveDefaultApprovalApprovers(supabase, company_id);
+
+  const request = await createWorkflowRequest({
+    type_id: type.id,
     title: `契約承認: ${title}`,
     payload: { contract_id: contractId },
-    status: "submitted",
-    submitted_at: new Date().toISOString(),
-  }).select().single();
-  if (error) throw error;
-  return data;
+    approver_ids: approverIds,
+  });
+
+  const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+  for (const approverId of approverIds) {
+    await notifySalesFlowUser(supabase, company_id, approverId, {
+      title: `契約承認依頼: ${title}`,
+      description: "契約書の社内承認をお願いします",
+      href: `/workflow/${request.id}`,
+      urgent: true,
+    }, user_id);
+  }
+
+  void dispatchWebhook(company_id, "contract.workflow_submitted", {
+    contract_id: contractId,
+    workflow_request_id: request.id,
+  });
+
+  return request;
 }
 
 export async function sendContractCloudSign(contractId: string, email: string, subject: string, message: string) {
-  // クラウドサイン連携は API キー設定後に有効化
-  const { supabase } = await getCompanyContext();
-  const { data: contract } = await supabase.from("contracts").select("contract_no, title").eq("id", contractId).single();
+  const { supabase, company_id } = await getCompanyContext();
+  const { data: company } = await supabase.from("companies").select("settings").eq("id", company_id).single();
+  const config = getCloudSignConfig(company?.settings as Record<string, unknown>);
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("contract_no, title, customer:customers(name)")
+    .eq("id", contractId)
+    .single();
+  if (!contract) throw new Error("契約が見つかりません");
+
+  const customerName = (contract.customer as { name?: string })?.name ?? "ご担当者";
+
+  const result = await sendToCloudSign(config, {
+    title: contract.title,
+    signers: [{ name: customerName, email, order: 1 }],
+    metadata: { contract_id: contractId, subject, message },
+  });
+
+  await supabase.from("contracts").update({
+    cloudsign_document_id: result.document_id,
+    cloudsign_status: result.status,
+    cloudsign_sent_at: result.status === "sent" ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", contractId);
+
+  await supabase.from("contract_communications").insert({
+    company_id,
+    contract_id: contractId,
+    platform: "email",
+    direction: "outbound",
+    sender_name: "CloudSign",
+    body: `[${subject}]\n${message}`,
+    sent_at: new Date().toISOString(),
+  }).then(() => {}, () => {});
+
+  void dispatchWebhook(company_id, "contract.cloudsign_sent", {
+    contract_id: contractId,
+    document_id: result.document_id,
+    status: result.status,
+  });
+
   return {
     ok: true,
-    message: `「${contract?.contract_no}」を ${email} へ送信予約しました（件名: ${subject}）`,
+    message: result.message,
+    documentId: result.document_id,
     preview: message,
   };
 }

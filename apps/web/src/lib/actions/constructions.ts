@@ -225,6 +225,8 @@ export async function createConstruction(input: {
   title: string;
   contract_id?: string;
   customer_id?: string;
+  deal_id?: string;
+  estimate_id?: string;
   start_date?: string;
   end_date?: string;
   order_amount?: number;
@@ -250,6 +252,8 @@ export async function createConstruction(input: {
       title: input.title,
       contract_id: input.contract_id || null,
       customer_id: input.customer_id || null,
+      deal_id: input.deal_id || null,
+      estimate_id: input.estimate_id || null,
       start_date: input.start_date || null,
       end_date: input.end_date || null,
       order_amount: input.order_amount || 0,
@@ -268,7 +272,23 @@ export async function createConstruction(input: {
     title: data.title,
     status: data.status,
     order_amount: data.order_amount,
+    deal_id: input.deal_id,
   });
+
+  if (input.assigned_to && input.assigned_to !== user.id) {
+    await supabase.from("todos").insert({
+      company_id: profile.company_id,
+      assigned_to: input.assigned_to,
+      customer_id: input.customer_id ?? null,
+      deal_id: input.deal_id ?? null,
+      title: `現場担当アサイン: ${data.title}`,
+      description: `工事 ${data.construction_no} の現場担当に割り当てられました`,
+      status: "pending",
+      priority: "high",
+      tags: ["sales_flow", "construction"],
+      source: "deal_won",
+    });
+  }
 
   return data as Construction;
 }
@@ -628,10 +648,20 @@ export async function updateContractDoc(input: {
   if (error) throw error;
 }
 
-export async function deleteContractDoc(id: string) {
+export async function deleteContractDoc(id: string, constructionId?: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("contracts").delete().eq("id", id);
+  const { data, error } = await supabase.from("contracts").delete().eq("id", id).select("id");
   if (error) throw error;
+  if (!data?.length) {
+    throw new Error("契約書を削除できませんでした。権限がないか、既に削除されています。");
+  }
+  if (constructionId) {
+    await supabase
+      .from("constructions")
+      .update({ contract_id: null })
+      .eq("id", constructionId)
+      .eq("contract_id", id);
+  }
 }
 
 export async function seedContractorOrders(constructionId: string) {

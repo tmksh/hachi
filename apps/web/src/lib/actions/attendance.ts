@@ -56,10 +56,19 @@ export async function clockIn() {
     throw new Error("本日は休暇として登録されています。出勤打刻するには休暇区分を解除してください。");
   }
 
+  if (existing?.clock_in_at) {
+    const { data } = await supabase
+      .from("attendance_entries")
+      .select("*")
+      .eq("id", existing.id)
+      .single();
+    return (data ?? existing) as AttendanceEntry;
+  }
+
   if (existing) {
     const { data, error } = await supabase
       .from("attendance_entries")
-      .update({ clock_in_at: new Date().toISOString() })
+      .update({ clock_in_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", existing.id)
       .select()
       .single();

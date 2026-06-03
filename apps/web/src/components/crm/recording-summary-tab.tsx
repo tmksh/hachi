@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, Mic, Square, Copy, Sparkles, ListTodo, Save } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomerRecordings, saveCustomerRecording, createCustomerTodo, type CustomerRecording } from "@/lib/actions/crm-features";
+import { processRecordingComplete } from "@/lib/actions/sales-flow";
 
 type SpeechSupport = "supported" | "unsupported";
 
@@ -18,7 +19,7 @@ function detectSpeechSupport(): SpeechSupport {
   return w.webkitSpeechRecognition || w.SpeechRecognition ? "supported" : "unsupported";
 }
 
-export function RecordingSummaryTab({ customerId }: { customerId: string }) {
+export function RecordingSummaryTab({ customerId, dealId }: { customerId: string; dealId?: string }) {
   const [recordings, setRecordings] = useState<CustomerRecording[]>([]);
   const [speechSupport, setSpeechSupport] = useState<SpeechSupport>("unsupported");
   const [listening, setListening] = useState(false);
@@ -91,14 +92,24 @@ export function RecordingSummaryTab({ customerId }: { customerId: string }) {
     }
     setSaving(true);
     try {
-      await saveCustomerRecording({
+      const saved = await saveCustomerRecording({
         customer_id: customerId,
+        deal_id: dealId,
         transcript: transcript.trim(),
         summary: (transcript || memo).slice(0, 120) + ((transcript || memo).length > 120 ? "…" : ""),
         memo: memo.trim(),
         title: `商談 ${format(new Date(), "M/d HH:mm", { locale: ja })}`,
       });
-      toast.success("保存しました");
+
+      const result = await processRecordingComplete({
+        customerId,
+        recordingId: saved.id,
+        dealId,
+        transcript: transcript.trim(),
+        memo: memo.trim(),
+      });
+
+      toast.success(`保存しました（ToDo ${result.todosCreated}件${result.stageProposalId ? "・ステージ提案あり" : ""}）`);
       setTranscript("");
       setMemo("");
       load();

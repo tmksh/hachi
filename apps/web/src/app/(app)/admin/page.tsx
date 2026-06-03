@@ -14,6 +14,9 @@ import {
   getAdminBiGrossRateDistribution,
   createAdminCompany,
   deleteAdminCompany,
+  getAdminLinqAiSettings,
+  updateAdminLinqAiSettings,
+  testAdminLinqAiConnection,
 } from "@/lib/actions/admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +33,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -58,6 +62,7 @@ import {
   Loader2,
   Download,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -161,6 +166,20 @@ export default function AdminPage() {
   const [addForm, setAddForm] = useState({ companyName: "", plan: "", slug: "", ownerName: "", ownerEmail: "", ownerPassword: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiModel, setAiModel] = useState("gemini-2.0-flash");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiKeyConfigured, setAiKeyConfigured] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const loadAiSettings = useCallback(async () => {
+    const s = await getAdminLinqAiSettings();
+    setAiEnabled(s.enabled);
+    setAiModel(s.model);
+    setAiKeyConfigured(s.apiKeyConfigured);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -173,8 +192,9 @@ export default function AdminPage() {
     ]);
     setStats(s); setCompanies(c ?? []); setUsers(u ?? []);
     setBi(ov); setBiRanking(rank); setBiTrend(trend); setBiStatus(status); setBiDist(dist);
+    await loadAiSettings().catch(() => {});
     setLoading(false);
-  }, []);
+  }, [loadAiSettings]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -210,6 +230,49 @@ export default function AdminPage() {
     try { await deleteAdminCompany(id); await loadData(); }
     catch (e) { setErrorMsg(extractErrorMessage(e)); }
     finally { setDeletingId(null); }
+  };
+
+  const handleSaveAiSettings = async () => {
+    setAiSaving(true);
+    setAiTestResult(null);
+    try {
+      await updateAdminLinqAiSettings({
+        enabled: aiEnabled,
+        provider: "google",
+        model: aiModel,
+        apiKey: aiApiKey || undefined,
+      });
+      setAiApiKey("");
+      await loadAiSettings();
+      setAiTestResult({ ok: true, message: "AI 設定を保存しました。全テナントで利用可能です。" });
+    } catch (e) {
+      setAiTestResult({ ok: false, message: extractErrorMessage(e) });
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const handleTestAiConnection = async () => {
+    setAiTesting(true);
+    setAiTestResult(null);
+    try {
+      if (aiApiKey.trim()) {
+        await updateAdminLinqAiSettings({
+          enabled: true,
+          provider: "google",
+          model: aiModel,
+          apiKey: aiApiKey.trim(),
+        });
+        setAiApiKey("");
+        await loadAiSettings();
+      }
+      const result = await testAdminLinqAiConnection();
+      setAiTestResult(result);
+    } catch (e) {
+      setAiTestResult({ ok: false, message: extractErrorMessage(e) });
+    } finally {
+      setAiTesting(false);
+    }
   };
 
   const exportCompaniesCsv = () => {
@@ -329,6 +392,10 @@ export default function AdminPage() {
         <TabsList>
           <TabsTrigger value="bi">全国 BI</TabsTrigger>
           <TabsTrigger value="companies">企業一覧</TabsTrigger>
+          <TabsTrigger value="ai" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI 設定
+          </TabsTrigger>
         </TabsList>
 
         {/* BI タブ */}
@@ -567,6 +634,84 @@ export default function AdminPage() {
                   </table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI 設定（全テナント共通） */}
+        <TabsContent value="ai" className="mt-4">
+          <Card variant="inset">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Linq AI（プラットフォーム共通）
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                ここで設定した API キーは全会社（全テナント）の営業フロー AI 機能で共通利用されます。
+                各社の設定画面からは変更できません。
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-5 max-w-lg">
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="font-medium text-sm">AI 機能を有効化</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">録音要約・ステージ提案など</p>
+                </div>
+                <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>プロバイダー</Label>
+                <Input value="Google Gemini" disabled />
+              </div>
+
+              <div className="space-y-2">
+                <Label>モデル</Label>
+                <Select value={aiModel} onValueChange={setAiModel}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gemini-2.0-flash">gemini-2.0-flash（推奨・無料枠あり）</SelectItem>
+                    <SelectItem value="gemini-1.5-flash">gemini-1.5-flash</SelectItem>
+                    <SelectItem value="gemini-1.5-pro">gemini-1.5-pro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Gemini API キー</Label>
+                <Input
+                  type="password"
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                  placeholder={aiKeyConfigured ? "●●●●●●●●（設定済み・変更時のみ入力）" : "AIza..."}
+                />
+                <p className="text-xs text-muted-foreground">
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    Google AI Studio
+                  </a>
+                  {" "}で無料取得できます
+                </p>
+              </div>
+
+              {aiTestResult && (
+                <div className={cn(
+                  "rounded-lg px-3 py-2 text-sm",
+                  aiTestResult.ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-800 border border-rose-200",
+                )}>
+                  {aiTestResult.message}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button onClick={handleSaveAiSettings} disabled={aiSaving}>
+                  {aiSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  保存
+                </Button>
+                <Button variant="outline" onClick={handleTestAiConnection} disabled={aiTesting}>
+                  {aiTesting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  接続テスト
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

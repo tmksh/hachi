@@ -3,7 +3,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripHorizontal } from "lucide-react";
 
 export const MIN_CARD_W = 180;
 export const MIN_CARD_H = 100;
@@ -110,38 +109,21 @@ export function SortableWidget({
         boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.12)" : undefined,
       }}
       {...attributes}
-      className="relative group/drag h-full min-h-0"
+      className="relative h-full min-h-0"
     >
-      {/* ドラッグ用ハンドル：カード上端中央のバー（ホバー時のみ表示） */}
+      {/* 上端：透明ゾーンでドラッグ並び替え（視覚ハンドルなし） */}
       <div
         {...listeners}
-        className={`absolute top-0 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center
-                    h-5 w-14 rounded-b-md
-                    bg-foreground/10 hover:bg-foreground/20
-                    text-foreground/60 hover:text-foreground/90
-                    cursor-grab active:cursor-grabbing
-                    opacity-0 group-hover/drag:opacity-100
-                    transition-opacity duration-150 touch-none select-none`}
-        title="ドラッグして縦横に並び替え"
-      >
-        <GripHorizontal className="h-3 w-3" />
-      </div>
+        aria-label="ドラッグして並び替え"
+        className="absolute top-0 left-0 right-0 z-30 h-3 cursor-grab active:cursor-grabbing touch-none select-none"
+      />
 
-      {/* リサイズハンドル（右下、ホバーで濃く表示） */}
+      {/* 右下角：透明ゾーンでリサイズ（視覚ハンドルなし） */}
       <div
         onMouseDown={handleResizeMouseDown}
-        className="absolute bottom-1.5 right-1.5 z-20 w-5 h-5 flex items-center justify-center opacity-0 group-hover/drag:opacity-100 cursor-nwse-resize transition-opacity rounded hover:bg-foreground/10"
-        title="ドラッグして自由にサイズ変更"
-      >
-        <svg viewBox="0 0 10 10" className="w-3 h-3 text-muted-foreground">
-          <path
-            d="M9 1L1 9M5.5 1L1 5.5M9 4.5L4.5 9"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
-      </div>
+        aria-label="ドラッグしてサイズ変更"
+        className="absolute bottom-0 right-0 z-20 h-5 w-5 cursor-nwse-resize touch-none select-none"
+      />
 
       <div className="flex-1 min-h-0 flex flex-col w-full">{children}</div>
     </div>
