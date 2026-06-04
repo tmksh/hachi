@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart,
@@ -46,6 +46,7 @@ import { KpiRow } from "@/components/shared/kpi-row";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import { AdaptiveList } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
+import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import {
   DndContext,
@@ -437,7 +438,7 @@ export default function DashboardPage() {
 
       case "trend":
         return !isVisible("trend") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0 w-full">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`text-xs font-bold text-slate-800`}>売上トレンド</span>
@@ -698,9 +699,18 @@ export default function DashboardPage() {
   };
 
   const sortableIds = widgets.filter((w) => w.id !== "kpi" && w.visible).map((w) => w.id);
+  const layoutWidgets = useMemo(
+    () =>
+      sortableIds.map((id) => {
+        const w = widgets.find((x) => x.id === id);
+        return { id, widthPx: w?.widthPx };
+      }),
+    [sortableIds, widgets],
+  );
+  const { gridRef, displayWidths, stackFullWidth } = useWidgetGridLayout(layoutWidgets);
 
   return (
-    <div className="p-4 md:p-6 space-y-4 min-h-screen">
+    <div className="@container p-4 md:p-6 space-y-4 min-h-screen min-w-0">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -811,7 +821,11 @@ export default function DashboardPage() {
       {/* Sortable widget grid */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
         <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-          <div data-widget-grid className="flex flex-wrap gap-4">
+          <div
+            ref={gridRef}
+            data-widget-grid
+            className="flex flex-wrap gap-4 min-w-0 w-full"
+          >
             {sortableIds.map((id) => {
               const card = renderCard(id);
               if (!card) return null;
@@ -821,6 +835,8 @@ export default function DashboardPage() {
                   key={id}
                   id={id}
                   widthPx={wc?.widthPx}
+                  layoutWidthPx={displayWidths[id]}
+                  stackFullWidth={stackFullWidth}
                   height={wc?.height}
                   onResize={resizeWidget}
                   onResizeWidth={setWidgetWidth}

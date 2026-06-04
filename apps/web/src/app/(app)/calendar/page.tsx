@@ -195,9 +195,10 @@ export default function CalendarPage() {
     }
     if (view === "week") {
       const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
+      const pad = 7; // 週ビュー横スクロール用に前後1週間分のイベントも取得
       return {
-        rangeStart: ws,
-        rangeEnd: addDays(ws, 6),
+        rangeStart: addDays(ws, -pad),
+        rangeEnd: addDays(ws, 6 + pad),
       };
     }
     const ms = startOfMonth(currentDate);
@@ -1076,8 +1077,9 @@ function MonthView({
 }
 
 /* ──────────────────── Week View (Google Calendar style, horizontal scroll) ──────────────────── */
-const DAY_COL_W = 160; // px per day column
-const TIME_W    = 52;  // px for time label gutter
+const WEEK_VISIBLE_DAYS = 7; // ビューポートに常に収める日数
+const WEEK_SCROLL_PAD_DAYS = 7; // 前後に追加する日数（横スクロール用）
+const TIME_W = 52; // px for time label gutter
 
 function WeekView({
   date,
@@ -1096,21 +1098,23 @@ function WeekView({
   onRefresh: () => void;
   onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
-  // 週ビュー: 選択日を含む週（月曜始まり）の7日間のみ表示
+  // 週ビュー: 表示週の前後も含めて横スクロール可能にする
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
+  const scrollRangeStart = addDays(weekStart, -WEEK_SCROLL_PAD_DAYS);
+  const scrollRangeEnd = addDays(weekStart, 6 + WEEK_SCROLL_PAD_DAYS);
+  const days = eachDayOfInterval({ start: scrollRangeStart, end: scrollRangeEnd });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef   = useRef<HTMLDivElement>(null);
 
-  /* Column width — fit exactly 7 days into the visible scroll area */
+  /* 列幅 — ビューポートに常に7日分が収まる幅（横スクロール時も1日=この幅でスナップ） */
   const [colW, setColW] = useState(120);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const calc = () => {
       const available = el.clientWidth - TIME_W;
-      setColW(Math.max(80, Math.floor(available / 7)));
+      setColW(Math.max(80, Math.floor(available / WEEK_VISIBLE_DAYS)));
     };
     calc();
     const ro = new ResizeObserver(calc);
@@ -1122,14 +1126,13 @@ function WeekView({
   const [dragging, setDragging] = useState<DragInfo | null>(null);
   const dragRef = useRef<DragInfo | null>(null);
 
-  /* 週変更時に縦スクロールを 8:00 付近にリセット（横スクロールは7日固定のため不要） */
+  /* 週変更時: 縦は8:00付近、横は表示中の週の先頭へ */
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || DAY_COL_W_DYN <= 0) return;
     el.scrollTop = 7.5 * HOUR_H;
-    el.scrollLeft = 0;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+    el.scrollLeft = WEEK_SCROLL_PAD_DAYS * DAY_COL_W_DYN;
+  }, [date, DAY_COL_W_DYN]);
 
   /* Current time indicator */
   const [nowMin, setNowMin] = useState(() => toMin(new Date()));
@@ -1154,7 +1157,7 @@ function WeekView({
     const x = clientX - rect.left + scroll.scrollLeft - TIME_W;
     const idx = Math.max(0, Math.min(days.length - 1, Math.floor(x / DAY_COL_W_DYN)));
     return days[idx];
-  }, [days]);
+  }, [days, DAY_COL_W_DYN]);
 
   /* Start drag */
   const startDrag = useCallback((
@@ -1254,6 +1257,7 @@ function WeekView({
       <div
         ref={scrollRef}
         className="overflow-auto md:flex-1 md:min-h-0 max-h-[600px] md:!max-h-none"
+        style={{ scrollSnapType: "x mandatory", scrollPaddingLeft: TIME_W }}
       >
         <div style={{ minWidth: innerW }}>
 
@@ -1279,6 +1283,7 @@ function WeekView({
                 <button
                   key={d.toISOString()}
                   onClick={() => onSelect(d)}
+                  style={{ scrollSnapAlign: "start" }}
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-2 border-r last:border-r-0 transition-colors hover:bg-muted/40",
                     isSel && "bg-primary/5",
@@ -1344,7 +1349,7 @@ function WeekView({
                   <div
                     key={d.toISOString()}
                     className="relative border-r last:border-r-0 cursor-pointer"
-                    style={{ width: DAY_COL_W_DYN, flexShrink: 0, height: 24 * HOUR_H }}
+                    style={{ width: DAY_COL_W_DYN, flexShrink: 0, height: 24 * HOUR_H, scrollSnapAlign: "start" }}
                     title="クリックで予定を追加"
                     onClick={(e) => {
                       if (isDraggingRef.current || dragRef.current) return;

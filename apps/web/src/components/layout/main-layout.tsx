@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { BridgeAiChat, BRIDGE_AI_PANEL_WIDTH } from "@/components/ai/bridge-ai-chat";
+import { ChatPanelProvider } from "@/contexts/chat-panel-context";
 import { Sidebar } from "./sidebar";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
@@ -47,7 +48,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div className="min-h-screen">
         <AdminSidebar />
         <main className="hidden md:block" style={{ paddingLeft: 220 + 12 + 12 }}>
-          <div className="mx-auto max-w-[1600px]">
+          <div className="mx-auto max-w-[1600px] min-w-0">
             {children}
           </div>
         </main>
@@ -59,32 +60,34 @@ export function MainLayout({ children }: MainLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
-      <Sidebar
-        profile={profile}
-        onSignOut={signOut}
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-      />
-      <MobileNav />
-      {/* Desktop */}
-      <motion.main
-        animate={{
-          paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12,
-          paddingRight: chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0,
-        }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="hidden md:block"
-      >
-        <div className="mx-auto max-w-[1600px]">
+    <ChatPanelProvider open={chatOpen}>
+      <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
+        <Sidebar
+          profile={profile}
+          onSignOut={signOut}
+          expanded={expanded}
+          onExpandedChange={setExpanded}
+        />
+        <MobileNav />
+        {/* Desktop */}
+        <motion.main
+          animate={{
+            paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12,
+            paddingRight: chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0,
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className="hidden md:block min-w-0"
+        >
+          <div className="mx-auto max-w-[1600px] min-w-0">
+            {children}
+          </div>
+        </motion.main>
+        <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />
+        {/* Mobile */}
+        <main className="md:hidden pb-32">
           {children}
-        </div>
-      </motion.main>
-      <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />
-      {/* Mobile */}
-      <main className="md:hidden pb-32">
-        {children}
-      </main>
-    </div>
+        </main>
+      </div>
+    </ChatPanelProvider>
   );
 }

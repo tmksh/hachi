@@ -8,18 +8,39 @@ import { Sparkles, Send, X } from "lucide-react";
 
 export const BRIDGE_AI_PANEL_WIDTH = 400;
 
-const GREETINGS: { match: RegExp; text: string }[] = [
-  { match: /\/quotes/, text: "見積もりについて\nお手伝いできますか？" },
-  { match: /\/constructions/, text: "工程表・工事管理について\nお手伝いできますか？" },
-  { match: /\/contracts/, text: "契約・書類作成について\nお手伝いできますか？" },
-  { match: /\/crm/, text: "顧客・商談について\nお手伝いできますか？" },
-  { match: /\/craftsmen/, text: "職人管理について\nお手伝いできますか？" },
-  { match: /\/workflow/, text: "ワークフローについて\nお手伝いできますか？" },
-  { match: /\/dashboard/, text: "ダッシュボードの見方について\nお手伝いできますか？" },
+/** 長いパスを先に評価（/dashboard2 が /dashboard に吸われないように） */
+const GREETINGS: { prefix: string; text: string }[] = [
+  { prefix: "/dashboard2", text: "KPIやウィジェットの見方、\n気になるところはありますか？" },
+  { prefix: "/dashboard3", text: "KPIやウィジェットの見方、\n気になるところはありますか？" },
+  { prefix: "/dashboard", text: "今日のKPIやフォーカス、\n確認したい項目はありますか？" },
+  { prefix: "/bi", text: "指標の見方やグラフの意味、\n知りたいことはありますか？" },
+  { prefix: "/crm", text: "顧客登録や商談ステージ、\nお困りのことはありますか？" },
+  { prefix: "/deals", text: "商談の進捗やステージ更新、\nお手伝いしましょうか？" },
+  { prefix: "/quotes", text: "見積の作成・編集・送付、\n進め方を確認しますか？" },
+  { prefix: "/craftsmen", text: "職人の登録や手配、\n確認したいことはありますか？" },
+  { prefix: "/contracts", text: "契約書類の作成や進捗、\nお困りのことはありますか？" },
+  { prefix: "/constructions", text: "工程表や現場の進捗、\nお手伝いできますか？" },
+  { prefix: "/invoices", text: "請求の発行や入金状況、\n確認したいことはありますか？" },
+  { prefix: "/budget", text: "予算と実績の差異、\n見方をお伝えしましょうか？" },
+  { prefix: "/calendar", text: "予定の登録や空き時間、\nお手伝いしましょうか？" },
+  { prefix: "/mail", text: "メールの作成や送受信、\n進め方を確認しますか？" },
+  { prefix: "/attendance", text: "打刻や勤怠の確認・修正、\nお困りのことはありますか？" },
+  { prefix: "/workflow", text: "申請や承認の進め方、\nお手伝いできますか？" },
+  { prefix: "/circulation", text: "回覧の確認や配布、\n進め方を確認しますか？" },
+  { prefix: "/documents", text: "文書の検索や保管、\nお困りのことはありますか？" },
+  { prefix: "/settings", text: "各種設定やPDFテンプレート、\n変更方法をお伝えしましょうか？" },
+  { prefix: "/marketing", text: "配信やROI・クリエイティブ、\n確認したいことはありますか？" },
+  { prefix: "/admin", text: "管理画面の操作や権限、\nお困りのことはありますか？" },
 ];
 
+const GREETINGS_BY_PREFIX = [...GREETINGS].sort((a, b) => b.prefix.length - a.prefix.length);
+
 function getGreeting(pathname: string) {
-  return GREETINGS.find((g) => g.match.test(pathname))?.text ?? "BRIDGE AI です。\n何かお手伝いできますか？";
+  const path = pathname.split("?")[0];
+  const hit = GREETINGS_BY_PREFIX.find(
+    (g) => path === g.prefix || path.startsWith(`${g.prefix}/`),
+  );
+  return hit?.text ?? "BRIDGE AI です。\n何かお手伝いできることはありますか？";
 }
 
 export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -30,10 +51,15 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
   const TEAL_ACTIVE_GRADIENT = "var(--brand-gradient)";
 
   useEffect(() => {
-    if (open && messages.length === 0) {
-      setMessages([{ role: "assistant", text: getGreeting(pathname ?? "") }]);
-    }
-  }, [open, pathname, messages.length]);
+    if (!open) return;
+    const greeting = getGreeting(pathname ?? "");
+    setMessages((prev) => {
+      if (prev.length === 0) return [{ role: "assistant", text: greeting }];
+      const initialOnly = prev.length === 1 && prev[0]?.role === "assistant";
+      if (initialOnly) return [{ role: "assistant", text: greeting }];
+      return prev;
+    });
+  }, [open, pathname]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

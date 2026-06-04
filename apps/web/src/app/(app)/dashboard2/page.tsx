@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BarChart,
@@ -37,6 +37,7 @@ import { AnalogClock } from "@/components/shared/analog-clock";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import { AdaptiveList } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
+import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import {
   DndContext,
   closestCorners,
@@ -683,6 +684,15 @@ export default function Dashboard2Page() {
   };
 
   const sortableIds = widgets.filter((w) => w.id !== "kpi" && w.visible).map((w) => w.id);
+  const layoutWidgets = useMemo(
+    () =>
+      sortableIds.map((id) => {
+        const w = widgets.find((x) => x.id === id);
+        return { id, widthPx: w?.widthPx };
+      }),
+    [sortableIds, widgets],
+  );
+  const { gridRef, displayWidths, stackFullWidth } = useWidgetGridLayout(layoutWidgets);
 
   return (
     <div className="p-4 md:p-6 space-y-4 min-h-screen">
@@ -714,7 +724,11 @@ export default function Dashboard2Page() {
       {/* Sortable widget grid */}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
         <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-          <div data-widget-grid className="flex flex-wrap gap-4">
+          <div
+            ref={gridRef}
+            data-widget-grid
+            className="flex flex-wrap gap-4 min-w-0 w-full"
+          >
             {sortableIds.map((id) => {
               const card = renderCard(id);
               if (!card) return null;
@@ -724,6 +738,8 @@ export default function Dashboard2Page() {
                   key={id}
                   id={id}
                   widthPx={wc?.widthPx}
+                  layoutWidthPx={displayWidths[id]}
+                  stackFullWidth={stackFullWidth}
                   height={wc?.height}
                   onResize={resizeWidget}
                   onResizeWidth={setWidgetWidth}

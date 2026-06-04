@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -23,12 +24,46 @@ interface KpiRowProps {
 
 const KPI_ICON_INNER = "h-3.5 w-3.5 text-white";
 
-const GRID_CLASS: Record<2 | 3 | 4 | 5, string> = {
-  2: "grid grid-cols-2 gap-2",
-  3: "grid grid-cols-2 lg:grid-cols-3 gap-2",
-  4: "grid grid-cols-2 lg:grid-cols-4 gap-2",
-  5: "grid grid-cols-2 lg:grid-cols-5 gap-2",
-};
+/** コンテナ幅に応じて列数を決定（チャットパネル開閉に追従） */
+function useResponsiveColumns(requested: 2 | 3 | 4 | 5) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(requested);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const breakpoints: Record<2 | 3 | 4 | 5, number> = {
+      2: 0,
+      3: 480,
+      4: 560,
+      5: 720,
+    };
+    const min = breakpoints[requested];
+
+    const update = () => {
+      const w = el.clientWidth;
+      if (requested === 2) {
+        setCols(2);
+        return;
+      }
+      if (w < min) {
+        setCols(2);
+      } else if (requested === 5 && w < breakpoints[5]) {
+        setCols(3);
+      } else {
+        setCols(requested);
+      }
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [requested]);
+
+  return { ref, cols };
+}
 
 export function KpiRow({
   items,
@@ -36,14 +71,19 @@ export function KpiRow({
   className,
   columns = 4,
 }: KpiRowProps) {
-  useKpiColor(); // CSS 変数初期化のためマウント
+  useKpiColor();
+  const { ref, cols } = useResponsiveColumns(columns);
   const iconStyle = { background: "var(--brand-gradient)" } as const;
 
   return (
-    <div className={cn(GRID_CLASS[columns], className)}>
+    <div
+      ref={ref}
+      className={cn("grid gap-2 min-w-0 w-full", className)}
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
       {loading
-        ? Array.from({ length: items.length || columns }).map((_, i) => (
-            <div key={i} className={cn(TEAL_CARD_SM, "px-3 py-2.5")}>
+        ? Array.from({ length: items.length || cols }).map((_, i) => (
+            <div key={i} className={cn(TEAL_CARD_SM, "px-3 py-2.5 min-w-0")}>
               <Skeleton className="h-6 w-full" />
             </div>
           ))
@@ -54,7 +94,7 @@ export function KpiRow({
                 key={i}
                 className={cn(
                   TEAL_CARD_SM,
-                  "px-3 py-2.5 flex items-center gap-2.5 flex-nowrap min-w-0 group hover:shadow-md transition-shadow",
+                  "px-3 py-2.5 flex items-center gap-2.5 flex-nowrap min-w-0 overflow-hidden group hover:shadow-md transition-shadow",
                 )}
               >
                 {Icon && (

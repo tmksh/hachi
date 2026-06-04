@@ -17,7 +17,11 @@ export function useVisibleItemCount(
 
     const update = () => {
       const h = el.clientHeight;
-      if (h <= 0) return;
+      if (h <= 0) {
+        // auto-height context (no fixed container) — show all items up to max
+        setCount(max);
+        return;
+      }
       const step = itemHeightPx + gapPx;
       const n = Math.max(min, Math.min(max, Math.floor((h + gapPx) / step)));
       setCount(n);
