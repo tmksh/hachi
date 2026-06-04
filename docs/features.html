@@ -88,7 +88,28 @@
     .status-chip { font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
     .status-done { background: var(--accent-light); color: var(--accent-dark); border: 1px solid #b2e8d8; }
     .status-partial { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+    .status-phase1 { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
     .status-phase2 { background: #fff7e6; color: #b45309; border: 1px solid #fbd38d; }
+
+    /* AI SECTION BANNER */
+    .ai-banner {
+      max-width: 1100px; margin: 2rem auto 0; padding: 0 2rem;
+    }
+    .ai-banner-inner {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      border-radius: 12px; padding: 1.6rem 2rem;
+      display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap;
+    }
+    .ai-banner-icon { font-size: 2rem; line-height: 1; }
+    .ai-banner-text { flex: 1; }
+    .ai-banner-title { font-size: 1.05rem; font-weight: 800; color: #fff; margin-bottom: .25rem; }
+    .ai-banner-desc { font-size: .83rem; color: #94a3b8; line-height: 1.6; }
+    .ai-phase-badge {
+      display: inline-block; font-size: .68rem; font-weight: 700;
+      padding: 2px 9px; border-radius: 99px; white-space: nowrap;
+    }
+    .phase1-badge { background: #1d4ed8; color: #fff; }
+    .phase2-badge { background: #b45309; color: #fff; }
 
     /* SCHEDULE */
     .schedule-outer { background: #fff; border-bottom: 1px solid var(--border); padding: 2.5rem 2rem; }
@@ -216,6 +237,23 @@
     <button class="filter-btn" onclick="filter('portal',this)">ポータル</button>
     <button class="filter-btn" onclick="filter('system',this)">システム</button>
     <button class="filter-btn" onclick="filter('integration',this)">外部連携</button>
+    <button class="filter-btn" onclick="filter('ai',this)" style="border-color:#1d4ed8;color:#1d4ed8;font-weight:700;">BRIDGE AI</button>
+  </div>
+</div>
+
+<!-- ── AI BANNER ── -->
+<div class="ai-banner">
+  <div class="ai-banner-inner">
+    <div class="ai-banner-icon">✦</div>
+    <div class="ai-banner-text">
+      <div class="ai-banner-title">BRIDGE AI — 2フェーズ展開</div>
+      <div class="ai-banner-desc">
+        <span class="ai-phase-badge phase1-badge">フェーズ1</span>&nbsp;
+        チャット機能・音声要約・AI 候補日提案でフロント業務を即時支援。&nbsp;&nbsp;
+        <span class="ai-phase-badge phase2-badge">フェーズ2</span>&nbsp;
+        レイアウト変更・AI 工程表作成・AI 見積もり作成で業務プロセス全体を自動化。
+      </div>
+    </div>
   </div>
 </div>
 
@@ -395,6 +433,56 @@
       <div class="feat-desc">BRIDGE 内のイベント（顧客・商談・見積・契約・工事・請求・ワークフロー・回覧板）を外部 URL にリアルタイムで POST 通知。管理者がエンドポイント URL とトリガーイベントを設定画面で登録。アプリ連携タブと併用可能。ペイロードは JSON 形式。</div>
       <div class="feat-tags"><span class="feat-tag">Webhook</span><span class="feat-tag">POST 通知</span><span class="feat-tag">Slack 連携想定</span><span class="feat-tag">Zapier / Make 対応</span></div></div>
 
+    <!-- BRIDGE AI – Phase 1 -->
+    <div class="feat-card" data-cat="ai" style="border-top-color:#1d4ed8;">
+      <div class="feat-cat" style="color:#1d4ed8;">BRIDGE AI</div>
+      <div class="feat-title">AIチャット（BRIDGE AI）</div>
+      <div class="feat-desc">画面右下のインタラクティブボタンをクリックすると、左からスライドインしてチャット画面を表示。開いている画面に応じて AI の挨拶が自動的に変化（工程表→「工程表についてお手伝いできますか？」など）。業務文脈を把握した対話で作業を支援。</div>
+      <div class="feat-tags"><span class="feat-tag">スライドインUI</span><span class="feat-tag">画面文脈対応</span><span class="feat-tag">インタラクティブ</span></div>
+      <div class="feat-footer"><span></span><span class="status-chip status-phase1">フェーズ1</span></div>
+    </div>
+
+    <div class="feat-card" data-cat="ai" style="border-top-color:#1d4ed8;">
+      <div class="feat-cat" style="color:#1d4ed8;">BRIDGE AI</div>
+      <div class="feat-title">音声要約・文字起こし</div>
+      <div class="feat-desc">顧客詳細「録音・要約」タブで録音開始・停止ボタンを操作するだけで、商談中の会話をリアルタイム音声文字変換。全商談の文字起こし＋要約テキストを一覧化し、クリックでタブ切り替え可能（Notion ミーティングノートのようなイメージ）。メモ欄はテキスト選択でフローティングツールバーを表示し、ToDo 追加・AI 文章改善・コピーが可能。</div>
+      <div class="feat-tags"><span class="feat-tag">リアルタイム文字変換</span><span class="feat-tag">要約テキスト履歴</span><span class="feat-tag">ToDo 自動追加</span><span class="feat-tag">AI 文章改善</span></div>
+      <div class="feat-footer"><span></span><span class="status-chip status-phase1">フェーズ1</span></div>
+    </div>
+
+    <div class="feat-card" data-cat="ai" style="border-top-color:#1d4ed8;">
+      <div class="feat-cat" style="color:#1d4ed8;">BRIDGE AI</div>
+      <div class="feat-title">AI 候補日提案（スケジューリング）</div>
+      <div class="feat-desc">顧客詳細「スケジューリング」タブで面談区分（対面／オンライン／電話等）・希望時間帯（午前／午後／夜／いつでも）・所要時間（15〜120分）を選択し、候補日提案ボタンを押すと Google カレンダーの空き状況を確認して候補日を一覧表示。AI が移動を伴うかどうかも判断し、最適な複数日を自動提案してカレンダーに反映。</div>
+      <div class="feat-tags"><span class="feat-tag">Google カレンダー連携</span><span class="feat-tag">空き時間自動確認</span><span class="feat-tag">候補日一覧提示</span><span class="feat-tag">移動考慮 AI 判断</span></div>
+      <div class="feat-footer"><span></span><span class="status-chip status-phase1">フェーズ1</span></div>
+    </div>
+
+    <!-- BRIDGE AI – Phase 2 -->
+    <div class="feat-card" data-cat="ai" style="border-top-color:#b45309;">
+      <div class="feat-cat" style="color:#b45309;">BRIDGE AI</div>
+      <div class="feat-title">AI レイアウト変更提案</div>
+      <div class="feat-desc">各画面のウィジェット配置・表示項目をユーザーの操作履歴や業務コンテキストに基づいて AI が分析し、最適なレイアウトを提案・自動変更。ダッシュボードや一覧画面のカスタマイズを自然言語で指示するだけで反映できます。</div>
+      <div class="feat-tags"><span class="feat-tag">レイアウト自動最適化</span><span class="feat-tag">自然言語指示</span><span class="feat-tag">ウィジェット制御</span></div>
+      <div class="feat-footer"><span></span><span class="status-chip status-phase2">フェーズ2</span></div>
+    </div>
+
+    <div class="feat-card" data-cat="ai" style="border-top-color:#b45309;">
+      <div class="feat-cat" style="color:#b45309;">BRIDGE AI</div>
+      <div class="feat-title">AI 工程表作成</div>
+      <div class="feat-desc">工事内容・工期・担当者情報をもとに AI が工程表の骨格を自動生成。過去の類似工事データを参照してタスク分割・期間配分を提案し、ガントチャートにワンクリックで反映。作業順序や依存関係の最適化も可能。</div>
+      <div class="feat-tags"><span class="feat-tag">工程自動生成</span><span class="feat-tag">過去データ参照</span><span class="feat-tag">ガントチャート連携</span><span class="feat-tag">依存関係最適化</span></div>
+      <div class="feat-footer"><span></span><span class="status-chip status-phase2">フェーズ2</span></div>
+    </div>
+
+    <div class="feat-card" data-cat="ai" style="border-top-color:#b45309;">
+      <div class="feat-cat" style="color:#b45309;">BRIDGE AI</div>
+      <div class="feat-title">AI 見積もり作成</div>
+      <div class="feat-desc">顧客情報・工事内容・過去の類似見積もりデータを AI が分析し、明細行・単価・粗利を自動提案。チャットで「外装工事、50㎡、高グレード仕上げ」と指示するだけでドラフト見積もりを生成。人手による修正・調整にも対応。</div>
+      <div class="feat-tags"><span class="feat-tag">明細自動生成</span><span class="feat-tag">類似案件参照</span><span class="feat-tag">チャット指示対応</span><span class="feat-tag">粗利自動計算</span></div>
+      <div class="feat-footer"><span></span><span class="status-chip status-phase2">フェーズ2</span></div>
+    </div>
+
   </div>
 </div>
 
@@ -473,6 +561,8 @@
   <span class="legend-label">ステータス</span>
   <span class="status-chip status-done">実装済み</span>
   <span class="status-chip status-partial">部分実装</span>
+  <span class="status-chip status-phase1">フェーズ1</span>
+  <span class="status-chip status-phase2">フェーズ2</span>
   <span class="legend-label" style="margin-left:1rem;">権限</span>
   <span class="role-chip">管理者系</span>
   <span class="role-chip role-chip-all">全ロール</span>
