@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,6 +143,11 @@ export function PdfBuilderTab() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-1" asChild>
+            <Link href="/settings/pdf-builder">
+              <FileText className="size-4 mr-1" />契約書テンプレート（PDFビルダー）
+            </Link>
+          </Button>
           <Button size="sm" variant="outline" className="gap-1" onClick={handleReset}>
             <RotateCcw className="size-4 mr-1" />初期化
           </Button>

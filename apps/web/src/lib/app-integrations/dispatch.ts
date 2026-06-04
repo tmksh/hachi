@@ -3,10 +3,9 @@ import type { WebhookEvent } from "@/lib/webhooks";
 import { formatChatworkMessage, postChatworkMessage } from "./chatwork";
 import { formatIntegrationNotification } from "./format-message";
 import { postKintoneRecord, validateKintoneCredentials } from "./kintone";
-import { formatLineNotifyMessage, postLineNotify } from "./line-notify";
 import { postLineWorksMessage, validateLineWorksCredentials } from "./line-works";
 import type { AppIntegrationProvider } from "./types";
-import { postWebhookMessage } from "./webhook";
+import { postSlackWebhookMessage } from "./webhook";
 
 type IntegrationRow = {
   id: string;
@@ -30,25 +29,16 @@ export async function sendProviderNotification(
       await postChatworkMessage(apiToken, roomId, formatChatworkMessage(input.title, input.body));
       return;
     }
-    case "slack":
-    case "teams":
-    case "google_chat":
-    case "discord": {
+    case "slack": {
       const webhookUrl = credentials.webhook_url;
       if (!webhookUrl) throw new Error("Webhook URL が設定されていません");
-      await postWebhookMessage(provider, webhookUrl, input.title, input.body);
-      return;
-    }
-    case "line_notify": {
-      const accessToken = credentials.access_token;
-      if (!accessToken) throw new Error("LINE Notify トークンが設定されていません");
-      await postLineNotify(accessToken, formatLineNotifyMessage(input.title, input.body));
+      await postSlackWebhookMessage(webhookUrl, input.title, input.body);
       return;
     }
     case "line_works": {
       await postLineWorksMessage(
         validateLineWorksCredentials(credentials),
-        formatLineNotifyMessage(input.title, input.body)
+        `${input.title}\n${input.body}`
       );
       return;
     }
@@ -127,10 +117,6 @@ function getProviderLabel(provider: AppIntegrationProvider): string {
   const labels: Record<AppIntegrationProvider, string> = {
     chatwork: "Chatwork",
     slack: "Slack",
-    teams: "Microsoft Teams",
-    google_chat: "Google Chat",
-    discord: "Discord",
-    line_notify: "LINE Notify",
     line_works: "LINE WORKS",
     kintone: "kintone",
   };

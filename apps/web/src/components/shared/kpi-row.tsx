@@ -18,15 +18,16 @@ interface KpiRowProps {
   items: KpiItem[];
   loading?: boolean;
   className?: string;
-  columns?: 2 | 3 | 4;
+  columns?: 2 | 3 | 4 | 5;
 }
 
 const KPI_ICON_INNER = "h-3.5 w-3.5 text-white";
 
-const GRID_CLASS: Record<2 | 3 | 4, string> = {
+const GRID_CLASS: Record<2 | 3 | 4 | 5, string> = {
   2: "grid grid-cols-2 gap-2",
   3: "grid grid-cols-2 lg:grid-cols-3 gap-2",
   4: "grid grid-cols-2 lg:grid-cols-4 gap-2",
+  5: "grid grid-cols-2 lg:grid-cols-5 gap-2",
 };
 
 export function KpiRow({

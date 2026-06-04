@@ -26,7 +26,7 @@ import {
   Wallet, User2, FileText,
   PackageCheck, ExternalLink,
   Plus, Trash2, Loader2, Wand2,
-  CalendarDays, ScrollText, PencilLine, BookOpen, Receipt, FolderOpen,
+  CalendarDays, ScrollText, PencilLine, BookOpen, FolderOpen,
 } from "lucide-react";
 import {
   getConstruction,
@@ -43,7 +43,7 @@ import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
 import { ContractTab } from "@/components/constructions/contract-tab";
 import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
-import { InvoicesTab } from "@/components/constructions/invoices-tab";
+import { ConstructionDocumentsTab } from "@/components/constructions/construction-documents-tab";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
 import { EstimateListView, type EstimateListItem } from "@/components/estimate/estimate-list-view";
 import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
@@ -797,7 +797,7 @@ export default function ConstructionDetailPage() {
           <TabsTrigger value="change"    className="text-xs gap-1.5"><PencilLine   className="h-3.5 w-3.5" />追加変更</TabsTrigger>
           <TabsTrigger value="budget"    className="text-xs gap-1.5"><BookOpen     className="h-3.5 w-3.5" />工事台帳</TabsTrigger>
           <TabsTrigger value="orders"    className="text-xs gap-1.5"><PackageCheck className="h-3.5 w-3.5" />発注書・請書</TabsTrigger>
-          <TabsTrigger value="invoices"  className="text-xs gap-1.5"><Receipt      className="h-3.5 w-3.5" />請求書</TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs gap-1.5"><FolderOpen   className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schedule" className="mt-4">
@@ -838,6 +838,14 @@ export default function ConstructionDetailPage() {
             constructionId={id as string}
             initialOrders={changeOrders}
             baseAmount={contract?.amount ?? data.order_amount ?? 0}
+            estimateList={((data as Detail & { estimates?: EstimateListItem[] }).estimates ?? []) as EstimateListItem[]}
+            constructionInfo={{
+              title: data.title,
+              constructionNo: data.construction_no,
+              customerName: customer?.name ?? null,
+              location: customer?.address ?? null,
+              assigneeName: (data.assignee as { display_name?: string } | null)?.display_name ?? null,
+            }}
             onRefresh={reload}
           />
         </TabsContent>
@@ -869,17 +877,8 @@ export default function ConstructionDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value="invoices" className="mt-4">
-          <InvoicesTab
-            constructionId={id as string}
-            initialInvoices={(data as Detail & { invoices?: Array<{
-              id: string; invoice_no: string; invoice_date: string | null;
-              due_date: string | null; total: number; status: string; created_at: string;
-            }> }).invoices ?? []}
-            hasSchedule={Boolean(data.start_date && data.end_date)}
-            closingDayLabel={closingDayLabel}
-            onRefresh={reload}
-          />
+        <TabsContent value="documents" className="mt-4">
+          <ConstructionDocumentsTab constructionId={id as string} />
         </TabsContent>
       </Tabs>
     </div>

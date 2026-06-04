@@ -1,10 +1,6 @@
 export type AppIntegrationProvider =
   | "chatwork"
   | "slack"
-  | "teams"
-  | "google_chat"
-  | "discord"
-  | "line_notify"
   | "line_works"
   | "kintone";
 

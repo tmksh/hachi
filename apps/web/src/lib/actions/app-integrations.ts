@@ -6,7 +6,7 @@ import { sendIntegrationTest } from "@/lib/app-integrations/dispatch";
 import { resolveKintoneSettings, validateKintoneCredentials } from "@/lib/app-integrations/kintone";
 import { validateLineWorksCredentials } from "@/lib/app-integrations/line-works";
 import { getProviderDefinition } from "@/lib/app-integrations/providers/registry";
-import { validateWebhookUrl } from "@/lib/app-integrations/webhook";
+import { validateSlackWebhookUrl } from "@/lib/app-integrations/webhook";
 import {
   DEFAULT_INTEGRATION_EVENTS,
   type AppIntegrationPublic,
@@ -46,14 +46,6 @@ function buildSummary(
       return settings.room_name ? `通知ルーム: ${settings.room_name}` : null;
     case "slack":
       return "Incoming Webhook";
-    case "teams":
-      return "Incoming Webhook";
-    case "google_chat":
-      return "スペース Webhook";
-    case "discord":
-      return "チャンネル Webhook";
-    case "line_notify":
-      return "LINE Notify";
     case "line_works":
       return settings.channel_id ? `Channel ID: ${settings.channel_id}` : "Bot 通知";
     case "kintone":
@@ -74,12 +66,7 @@ function buildCredentialHint(
     case "kintone":
       return maskSecret(credentials.api_token);
     case "slack":
-    case "teams":
-    case "google_chat":
-    case "discord":
       return maskSecret(credentials.webhook_url);
-    case "line_notify":
-      return maskSecret(credentials.access_token);
     case "line_works":
       return maskSecret(credentials.client_secret);
     default:
@@ -122,10 +109,7 @@ function validateCredentials(provider: AppIntegrationProvider, credentials: Reco
 
   switch (provider) {
     case "slack":
-    case "teams":
-    case "google_chat":
-    case "discord":
-      validateWebhookUrl(provider, credentials.webhook_url);
+      validateSlackWebhookUrl(credentials.webhook_url);
       break;
     case "line_works":
       validateLineWorksCredentials(credentials);

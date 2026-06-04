@@ -194,9 +194,10 @@ export default function CalendarPage() {
       return { rangeStart: startOfDay(currentDate), rangeEnd: endOfDay(currentDate) };
     }
     if (view === "week") {
+      const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
       return {
-        rangeStart: startOfMonth(currentDate),
-        rangeEnd: endOfMonth(currentDate),
+        rangeStart: ws,
+        rangeEnd: addDays(ws, 6),
       };
     }
     const ms = startOfMonth(currentDate);
@@ -398,21 +399,33 @@ export default function CalendarPage() {
     setCurrentDate(
       view === "day"
         ? subDays(currentDate, 1)
-        : subMonths(currentDate, 1)
+        : view === "week"
+          ? subDays(currentDate, 7)
+          : subMonths(currentDate, 1)
     );
   };
   const goNext = () => {
     setCurrentDate(
       view === "day"
         ? addDays(currentDate, 1)
-        : addMonths(currentDate, 1)
+        : view === "week"
+          ? addDays(currentDate, 7)
+          : addMonths(currentDate, 1)
     );
   };
 
   const titleText =
     view === "day"
       ? format(currentDate, "yyyy年M月d日（E）", { locale: ja })
-      : format(currentDate, "yyyy年M月", { locale: ja });
+      : view === "week"
+        ? (() => {
+            const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
+            const we = addDays(ws, 6);
+            return isSameMonth(ws, we)
+              ? format(ws, "yyyy年M月", { locale: ja })
+              : `${format(ws, "yyyy年M月", { locale: ja })} – ${format(we, "M月", { locale: ja })}`;
+          })()
+        : format(currentDate, "yyyy年M月", { locale: ja });
 
   const selectedDateEvents = useMemo(
     () => visibleEvents.filter((e) => isSameDay(parseISO(e.start_at), selectedDate)),
@@ -846,7 +859,7 @@ function ConnectedAccountsPanel({
         <div className="flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-muted/40 transition-colors">
           <GoogleLogo className="h-4 w-4 shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium leading-tight">Google カレンダー</div>
+            <div className="text-xs font-medium leading-tight whitespace-nowrap">Google カレンダー</div>
             <div className="text-[10px] text-muted-foreground truncate">
               {googleConnected
                 ? googleAccountEmail ?? "連携済み"
@@ -1083,7 +1096,9 @@ function WeekView({
   onRefresh: () => void;
   onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
-  const days = eachDayOfInterval({ start: startOfMonth(date), end: endOfMonth(date) });
+  // 週ビュー: 選択日を含む週（月曜始まり）の7日間のみ表示
+  const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef   = useRef<HTMLDivElement>(null);
@@ -1107,15 +1122,12 @@ function WeekView({
   const [dragging, setDragging] = useState<DragInfo | null>(null);
   const dragRef = useRef<DragInfo | null>(null);
 
-  /* Scroll to 8am (vertical) and center today/selected date (horizontal) on mount or month change */
+  /* 週変更時に縦スクロールを 8:00 付近にリセット（横スクロールは7日固定のため不要） */
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = 7.5 * HOUR_H; // 7:30 start → 8:00 label is clearly below the sticky header
-    const todayIdx = days.findIndex((d) => isToday(d));
-    const targetIdx = todayIdx >= 0 ? todayIdx : 0;
-    const targetX = TIME_W + targetIdx * DAY_COL_W_DYN - (el.clientWidth - DAY_COL_W_DYN * 3.5);
-    el.scrollLeft = Math.max(0, targetX);
+    el.scrollTop = 7.5 * HOUR_H;
+    el.scrollLeft = 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 

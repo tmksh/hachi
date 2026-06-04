@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shared/page-header";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, Phone, Mail, HardHat, LayoutGrid, List } from "lucide-react";
+import { Search, Plus, Phone, Mail, LayoutGrid, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCraftsmen } from "@/lib/actions/craftsmen";
 import type { Craftsman } from "@/lib/database.types";
@@ -37,30 +38,37 @@ export default function CraftsmenPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="職人管理" description="協力業者・職人の一覧"><Link href="/craftsmen/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規登録</Button></Link></PageHeader>
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 min-w-[240px] max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="名前・会社名で検索..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9" /></div>
-          <div className="segmented-control shrink-0 text-xs ml-auto">
-            {([
-              { key: "grid", label: "カード", Icon: LayoutGrid },
-              { key: "list", label: "一覧", Icon: List },
-            ] as const).map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setView(key)}
-                className={cn(
-                  "segmented-control-btn",
-                  view === key && "segmented-control-btn-active",
-                )}
-                aria-label={`${label}表示`}
-              >
-                <Icon className="shrink-0" />{label}
-              </button>
-            ))}
-          </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="名前・会社名で検索..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1">{["all","carpenter","electrical","interior","plumbing","general"].map(s => <Button key={s} size="sm" variant={specFilter===s?"default":"outline"} onClick={()=>setSpecFilter(s)}>{s === "all" ? "すべて" : SPEC_LABELS[s]}</Button>)}</div>
+        <div className="flex flex-wrap gap-1">
+          {["all","carpenter","electrical","interior","plumbing","general"].map(s => (
+            <Button key={s} size="sm" variant={specFilter===s?"default":"outline"} onClick={()=>setSpecFilter(s)}>
+              {s === "all" ? "すべて" : SPEC_LABELS[s]}
+            </Button>
+          ))}
+        </div>
+        <div className="segmented-control shrink-0 text-xs ml-auto">
+          {([
+            { key: "grid", label: "カード", Icon: LayoutGrid },
+            { key: "list", label: "一覧", Icon: List },
+          ] as const).map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              className={cn(
+                "segmented-control-btn",
+                view === key && "segmented-control-btn-active",
+              )}
+              aria-label={`${label}表示`}
+            >
+              <Icon className="shrink-0" />{label}
+            </button>
+          ))}
+        </div>
       </div>
       {loading ? (
         view === "grid" ? (
@@ -78,7 +86,7 @@ export default function CraftsmenPage() {
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"><HardHat className="h-5 w-5 text-primary" /></div>
+                      <CustomerAvatar seed={c.id} name={c.name} size="md" />
                       <div><p className="font-medium">{c.name}</p><p className="text-sm text-muted-foreground">{c.company_name || "-"}</p></div>
                     </div>
                     <div className="flex gap-1">{c.specialty && <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge>}{c.rank && <Badge className="text-xs">{c.rank}</Badge>}</div>
@@ -116,7 +124,7 @@ export default function CraftsmenPage() {
                   <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => { window.location.href = `/craftsmen/${c.id}`; }}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><HardHat className="h-4 w-4 text-primary" /></div>
+                        <CustomerAvatar seed={c.id} name={c.name} />
                         <span className="font-medium">{c.name}</span>
                       </div>
                     </TableCell>

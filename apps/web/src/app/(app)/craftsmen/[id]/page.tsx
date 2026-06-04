@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Pencil, Trash2, Phone, Mail, HardHat } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Phone, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { getCraftsman, deleteCraftsman } from "@/lib/actions/craftsmen";
 import type { Craftsman } from "@/lib/database.types";
 
@@ -35,7 +36,7 @@ export default function CraftsmanDetailPage() {
       <Link href="/craftsmen" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />職人一覧</Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center"><HardHat className="h-7 w-7 text-primary" /></div>
+          <CustomerAvatar seed={data.id} name={data.name} size="lg" />
           <div><h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
           {data.specialty && <Badge variant="secondary">{SPEC_LABELS[data.specialty]}</Badge>}
           {data.rank && <Badge>{data.rank}ランク</Badge>}

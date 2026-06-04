@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { getCostBudget, saveCostBudget } from "@/lib/actions/cost-budgets";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Trash2, Plus, MessageSquare, Send, X } from "lucide-react";
 
 /* ─────────────────── types ─────────────────── */
@@ -617,18 +618,15 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
               </span>
             )}
           </button>
-          <button
+          <Button
+            size="sm"
             onClick={handleSave}
-            disabled={saving}
-            className={cn(
-              "text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
-              saved
-                ? "bg-green-100 text-green-700 cursor-default shadow-inner"
-                : "bg-[#6BC9B3] text-white hover:bg-[#4aab96] shadow-[0_2px_6px_rgba(107,201,179,0.50),0_1px_2px_rgba(107,201,179,0.30),inset_0_1px_0_rgba(255,255,255,0.25)] hover:shadow-[0_4px_10px_rgba(107,201,179,0.55),0_2px_4px_rgba(107,201,179,0.35),inset_0_1px_0_rgba(255,255,255,0.28)] hover:-translate-y-px active:translate-y-0 active:shadow-inner"
-            )}
+            disabled={saving || saved}
+            variant={saved ? "outline" : "default"}
+            className={saved ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-100 cursor-default" : undefined}
           >
             {saved ? "保存済み" : saving ? "保存中..." : "保存する"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -655,7 +653,17 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           <thead>
             <tr>
               <th colSpan={4} className={cn(th, "bg-gray-100 text-left text-gray-600")}>基本情報</th>
-              <th colSpan={3} className={cn(th, "bg-blue-100 text-blue-800")}>実行予算・追加契約</th>
+              <th colSpan={3} className={cn(th, "bg-blue-100 text-blue-800 relative group/add-budget")}>
+                <span>実行予算・追加契約</span>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); addRow(); }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center h-5 w-5 rounded bg-blue-600 text-white opacity-0 group-hover/add-budget:opacity-100 transition-opacity hover:bg-blue-700 shadow-sm"
+                  title="1行追加"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </th>
               <th className={cn(th, "bg-green-100 text-green-800")}>合算</th>
               <th className={cn(th, "bg-violet-100 text-violet-800")}>管理</th>
               <th colSpan={4} className={cn(th, "bg-amber-100 text-amber-800")}>発注</th>

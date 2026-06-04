@@ -12,10 +12,6 @@ type IntegrationBrandIconProps = {
 const ICON_SRC: Record<AppIntegrationProvider, string> = {
   chatwork: "/integrations/chatwork.svg",
   slack: "/integrations/slack.svg",
-  teams: "/integrations/teams.svg",
-  google_chat: "/integrations/google_chat.svg",
-  discord: "/integrations/discord.svg",
-  line_notify: "/integrations/line_notify.svg",
   line_works: "/integrations/line_works.svg",
   kintone: "/integrations/kintone.svg",
 };
@@ -23,10 +19,6 @@ const ICON_SRC: Record<AppIntegrationProvider, string> = {
 const ICON_LABEL: Record<AppIntegrationProvider, string> = {
   chatwork: "Chatwork",
   slack: "Slack",
-  teams: "Microsoft Teams",
-  google_chat: "Google Chat",
-  discord: "Discord",
-  line_notify: "LINE Notify",
   line_works: "LINE WORKS",
   kintone: "kintone",
 };

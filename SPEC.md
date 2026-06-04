@@ -140,7 +140,7 @@ Supabase RLS により `company_id` 単位でデータを分離。
 | Google Calendar API | OAuth 設定時に双方向同期（`calendar` スコープ） |
 | 外部向け REST API | 実装済 — `/api/v1/*`（GET）、設定画面で API キー発行 |
 | Webhook | 実装済 — 全主要イベント発火、HMAC 署名付き POST |
-| アプリ連携 | 実装済 — Chatwork / Slack 等 8 サービス、設定画面からワンクリック接続 |
+| アプリ連携 | 実装済 — Chatwork / Slack / LINE WORKS / kintone、設定画面からワンクリック接続 |
 
 ---
 
@@ -202,7 +202,7 @@ API キーは **設定 → API/Webhook** から発行。
 
 ### アプリ連携（ワンクリック通知）
 
-**設定 → アプリ連携** から Chatwork / Slack / Teams / Google Chat / Discord / LINE Notify / LINE WORKS / kintone を接続。  
+**設定 → アプリ連携** から Chatwork / Slack / LINE WORKS / kintone を接続。  
 顧客・商談・見積・契約・工事・請求・ワークフロー・回覧板のイベントを各サービスへ自動通知。
 
 ### Webhook

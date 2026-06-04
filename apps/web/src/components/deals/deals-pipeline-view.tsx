@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, Users, DollarSign, BarChart3, FileText, MoreVertical, Pencil, Trash2, GripVertical, User, Clock, ArrowRight, Search, LayoutList, KanbanSquare, Eye, EyeOff } from "lucide-react";
+import { TrendingUp, Users, DollarSign, BarChart3, FileText, MoreVertical, Pencil, Trash2, GripVertical, User, Clock, ArrowRight, Search, LayoutList, KanbanSquare, Eye, EyeOff, Target } from "lucide-react";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { cn } from "@/lib/utils";
@@ -191,7 +191,6 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
   const lostDeals      = searchFiltered.filter(d => isLostStageKey(normalizeStageKey(d.stage, stages), stages));
   const highPriorityDeals = allActiveDeals.filter(d => d.priority === "high");
 
-  const totalAllAmount  = allActiveDeals.reduce((s, d) => s + (d.value || 0), 0);
   const highPrioAmount  = highPriorityDeals.reduce((s, d) => s + (d.value || 0), 0);
 
   const totalAmount   = filteredDeals.reduce((s, d) => s + (d.value || 0), 0);
@@ -240,7 +239,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
 
   if (loading) return (
     <div className="space-y-6">
-      <KpiRow loading columns={4} items={[{ label: "", value: "" }, { label: "", value: "" }, { label: "", value: "" }, { label: "", value: "" }]} />
+      <KpiRow loading columns={5} items={[{ label: "", value: "" }, { label: "", value: "" }, { label: "", value: "" }, { label: "", value: "" }, { label: "", value: "" }]} />
       <Skeleton className="h-[400px] w-full" />
     </div>
   );
@@ -251,46 +250,12 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
         items={[
           { label: "総商談数", value: String(filteredDeals.length), sub: "件", icon: Users },
           { label: "総金額", value: formatYen(totalAmount), icon: DollarSign },
+          { label: "確度「高」", value: formatYen(highPrioAmount), sub: `${highPriorityDeals.length}件`, icon: Target },
           { label: "受注率", value: `${convRate}%`, icon: TrendingUp },
           { label: "パイプライン", value: formatYen(pipelineValue), sub: "見込み", icon: BarChart3 },
         ]}
-        columns={4}
+        columns={5}
       />
-
-      {/* 確度サマリーバー */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setShowClosedDeals(false)}
-          className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors",
-            !showClosedDeals
-              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-              : "bg-muted/50 border-border text-muted-foreground hover:bg-muted",
-          )}
-        >
-          <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-          確度「高」{formatYen(highPrioAmount)}
-          <span className="text-xs opacity-80">({highPriorityDeals.length}件)</span>
-        </button>
-        <button
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border bg-muted/50 border-border text-muted-foreground hover:bg-muted transition-colors"
-        >
-          <TrendingUp className="h-3.5 w-3.5" />
-          全件獲得時 {formatYen(totalAllAmount)}
-          <span className="text-xs opacity-80">({allActiveDeals.length}件)</span>
-        </button>
-        {(wonDeals.length > 0 || lostDeals.length > 0) && (
-          <button
-            onClick={() => setShowClosedDeals(v => !v)}
-            className="inline-flex items-center gap-1.5 ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showClosedDeals ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            {showClosedDeals
-              ? "受注/失注を非表示"
-              : `受注${wonDeals.length}件・失注${lostDeals.length}件は非表示`}
-          </button>
-        )}
-      </div>
 
       {/* 検索・フィルタ・表示切替 */}
       <div className="flex flex-wrap items-center gap-2">
@@ -308,7 +273,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
             <SelectValue placeholder="担当者" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="_all">担当者：すべて</SelectItem>
+            <SelectItem value="_all">担当者</SelectItem>
             <SelectItem value="_unassigned">未割り当て</SelectItem>
             {profiles.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
@@ -320,12 +285,23 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
             <SelectValue placeholder="ステージ" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="_all">ステージ：すべて</SelectItem>
+            <SelectItem value="_all">ステージ</SelectItem>
             {stages.map(s => (
               <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {(wonDeals.length > 0 || lostDeals.length > 0) && (
+          <button
+            onClick={() => setShowClosedDeals(v => !v)}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showClosedDeals ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showClosedDeals
+              ? "受注/失注を非表示"
+              : `受注${wonDeals.length}件・失注${lostDeals.length}件は非表示`}
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-1 rounded-lg border bg-muted/40 p-1">
           <button
             onClick={() => setViewMode("list")}
