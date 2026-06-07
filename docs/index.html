@@ -463,6 +463,7 @@
     <a href="index.html#architecture">アーキテクチャ</a>
     <a href="index.html#subdomain">サブドメイン</a>
     <a href="index.html#lead-flow">リードフロー</a>
+          <a href="index.html#construction-flow">工事フロー</a>
           <a href="index.html#constructions">工事管理（7タブ）</a>
           <a href="index.html#cost">工事台帳</a>
     <a href="features.html">機能一覧</a>
@@ -888,7 +889,7 @@
             <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
           </tr>
           <tr>
-            <td>顧客管理 / CRM</td>
+            <td>顧客・商談管理 / CRM</td>
             <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
             <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
             <td class="perm-cell"><span class="dot-no"></span></td>
@@ -999,23 +1000,23 @@
         <div><span class="login-pass">admin2026</span></div>
         <div><span class="badge-full">全機能アクセス</span></div>
       </div>
-      <div class="login-section-header">ロール確認用テストアカウント — パスワード共通: Bridge2024!</div>
-      <div class="login-row main">
+      <div class="login-section-header">ロール確認用（demo_seed 登録時）</div>
+      <div class="login-row">
         <div class="login-role">本部管理者</div>
         <div class="login-email">hqadmin@bridge.test</div>
-        <div><span class="login-pass">Bridge2024!</span></div>
-        <div><span class="badge-full">全機能アクセス</span></div>
+        <div><span class="login-pass">admin2026</span></div>
+        <div><span class="badge-full">BI・予算含む</span></div>
       </div>
       <div class="login-row">
         <div class="login-role">施工店管理者</div>
         <div class="login-email">contractor@bridge.test</div>
-        <div><span class="login-pass">Bridge2024!</span></div>
+        <div><span class="login-pass">admin2026</span></div>
         <div><span class="badge-limited">予算除く</span></div>
       </div>
       <div class="login-row">
         <div class="login-role">社員</div>
         <div class="login-email">employee@bridge.test</div>
-        <div><span class="login-pass">Bridge2024!</span></div>
+        <div><span class="login-pass">admin2026</span></div>
         <div><span class="badge-limited">ポータルのみ</span></div>
       </div>
     </div>
@@ -1041,7 +1042,7 @@
       <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
         <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 2</div>
         <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">商談追加</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">パイプライン（/deals）の「＋商談追加」ボタンから顧客を選択して商談を作成。ステージ・金額・クロージング日を設定。</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">顧客・商談管理（/crm）の「パイプライン」ビューで「＋商談を追加」から顧客を選択して商談を作成。ステージ・金額・クロージング日を設定。<code>/deals</code> は <code>/crm?view=pipeline</code> へリダイレクト。</div>
       </div>
       <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
       <!-- Step 3 -->
@@ -1110,55 +1111,138 @@
       <div style="background:#f0fdf4;padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;color:#15803d;">受注</div><div style="font-size:.76rem;color:var(--muted);">契約成立。工事へ引き継ぎ</div></div>
       <div style="background:#fef2f2;padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;color:#dc2626;">失注</div><div style="font-size:.76rem;color:var(--muted);">競合他社への流出・キャンセル</div></div>
     </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin:2.5rem 0 .8rem;">顧客詳細タブ（/crm/[id]）</div>
+    <div class="table-wrap" style="margin-bottom:1.5rem;">
+      <table>
+        <thead><tr><th>タブ</th><th>スプレッドシート</th><th>状態</th><th>概要</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">概要</td><td>—</td><td>実装済</td><td>商談・見積・契約・工事のサマリーと関連一覧</td></tr>
+          <tr><td class="td-name">記入画面</td><td>No.5</td><td>実装済</td><td>電話・メール・予算感・問い合わせ分類など。顧客カードクリックで展開</td></tr>
+          <tr><td class="td-name">商談</td><td>No.6</td><td>実装済</td><td>商談タイムライン、要約表示、メモ→ToDo化</td></tr>
+          <tr><td class="td-name">録音・要約</td><td>No.7〜9</td><td>部分実装</td><td>録音UIあり。AI文字起こし・履歴一覧は未着手</td></tr>
+          <tr><td class="td-name">ToDo</td><td>No.10〜11</td><td>部分実装</td><td>3カラム構成は実装済。録音からの自動追加は未着手</td></tr>
+          <tr><td class="td-name">スケジューリング</td><td>No.12〜14</td><td>部分実装</td><td>候補日提案フロー実装済。AI最適化は未着手</td></tr>
+          <tr><td class="td-name">ファイル</td><td>No.15,45</td><td>部分実装</td><td>アップロード対応。一覧/カード表示は未着手</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">契約詳細タブ（/contracts/[id]）</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>タブ</th><th>スプレッドシート</th><th>状態</th><th>概要</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">顧客情報</td><td>No.24</td><td>部分実装</td><td>契約基本情報・見積紐付け。横断共通化は未着手</td></tr>
+          <tr><td class="td-name">やり取り管理</td><td>No.25〜28</td><td>部分実装</td><td>名称変更済。LINE/Slack連携・クイック返信は未着手</td></tr>
+          <tr><td class="td-name">書類作成</td><td>No.29〜30</td><td>部分実装</td><td>テンプレ選択・PDFプレビュー。管理者テンプレ設定は未着手</td></tr>
+          <tr><td class="td-name">承認WF</td><td>No.31</td><td>部分実装</td><td>ワークフロー起票・履歴。ポータル完全連携は未着手</td></tr>
+          <tr><td class="td-name">電子契約</td><td>No.32</td><td>部分実装</td><td>CloudSign送信UI。APIキー設定時に利用可</td></tr>
+          <tr><td class="td-name">ドキュメント</td><td>No.33</td><td>部分実装</td><td>契約関連ファイル格納</td></tr>
+          <tr><td class="td-name">見積もり</td><td>No.20</td><td>実装済</td><td>契約画面からも見積作成・閲覧可能</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CONSTRUCTION FLOW -->
+  <section id="construction-flow">
+    <div class="section-label">Feature Detail</div>
+    <h2>工事フロー（Notion 2-1〜2-5）</h2>
+    <p class="section-desc"><a href="https://scythe-aurora-978.notion.site/p/36c0fccb9ad48023b431f255937b2bab" target="_blank">Notion 運用フロー</a> の「工事フロー」と現行システムの対応です。営業フロー（1-6 受注確定）で契約・工事が自動登録された後、現場担当がこのフローで進めます。</p>
+
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ステップフロー</div>
+    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:2.5rem;overflow-x:auto;">
+      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-radius:12px 0 0 12px;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-1</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">引き継ぎ〜工程表</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">受注後の工事登録（/constructions/new）→ 工程表タブでガント作成</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
+      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-2</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">見積作成</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">工事詳細「見積もり」タブで版管理・改訂</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
+      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-3</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">追加変更</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">追加変更タブで差額・明細比較・CloudSign</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
+      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-4</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">工事台帳</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">原価管理表を DB 永続化（construction_cost_budgets）</div>
+      </div>
+      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
+      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;border-radius:0 12px 12px 0;padding:1.4rem 1.2rem;">
+        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-5</div>
+        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">発注書・請求</div>
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">発注書・請書タブ + 請求管理（/invoices）で顧客請求</div>
+      </div>
+    </div>
+
+    <div class="db-note" style="margin-bottom:2.5rem;">
+      <strong>整合性メモ：</strong> Notion 2-5 は「発注書・請求書」を1ステップにまとめています。現行 UI では下請への<strong>発注書・請書</strong>は工事詳細タブ、顧客向け<strong>請求書</strong>はメニュー「請求管理」で横断管理しています（工事詳細に請求書タブはありません）。
+    </div>
   </section>
 
   <!-- CONSTRUCTION TABS -->
   <section id="constructions">
     <div class="section-label">Feature Detail</div>
     <h2>工事管理（7タブ構成）</h2>
-    <p class="section-desc">工事詳細ページ（/constructions/[id]）は 2026/04/16 設計レビューに基づき、旧5タブから7タブに再構成されています。受注から完工・請求までを1画面で完結できます。</p>
+    <p class="section-desc">工事詳細ページ（/constructions/[id]）の現行タブ構成です。受注から現場管理・原価管理までを1画面で完結できます。</p>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">タブ一覧</div>
+    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">タブ一覧（2026-06 時点）</div>
     <div class="table-wrap" style="margin-bottom:2.5rem;">
       <table>
         <thead>
-          <tr><th style="width:100px;">タブ</th><th style="width:140px;">キー</th><th>機能概要</th></tr>
+          <tr><th style="width:120px;">タブ</th><th style="width:140px;">キー</th><th style="width:80px;">Notion</th><th>機能概要</th></tr>
         </thead>
         <tbody>
           <tr>
             <td class="td-name">工程表</td>
             <td class="td-mono">schedule</td>
+            <td>2-1</td>
             <td>ガントチャートで工程タスクの期間・進捗を管理。タスクの追加・編集・期間変更に対応。</td>
           </tr>
           <tr>
             <td class="td-name">見積もり</td>
             <td class="td-mono">estimate</td>
-            <td>1工事に複数見積を保持。版（version）管理・改訂（parent_estimate_id）に対応。予備費1（デフォルト2%）・予備費2（3%）・デフォルト粗利率（50%）を見積ごとに設定可能。</td>
+            <td>2-2</td>
+            <td>1工事に複数見積を保持。版（version）管理・改訂（parent_estimate_id）に対応。予備費1（2%）・予備費2（3%）を設定可能。</td>
           </tr>
           <tr>
             <td class="td-name">契約書</td>
             <td class="td-mono">contract</td>
+            <td>—</td>
             <td>契約書 PDF のアップロード・管理。顧客・工期・契約金額をコンテキストとして表示。</td>
           </tr>
           <tr>
             <td class="td-name">追加変更</td>
             <td class="td-mono">change</td>
-            <td>追加変更工事（change_orders）の作成・承認。変更前後の明細・差額を記録。<strong>CloudSign B案</strong>：会社設定で API キーを登録済みの場合は電子署名送信、未設定時は PDF ダウンロードで代替。</td>
+            <td>2-3</td>
+            <td>追加変更工事（change_orders）の作成・承認。変更前後の明細・差額を記録。CloudSign B案（未設定時は PDF 代替）。</td>
           </tr>
           <tr>
             <td class="td-name">工事台帳</td>
             <td class="td-mono">budget</td>
-            <td>原価管理表（実行予算・発注・月次請求・粗利）。<strong>construction_cost_budgets</strong> テーブルへ永続化。詳細は下記「工事台帳」セクション参照。</td>
+            <td>2-4</td>
+            <td>原価管理表（実行予算・発注・月次請求・粗利）。<strong>construction_cost_budgets</strong> テーブルへ永続化。</td>
           </tr>
           <tr>
-            <td class="td-name">発注書</td>
+            <td class="td-name">発注書・請書</td>
             <td class="td-mono">orders</td>
-            <td>下請発注（contractor_orders）の作成・ステータス管理。支払回数は <strong>2回 / 4回 / 6回 / 12回</strong> から選択し、着工時・中間・追加・完了のフェーズに按分（payment_schedule JSONB）。</td>
+            <td>2-5</td>
+            <td>下請発注（contractor_orders）の作成・ステータス管理。支払回数 <strong>2/4/6/12回</strong> の payment_schedule 按分。</td>
           </tr>
           <tr>
-            <td class="td-name">請求書</td>
-            <td class="td-mono">invoices</td>
-            <td>工事に紐づく請求書一覧。単発作成に加え、会社設定の<strong>締日（20日締め / 月末締め）</strong>に基づく月次請求の一括生成に対応。</td>
+            <td class="td-name">ドキュメント一覧</td>
+            <td class="td-mono">documents</td>
+            <td>—</td>
+            <td>工事関連ファイルの一覧・カード表示・ダウンロード。顧客詳細のファイルタブと連携予定（No.45 未着手）。</td>
           </tr>
         </tbody>
       </table>
@@ -1873,44 +1957,65 @@
   </section>
 
   <!-- SCREENSHOTS -->
-  <section>
+  <section id="screenshots">
     <div class="section-label">Screenshots</div>
     <h2>画面スクリーンショット</h2>
-    <p class="section-desc">実際のシステム画面の一部です。</p>
+    <p class="section-desc"><code>admin@example.com</code> / <code>admin2026</code> でログインし、2026-06-07 時点の実画面をキャプチャしています。</p>
     <div class="ss-grid">
       <div class="ss-card">
         <img src="screenshots/dashboard.png" alt="ダッシュボード" />
         <div class="ss-info">
-          <div class="ss-title">ダッシュボード</div>
-          <div class="ss-desc">受注額・パイプライン・顧客数・進行件数などのKPIをウィジェット形式で一覧表示。勤怠打刻・ワークフロー状況・未読お知らせも確認できます。</div>
+          <div class="ss-title">ダッシュボード（/dashboard）</div>
+          <div class="ss-desc">受注額・商談数・進行案件などの KPI、勤怠打刻、今日のフォーカス（ToDo）、生産サマリーをウィジェット表示。D&amp;D で並べ替え可能。</div>
         </div>
       </div>
       <div class="ss-card">
-        <img src="screenshots/attendance.png" alt="勤怠管理" />
+        <img src="screenshots/crm-list.png" alt="顧客管理" />
         <div class="ss-info">
-          <div class="ss-title">勤怠管理</div>
-          <div class="ss-desc">ワンクリックで出退勤打刻。アナログ時計UIでリアルタイム表示。管理者は全スタッフの勤怠確認・承認・月次レポートに対応しています。</div>
+          <div class="ss-title">顧客・商談管理 — 一覧（/crm）</div>
+          <div class="ss-desc">初期表示は「一覧」。法人／個人タブ、一覧・カード・パイプラインの3ビュー切替。スプレッドシート No.2〜3 の要件どおり実装済み。</div>
         </div>
       </div>
       <div class="ss-card">
-        <img src="screenshots/workflow.png" alt="ワークフロー" />
+        <img src="screenshots/crm-pipeline.png" alt="商談パイプライン" />
         <div class="ss-info">
-          <div class="ss-title">ワークフロー</div>
-          <div class="ss-desc">経費申請・休暇申請・購入申請を電子化。申請から承認フロー・完了まで、ステータスをリアルタイムで管理できます。</div>
+          <div class="ss-title">商談パイプライン（/crm?view=pipeline）</div>
+          <div class="ss-desc">独立画面は廃止。パイプライン／一覧の切替、KPI バー、受注確定フロー。旧 <code>/deals</code> はここへリダイレクト。</div>
         </div>
       </div>
       <div class="ss-card">
-        <img src="screenshots/settings.png" alt="設定" />
+        <img src="screenshots/crm-detail.png" alt="顧客詳細" />
         <div class="ss-info">
-          <div class="ss-title">設定・プロフィール</div>
-          <div class="ss-desc">プロフィール編集・通知設定・会社情報の管理。通知設定は Supabase に永続保存されます。</div>
+          <div class="ss-title">顧客詳細（/crm/[id]）</div>
+          <div class="ss-desc">概要・記入画面・商談・録音・ToDo・スケジューリング・ファイルの7タブ。商談→見積→契約→工事の関連データを横断表示。</div>
         </div>
       </div>
       <div class="ss-card">
-        <img src="screenshots/unauthorized.png" alt="アクセス制限" />
+        <img src="screenshots/quotes-list.png" alt="見積管理" />
         <div class="ss-info">
-          <div class="ss-title">アクセス制限ページ</div>
-          <div class="ss-desc">権限のないページにアクセスした場合に表示されます。ミドルウェアによるロールベースのルート保護（RBAC）を実装済みです。</div>
+          <div class="ss-title">見積管理（/quotes）</div>
+          <div class="ss-desc">顧客別／全見積の2タブで階層表示。顧客カード→見積一覧→詳細の遷移（No.16〜19）。大項目・詳細項目の階層明細に対応。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/contract-detail.png" alt="契約詳細" />
+        <div class="ss-info">
+          <div class="ss-title">契約詳細（/contracts/[id]）</div>
+          <div class="ss-desc">顧客情報・やり取り管理・書類作成・承認WF・電子契約・ドキュメント・見積もりの7タブ。受注確定で自動登録された案件を管理。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/constructions-list.png" alt="工事一覧" />
+        <div class="ss-info">
+          <div class="ss-title">工事管理 — 一覧（/constructions）</div>
+          <div class="ss-desc">着工前・施工中・完了のステータス集計、担当者フィルタ、工事名・顧客名検索。受注後の引き継ぎ先画面。</div>
+        </div>
+      </div>
+      <div class="ss-card">
+        <img src="screenshots/construction-detail.png" alt="工事詳細" />
+        <div class="ss-info">
+          <div class="ss-title">工事詳細 — 工程表（/constructions/[id]）</div>
+          <div class="ss-desc">Notion 工事フロー 2-1 に対応。ガントチャートで工程タスクを管理。7タブ（工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント一覧）。</div>
         </div>
       </div>
     </div>

@@ -207,15 +207,15 @@
         <span class="tl-status tl-s-dead">DEADLINE</span>
       </div>
       <div class="tl-card">
-        <div class="tl-date">7月15日</div>
+        <div class="tl-date">7月30日</div>
         <div class="tl-label">機能実装完了</div>
       </div>
       <div class="tl-card">
-        <div class="tl-date">7月16日〜8月14日</div>
+        <div class="tl-date">7月31日〜8月28日</div>
         <div class="tl-label">動作確認・QA</div>
       </div>
       <div class="tl-card tl-card-rel">
-        <div class="tl-date">8月15日</div>
+        <div class="tl-date">8月30日</div>
         <div class="tl-label">全機能リリース準備完了</div>
         <span class="tl-status tl-s-rel">TARGET</span>
       </div>
@@ -243,40 +243,46 @@
     <!-- CRM -->
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
-      <div class="feat-title">顧客管理</div>
-      <div class="feat-desc">顧客の登録・編集・検索・削除。法人／個人タブ切替、カード／テーブル表示切替。担当者アサイン、獲得ソース・ステータス記録。顧客詳細から関連する商談・見積・契約・工事を一覧確認できます。タグはマスタ設定＋顧客フォームでの付与に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">登録・編集・削除</span><span class="feat-tag">担当者アサイン</span><span class="feat-tag">獲得ソース管理</span><span class="feat-tag">関連データ参照</span></div></div>
+      <div class="feat-title">顧客・商談管理</div>
+      <div class="feat-desc">顧客の登録・編集・検索・削除。法人／個人タブ、<strong>一覧／カード／パイプライン</strong>の3ビュー切替（初期表示は一覧）。独立したパイプライン画面は廃止し、<code>/crm?view=pipeline</code> に統合。<code>/deals</code> は同画面へリダイレクト。担当者アサイン、獲得ソース・タグ管理、関連データ（商談・見積・契約・工事）参照に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">一覧・カード・パイプライン</span><span class="feat-tag">担当者アサイン</span><span class="feat-tag">獲得ソース管理</span><span class="feat-tag">関連データ参照</span></div></div>
+
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-cat">CRM・リード</div>
+      <div class="feat-title">顧客詳細（7タブ）</div>
+      <div class="feat-desc">顧客詳細は概要／記入画面／商談／録音・要約／ToDo／スケジューリング／ファイルの7タブ構成。記入画面で電話・メール・予算感・問い合わせ分類などを管理。商談タブはタイムライン表示、ToDoは3カラム（Today／upcoming／All）、スケジューリングは面談区分・希望時間帯・所要時間から候補日を提案。</div>
+      <div class="feat-tags"><span class="feat-tag">記入画面</span><span class="feat-tag">商談タイムライン</span><span class="feat-tag">ToDo 3カラム</span><span class="feat-tag">候補日提案</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">商談パイプライン</div>
-      <div class="feat-desc">商談をカンバン形式で管理。ドラッグ&amp;ドロップでステージ変更、DB に即時反映。担当者フィルタ・商談数／総額／受注率の KPI バー表示。「受注」ステージへ移動すると受注確定ダイアログが表示され、見積作成または工事登録へ誘導。商談の追加・編集・削除に対応。</div>
+      <div class="feat-desc">顧客・商談管理画面の「パイプライン」ビューでカンバン／一覧を切替。ドラッグ&amp;Dでステージ変更、KPI（商談数・総額・受注率）表示。「受注」へ移動すると受注確定ダイアログが開き、契約・工事へ自動引き継ぎ。商談の追加・編集・削除に対応。</div>
       <div class="feat-tags"><span class="feat-tag">カンバン D&amp;D</span><span class="feat-tag">受注率 KPI</span><span class="feat-tag">受注確定フロー</span><span class="feat-tag">担当者フィルタ</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">見積管理</div>
-      <div class="feat-desc">見積書の作成・編集・削除・ステータス管理（下書き／送付済み／受理／却下）。明細行と粗利・粗利率をリアルタイム自動計算。商談からの顧客・金額引き継ぎに対応。工事詳細では1工事に複数見積・版（revision）管理。予備費1（2%）・予備費2（3%）を見積ごとに設定可能。</div>
-      <div class="feat-tags"><span class="feat-tag">明細行 CRUD</span><span class="feat-tag">粗利・粗利率計算</span><span class="feat-tag">版管理・改訂</span><span class="feat-tag">予備費設定</span></div></div>
+      <div class="feat-desc">見積の横断管理。<strong>顧客別</strong>タブで顧客→見積一覧→詳細の階層遷移、<strong>全見積</strong>タブで横断閲覧。大項目／詳細項目の階層明細、粗利・粗利率のリアルタイム計算、PDFプレビュー・コピー作成。作成時は顧客選択→情報取得→編集画面。工事詳細・契約詳細からも見積を紐付け可能。</div>
+      <div class="feat-tags"><span class="feat-tag">顧客別階層</span><span class="feat-tag">大項目・詳細項目</span><span class="feat-tag">PDFプレビュー</span><span class="feat-tag">版管理・改訂</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">職人管理</div>
-      <div class="feat-desc">協力業者・職人の登録・編集・削除。専門分野・ランク（A/B/C）・資格を管理。カード／リスト表示切替、専門分野フィルタ。詳細ページで進行中案件数・累計受注額を表示。下請発注と連携して工事への紐付けが可能。</div>
-      <div class="feat-tags"><span class="feat-tag">登録・編集・削除</span><span class="feat-tag">専門分野・ランク</span><span class="feat-tag">稼働案件数</span><span class="feat-tag">工事下請連携</span></div></div>
+      <div class="feat-desc">協力業者・職人の登録・編集・削除。初期表示は<strong>一覧</strong>（一覧／カード切替）。専門分野・ランク（A/B/C）・資格に加え、スキル／対応可能エリア／契約単価／支払い予定・履歴セクションを詳細画面に表示。作業履歴は横幅いっぱいの実績セクションで案件一覧表示。</div>
+      <div class="feat-tags"><span class="feat-tag">一覧デフォルト</span><span class="feat-tag">スキル・エリア</span><span class="feat-tag">契約単価</span><span class="feat-tag">作業履歴</span></div></div>
 
     <!-- PRODUCTION -->
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">契約管理</div>
-      <div class="feat-desc">工事契約の登録・編集・削除・ステータス管理（下書き／締結済み／完了／解除）。顧客・見積との紐付け、契約金額・契約日・着工日・完工日・担当者を管理。契約一覧で金額サマリーを表示。</div>
-      <div class="feat-tags"><span class="feat-tag">契約 CRUD</span><span class="feat-tag">見積紐付け</span><span class="feat-tag">工期管理</span><span class="feat-tag">金額サマリー</span></div></div>
+      <div class="feat-desc">受注後に自動登録される契約を管理。詳細は7タブ：顧客情報／やり取り管理（旧・合意形成サポート）／書類作成／承認WF／電子契約／ドキュメント／見積もり。テンプレート選択で契約書PDFプレビュー、CloudSign送信、ワークフロー連携に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">やり取り管理</span><span class="feat-tag">書類作成</span><span class="feat-tag">承認WF</span><span class="feat-tag">電子契約</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">工事管理</div>
-      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細画面は7タブ構成：工程表／見積もり／契約書／追加変更／工事台帳／発注書／請求書。ガントチャート、複数見積の版管理、追加変更（CloudSign B案）、工事台帳の DB 永続化、発注書の支払スケジュール（2/4/6/12回）、締日ベースの月次請求生成に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">7タブ構成</span><span class="feat-tag">追加変更・CloudSign</span><span class="feat-tag">工事台帳永続化</span><span class="feat-tag">月次請求生成</span></div></div>
+      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細は7タブ：工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント一覧。Notion「工事フロー」2-1〜2-5に対応。顧客請求は工事タブではなく<strong>請求管理（/invoices）</strong>で横断管理。</div>
+      <div class="feat-tags"><span class="feat-tag">7タブ構成</span><span class="feat-tag">ガント工程表</span><span class="feat-tag">工事台帳永続化</span><span class="feat-tag">発注書・請書</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
@@ -292,14 +298,20 @@
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">発注書・請書</div>
+      <div class="feat-desc">工事詳細「発注書・請書」タブで下請業者への発注書を作成・送付。支払スケジュールは2回／4回／6回／12回から選択。職人（下請業者）情報を自動取得し、契約単価・支払条件を明細に反映。発注確定後に請書 PDF を自動生成。外部協力業者は URL 経由でログイン不要の専用画面から受領操作・PDF ダウンロードが可能。</div>
+      <div class="feat-tags"><span class="feat-tag">支払スケジュール（2/4/6/12回）</span><span class="feat-tag">請書自動生成</span><span class="feat-tag">外部業者 URL 受領</span><span class="feat-tag">職人情報自動取得</span></div></div>
+
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
       <div class="feat-title">請求管理</div>
-      <div class="feat-desc">請求書の作成・明細編集・消費税計算・ステータス管理（下書き／送付済み／入金済み／キャンセル）。工事詳細「請求書」タブから単発作成、または会社設定の締日（20日締め／月末締め）に基づく月次請求の一括生成。一覧で入金サマリーを表示。ブラウザ印刷に対応。</div>
+      <div class="feat-desc">顧客向け請求書の作成・明細編集・消費税計算・ステータス管理（下書き／送付済み／入金済み／キャンセル）。会社設定の締日（20日締め／月末締め）に基づく月次請求の一括生成、入金サマリー・ブラウザ印刷に対応。<strong>メニューは現状維持</strong>（スプレッドシート No.35 で削除検討中）。</div>
       <div class="feat-tags"><span class="feat-tag">締日ベース月次生成</span><span class="feat-tag">明細編集・消費税計算</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">予算管理</div>
-      <div class="feat-desc">年度予算の策定・承認・削除。完了工事データから売上・粗利の実績を自動集計し、計画対実績を達成率で表示。複数年度の比較に対応。予算は承認/下書き戻しのワークフロー付き。</div>
+      <div class="feat-desc">年度予算の策定・承認・削除。完了工事データから売上・粗利の実績を自動集計し、計画対実績を達成率で表示。複数年度の比較に対応。<strong>メニューは現状維持</strong>（スプレッドシート No.35 で削除検討中）。</div>
       <div class="feat-tags"><span class="feat-tag">年度予算策定</span><span class="feat-tag">完了工事から実績集計</span><span class="feat-tag">達成率表示</span><span class="feat-tag">承認フロー</span></div></div>
 
     <!-- PORTAL -->
@@ -342,6 +354,12 @@
     <!-- SYSTEM -->
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
+      <div class="feat-title">ダッシュボード</div>
+      <div class="feat-desc">ログイン直後に表示されるホーム画面。受注数・案件数・本日の工事件数など主要 KPI をウィジェットカードで一覧表示。ウィジェットはドラッグ&amp;D でレイアウト変更可能。本日の勤怠打刻・直近の ToDo・未読通知もワンビューで確認できる。</div>
+      <div class="feat-tags"><span class="feat-tag">KPI ウィジェット</span><span class="feat-tag">D&amp;D レイアウト変更</span><span class="feat-tag">勤怠打刻</span><span class="feat-tag">未読通知</span></div></div>
+
+    <div class="feat-card" data-cat="system">
+      <div class="feat-cat">システム</div>
       <div class="feat-title">BI ダッシュボード</div>
       <div class="feat-desc">経営 KPI（売上・粗利・営業利益）の目標 vs 実績を円形達成率チャートで表示。P&amp;L ウォーターフォール・月次/四半期/年次推移・部門別 KPI・部門別月次（売上構成比按分）・着地予測（会社設定の tier）に対応。期首設定・分析ルール（A見込等の SaaS 設定）・期中変更履歴（遡及按分）を DB 連携。実績は工事/商談/請求から設定に基づき自動集計（工事紐付き請求の二重計上を防止）。</div>
       <div class="feat-tags"><span class="feat-tag">目標 vs 実績</span><span class="feat-tag">P&amp;L ウォーターフォール</span><span class="feat-tag">着地予測 tier 設定</span><span class="feat-tag">期中変更履歴</span><span class="feat-tag">部門別月次按分</span></div></div>
@@ -349,14 +367,14 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">ロールベース権限管理</div>
-      <div class="feat-desc">本部管理者・施工店管理者・社員の3段階ロール（オーナーロール廃止）。Next.js Middleware でルートを保護し、Supabase RLS でデータレベルのアクセス制御を二重実施。マーケティングは v2 非公開（全ロールアクセス不可）。メニュー表示・ページアクセス・データ閲覧がロールごとに自動制限される。</div>
-      <div class="feat-tags"><span class="feat-tag">3段階ロール</span><span class="feat-tag">RLS + Middleware 二重制御</span><span class="feat-tag">ルート保護</span><span class="feat-tag">CloudSign 設定</span></div></div>
+      <div class="feat-desc">レガシー3ロール（本部管理者・施工店管理者・社員）に加え、CSV定義のデフォルト6ロール（管理者・経営層・営業・現場担当・設計士・総務）と外部協力業者（URL経由）をサポート。Middleware + RLS で二重制御。マーケティングは v2 非公開。</div>
+      <div class="feat-tags"><span class="feat-tag">6+3ロール</span><span class="feat-tag">RLS + Middleware</span><span class="feat-tag">外部協力業者</span><span class="feat-tag">自由追加ロール</span></div></div>
 
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
-      <div class="feat-title">通知・設定</div>
-      <div class="feat-desc">未読のお知らせ・承認待ちワークフローをヘッダーのベルバッジで通知（60秒間隔更新）。設定タブはプロフィール・会社情報（CloudSign 連携・請求締日含む）・メンバー招待・パスワード変更・通知 ON/OFF・メール署名・勤怠設定・ワークフロー種別・CRM／職人マスタの管理を提供。</div>
-      <div class="feat-tags"><span class="feat-tag">未読バッジ通知</span><span class="feat-tag">CloudSign 設定</span><span class="feat-tag">請求締日設定</span><span class="feat-tag">各種マスタ管理</span></div></div>
+      <div class="feat-title">管理者設定・通知</div>
+      <div class="feat-desc">設定画面に<strong>管理者設定</strong>（PDFビルダー／アカウント管理／権限・ロール管理）を追加。PDFビルダーは項目パレットのドラッグ&amp;D配置に対応。ベル通知（60秒更新）、CloudSign・請求締日、メンバー招待、CRM／職人マスタ管理を提供。</div>
+      <div class="feat-tags"><span class="feat-tag">PDFビルダー</span><span class="feat-tag">ロール管理</span><span class="feat-tag">未読バッジ通知</span><span class="feat-tag">各種マスタ管理</span></div></div>
 
     <!-- INTEGRATION -->
     <div class="feat-card" data-cat="integration">
@@ -397,9 +415,9 @@
 
     <div class="feat-card" data-cat="integration">
       <div class="feat-cat">外部連携</div>
-      <div class="feat-title">アプリ連携（Chatwork / Slack 等）</div>
-      <div class="feat-desc">設定 → アプリ連携 から 8 種類のツールをボタン操作で接続。API トークンまたは Webhook URL を入力するだけで、顧客・商談・見積・契約・工事・請求・ワークフロー・回覧板の更新を自動通知。連携テスト送信・通知イベントの選択・解除に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">Chatwork</span><span class="feat-tag">Slack</span><span class="feat-tag">kintone</span><span class="feat-tag">テスト通知</span></div></div>
+      <div class="feat-title">アプリ連携（LINE公式 / Slack）</div>
+      <div class="feat-desc">設定 → アプリ連携 から <strong>LINE公式アカウント</strong> と <strong>Slack</strong> をボタン操作で接続。Webhook URL を入力するだけで、顧客・商談・見積・契約・工事・請求・ワークフロー・回覧板の更新を自動通知。連携テスト送信・通知イベントの選択・解除に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">LINE公式</span><span class="feat-tag">Slack</span><span class="feat-tag">Webhook</span><span class="feat-tag">テスト通知</span></div></div>
 
     <div class="feat-card" data-cat="integration">
       <div class="feat-cat">外部連携</div>
@@ -515,8 +533,8 @@
       </div>
 
       <div class="ext-card">
-        <div class="ext-name">アプリ連携（Chatwork / Slack 等）</div>
-        <div class="ext-desc">設定画面から Chatwork・Slack・LINE WORKS・kintone を接続。業務イベントを各サービスへ自動通知。テスト送信・イベント選択に対応。</div>
+        <div class="ext-name">アプリ連携（LINE公式 / Slack）</div>
+        <div class="ext-desc">設定画面から <strong>LINE公式アカウント</strong>・<strong>Slack</strong> を接続。業務イベントを各サービスへ自動通知。テスト送信・イベント選択に対応。</div>
         <span class="ext-status ext-status-active">実装済み</span>
       </div>
 
