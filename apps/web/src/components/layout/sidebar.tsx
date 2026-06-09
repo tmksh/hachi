@@ -38,6 +38,7 @@ import {
   ChevronRight,
   FileText,
   CalendarDays,
+  MessageCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -53,9 +54,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useAuth, type Profile } from "@/hooks/use-auth";
+import type { Profile } from "@/hooks/use-auth";
 import { getNotifications, markAnnouncementAsRead, type Notification } from "@/lib/actions/notifications";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
+import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -81,9 +83,10 @@ interface SidebarProps {
   onSignOut: () => void;
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
+  onInternalChatOpen?: () => void;
 }
 
-export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: SidebarProps) {
+export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInternalChatOpen }: SidebarProps) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -92,12 +95,37 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
   useEffect(() => {
-    const fetch = () => getNotifications().then(setNotifications).catch(() => {});
-    void fetch();
-    const timer = setInterval(fetch, 60_000);
-    return () => clearInterval(timer);
+    const fetchNotifs = () => getNotifications().then(setNotifications).catch(() => {});
+    const fetchUnread = () => getUnreadMessageCount().then(setChatUnreadCount).catch(() => {});
+
+    let notifTimer: ReturnType<typeof setInterval> | undefined;
+    let chatTimer: ReturnType<typeof setInterval> | undefined;
+
+    const start = () => {
+      void fetchNotifs();
+      void fetchUnread();
+      notifTimer = setInterval(fetchNotifs, 60_000);
+      chatTimer = setInterval(fetchUnread, 30_000);
+    };
+
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(start, { timeout: 2000 });
+    } else {
+      timeoutId = setTimeout(start, 300);
+    }
+
+    return () => {
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      if (notifTimer) clearInterval(notifTimer);
+      if (chatTimer) clearInterval(chatTimer);
+    };
   }, []);
 
   // デバウンスグローバル検索
@@ -129,7 +157,6 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
     return group?.items.some((item) => isActive(item.href)) ?? false;
   };
 
-  const { user } = useAuth();
   const { color: kpiColor } = useKpiColor();
   const { canAccess: canAccessCustom } = useCompanyPermissions();
 
@@ -344,6 +371,13 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                 <span className="whitespace-nowrap">通知</span>
                 {unreadCount > 0 && <span className="absolute top-2.5 left-[30px] h-2 w-2 rounded-full bg-destructive" />}
               </button>
+              <button onClick={() => onInternalChatOpen?.()} className="relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
+                <MessageCircle className="h-5 w-5 shrink-0" />
+                <span className="whitespace-nowrap">社内チャット</span>
+                {chatUnreadCount > 0 && (
+                  <span className="ml-auto text-[10px] font-bold bg-rose-100 text-rose-600 rounded-full px-1.5 py-0.5">{chatUnreadCount}</span>
+                )}
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm sidebar-nav-hover transition-colors">
@@ -406,6 +440,15 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange }: Side
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">通知</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => onInternalChatOpen?.()} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
+                    <MessageCircle className="h-5 w-5" />
+                    {chatUnreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-rose-500" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">社内チャット</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

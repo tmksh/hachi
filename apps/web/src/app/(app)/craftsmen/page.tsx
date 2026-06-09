@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"�
 type ViewMode = "grid" | "list";
 
 export default function CraftsmenPage() {
+  const router = useRouter();
   const [data, setData] = useState<Craftsman[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -121,7 +123,7 @@ export default function CraftsmenPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map(c => (
-                  <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => { window.location.href = `/craftsmen/${c.id}`; }}>
+                  <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => router.push(`/craftsmen/${c.id}`)}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         <CustomerAvatar seed={c.id} name={c.name} />

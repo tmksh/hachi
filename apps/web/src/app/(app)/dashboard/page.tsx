@@ -33,13 +33,18 @@ import {
   MessageSquare,
   Clock,
   ClipboardCheck,
+  AlertCircle,
+  Send,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { toast } from "sonner";
-import { getDashboardData } from "@/lib/actions/dashboard";
+import { getDashboardData, getUnfollowedLeads } from "@/lib/actions/dashboard";
+import { sendFollowupInquiry } from "@/lib/actions/internal-messages";
 import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
 import { AnalogClock } from "@/components/shared/analog-clock";
 import { KpiRow } from "@/components/shared/kpi-row";
@@ -61,8 +66,10 @@ import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { computeBrandFromHex, type BrandColors } from "@/lib/brand-color";
+import { cn } from "@/lib/utils";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+type UnfollowedLead = Awaited<ReturnType<typeof getUnfollowedLeads>>[number];
 
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
@@ -155,6 +162,12 @@ export default function DashboardPage() {
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unfollowedLeads, setUnfollowedLeads] = useState<UnfollowedLead[]>([]);
+  const [unfollowedLoading, setUnfollowedLoading] = useState(true);
+  const [inquiryTarget, setInquiryTarget] = useState<UnfollowedLead | null>(null);
+  const [inquiryContent, setInquiryContent] = useState("");
+  const [inquirySending, setInquirySending] = useState(false);
+  const [dealsTab, setDealsTab] = useState<"deals" | "unfollowed">("deals");
   const now = new Date();
 
   const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths, toggleVisible, reset } = useWidgets();
@@ -183,6 +196,7 @@ export default function DashboardPage() {
         setClockInTime(new Date(entry.clock_in_at));
       }
     }).catch(() => {});
+    getUnfollowedLeads().then(setUnfollowedLeads).catch(() => {}).finally(() => setUnfollowedLoading(false));
   }, []);
 
   const handleClockIn = async () => {
@@ -199,6 +213,26 @@ export default function DashboardPage() {
       setClockedIn(false);
       toast.success("退勤しました", { description: format(new Date(), "HH:mm", { locale: ja }) });
     } catch { toast.error("退勤打刻に失敗しました"); }
+  };
+
+  const handleSendInquiry = async () => {
+    if (!inquiryTarget || !inquiryContent.trim()) return;
+    if (!inquiryTarget.assigned_to) return;
+    setInquirySending(true);
+    try {
+      await sendFollowupInquiry(
+        inquiryTarget.assigned_to,
+        inquiryTarget.id,
+        inquiryContent.trim(),
+      );
+      toast.success("問い合わせを送信しました");
+      setInquiryTarget(null);
+      setInquiryContent("");
+    } catch {
+      toast.error("送信に失敗しました");
+    } finally {
+      setInquirySending(false);
+    }
   };
 
   const isVisible = (id: string) =>
@@ -462,56 +496,155 @@ export default function DashboardPage() {
       case "deals":
         return !isVisible("deals") ? null : (
           <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
+            {/* ヘッダー */}
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold text-slate-800`}>商談パイプライン</span>
-              <Link href="/deals"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-1 flex-1 min-h-0">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="py-2 space-y-1.5">
-                    <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
-                  </div>
-                ))}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800">
+                  {dealsTab === "deals" ? "商談パイプライン" : "未フォローアップ"}
+                </span>
+                {dealsTab === "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
+                  <span
+                    className="text-[10px] font-bold rounded-full px-1.5 py-0.5 border"
+                    style={{ color: brandColors.dark, background: brandColors.accent + "40", borderColor: brandColors.mid }}
+                  >{unfollowedLeads.length}件</span>
+                )}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.recentDeals ?? []}
-                itemHeightPx={56}
-                max={20}
-                empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
-              >
-                {(deal) => {
-                const colorSeed = deal.customerId ?? deal.customerName;
-                const avatar = getCustomerAvatarColor(colorSeed);
-                const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
-                return (
-                <Link key={deal.id} href="/deals"
-                  className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div
-                      className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
-                      style={{ background: avatar.avatarGradient }}
-                    >
-                      {initial}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-slate-800 truncate">{deal.title}</p>
-                      <p className="text-[11px] text-slate-400 truncate">{deal.customerName}</p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(deal.value ?? 0)}</p>
-                    <span
-                      className="text-[10px] font-medium rounded-full px-2 py-0.5 mt-0.5 inline-block"
-                      style={{ background: avatar.track, color: avatar.progress }}
-                    >
-                      {deal.stageLabel}
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2">
+                {/* タブ切替 */}
+                <div className="flex rounded-lg border border-slate-100 overflow-hidden text-[10px] font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setDealsTab("deals")}
+                    className={cn("px-2 py-1 transition-colors", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                    style={dealsTab === "deals" ? { background: "var(--brand-gradient)" } : undefined}
+                  >商談</button>
+                  <button
+                    type="button"
+                    onClick={() => setDealsTab("unfollowed")}
+                    className={cn("px-2 py-1 transition-colors relative", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                    style={dealsTab === "unfollowed" ? { background: "var(--brand-gradient)" } : undefined}
+                  >
+                    未フォロー
+                    {dealsTab !== "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
+                    )}
+                  </button>
+                </div>
+                <Link href={dealsTab === "deals" ? "/deals" : "/crm?tab=unfollowed"}>
+                  <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" />
                 </Link>
-              );}}
-              </AdaptiveList>
+              </div>
+            </div>
+
+            {/* 商談一覧 */}
+            {dealsTab === "deals" && (
+              loading ? (
+                <div className="flex flex-col gap-1 flex-1 min-h-0">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="py-2 space-y-1.5">
+                      <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <AdaptiveList
+                  items={data?.recentDeals ?? []}
+                  itemHeightPx={56}
+                  max={20}
+                  empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
+                >
+                  {(deal) => {
+                  const colorSeed = deal.customerId ?? deal.customerName;
+                  const avatar = getCustomerAvatarColor(colorSeed);
+                  const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
+                  return (
+                  <Link key={deal.id} href="/deals"
+                    className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div
+                        className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
+                        style={{ background: avatar.avatarGradient }}
+                      >
+                        {initial}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-800 truncate">{deal.title}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{deal.customerName}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(deal.value ?? 0)}</p>
+                      <span
+                        className="text-[10px] font-medium rounded-full px-2 py-0.5 mt-0.5 inline-block"
+                        style={{ background: avatar.track, color: avatar.progress }}
+                      >
+                        {deal.stageLabel}
+                      </span>
+                    </div>
+                  </Link>
+                );}}
+                </AdaptiveList>
+              )
+            )}
+
+            {/* 未フォローアップ一覧 */}
+            {dealsTab === "unfollowed" && (
+              unfollowedLoading ? (
+                <div className="flex flex-col gap-1 flex-1 min-h-0">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="py-2 space-y-1.5">
+                      <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : unfollowedLeads.length === 0 ? (
+                <div className="flex flex-col items-center justify-center flex-1 gap-1.5 py-4">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                  <p className="text-[11px] text-slate-400">全員フォローアップ済みです</p>
+                </div>
+              ) : (
+                <AdaptiveList
+                  items={unfollowedLeads}
+                  itemHeightPx={60}
+                  max={10}
+                  empty={null}
+                >
+                  {(lead) => {
+                    const avatar = getCustomerAvatarColor(lead.id);
+                    return (
+                      <div key={lead.id} className="flex items-center gap-2 py-2 px-1 rounded-xl shrink-0">
+                        <div
+                          className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
+                          style={{ background: avatar.avatarGradient }}
+                        >
+                          {lead.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/crm/${lead.id}`} className="text-xs font-semibold text-slate-800 truncate hover:text-primary block">{lead.name}</Link>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            担当: {lead.assigned_to_profile?.display_name ?? "不明"}
+                            {lead.days_since_update != null && (
+                              <span className="ml-1" style={{ color: brandColors.dark }}>{lead.days_since_update}日前</span>
+                            )}
+                          </p>
+                        </div>
+                        {lead.assigned_to && (
+                          <button
+                            type="button"
+                            onClick={() => { setInquiryTarget(lead); setInquiryContent(`${lead.name} 様の件ですが、フォローアップの状況を教えてください。`); }}
+                            className="shrink-0 text-[10px] font-medium px-2 py-1 rounded-lg flex items-center gap-1 border transition-colors"
+                            style={{ color: brandColors.dark, background: brandColors.accent + "30", borderColor: brandColors.mid }}
+                            onMouseEnter={e => (e.currentTarget.style.background = brandColors.accent + "60")}
+                            onMouseLeave={e => (e.currentTarget.style.background = brandColors.accent + "30")}
+                          >
+                            <MessageSquare className="h-3 w-3" />問い合わせ
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }}
+                </AdaptiveList>
+              )
             )}
           </div>
         );
@@ -693,6 +826,9 @@ export default function DashboardPage() {
           </div>
         );
 
+      case "unfollowed":
+        return null;
+
       default:
         return null;
     }
@@ -711,6 +847,51 @@ export default function DashboardPage() {
 
   return (
     <div className="@container p-4 md:p-6 space-y-4 min-h-screen min-w-0">
+
+      {/* フォローアップ問い合わせダイアログ */}
+      <Dialog open={!!inquiryTarget} onOpenChange={(o) => { if (!o) { setInquiryTarget(null); setInquiryContent(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              フォローアップ問い合わせ
+            </DialogTitle>
+          </DialogHeader>
+          {inquiryTarget && (
+            <div className="space-y-3">
+              <div
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: brandColors.accent + "40", color: brandColors.dark }}
+              >
+                <p className="font-medium text-foreground">{inquiryTarget.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  担当: {inquiryTarget.assigned_to_profile?.display_name ?? "不明"}
+                  {inquiryTarget.days_since_update != null && (
+                    <span className="ml-2">最終更新: {inquiryTarget.days_since_update}日前</span>
+                  )}
+                </p>
+              </div>
+              <Textarea
+                value={inquiryContent}
+                onChange={(e) => setInquiryContent(e.target.value)}
+                placeholder="担当者へのメッセージを入力..."
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setInquiryTarget(null); setInquiryContent(""); }}>キャンセル</Button>
+            <Button
+              onClick={handleSendInquiry}
+              disabled={inquirySending || !inquiryContent.trim()}
+              className="gap-1.5"
+            >
+              <Send className="h-4 w-4" />
+              {inquirySending ? "送信中..." : "送信する"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">

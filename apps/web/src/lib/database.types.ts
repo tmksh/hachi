@@ -561,3 +561,19 @@ export type BudgetItem = {
   created_at: string;
   updated_at: string;
 };
+
+export type InternalMessage = {
+  id: string;
+  company_id: string;
+  sender_id: string;
+  recipient_id: string | null;
+  content: string;
+  message_type: 'chat' | 'followup_inquiry';
+  related_customer_id: string | null;
+  related_deal_id: string | null;
+  read_at: string | null;
+  created_at: string;
+  sender?: { id: string; display_name: string; avatar_url: string | null };
+  recipient?: { id: string; display_name: string; avatar_url: string | null } | null;
+  related_customer?: { id: string; name: string } | null;
+};

@@ -7,8 +7,35 @@ import { Loader2, Type } from "lucide-react";
 
 const SIZES: FontSize[] = ["sm", "md", "lg"];
 
-export function FontSizeSelector() {
+export function FontSizeSelector({ compact = false }: { compact?: boolean }) {
   const { fontSize, setFontSize, saving } = useFontSize();
+
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <Type className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <p className="text-xs font-medium">文字サイズ</p>
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        </div>
+        <div className="segmented-control w-fit">
+          {SIZES.map(size => (
+            <button
+              key={size}
+              type="button"
+              onClick={() => void setFontSize(size)}
+              className={cn(
+                "segmented-control-btn min-w-[48px] text-xs",
+                fontSize === size && "segmented-control-btn-active",
+              )}
+            >
+              {FONT_SIZE_LABELS[size]}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2 pt-4 border-t border-border">

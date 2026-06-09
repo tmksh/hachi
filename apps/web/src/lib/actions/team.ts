@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getResend, FROM_EMAIL, buildInviteEmailHtml } from "@/lib/resend";
 import type { Profile } from "@/lib/database.types";
 import type { AssignableRole } from "@/lib/constants";
 
@@ -61,7 +62,7 @@ export async function inviteTeamMember(input: {
   role: TeamRole;
   password?: string;
 }): Promise<void> {
-  const { companyId, actorRole } = await assertTenantAdmin();
+  const { companyId, actorRole, actorId } = await assertTenantAdmin();
   assertCanAssignRole(actorRole, input.role);
 
   if (!input.email.trim()) throw new Error("メールアドレスは必須です");
@@ -82,6 +83,7 @@ export async function inviteTeamMember(input: {
   };
 
   if (input.password) {
+    // パスワード直接設定：即時アカウント作成（メール送信なし）
     const { data, error } = await admin.auth.admin.createUser({
       email: input.email.trim(),
       password: input.password,
@@ -113,18 +115,56 @@ export async function inviteTeamMember(input: {
       if (profileError) throw profileError;
     }
   } else {
-    const { error } = await admin.auth.admin.inviteUserByEmail(
-      input.email.trim(),
-      {
-        redirectTo: `${appUrl}/api/auth/accept-invite`,
+    // Resend で招待メールを送信
+    const redirectTo = `${appUrl}/api/auth/accept-invite`;
+
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email: input.email.trim(),
+      options: {
+        redirectTo,
         data: userMeta,
       },
-    );
-    if (error) {
-      if ((error as { code?: string }).code === "email_exists") {
+    });
+    if (linkError) {
+      if ((linkError as { code?: string }).code === "email_exists") {
         throw new Error("このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。");
       }
-      throw new Error(error.message);
+      throw new Error(linkError.message);
+    }
+
+    // 招待者の表示名を取得
+    const { data: actorProfile } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", actorId)
+      .single();
+
+    // 会社名を取得
+    const { data: company } = await admin
+      .from("companies")
+      .select("name")
+      .eq("id", companyId)
+      .single();
+
+    const inviteUrl = linkData.properties.action_link;
+    const companyName = company?.name ?? "業務管理システム";
+    const inviterName = actorProfile?.display_name ?? "管理者";
+
+    const { error: mailError } = await getResend().emails.send({
+      from: FROM_EMAIL,
+      to: input.email.trim(),
+      subject: `【${companyName}】システムへのご招待`,
+      html: buildInviteEmailHtml({
+        inviteeName: input.displayName.trim(),
+        inviterName,
+        companyName,
+        inviteUrl,
+        appUrl,
+      }),
+    });
+    if (mailError) {
+      throw new Error(`招待メールの送信に失敗しました: ${mailError.message}`);
     }
   }
 }
@@ -230,13 +270,51 @@ export async function resendTeamInvite(userId: string): Promise<void> {
       ? `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? ""}`
       : "http://localhost:3000");
 
-  const { error } = await admin.auth.admin.inviteUserByEmail(target.email, {
-    redirectTo: `${appUrl}/api/auth/accept-invite`,
-    data: {
-      company_id: companyId,
-      role: target.role,
-      display_name: (target.display_name as string | null) ?? target.email,
+  const userMeta = {
+    company_id: companyId,
+    role: target.role,
+    display_name: (target.display_name as string | null) ?? target.email,
+  };
+
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: target.email,
+    options: {
+      redirectTo: `${appUrl}/api/auth/accept-invite`,
+      data: userMeta,
     },
   });
-  if (error) throw error;
+  if (linkError) throw new Error(linkError.message);
+
+  const { data: actorProfile } = await admin
+    .from("profiles")
+    .select("display_name")
+    .eq("id", actorId)
+    .single();
+
+  const { data: company } = await admin
+    .from("companies")
+    .select("name")
+    .eq("id", companyId)
+    .single();
+
+  const companyName = company?.name ?? "業務管理システム";
+  const inviterName = actorProfile?.display_name ?? "管理者";
+  const inviteeName = (target.display_name as string | null) ?? target.email;
+
+  const { error: mailError } = await getResend().emails.send({
+    from: FROM_EMAIL,
+    to: target.email,
+    subject: `【${companyName}】招待メール（再送）`,
+    html: buildInviteEmailHtml({
+      inviteeName,
+      inviterName,
+      companyName,
+      inviteUrl: linkData.properties.action_link,
+      appUrl,
+    }),
+  });
+  if (mailError) {
+    throw new Error(`招待メールの再送に失敗しました: ${mailError.message}`);
+  }
 }

@@ -8,11 +8,14 @@ export async function getCustomers() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("customers")
-    .select("*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)")
+    .select("*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name), deals(id, updated_at, stage)")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data as (Customer & { assigned_to_profile: { id: string; display_name: string } | null })[];
+  return data as (Customer & {
+    assigned_to_profile: { id: string; display_name: string } | null;
+    deals: Array<{ id: string; updated_at: string; stage: string }>;
+  })[];
 }
 
 export async function getCustomer(id: string) {
@@ -106,6 +109,59 @@ export async function deleteCustomer(id: string) {
   if (existing) {
     void dispatchWebhook(existing.company_id, "customer.deleted", { id, name: existing.name });
   }
+}
+
+/**
+ * 担当者アサイン済みかつ一定日数以上フォローアップ活動のない顧客を取得
+ * @param days 未フォローアップとみなす日数（デフォルト7日）
+ */
+export async function getUnfollowedCustomers(days = 7) {
+  const supabase = await createClient();
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - days);
+
+  // assigned_to がある顧客を取得（最新の商談updated_atも取得）
+  const { data: customers, error } = await supabase
+    .from("customers")
+    .select(`
+      id, name, company_name, assigned_to, status, inquiry_date, created_at,
+      assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name),
+      deals(id, updated_at, stage)
+    `)
+    .is("deleted_at", null)
+    .not("assigned_to", "is", null);
+
+  if (error) throw error;
+
+  const result = (customers ?? []).filter((c) => {
+    const cDeals = (c.deals as Array<{ id: string; updated_at: string; stage: string }> | null) ?? [];
+    const activeDeals = cDeals.filter((d) => !["won", "lost"].includes(d.stage));
+    if (activeDeals.length === 0) return true; // 商談なし = フォローアップ必要
+    const lastActivity = activeDeals.reduce((latest, d) => {
+      const t = new Date(d.updated_at).getTime();
+      return t > latest ? t : latest;
+    }, 0);
+    return lastActivity < threshold.getTime();
+  });
+
+  return result.map((c) => ({
+    id: c.id,
+    name: c.name,
+    company_name: c.company_name,
+    assigned_to: c.assigned_to,
+    assigned_to_profile: (c.assigned_to_profile as unknown) as { id: string; display_name: string } | null,
+    status: c.status,
+    inquiry_date: c.inquiry_date,
+    created_at: c.created_at,
+    last_deal_updated: (() => {
+      const cDeals = (c.deals as Array<{ id: string; updated_at: string; stage: string }> | null) ?? [];
+      const activeDeals = cDeals.filter((d) => !["won", "lost"].includes(d.stage));
+      if (activeDeals.length === 0) return null;
+      return activeDeals.reduce((latest, d) => {
+        return new Date(d.updated_at) > new Date(latest) ? d.updated_at : latest;
+      }, activeDeals[0].updated_at);
+    })(),
+  }));
 }
 
 export async function getCustomerRelated(customerId: string) {

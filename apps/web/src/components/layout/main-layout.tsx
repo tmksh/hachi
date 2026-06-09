@@ -1,26 +1,39 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { BridgeAiChat, BRIDGE_AI_PANEL_WIDTH } from "@/components/ai/bridge-ai-chat";
 import { ChatPanelProvider } from "@/contexts/chat-panel-context";
 import { Sidebar } from "./sidebar";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
-import { Skeleton } from "@/components/ui/skeleton";
 import { BLUE_PAGE_BG } from "@/lib/blue-theme";
 import { TEAL_PAGE_BG } from "@/lib/teal-theme";
+
+const BRIDGE_AI_PANEL_WIDTH = 400;
+const INTERNAL_CHAT_WIDTH = 360;
+
+const BridgeAiChat = dynamic(
+  () => import("@/components/ai/bridge-ai-chat").then((m) => m.BridgeAiChat),
+  { ssr: false },
+);
+
+const InternalChatPanel = dynamic(
+  () => import("@/components/chat/internal-chat-panel").then((m) => m.InternalChatPanel),
+  { ssr: false },
+);
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const { profile, loading, signOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [internalChatOpen, setInternalChatOpen] = useState(false);
   const pathname = usePathname();
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
@@ -28,19 +41,6 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   if (isAdminLogin) {
     return <>{children}</>;
-  }
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="space-y-4 text-center">
-          <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center mx-auto animate-pulse">
-            <span className="text-primary-foreground font-bold text-lg">B</span>
-          </div>
-          <Skeleton className="h-4 w-32 mx-auto" />
-        </div>
-      </div>
-    );
   }
 
   if (isAdminConsole) {
@@ -67,13 +67,14 @@ export function MainLayout({ children }: MainLayoutProps) {
           onSignOut={signOut}
           expanded={expanded}
           onExpandedChange={setExpanded}
+          onInternalChatOpen={() => setInternalChatOpen(true)}
         />
-        <MobileNav />
+        <MobileNav profile={profile} />
         {/* Desktop */}
         <motion.main
           animate={{
             paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12,
-            paddingRight: chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0,
+            paddingRight: (chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0) + (internalChatOpen ? INTERNAL_CHAT_WIDTH : 0),
           }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           className="hidden md:block min-w-0"
@@ -82,7 +83,10 @@ export function MainLayout({ children }: MainLayoutProps) {
             {children}
           </div>
         </motion.main>
-        <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />
+        {chatOpen && <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />}
+        {internalChatOpen && (
+          <InternalChatPanel open={internalChatOpen} onOpenChange={setInternalChatOpen} />
+        )}
         {/* Mobile */}
         <main className="md:hidden pb-32">
           {children}

@@ -37,6 +37,7 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: "customers",       label: "最近の顧客",        visible: true,  order: 15 },
   { id: "production",      label: "生産サマリー",      visible: true,  order: 16 },
   { id: "constructions",   label: "進行中の工事",      visible: true,  order: 17 },
+  { id: "unfollowed",      label: "未フォローアップ",  visible: false, order: 18 },
 ];
 
 const STORAGE_KEY = "dashboard-widgets-v1";

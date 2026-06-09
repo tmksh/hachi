@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { format, subMonths, startOfMonth } from "date-fns";
+import { format, subMonths, startOfMonth, subDays } from "date-fns";
 import { ja } from "date-fns/locale";
 
 const DEAL_STAGE_LABELS: Record<string, string> = {
@@ -52,6 +52,55 @@ function buildMonthlyTrend(
       パイプライン: Math.round(pipeline / 10_000),
     };
   });
+}
+
+/** 担当者アサイン済みで一定日数以上フォローアップなしの顧客リストを取得 */
+export async function getUnfollowedLeads(days = 7) {
+  const supabase = await createClient();
+  const threshold = subDays(new Date(), days).toISOString();
+
+  const { data: customers } = await supabase
+    .from("customers")
+    .select(`
+      id, name, company_name, assigned_to, status, inquiry_date, created_at,
+      assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name),
+      deals(id, updated_at, stage)
+    `)
+    .is("deleted_at", null)
+    .not("assigned_to", "is", null);
+
+  if (!customers) return [];
+
+  return customers
+    .filter((c) => {
+      const deals = (c.deals as Array<{ id: string; updated_at: string; stage: string }> | null) ?? [];
+      const activeDeals = deals.filter((d) => !["won", "lost"].includes(d.stage));
+      if (activeDeals.length === 0) return true;
+      const lastUpdated = activeDeals.reduce((latest, d) => {
+        const t = d.updated_at;
+        return t > latest ? t : latest;
+      }, activeDeals[0].updated_at);
+      return lastUpdated < threshold;
+    })
+    .map((c) => {
+      const deals = (c.deals as Array<{ id: string; updated_at: string; stage: string }> | null) ?? [];
+      const activeDeals = deals.filter((d) => !["won", "lost"].includes(d.stage));
+      const lastUpdated = activeDeals.length > 0
+        ? activeDeals.reduce((l, d) => (d.updated_at > l ? d.updated_at : l), activeDeals[0].updated_at)
+        : null;
+      return {
+        id: c.id,
+        name: c.name,
+        company_name: c.company_name,
+        assigned_to: c.assigned_to,
+        assigned_to_profile: (c.assigned_to_profile as unknown) as { id: string; display_name: string } | null,
+        status: c.status,
+        last_deal_updated: lastUpdated,
+        days_since_update: lastUpdated
+          ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86_400_000)
+          : null,
+      };
+    });
 }
 
 export async function getDashboardData() {

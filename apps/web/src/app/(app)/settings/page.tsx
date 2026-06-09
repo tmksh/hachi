@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +11,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { CrmMasterTab } from "@/components/settings/crm-master-tab";
-import { CraftsmenMasterTab } from "@/components/settings/craftsmen-master-tab";
-import { IntegrationsTab } from "@/components/settings/integrations-tab";
-import { AppIntegrationsTab } from "@/components/settings/app-integrations-tab";
-import { WorkflowTypesTab } from "@/components/settings/workflow-types-tab";
-import { PdfBuilderTab } from "@/components/settings/pdf-builder-tab";
+const tabSkeleton = () => <Skeleton className="h-48 w-full rounded-xl" />;
+
+const CrmMasterTab = dynamic(
+  () => import("@/components/settings/crm-master-tab").then((m) => m.CrmMasterTab),
+  { loading: tabSkeleton },
+);
+const CraftsmenMasterTab = dynamic(
+  () => import("@/components/settings/craftsmen-master-tab").then((m) => m.CraftsmenMasterTab),
+  { loading: tabSkeleton },
+);
+const IntegrationsTab = dynamic(
+  () => import("@/components/settings/integrations-tab").then((m) => m.IntegrationsTab),
+  { loading: tabSkeleton },
+);
+const AppIntegrationsTab = dynamic(
+  () => import("@/components/settings/app-integrations-tab").then((m) => m.AppIntegrationsTab),
+  { loading: tabSkeleton },
+);
+const WorkflowTypesTab = dynamic(
+  () => import("@/components/settings/workflow-types-tab").then((m) => m.WorkflowTypesTab),
+  { loading: tabSkeleton },
+);
+const PdfBuilderTab = dynamic(
+  () => import("@/components/settings/pdf-builder-tab").then((m) => m.PdfBuilderTab),
+  { loading: tabSkeleton },
+);
 import {
   Select,
   SelectContent,
@@ -53,6 +74,17 @@ import {
   Eye,
   EyeOff,
   Mail,
+  User,
+  Bell,
+  FileText,
+  Link2,
+  BookOpen,
+  Wrench,
+  Clock,
+  GitBranch,
+  Puzzle,
+  Code2,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -71,6 +103,8 @@ import type { Company, Profile } from "@/lib/database.types";
 import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, ASSIGNABLE_TEAM_ROLES, SYSTEM_PERMISSION_ROLES, type Role } from "@/lib/constants";
 import { useCompanyPermissions, type CustomRole, type RolePermissions, DEFAULT_PERMISSIONS } from "@/hooks/use-company-permissions";
 import { FontSizeSelector } from "@/components/settings/font-size-selector";
+import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 
 const ROLE_COLOR: Record<Role, string> = {
   hq_admin: "bg-blue-100 text-blue-800 border-blue-200",
@@ -89,6 +123,7 @@ export default function SettingsPage() {
   const { profile, loading: authLoading } = useAuth();
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(null);
+  const [companyLoading, setCompanyLoading] = useState(true);
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
@@ -206,6 +241,7 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    setCompanyLoading(true);
     getCompany().then((c) => {
       setCompany(c);
       setCompanyName(c.name);
@@ -233,7 +269,12 @@ export default function SettingsPage() {
       if (Array.isArray(cs?.custom_roles)) {
         setCustomRoles(cs.custom_roles as CustomRole[]);
       }
-    }).catch(() => {});
+    }).catch((e) => {
+      console.error("会社情報の取得に失敗:", e);
+      toast.error("会社情報の取得に失敗しました");
+    }).finally(() => {
+      setCompanyLoading(false);
+    });
   }, []);
 
   const handleSave = async () => {
@@ -514,13 +555,21 @@ export default function SettingsPage() {
 
       {/* ── 大項目タブ（上部ナビ） ─── */}
       <Tabs defaultValue="personal" className="w-full">
-        <TabsList className="w-full justify-start gap-0 border-b rounded-none bg-transparent h-auto pb-0 border-border/60">
-          <TabsTrigger value="personal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">概要</TabsTrigger>
+        <TabsList className="w-fit mb-1 gap-0.5 h-auto">
+          <TabsTrigger value="personal" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+            <User className="h-3.5 w-3.5" />概要
+          </TabsTrigger>
           {canManageMembers && (
             <>
-              <TabsTrigger value="organization" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">組織</TabsTrigger>
-              <TabsTrigger value="master" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">マスタ</TabsTrigger>
-              <TabsTrigger value="integrations_group" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 pb-2.5 pt-1.5 text-sm font-medium text-muted-foreground data-[state=active]:text-[#0F5132]">連携</TabsTrigger>
+              <TabsTrigger value="organization" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <Users className="h-3.5 w-3.5" />組織
+              </TabsTrigger>
+              <TabsTrigger value="master" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <BookOpen className="h-3.5 w-3.5" />マスタ
+              </TabsTrigger>
+              <TabsTrigger value="integrations_group" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <Link2 className="h-3.5 w-3.5" />連携
+              </TabsTrigger>
             </>
           )}
         </TabsList>
@@ -528,52 +577,64 @@ export default function SettingsPage() {
         {/* ── 個人グループ ─── */}
         <TabsContent value="personal" className="mt-4">
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="profile">アカウント</TabsTrigger>
-              <TabsTrigger value="security">セキュリティ</TabsTrigger>
-              <TabsTrigger value="notifications">通知</TabsTrigger>
-              <TabsTrigger value="mail_signature">メール署名</TabsTrigger>
-              {canManageMembers && <TabsTrigger value="pdf_builder">PDF編集</TabsTrigger>}
+            <TabsList className="w-fit mb-4 gap-0.5 h-auto">
+              <TabsTrigger value="profile" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <User className="h-3.5 w-3.5" />プロフィール
+              </TabsTrigger>
+              <TabsTrigger value="security" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <ShieldCheck className="h-3.5 w-3.5" />セキュリティ
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <Bell className="h-3.5 w-3.5" />通知設定
+              </TabsTrigger>
+              <TabsTrigger value="mail_signature" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                <Mail className="h-3.5 w-3.5" />メール署名
+              </TabsTrigger>
+              {canManageMembers && (
+                <TabsTrigger value="pdf_builder" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+                  <FileText className="h-3.5 w-3.5" />PDF編集
+                </TabsTrigger>
+              )}
             </TabsList>
 
         {/* ── アカウント（プロフィール + 会社情報） ─── */}
         <TabsContent value="profile" className="mt-3 space-y-4">
           {/* 個人プロフィール */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">プロフィール</CardTitle>
+          <Card className="gap-2 py-3">
+            <CardHeader className="min-h-8 border-b border-border/60 px-5 py-2">
+              <CardTitle className="text-sm">プロフィール</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>表示名</Label>
-                  <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            <CardContent className="space-y-3 px-5 pb-3 pt-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">表示名</Label>
+                  <Input className="h-8" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
                 </div>
-                <div className="space-y-2">
-                  <Label>メール</Label>
-                  <Input value={profile?.email ?? ""} disabled />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">メール</Label>
+                  <Input className="h-8" value={profile?.email ?? ""} disabled />
                 </div>
-                <div className="space-y-2">
-                  <Label>電話</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="090-0000-0000" />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">電話</Label>
+                  <Input className="h-8" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="090-0000-0000" />
                 </div>
-                <div className="space-y-2">
-                  <Label>部署</Label>
-                  <Input value={department} onChange={(e) => setDepartment(e.target.value)} />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">部署</Label>
+                  <Input className="h-8" value={department} onChange={(e) => setDepartment(e.target.value)} />
                 </div>
-                <div className="space-y-2">
-                  <Label>役職</Label>
-                  <Input value={position} onChange={(e) => setPosition(e.target.value)} />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">役職</Label>
+                  <Input className="h-8" value={position} onChange={(e) => setPosition(e.target.value)} />
                 </div>
-                <div className="space-y-2">
-                  <Label>権限</Label>
-                  <Input value={profile?.role ?? ""} disabled />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">権限</Label>
+                  <Input className="h-8" value={profile?.role ?? ""} disabled />
                 </div>
               </div>
-              <FontSizeSelector />
-              <div className="flex justify-end">
-                <Button onClick={handleSave} disabled={saving}>
-                  <Save className="size-4 mr-1" />
+              <FontSizeSelector compact />
+              <div className="flex justify-end pt-1">
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  <Save className="size-3.5 mr-1" />
                   {saving ? "保存中..." : "保存"}
                 </Button>
               </div>
@@ -589,7 +650,11 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {company ? (
+              {companyLoading ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ) : company ? (
                 <>
                   {/* 読み取り専用情報 */}
                   <div className="flex flex-wrap gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm">
@@ -611,22 +676,10 @@ export default function SettingsPage() {
 
                   {canEditCompany ? (
                     <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2 sm:col-span-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-2">
                           <Label>会社名</Label>
                           <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>電話番号</Label>
-                          <Input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} placeholder="03-0000-0000" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>郵便番号</Label>
-                          <Input value={companyPostal} onChange={(e) => setCompanyPostal(e.target.value)} placeholder="000-0000" />
-                        </div>
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label>住所</Label>
-                          <Input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} placeholder="東京都〇〇区〇〇 1-2-3" />
                         </div>
                         <div className="space-y-2">
                           <Label>代表者名</Label>
@@ -635,6 +688,14 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           <Label>インボイス登録番号</Label>
                           <Input value={companyInvoiceNumber} onChange={(e) => setCompanyInvoiceNumber(e.target.value)} placeholder="T-XXXXXXXXXXXXXXX" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>電話番号</Label>
+                          <Input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} placeholder="03-0000-0000" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>郵便番号</Label>
+                          <Input value={companyPostal} onChange={(e) => setCompanyPostal(e.target.value)} placeholder="000-0000" />
                         </div>
                         <div className="space-y-2">
                           <Label>請求締日</Label>
@@ -647,7 +708,11 @@ export default function SettingsPage() {
                           </Select>
                           <p className="text-xs text-muted-foreground">工事管理の月次請求自動生成に使用します</p>
                         </div>
-                        <div className="space-y-2 sm:col-span-2 pt-2 border-t border-border">
+                        <div className="space-y-2 sm:col-span-3">
+                          <Label>住所</Label>
+                          <Input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} placeholder="東京都〇〇区〇〇 1-2-3" />
+                        </div>
+                        <div className="space-y-2 sm:col-span-3 pt-2 border-t border-border">
                           <Label>クラウドサイン連携（B案: 顧客別契約）</Label>
                           <div className="flex items-center gap-3">
                             <Switch checked={cloudsignEnabled} onCheckedChange={setCloudsignEnabled} />
@@ -835,10 +900,16 @@ export default function SettingsPage() {
     {canManageMembers && (
       <TabsContent value="organization" className="mt-4">
         <Tabs defaultValue="members">
-          <TabsList className="mb-4">
-            <TabsTrigger value="members">メンバー管理</TabsTrigger>
-            <TabsTrigger value="attendance_settings">勤怠設定</TabsTrigger>
-            <TabsTrigger value="workflow_types">ワークフロー</TabsTrigger>
+          <TabsList className="w-fit mb-4 gap-0.5 h-auto">
+            <TabsTrigger value="members" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <Users className="h-3.5 w-3.5" />メンバー管理
+            </TabsTrigger>
+            <TabsTrigger value="attendance_settings" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <Clock className="h-3.5 w-3.5" />勤怠設定
+            </TabsTrigger>
+            <TabsTrigger value="workflow_types" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <GitBranch className="h-3.5 w-3.5" />ワークフロー
+            </TabsTrigger>
           </TabsList>
 
           {/* メンバー管理 */}
@@ -891,15 +962,21 @@ export default function SettingsPage() {
                         {members.map((m) => {
                           const isSelf = m.id === profile?.id;
                           const canEditThis = !isSelf;
+                          const avatarColor = getCustomerAvatarColor(m.role);
                           return (
                             <tr key={m.id} className="border-t hover:bg-muted/30">
                               <td className="px-3 py-2.5">
-                                <div className="font-medium">{m.display_name}</div>
-                                {(m.department || m.position) && (
-                                  <div className="text-xs text-muted-foreground">
-                                    {[m.department, m.position].filter(Boolean).join(" / ")}
+                                <div className="flex items-center gap-2.5">
+                                  <CustomerAvatar seed={m.role} name={m.display_name} size="sm" />
+                                  <div>
+                                    <div className="font-medium">{m.display_name}</div>
+                                    {(m.department || m.position) && (
+                                      <div className="text-xs text-muted-foreground">
+                                        {[m.department, m.position].filter(Boolean).join(" / ")}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
                               </td>
                               <td className="px-3 py-2.5 text-muted-foreground">{m.email}</td>
                               <td className="px-3 py-2.5">
@@ -909,7 +986,10 @@ export default function SettingsPage() {
                                     onValueChange={(v) => void handleChangeRole(m, v as TeamRole)}
                                     disabled={updatingRoleId === m.id}
                                   >
-                                    <SelectTrigger className={`h-7 data-[size=default]:h-7 py-0 text-xs px-2 border gap-1 [&>svg:last-child]:hidden ${ROLE_COLOR[m.role]}`}>
+                                    <SelectTrigger
+                                      className="h-7 data-[size=default]:h-7 py-0 text-xs px-2 border-0 gap-1 [&>svg:last-child]:hidden text-white"
+                                      style={{ background: avatarColor.avatarGradient }}
+                                    >
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -919,7 +999,11 @@ export default function SettingsPage() {
                                     </SelectContent>
                                   </Select>
                                 ) : (
-                                  <Badge variant="outline" className={`h-7 px-2 text-xs rounded-md ${ROLE_COLOR[m.role]}`}>
+                                  <Badge
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs rounded-md border-0 text-white"
+                                    style={{ background: avatarColor.avatarGradient }}
+                                  >
                                     {ROLE_LABELS[m.role]}
                                     {isSelf && <span className="ml-1">（自分）</span>}
                                   </Badge>
@@ -975,11 +1059,14 @@ export default function SettingsPage() {
                 <div className="mb-4">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">ロール一覧</p>
                   <div className="flex flex-wrap gap-2">
-                    {SYSTEM_PERMISSION_ROLES.map((role) => (
-                      <div key={role} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${ROLE_COLOR[role]}`}>
-                        {ROLE_LABELS[role]}<span className="text-[10px] opacity-60">（システム）</span>
-                      </div>
-                    ))}
+                    {SYSTEM_PERMISSION_ROLES.map((role) => {
+                      const p = getCustomerAvatarColor(role);
+                      return (
+                        <div key={role} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-white" style={{ background: p.avatarGradient }}>
+                          {ROLE_LABELS[role]}
+                        </div>
+                      );
+                    })}
                     {customRoles.map((cr) => {
                       const colorMap: Record<string, string> = { slate: "border-slate-200 bg-slate-50 text-slate-700", blue: "border-blue-200 bg-blue-50 text-blue-700", emerald: "border-emerald-200 bg-emerald-50 text-emerald-700", amber: "border-amber-200 bg-amber-50 text-amber-700", rose: "border-rose-200 bg-rose-50 text-rose-700", violet: "border-violet-200 bg-violet-50 text-violet-700" };
                       return (
@@ -993,12 +1080,9 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {(() => {
-                  const allCols: Array<{ key: string; label: string; color: string }> = [
-                    ...SYSTEM_PERMISSION_ROLES.map((role) => ({ key: role, label: ROLE_LABELS[role], color: ROLE_COLOR[role] })),
-                    ...customRoles.map((cr) => {
-                      const colorMap: Record<string, string> = { slate: "bg-slate-100 text-slate-700", blue: "bg-blue-100 text-blue-700", emerald: "bg-emerald-100 text-emerald-700", amber: "bg-amber-100 text-amber-700", rose: "bg-rose-100 text-rose-700", violet: "bg-violet-100 text-violet-700" };
-                      return { key: cr.id, label: cr.name, color: colorMap[cr.color] ?? colorMap.slate };
-                    }),
+                  const allCols: Array<{ key: string; label: string; palette: ReturnType<typeof getCustomerAvatarColor> }> = [
+                    ...SYSTEM_PERMISSION_ROLES.map((role) => ({ key: role, label: ROLE_LABELS[role], palette: getCustomerAvatarColor(role) })),
+                    ...customRoles.map((cr) => ({ key: cr.id, label: cr.name, palette: getCustomerAvatarColor(cr.id) })),
                   ];
                   const featureRows = [
                     ...NAV_GROUPS.flatMap((g, gi) => g.items.map((item, idx) => ({ key: item.key, label: item.label, group: idx === 0 ? g.label : null, groupStart: idx === 0, gi }))),
@@ -1016,7 +1100,7 @@ export default function SettingsPage() {
                             <th className="text-left px-3 py-2 font-medium sticky left-0 bg-muted/40 z-10">機能</th>
                             {allCols.map((col) => (
                               <th key={col.key} className="text-center px-1.5 py-2 font-medium min-w-[80px]">
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${col.color}`}>{col.label}</span>
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[11px] text-white" style={{ background: col.palette.avatarGradient }}>{col.label}</span>
                               </th>
                             ))}
                           </tr>
@@ -1261,9 +1345,13 @@ export default function SettingsPage() {
     {canManageMembers && (
       <TabsContent value="master" className="mt-4">
         <Tabs defaultValue="crm_master">
-          <TabsList className="mb-4">
-            <TabsTrigger value="crm_master">CRMマスタ</TabsTrigger>
-            <TabsTrigger value="craftsmen_master">職人マスタ</TabsTrigger>
+          <TabsList className="w-fit mb-4 gap-0.5 h-auto">
+            <TabsTrigger value="crm_master" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <BookOpen className="h-3.5 w-3.5" />CRMマスタ
+            </TabsTrigger>
+            <TabsTrigger value="craftsmen_master" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <Wrench className="h-3.5 w-3.5" />職人マスタ
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="crm_master" className="mt-3"><CrmMasterTab /></TabsContent>
           <TabsContent value="craftsmen_master" className="mt-3"><CraftsmenMasterTab /></TabsContent>
@@ -1275,9 +1363,13 @@ export default function SettingsPage() {
     {canManageMembers && (
       <TabsContent value="integrations_group" className="mt-4">
         <Tabs defaultValue="app_integrations">
-          <TabsList className="mb-4">
-            <TabsTrigger value="app_integrations">アプリ連携</TabsTrigger>
-            <TabsTrigger value="integrations">API / Webhook</TabsTrigger>
+          <TabsList className="w-fit mb-4 gap-0.5 h-auto">
+            <TabsTrigger value="app_integrations" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <Puzzle className="h-3.5 w-3.5" />アプリ連携
+            </TabsTrigger>
+            <TabsTrigger value="integrations" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
+              <Code2 className="h-3.5 w-3.5" />API / Webhook
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="app_integrations" className="mt-3"><AppIntegrationsTab /></TabsContent>
           <TabsContent value="integrations" className="mt-3"><IntegrationsTab /></TabsContent>

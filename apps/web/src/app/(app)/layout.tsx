@@ -1,3 +1,4 @@
+import { AuthProvider } from "@/components/providers/auth-provider";
 import { MainLayout } from "@/components/layout/main-layout";
 
 export default function AppLayout({
@@ -5,5 +6,9 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <MainLayout>{children}</MainLayout>;
+  return (
+    <AuthProvider>
+      <MainLayout>{children}</MainLayout>
+    </AuthProvider>
+  );
 }

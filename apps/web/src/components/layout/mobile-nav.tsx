@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, canAccessNavItem } from "@/lib/constants";
-import { useAuth } from "@/hooks/use-auth";
+import type { Profile } from "@/hooks/use-auth";
 import {
   LayoutDashboard,
   Users,
@@ -23,10 +23,9 @@ const GROUP_ICONS = {
   marketing: Megaphone,
 } as const;
 
-export function MobileNav() {
+export function MobileNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const { profile } = useAuth();
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
