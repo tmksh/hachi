@@ -17,21 +17,9 @@ import {
   ArrowUpRight,
   Briefcase,
 } from "lucide-react";
-import {
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RTooltip,
-  ResponsiveContainer,
-  Legend,
-  Cell,
-  BarChart,
-  LabelList,
-  ReferenceLine,
-  AreaChart,
-  Area,
-} from "recharts";
+import { BarChart } from "@/components/charts/bar-chart";
+import { GroupedBarChart } from "@/components/charts/grouped-bar-chart";
+import { AreaChart } from "@/components/charts/area-chart";
 import { getBiSettings, getBiActuals } from "@/lib/actions/bi";
 import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
 import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
@@ -48,13 +36,6 @@ import {
 } from "@/lib/teal-theme";
 
 const BI_NEGATIVE = "#e11d48";
-const CHART_TOOLTIP_STYLE = {
-  background: "#fff",
-  border: `1px solid ${TEAL[100]}`,
-  borderRadius: 10,
-  fontSize: 12,
-  boxShadow: "0 4px 16px rgba(15,81,50,0.08)",
-};
 const DEPT_CHART_COLORS = [TEAL[700], TEAL[500], TEAL[300], TEAL[100]];
 
 // データ未登録時のフォールバック
@@ -324,27 +305,23 @@ function BiDashboardPageContent() {
               description="売上 → 粗利 → 売上総利益 → 営業利益"
               className="lg:col-span-2"
             >
-              <ResponsiveContainer width="100%" height="100%" minHeight={260}>
-                <BarChart data={plData} margin={{ top: 24, right: 12, bottom: 4, left: 0 }} barSize={44}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={TEAL[50]} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: TEAL[500] }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: TEAL[500] }} unit="万" axisLine={false} tickLine={false} width={50} />
-                  <RTooltip
-                    formatter={(v) => [`${Number(v) < 0 ? "▲" : ""}¥${Math.abs(Number(v)).toLocaleString()}万`, ""]}
-                    contentStyle={CHART_TOOLTIP_STYLE}
-                  />
-                  <ReferenceLine y={0} stroke={TEAL[100]} strokeWidth={1} />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {plData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                    <LabelList
-                      dataKey="value"
-                      position="top"
-                      style={{ fontSize: 10, fontWeight: 600, fill: TEAL[700] }}
-                      formatter={(v: unknown) => { const n = Number(v); return `${n < 0 ? "▲" : ""}${Math.abs(n).toLocaleString()}`; }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="min-h-[260px]">
+                <BarChart
+                  data={plData.map((entry) => ({
+                    label: entry.name,
+                    value: entry.value,
+                    color: entry.fill,
+                  }))}
+                  height={260}
+                  allowNegative
+                  showValueLabels
+                  unit="万"
+                  gridColor={TEAL[50]}
+                  labelColor={TEAL[700]}
+                  tickColor={TEAL[500]}
+                  formatValue={(v) => `${v < 0 ? "▲" : ""}${Math.abs(v).toLocaleString()}`}
+                />
+              </div>
             </BiPanel>
 
             <BiPanel title="目標 vs 実績" description="期首予算との対比">
@@ -428,7 +405,7 @@ function BiDashboardPageContent() {
               </div>
             }
           >
-            <ResponsiveContainer width="100%" height={280}>
+            <div className="h-[280px]">
               <AreaChart
                 data={chartData.map((m) => ({
                   month: m.label,
@@ -436,41 +413,20 @@ function BiDashboardPageContent() {
                   粗利: m.grossProfit,
                   売上総利益: m.grossProfitTotal,
                 }))}
-                margin={{ top: 12, right: 16, bottom: 0, left: 0 }}
-              >
-                <defs>
-                  <linearGradient id="grad-revenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={TEAL[700]} stopOpacity={0.45} />
-                    <stop offset="100%" stopColor={TEAL[700]} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="grad-gp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={TEAL[500]} stopOpacity={0.4} />
-                    <stop offset="100%" stopColor={TEAL[500]} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="grad-gpt" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={TEAL[300]} stopOpacity={0.45} />
-                    <stop offset="100%" stopColor={TEAL[300]} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={TEAL[50]} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: TEAL[500] }} axisLine={false} tickLine={false} padding={{ left: 8, right: 8 }} />
-                <YAxis tick={{ fontSize: 10, fill: TEAL[500] }} unit="万" axisLine={false} tickLine={false} width={50} />
-                <RTooltip
-                  formatter={(v, n) => [`${Number(v) < 0 ? "▲" : ""}¥${Math.abs(Number(v)).toLocaleString()}万`, n]}
-                  contentStyle={CHART_TOOLTIP_STYLE}
-                  cursor={{ stroke: TEAL[100], strokeWidth: 1, strokeDasharray: "3 3" }}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
-                  iconType="circle"
-                  iconSize={8}
-                  formatter={(v) => <span className="text-slate-500 ml-1 mr-3">{v}</span>}
-                />
-                <Area type="monotone" dataKey="売上" stroke={TEAL[700]} strokeWidth={2} fill="url(#grad-revenue)" />
-                <Area type="monotone" dataKey="粗利" stroke={TEAL[500]} strokeWidth={1.8} fill="url(#grad-gp)" />
-                <Area type="monotone" dataKey="売上総利益" stroke={TEAL[300]} strokeWidth={1.8} fill="url(#grad-gpt)" />
-              </AreaChart>
-            </ResponsiveContainer>
+                labelKey="month"
+                height={280}
+                gridColor={TEAL[50]}
+                labelColor={TEAL[500]}
+                tickColor={TEAL[500]}
+                unit="万"
+                series={[
+                  { key: "売上", label: "売上", color: TEAL[700] },
+                  { key: "粗利", label: "粗利", color: TEAL[500] },
+                  { key: "売上総利益", label: "売上総利益", color: TEAL[300] },
+                ]}
+                formatValue={(v) => `${v < 0 ? "▲" : ""}¥${Math.abs(v).toLocaleString()}万`}
+              />
+            </div>
           </BiPanel>
 
           <BiPanel
@@ -617,7 +573,7 @@ function BiDashboardPageContent() {
               title="部門別 月次推移"
               description="製造間接費は当月の売上構成比で部門按分（§3.3）"
             >
-              <ResponsiveContainer width="100%" height={280}>
+              <div className="h-[280px]">
                 <AreaChart
                   data={monthlyActuals.map((m, i) => {
                     const row: Record<string, string | number> = { month: m.month };
@@ -626,54 +582,46 @@ function BiDashboardPageContent() {
                     }
                     return row;
                   })}
-                  margin={{ top: 12, right: 16, bottom: 0, left: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={TEAL[50]} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: TEAL[500] }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: TEAL[500] }} unit="万" axisLine={false} tickLine={false} width={50} />
-                  <RTooltip
-                    formatter={(v, n) => [`${Number(v) < 0 ? "▲" : ""}¥${Math.abs(Number(v)).toLocaleString()}万`, n]}
-                    contentStyle={CHART_TOOLTIP_STYLE}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" iconSize={8} />
-                  {monthlyByDept.map((dept, i) => (
-                    <Area
-                      key={dept.name}
-                      type="monotone"
-                      dataKey={dept.name}
-                      stroke={DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length]}
-                      fill={DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length]}
-                      fillOpacity={0.15}
-                      strokeWidth={1.8}
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
+                  labelKey="month"
+                  height={280}
+                  gridColor={TEAL[50]}
+                  labelColor={TEAL[500]}
+                  tickColor={TEAL[500]}
+                  unit="万"
+                  series={monthlyByDept.map((dept, i) => ({
+                    key: dept.name,
+                    label: dept.name,
+                    color: DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length],
+                  }))}
+                  formatValue={(v) => `${v < 0 ? "▲" : ""}¥${Math.abs(v).toLocaleString()}万`}
+                />
+              </div>
             </BiPanel>
           )}
 
           <BiPanel title="部門別 売上・粗利比較" description="目標と実績の対比">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart
+            <div className="h-[260px]">
+              <GroupedBarChart
                 data={deptActuals.map((d) => ({
                   name: d.name,
                   目標: deptTargetMap[d.name] ?? 1000,
                   売上: d.revenue,
                   粗利: d.grossProfit,
                 }))}
-                margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
-                barCategoryGap="25%"
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={TEAL[50]} />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: TEAL[500] }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: TEAL[500] }} unit="万" axisLine={false} tickLine={false} width={50} />
-                <RTooltip formatter={(v) => [`¥${Number(v).toLocaleString()}万`]} contentStyle={CHART_TOOLTIP_STYLE} />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="circle" iconSize={8} />
-                <Bar dataKey="目標" fill={TEAL[50]} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="売上" fill={TEAL[700]} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="粗利" fill={TEAL[500]} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+                labelKey="name"
+                idPrefix="bi-dept-compare"
+                height={260}
+                gridColor={TEAL[50]}
+                labelColor={TEAL[500]}
+                tickColor={TEAL[500]}
+                series={[
+                  { key: "目標", label: "目標", fill: TEAL[50] },
+                  { key: "売上", label: "売上", fill: TEAL[700] },
+                  { key: "粗利", label: "粗利", fill: TEAL[500] },
+                ]}
+                formatValue={(v) => `¥${v.toLocaleString()}万`}
+              />
+            </div>
           </BiPanel>
 
           <BiPanel

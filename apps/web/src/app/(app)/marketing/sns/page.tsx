@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { DonutChart } from "@/components/charts/donut-chart";
 import { getCustomers } from "@/lib/actions/customers";
 
 const COLORS = ["#0F5132", "#1A7A52", "#2D9E6B", "#4DB88A", "#7DCFAA", "#A8DFC5"];
@@ -32,7 +32,14 @@ export default function MarketingSnsPage() {
       </div>
       <Card><CardHeader className="pb-2"><CardTitle className="text-sm">顧客獲得チャネル内訳</CardTitle></CardHeader>
         <CardContent>{sourceData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}><PieChart><Pie data={sourceData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({name,percent})=>`${name} ${((percent??0)*100).toFixed(0)}%`}>{sourceData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer>
+          <DonutChart
+            data={sourceData.map((item, i) => ({
+              label: item.name,
+              value: item.value,
+              color: COLORS[i % COLORS.length],
+            }))}
+            formatValue={(v) => `${v}件`}
+          />
         ) : <p className="text-center py-8 text-muted-foreground">データなし</p>}</CardContent>
       </Card>
     </div>

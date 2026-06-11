@@ -197,6 +197,34 @@ export async function getUnfollowedCustomers(days = 7, page = 1, limit = 50) {
   }));
 }
 
+export async function getUnfollowedCustomersCount(days = 7) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_unfollowed_customers_count", { p_days: days });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+export async function getCustomerDealSummaries(customerIds: string[]) {
+  if (customerIds.length === 0) return {} as Record<string, string>;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("deals")
+    .select("customer_id, updated_at, stage")
+    .in("customer_id", customerIds)
+    .not("stage", "in", '("won","lost")');
+  if (error) throw error;
+
+  const map: Record<string, string> = {};
+  for (const deal of data ?? []) {
+    const prev = map[deal.customer_id];
+    if (!prev || deal.updated_at > prev) {
+      map[deal.customer_id] = deal.updated_at;
+    }
+  }
+  return map;
+}
+
 export async function getCustomerRelated(customerId: string) {
   const supabase = await createClient();
   const [dealsRes, estimatesRes, contractsRes, constructionsRes] = await Promise.all([

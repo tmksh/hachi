@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart } from "@/components/charts/bar-chart";
 import { getDeals } from "@/lib/actions/deals";
 import type { Deal } from "@/lib/database.types";
 
@@ -39,7 +39,13 @@ export default function MarketingRoiPage() {
       </div>
       <Card><CardHeader className="pb-2"><CardTitle className="text-sm">ステージ別商談数</CardTitle></CardHeader>
         <CardContent>{stageData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}><BarChart data={stageData}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="stage" tick={{fontSize:11}} /><YAxis /><Tooltip /><Bar dataKey="件数" fill="#0F5132" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>
+          <div className="h-[300px]">
+            <BarChart
+              data={stageData.map((d) => ({ label: d.stage, value: d.件数 }))}
+              height={300}
+              formatValue={(v) => `${v}件`}
+            />
+          </div>
         ) : <p className="text-center py-8 text-muted-foreground">データなし</p>}</CardContent>
       </Card>
     </div>

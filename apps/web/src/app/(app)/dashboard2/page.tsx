@@ -46,10 +46,7 @@ import {
   CHART_PIPELINE_LEGEND,
 } from "@/lib/blue-theme";
 
-const ResponsiveTrendChartBlue = dynamic(
-  () => import("@/components/dashboard/responsive-trend-chart-blue").then((m) => m.ResponsiveTrendChartBlue),
-  { ssr: false, loading: () => <Skeleton className="flex-1 min-h-[180px] w-full rounded-lg" /> },
-);
+import { ResponsiveTrendChartBlue } from "@/components/dashboard/responsive-trend-chart-blue";
 
 const WidgetGrid = dynamic(
   () => import("@/components/dashboard/widget-grid").then((m) => m.WidgetGrid),

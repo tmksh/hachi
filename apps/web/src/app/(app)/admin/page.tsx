@@ -64,21 +64,9 @@ import {
   BarChart3,
   Sparkles,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RTooltip,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  Legend,
-} from "recharts";
+import { LineChart } from "@/components/charts/line-chart";
+import { DonutChart } from "@/components/charts/donut-chart";
+import { BarChart } from "@/components/charts/bar-chart";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -462,19 +450,18 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 {loading ? <Skeleton className="h-[280px] w-full" /> : (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={biTrend} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={(v: number) => v >= 1_000_000 ? `${Math.round(v / 1_000_000)}M` : v >= 1000 ? `${Math.round(v / 1000)}K` : `${v}`} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                      <RTooltip formatter={(value, name) => { const v = typeof value === "number" ? value : 0; return name === "件数" ? `${v}件` : yen(v); }} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Line yAxisId="left" type="monotone" dataKey="revenue" name="受注額" stroke="#0F5132" strokeWidth={2} dot={{ r: 3, fill: "#0F5132" }} />
-                      <Line yAxisId="left" type="monotone" dataKey="gross" name="粗利" stroke="#2D9E6B" strokeWidth={2} dot={{ r: 3, fill: "#2D9E6B" }} />
-                      <Line yAxisId="right" type="monotone" dataKey="count" name="件数" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: "#f59e0b" }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div className="h-[280px]">
+                    <LineChart
+                      data={biTrend}
+                      labelKey="label"
+                      height={280}
+                      series={[
+                        { key: "revenue", label: "受注額", color: "#0F5132", formatValue: yen },
+                        { key: "gross", label: "粗利", color: "#2D9E6B", formatValue: yen },
+                        { key: "count", label: "件数", color: "#f59e0b", yAxis: "right", formatValue: (v) => `${v}件` },
+                      ]}
+                    />
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -486,20 +473,15 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 {loading || !biStatus ? <Skeleton className="h-[280px] w-full" /> : (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie
-                        data={Object.entries(biStatus).map(([k, v]) => ({ name: STATUS_LABEL[k] ?? k, value: v, key: k }))}
-                        dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3}
-                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {Object.keys(biStatus).map((k, i) => <Cell key={k} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                      </Pie>
-                      <RTooltip formatter={(v) => `${typeof v === "number" ? v : 0}件`} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <DonutChart
+                    data={Object.entries(biStatus).map(([k, v], i) => ({
+                      label: STATUS_LABEL[k] ?? k,
+                      value: v,
+                      color: PIE_COLORS[i % PIE_COLORS.length],
+                    }))}
+                    height={280}
+                    formatValue={(v) => `${v}件`}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -515,15 +497,13 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 {loading ? <Skeleton className="h-[220px] w-full" /> : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={biDist} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <RTooltip formatter={(v) => `${typeof v === "number" ? v : 0}社`} />
-                      <Bar dataKey="count" name="社数" fill="#0F5132" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="h-[220px]">
+                    <BarChart
+                      data={biDist.map((d) => ({ label: d.label, value: d.count }))}
+                      height={220}
+                      formatValue={(v) => `${v}社`}
+                    />
+                  </div>
                 )}
               </CardContent>
             </Card>
