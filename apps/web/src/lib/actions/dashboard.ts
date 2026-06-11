@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { format, subMonths, startOfMonth, subDays } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -24,9 +25,17 @@ const ESTIMATE_STATUS_LABELS: Record<string, string> = {
   expired: "失効",
 };
 
-function buildMonthlyTrend(
-  deals: Array<{ stage: string; value: number | null; updated_at: string; created_at: string }>
-) {
+type DealRow = {
+  id: string;
+  title: string;
+  stage: string;
+  value: number | null;
+  updated_at: string;
+  created_at: string;
+  customer: { id?: string; name?: string } | null;
+};
+
+function buildMonthlyTrend(deals: DealRow[]) {
   const now = new Date();
   return Array.from({ length: 7 }, (_, i) => {
     const monthDate = startOfMonth(subMonths(now, 6 - i));
@@ -105,16 +114,13 @@ export async function getUnfollowedLeads(days = 7) {
 
 export async function getDashboardData() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
 
   const [
     { count: customerCount },
-    { count: dealCount },
-    { data: deals },
-    { data: allDealsForTrend },
+    { data: allDeals, count: dealCount },
     { data: constructions },
     { data: recentCustomers },
-    { data: recentDeals },
     { data: recentEstimates },
     { data: contracts },
     { data: invoices },
@@ -126,9 +132,9 @@ export async function getDashboardData() {
     { count: completedRequests },
   ] = await Promise.all([
     supabase.from("customers").select("*", { count: "exact", head: true }).is("deleted_at", null),
-    supabase.from("deals").select("*", { count: "exact", head: true }),
-    supabase.from("deals").select("stage, value"),
-    supabase.from("deals").select("stage, value, updated_at, created_at"),
+    supabase
+      .from("deals")
+      .select("id, title, stage, value, updated_at, created_at, customer:customers(id, name)", { count: "exact" }),
     supabase
       .from("constructions")
       .select("id, title, status, progress, end_date, assigned_to, customer_id, customer:customers(id, name), assignee:profiles!constructions_assigned_to_fkey(display_name)")
@@ -142,17 +148,12 @@ export async function getDashboardData() {
       .order("created_at", { ascending: false })
       .limit(15),
     supabase
-      .from("deals")
-      .select("id, title, stage, value, updated_at, customer:customers(id, name)")
-      .order("updated_at", { ascending: false })
-      .limit(20),
-    supabase
       .from("estimates")
       .select("id, estimate_no, title, status, total, created_at")
       .order("created_at", { ascending: false })
       .limit(15),
-    supabase.from("contracts").select("id, status"),
-    supabase.from("invoices").select("id, status, total"),
+    supabase.from("contracts").select("status"),
+    supabase.from("invoices").select("status, total"),
     supabase
       .from("announcements")
       .select("id, title, body, pinned, is_urgent, published_at, author:profiles!announcements_author_id_fkey(display_name)")
@@ -181,16 +182,17 @@ export async function getDashboardData() {
       : Promise.resolve({ count: 0, data: null, error: null }),
   ]);
 
-  const pipelineValue = (deals || [])
+  const deals = (allDeals ?? []) as DealRow[];
+
+  const pipelineValue = deals
     .filter((d) => !["won", "lost"].includes(d.stage))
     .reduce((sum, d) => sum + (d.value || 0), 0);
 
-  const wonValue = (deals || [])
+  const wonValue = deals
     .filter((d) => d.stage === "won")
     .reduce((sum, d) => sum + (d.value || 0), 0);
 
   const activeConstructions = (constructions || []).length;
-
   const contractList = contracts ?? [];
   const invoiceList = invoices ?? [];
 
@@ -202,24 +204,25 @@ export async function getDashboardData() {
       wonValue,
       activeConstructions,
     },
-    monthlyTrend: buildMonthlyTrend(allDealsForTrend ?? []),
+    monthlyTrend: buildMonthlyTrend(deals),
     constructions: constructions || [],
     recentCustomers: recentCustomers || [],
-    recentDeals: (recentDeals ?? [])
+    recentDeals: deals
       .filter((d) => !["won", "lost"].includes(d.stage))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, 5)
       .map((d) => {
-      const customer = d.customer as { id?: string; name?: string } | null;
-      return {
-        id: d.id,
-        title: d.title,
-        stage: d.stage,
-        stageLabel: DEAL_STAGE_LABELS[d.stage] ?? d.stage,
-        value: d.value,
-        customerId: customer?.id ?? null,
-        customerName: customer?.name ?? "—",
-      };
-    }),
+        const customer = d.customer;
+        return {
+          id: d.id,
+          title: d.title,
+          stage: d.stage,
+          stageLabel: DEAL_STAGE_LABELS[d.stage] ?? d.stage,
+          value: d.value,
+          customerId: customer?.id ?? null,
+          customerName: customer?.name ?? "—",
+        };
+      }),
     recentEstimates: (recentEstimates ?? []).map((e) => ({
       id: e.id,
       estimateNo: e.estimate_no,

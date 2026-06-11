@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,7 +120,7 @@ const ROLE_COLOR: Record<Role, string> = {
   external_partner: "bg-gray-100 text-gray-800 border-gray-200",
 };
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const { profile, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const initInnerTab = searchParams.get("tab") ?? "profile";
@@ -1382,5 +1382,13 @@ export default function SettingsPage() {
 
       </Tabs> {/* ── 外側 group Tabs ── */}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 w-full rounded-xl" /></div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

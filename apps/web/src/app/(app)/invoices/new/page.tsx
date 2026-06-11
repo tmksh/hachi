@@ -29,7 +29,7 @@ export default function InvoiceNewPage() {
   const [dueDate, setDueDate] = useState("");
   const [items, setItems] = useState<LineItem[]>([{ description: "", quantity: 1, unit_price: 0 }]);
 
-  useEffect(() => { Promise.all([getCustomers(), getConstructions()]).then(([c, co]) => { setCustomers(c.map(x=>({id:x.id,name:x.name}))); setConstructions(co.map(x=>({id:x.id,title:x.title}))); }).catch(()=>{}); }, []);
+  useEffect(() => { Promise.all([getCustomers({ limit: 100 }), getConstructions()]).then(([customerResult, co]) => { setCustomers(customerResult.customers.map(x=>({id:x.id,name:x.name}))); setConstructions(co.map(x=>({id:x.id,title:x.title}))); }).catch(()=>{}); }, []);
 
   const addItem = () => setItems([...items, { description: "", quantity: 1, unit_price: 0 }]);
   const removeItem = (i: number) => setItems(items.filter((_,j) => j !== i));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -188,7 +188,7 @@ function fmtSigned(v: number) { return v < 0 ? `▲${fmtMan(v)}` : fmtMan(v); }
 // ────────────────────────────────────────────────────────────────────
 // メイン
 // ────────────────────────────────────────────────────────────────────
-export default function BiDashboardPage() {
+function BiDashboardPageContent() {
   const searchParams = useSearchParams();
   const [showTheoretical, setShowTheoretical] = useState(true);
   const [settings, setSettings] = useState<BiAnnualSettings | null>(null);
@@ -773,5 +773,13 @@ export default function BiDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function BiDashboardPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6"><div className="h-8 w-48 bg-muted animate-pulse rounded mb-4" /><div className="h-96 bg-muted animate-pulse rounded-xl" /></div>}>
+      <BiDashboardPageContent />
+    </Suspense>
   );
 }

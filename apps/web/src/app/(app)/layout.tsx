@@ -1,7 +1,6 @@
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { MainLayout } from "@/components/layout/main-layout";
-
-export const dynamic = "force-dynamic";
 
 export default function AppLayout({
   children,
@@ -9,8 +8,10 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthProvider>
-      <MainLayout>{children}</MainLayout>
-    </AuthProvider>
+    <QueryProvider>
+      <AuthProvider>
+        <MainLayout>{children}</MainLayout>
+      </AuthProvider>
+    </QueryProvider>
   );
 }

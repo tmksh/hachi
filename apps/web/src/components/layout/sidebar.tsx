@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, canAccessNavItem, ROLE_LABELS } from "@/lib/constants";
@@ -98,23 +97,17 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
   useEffect(() => {
-    const fetchNotifs = () => getNotifications().then(setNotifications).catch(() => {});
     const fetchUnread = () => getUnreadMessageCount().then(setChatUnreadCount).catch(() => {});
 
-    let notifTimer: ReturnType<typeof setInterval> | undefined;
     let chatTimer: ReturnType<typeof setInterval> | undefined;
 
     const startPolling = () => {
-      void fetchNotifs();
       void fetchUnread();
-      notifTimer = setInterval(fetchNotifs, 60_000);
-      chatTimer = setInterval(fetchUnread, 30_000);
+      chatTimer = setInterval(fetchUnread, 60_000);
     };
 
     const stopPolling = () => {
-      if (notifTimer) clearInterval(notifTimer);
       if (chatTimer) clearInterval(chatTimer);
-      notifTimer = undefined;
       chatTimer = undefined;
     };
 
@@ -136,9 +129,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      idleId = window.requestIdleCallback(start, { timeout: 2000 });
+      idleId = window.requestIdleCallback(start, { timeout: 3000 });
     } else {
-      timeoutId = setTimeout(start, 300);
+      timeoutId = setTimeout(start, 500);
     }
 
     return () => {
@@ -148,6 +141,14 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       stopPolling();
     };
   }, []);
+
+  useEffect(() => {
+    if (!notifOpen) return;
+    const fetchNotifs = () => getNotifications().then(setNotifications).catch(() => {});
+    void fetchNotifs();
+    const timer = setInterval(fetchNotifs, 60_000);
+    return () => clearInterval(timer);
+  }, [notifOpen]);
 
   // デバウンスグローバル検索
   useEffect(() => {
@@ -210,11 +211,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
   return (
     <>
-      <motion.aside
-        animate={{ width: expanded ? 220 : 68 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      <aside
+        style={{ width: expanded ? 220 : 68 }}
         className={cn(
-          "fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl",
+          "fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl transition-[width] duration-300 ease-out",
           false && "sidebar-theme-blue",
         )}
       >
@@ -231,19 +231,11 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
           >
             <Image src="/logo.png" alt="BRIDGE" width={40} height={34} className="object-contain w-8 h-auto" />
           </button>
-          <AnimatePresence>
-            {expanded && (
-              <motion.span
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -8 }}
-                transition={{ duration: 0.15 }}
-                className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden"
-              >
+          {expanded && (
+              <span className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden animate-in fade-in slide-in-from-left-2 duration-150">
                 BRIDGE
-              </motion.span>
+              </span>
             )}
-          </AnimatePresence>
         </div>
 
         {/* Nav Groups */}
@@ -274,13 +266,11 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                       <span className="shrink-0 relative">
                         {Icon && <Icon className="h-5 w-5" />}
                         {active && (
-                          <motion.div
-                            layoutId="sidebar-active"
+                          <div
                             className={cn(
                               "absolute -left-[14px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full",
                               sidebarActiveIndicator,
                             )}
-                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
                           />
                         )}
                       </span>
@@ -294,15 +284,8 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                         )}
                       />
                     </button>
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
+                    {isOpen && (
+                        <div className="overflow-hidden animate-in fade-in duration-200">
                           <div className="pl-10 pr-1 pb-1 flex flex-col gap-0.5">
                             {group.items.map((item) => (
                               <Link
@@ -320,9 +303,8 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                               </Link>
                             ))}
                           </div>
-                        </motion.div>
+                        </div>
                       )}
-                    </AnimatePresence>
                   </div>
                 ) : (
                   /* 折りたたみ時: アイコンのみ + ホバーでメニュー表示 */
@@ -337,13 +319,11 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                       >
                         {Icon && <Icon className="h-5 w-5" />}
                         {active && (
-                          <motion.div
-                            layoutId="sidebar-active"
+                          <div
                             className={cn(
                               "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full",
                               sidebarActiveIndicator,
                             )}
-                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
                           />
                         )}
                       </button>
@@ -521,7 +501,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
             </>
           )}
         </div>
-      </motion.aside>
+      </aside>
 
       {/* 検索ダイアログ — 開いたときだけマウント */}
       {searchOpen && (

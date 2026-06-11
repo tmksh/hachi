@@ -32,8 +32,9 @@ export default function QuoteEditPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getEstimate(id as string), getCustomers()])
-      .then(([est, c]) => {
+    Promise.all([getEstimate(id as string), getCustomers({ limit: 100 })])
+      .then(([est, customerResult]) => {
+        const c = customerResult.customers;
         setCustomers(c.map(x => ({id:x.id,name:x.name})));
         setCustomerId(est.customer_id ?? ""); setTitle(est.title ?? ""); setNotes(est.notes ?? ""); setStatus(est.status ?? "draft");
         setItems(est.items.length > 0 ? est.items.map(i => ({ name: i.name, quantity: i.quantity, unit: i.unit ?? "式", selling_price: i.selling_price })) : [

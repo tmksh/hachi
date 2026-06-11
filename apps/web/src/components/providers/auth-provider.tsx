@@ -12,6 +12,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { type Role, canAccessRoute } from "@/lib/constants";
+import { applyFontSize, isFontSize } from "@/lib/font-size";
 
 export type Profile = {
   id: string;
@@ -54,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         return;
       }
+      const fontMeta = authUser.user_metadata?.font_size;
+      if (isFontSize(fontMeta)) applyFontSize(fontMeta);
       const { data } = await supabase
         .from("profiles")
         .select("*")
@@ -69,8 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authUser = session?.user ?? null;
       if (!mounted) return;
       setUser(authUser);
       await loadProfile(authUser);

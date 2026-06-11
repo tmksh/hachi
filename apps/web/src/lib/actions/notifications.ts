@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -16,7 +17,7 @@ export type Notification = {
 
 export async function getNotifications(): Promise<Notification[]> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return [];
 
   const now = new Date();

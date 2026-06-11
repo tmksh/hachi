@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import type { Profile, Company } from "@/lib/database.types";
 
 export async function getProfiles() {
@@ -41,7 +42,7 @@ export async function updateProfile(input: Partial<Pick<Profile, "display_name" 
 
 export async function getCompany() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) throw new Error("Not authenticated");
 
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();

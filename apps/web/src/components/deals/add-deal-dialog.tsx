@@ -49,7 +49,7 @@ export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Pr
 
   useEffect(() => {
     if (open) {
-      getCustomers().then(c => setCustomers(c.map(x => ({ id: x.id, name: x.name })))).catch(() => {});
+      getCustomers({ limit: 100 }).then(r => setCustomers(r.customers.map(x => ({ id: x.id, name: x.name })))).catch(() => {});
     }
   }, [open]);
 

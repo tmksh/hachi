@@ -108,8 +108,8 @@ function QuoteNewPageContent() {
   });
 
   useEffect(() => {
-    getCustomers()
-      .then((rows) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
+    getCustomers({ limit: 100 })
+      .then(({ customers: rows }) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => {});
   }, []);
 

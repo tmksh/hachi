@@ -2,17 +2,9 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import {
   LogIn,
   LogOut,
@@ -43,10 +35,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { toast } from "sonner";
-import { getDashboardData, getUnfollowedLeads } from "@/lib/actions/dashboard";
+import { getUnfollowedLeads } from "@/lib/actions/dashboard";
 import { sendFollowupInquiry } from "@/lib/actions/internal-messages";
-import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
-import { AnalogClock } from "@/components/shared/analog-clock";
+import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/actions/attendance";
+import { ResponsiveClock } from "@/components/dashboard/responsive-clock";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import { AdaptiveList } from "@/components/shared/adaptive-list";
@@ -54,22 +46,24 @@ import { useWidgets } from "@/hooks/use-widgets";
 import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { useInternalChat } from "@/contexts/chat-panel-context";
-import {
-  DndContext,
-  closestCorners,
-  type DragEndEvent,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { useDashboardData, useTodayAttendance } from "@/hooks/use-dashboard-data";
+import type { DragEndEvent } from "@dnd-kit/core";
 
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
-import { computeBrandFromHex, type BrandColors } from "@/lib/brand-color";
+import { computeBrandFromHex } from "@/lib/brand-color";
 import { cn } from "@/lib/utils";
 
-type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+const ResponsiveTrendChart = dynamic(
+  () => import("@/components/dashboard/responsive-trend-chart").then((m) => m.ResponsiveTrendChart),
+  { ssr: false, loading: () => <Skeleton className="flex-1 min-h-[180px] w-full rounded-lg" /> },
+);
+
+const WidgetGrid = dynamic(
+  () => import("@/components/dashboard/widget-grid").then((m) => m.WidgetGrid),
+  { loading: () => <div className="flex flex-wrap gap-4 min-w-0 w-full"><Skeleton className="h-48 w-full md:w-[calc(33%-11px)] rounded-2xl" /><Skeleton className="h-48 w-full md:w-[calc(33%-11px)] rounded-2xl" /><Skeleton className="h-48 w-full md:w-[calc(33%-11px)] rounded-2xl" /></div> },
+);
+
+type DashboardData = NonNullable<ReturnType<typeof useDashboardData>["data"]>;
 type UnfollowedLead = Awaited<ReturnType<typeof getUnfollowedLeads>>[number];
 
 const MOCK_UNFOLLOWED_LEADS: UnfollowedLead[] = [
@@ -129,73 +123,12 @@ function getTrendChartData(trend: DashboardData["monthlyTrend"] | undefined) {
   }));
 }
 
-/** カードの空きスペースに合わせて高さが伸びる売上トレンドチャート */
-function ResponsiveTrendChart({
-  data,
-  brandColors,
-}: {
-  data: ReturnType<typeof getTrendChartData>;
-  brandColors: BrandColors;
-}) {
-  return (
-    <div className="flex-1 min-h-[180px] w-full">
-      <ResponsiveContainer width="100%" height="100%" minHeight={180}>
-        <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
-          <defs>
-            <linearGradient id="chartWonGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" style={{ stopColor: "var(--brand-light)" }} />
-              <stop offset="100%" style={{ stopColor: "var(--brand-dark)" }} />
-            </linearGradient>
-            <linearGradient id="chartPipelineGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" style={{ stopColor: "var(--brand-accent)" }} />
-              <stop offset="100%" style={{ stopColor: "var(--brand-mid)" }} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={brandColors.accent} vertical={false} />
-          <XAxis dataKey="month" tick={{ fontSize: 11, fill: brandColors.light }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fontSize: 11, fill: brandColors.light }} axisLine={false} tickLine={false} />
-          <Tooltip
-            cursor={{ fill: brandColors.accent + "88" }}
-            contentStyle={{ background: "#fff", border: `1px solid ${brandColors.mid}`, borderRadius: 10, fontSize: 12, boxShadow: `0 4px 16px rgba(var(--primary-rgb),0.08)` }}
-            formatter={(v, name) => [`¥${v}万`, name ?? ""]}
-          />
-          <Bar dataKey="パイプライン" fill="url(#chartPipelineGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
-          <Bar dataKey="受注額" fill="url(#chartWonGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/** カードの空きスペースに合わせて自動でサイズが変わるアナログ時計 */
-function ResponsiveClock({ flat = false }: { flat?: boolean } = {}) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState(76);
-
-  useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver((entries) => {
-      const rect = entries[0].contentRect;
-      const next = Math.max(48, Math.min(220, Math.floor(Math.min(rect.width, rect.height))));
-      setSize(next);
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return (
-    <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
-      <AnalogClock size={size} flat={flat} />
-    </div>
-  );
-}
 
 export default function DashboardPage() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading } = useDashboardData();
+  const { data: attendanceEntry } = useTodayAttendance();
   const [unfollowedLeads, setUnfollowedLeads] = useState<UnfollowedLead[]>([]);
   const [unfollowedLoading, setUnfollowedLoading] = useState(true);
   const [inquiryTarget, setInquiryTarget] = useState<UnfollowedLead | null>(null);
@@ -210,31 +143,31 @@ export default function DashboardPage() {
   const brandHex = brandMode === "solid" ? solidHex : gradientHex;
   const brandColors = computeBrandFromHex(brandHex);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
-  );
-
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) reorder(String(active.id), String(over.id));
   }, [reorder]);
 
   useEffect(() => {
-    getDashboardData()
-      .then(setData)
-      .catch(() => toast.error("データの取得に失敗しました"))
-      .finally(() => setLoading(false));
-    getTodayAttendance().then((entry) => {
-      if (entry?.clock_in_at) {
-        setClockedIn(!entry.clock_out_at);
-        setClockInTime(new Date(entry.clock_in_at));
-      }
-    }).catch(() => {});
-    getUnfollowedLeads()
-      .then((leads) => setUnfollowedLeads(leads.length > 0 ? leads : MOCK_UNFOLLOWED_LEADS))
-      .catch(() => setUnfollowedLeads(MOCK_UNFOLLOWED_LEADS))
-      .finally(() => setUnfollowedLoading(false));
+    if (attendanceEntry?.clock_in_at) {
+      setClockedIn(!attendanceEntry.clock_out_at);
+      setClockInTime(new Date(attendanceEntry.clock_in_at));
+    }
+  }, [attendanceEntry]);
+
+  useEffect(() => {
+    const loadUnfollowed = () => {
+      getUnfollowedLeads()
+        .then((leads) => setUnfollowedLeads(leads.length > 0 ? leads : MOCK_UNFOLLOWED_LEADS))
+        .catch(() => setUnfollowedLeads(MOCK_UNFOLLOWED_LEADS))
+        .finally(() => setUnfollowedLoading(false));
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      window.requestIdleCallback(loadUnfollowed, { timeout: 3000 });
+    } else {
+      setTimeout(loadUnfollowed, 500);
+    }
   }, []);
 
   const handleClockIn = async () => {
@@ -1048,13 +981,7 @@ export default function DashboardPage() {
       )}
 
       {/* Sortable widget grid */}
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-        <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-          <div
-            ref={gridRef}
-            data-widget-grid
-            className="flex flex-wrap gap-4 min-w-0 w-full"
-          >
+      <WidgetGrid sortableIds={sortableIds} onDragEnd={handleDragEnd} gridRef={gridRef}>
             {sortableIds.map((id) => {
               const card = renderCard(id);
               if (!card) return null;
@@ -1075,9 +1002,7 @@ export default function DashboardPage() {
                 </SortableWidget>
               );
             })}
-          </div>
-        </SortableContext>
-      </DndContext>
+      </WidgetGrid>
 
     </div>
   );

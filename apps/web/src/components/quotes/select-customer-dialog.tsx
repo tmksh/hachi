@@ -34,8 +34,8 @@ export function SelectCustomerDialog({
       return;
     }
     setLoading(true);
-    getCustomers()
-      .then((rows) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
+    getCustomers({ limit: 100 })
+      .then(({ customers: rows }) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => setCustomers([]))
       .finally(() => setLoading(false));
   }, [open]);

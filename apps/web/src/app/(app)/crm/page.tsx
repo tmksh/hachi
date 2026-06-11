@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,20 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, Phone, Mail, MapPin, LayoutGrid, List, Kanban, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Phone, Mail, MapPin, LayoutGrid, List, Kanban, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getCustomers } from "@/lib/actions/customers";
 const DealsPipelineView = dynamic(
   () => import("@/components/deals/deals-pipeline-view").then((m) => m.DealsPipelineView),
   { loading: () => <Skeleton className="h-[400px] w-full rounded-xl" /> },
 );
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
-import type { Customer } from "@/lib/database.types";
-
-type CustomerWithDeals = Customer & {
-  assigned_to_profile: { id: string; display_name: string } | null;
-  deals?: Array<{ id: string; updated_at: string; stage: string }>;
-};
+import { useCustomers, useCustomerCounts, type CustomerWithDeals } from "@/hooks/use-customers";
 
 type ViewMode = "grid" | "list" | "pipeline";
 
@@ -43,35 +37,44 @@ function getFollowupStatus(c: CustomerWithDeals): "unassigned" | "followed" | "u
 
 export default function CrmPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<CustomerWithDeals[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [tab, setTab] = useState("all");
   const [view, setView] = useState<ViewMode>("list");
   const [addDealOpen, setAddDealOpen] = useState(false);
 
   useEffect(() => {
-    getCustomers().then(d => {
-      setCustomers(d as CustomerWithDeals[]);
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading: loading } = useCustomers(page, debouncedSearch);
+  const { data: counts } = useCustomerCounts();
+  const customers = data?.customers ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / (data?.limit ?? 50)));
 
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get("view");
     if (v === "pipeline" || v === "grid" || v === "list") setView(v);
   }, []);
 
-  const filtered = customers.filter(c => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || c.name.toLowerCase().includes(q) || (c.company_name ?? "").toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q);
+  const filtered = useMemo(() => customers.filter(c => {
     const matchTab = tab === "all"
       || (tab === "corporation" && c.company_name)
       || (tab === "individual" && !c.company_name)
       || (tab === "unfollowed" && getFollowupStatus(c) === "unfollowed");
-    return matchSearch && matchTab;
-  });
+    return matchTab;
+  }), [customers, tab]);
 
-  const unfollowedCount = customers.filter(c => getFollowupStatus(c) === "unfollowed").length;
+  const unfollowedCount = useMemo(
+    () => customers.filter(c => getFollowupStatus(c) === "unfollowed").length,
+    [customers],
+  );
   const isPipeline = view === "pipeline";
 
   return (
@@ -121,7 +124,7 @@ export default function CrmPage() {
       ) : (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="all">すべて ({customers.length})</TabsTrigger>
+            <TabsTrigger value="all">すべて ({counts?.total ?? total})</TabsTrigger>
             <TabsTrigger value="corporation">法人</TabsTrigger>
             <TabsTrigger value="individual">個人</TabsTrigger>
             <TabsTrigger value="unfollowed" className="gap-1">
@@ -252,6 +255,17 @@ export default function CrmPage() {
                   </Table>
                 </CardContent>
               </Card>
+            )}
+            {!isPipeline && totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 pt-4">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  <ChevronLeft className="h-4 w-4" />前へ
+                </Button>
+                <span className="text-sm text-muted-foreground tabular-nums">{page} / {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  次へ<ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             )}
           </TabsContent>
         </Tabs>

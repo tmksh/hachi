@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import type { AttendanceEntry } from "@/lib/database.types";
 
 /** JST の YYYY-MM-DD を返す */
@@ -196,7 +197,7 @@ export async function updateLeaveType(id: string, leaveType: string) {
 
 export async function getTodayAttendance() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
   const today = getTodayJST();
   const { data } = await supabase

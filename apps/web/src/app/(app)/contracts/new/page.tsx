@@ -35,8 +35,9 @@ export default function ContractNewPage() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    Promise.all([getCustomers(), getEstimates(), getProfiles()])
-      .then(([c, e, p]) => {
+    Promise.all([getCustomers({ limit: 100 }), getEstimates(), getProfiles()])
+      .then(([customerResult, e, p]) => {
+        const c = customerResult.customers;
         setCustomers(c.map((x) => ({ id: x.id, name: x.name })));
         setEstimates(
           e.map((x) => ({

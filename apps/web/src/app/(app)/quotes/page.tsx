@@ -23,7 +23,7 @@ import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog
 import { Badge } from "@/components/ui/badge";
 
 type Row = Awaited<ReturnType<typeof getEstimates>>[number];
-type CustomerRow = Awaited<ReturnType<typeof getCustomers>>[number];
+type CustomerRow = Awaited<ReturnType<typeof getCustomers>>["customers"][number];
 
 function fmt(v: number) { return `¥${Math.round(v / 10000).toLocaleString()}万`; }
 
@@ -49,7 +49,7 @@ function QuotesPageContent() {
         toast.error("見積一覧の読み込みに失敗しました");
         return [] as Row[];
       }),
-      getCustomers().catch(() => {
+      getCustomers({ limit: 100 }).then((r) => r.customers).catch(() => {
         toast.error("顧客一覧の読み込みに失敗しました");
         return [] as CustomerRow[];
       }),

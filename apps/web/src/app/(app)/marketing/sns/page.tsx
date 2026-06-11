@@ -13,7 +13,7 @@ export default function MarketingSnsPage() {
   const [customers, setCustomers] = useState<{ source: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { getCustomers().then(c => setCustomers(c.map(x => ({ source: x.source })))).catch(()=>{}).finally(()=>setLoading(false)); }, []);
+  useEffect(() => { getCustomers({ limit: 100 }).then(r => setCustomers(r.customers.map(x => ({ source: x.source })))).catch(()=>{}).finally(()=>setLoading(false)); }, []);
 
   const sourceData = useMemo(() => {
     const counts: Record<string, number> = {};

@@ -68,23 +68,29 @@ export function useWidgets() {
   // ハイドレーション完了後の変更のみ永続化するためのフラグ
   const skipPersistRef = useRef(true);
 
-  // 起動時: まず localStorage で即時表示 → DB から上書き
+  // 起動時: localStorage で即時表示 → DB はアイドル時に同期
   useEffect(() => {
     const local = loadFromLocalStorage();
     setWidgets(local);
+    setHydrated(true);
+    skipPersistRef.current = false;
 
-    getDashboardSettings().then((dbWidgets) => {
-      if (dbWidgets && dbWidgets.length > 0) {
-        const merged = mergeWithDefaults(dbWidgets);
-        setWidgets(merged);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      }
-      setHydrated(true);
-      skipPersistRef.current = false;
-    }).catch(() => {
-      setHydrated(true);
-      skipPersistRef.current = false;
-    });
+    const syncFromDb = () => {
+      getDashboardSettings().then((dbWidgets) => {
+        if (dbWidgets && dbWidgets.length > 0) {
+          const merged = mergeWithDefaults(dbWidgets);
+          setWidgets(merged);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        }
+      }).catch(() => {});
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(syncFromDb, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = setTimeout(syncFromDb, 1500);
+    return () => clearTimeout(t);
   }, []);
 
   // widgets が変化したら localStorage + DB に自動保存（ハイドレーション後のみ）

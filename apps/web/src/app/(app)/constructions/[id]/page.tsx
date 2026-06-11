@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -662,7 +662,7 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
 ────────────────────────────────────────────────── */
 type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[number];
 
-export default function ConstructionDetailPage() {
+function ConstructionDetailPageContent() {
   const { id } = useParams();
   const searchParams = useSearchParams();
   const { profile } = useAuth();
@@ -882,5 +882,13 @@ export default function ConstructionDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function ConstructionDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-96 w-full rounded-xl" /></div>}>
+      <ConstructionDetailPageContent />
+    </Suspense>
   );
 }

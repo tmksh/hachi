@@ -1,11 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import type { WidgetConfig } from "@/hooks/use-widgets";
 
 export async function getDashboardSettings(): Promise<WidgetConfig[] | null> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
 
   const { data, error } = await supabase
@@ -22,7 +23,7 @@ export async function getDashboardSettings(): Promise<WidgetConfig[] | null> {
 
 export async function saveDashboardSettings(widgets: WidgetConfig[]): Promise<void> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return;
 
   await supabase

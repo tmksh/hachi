@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -96,7 +97,7 @@ function uid() {
   return `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export default function PdfBuilderEditPage() {
+function PdfBuilderEditPageContent() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -654,5 +655,13 @@ export default function PdfBuilderEditPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PdfBuilderEditPage() {
+  return (
+    <Suspense fallback={<div className="p-4 md:p-6"><Skeleton className="h-8 w-48 mb-4" /><Skeleton className="h-[600px] w-full rounded-xl" /></div>}>
+      <PdfBuilderEditPageContent />
+    </Suspense>
   );
 }

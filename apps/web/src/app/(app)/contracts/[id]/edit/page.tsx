@@ -37,8 +37,9 @@ export default function ContractEditPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getContract(id as string), getCustomers(), getEstimates(), getProfiles()])
-      .then(([contract, c, e, p]) => {
+    Promise.all([getContract(id as string), getCustomers({ limit: 100 }), getEstimates(), getProfiles()])
+      .then(([contract, customerResult, e, p]) => {
+        const c = customerResult.customers;
         setCustomers(c.map((x) => ({ id: x.id, name: x.name })));
         setEstimates(
           e.map((x) => ({

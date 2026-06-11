@@ -1,21 +1,70 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import type { Customer } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
 
-export async function getCustomers() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("customers")
-    .select("*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name), deals(id, updated_at, stage)")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data as (Customer & {
+const CUSTOMER_SELECT =
+  "*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name), deals(id, updated_at, stage)";
+
+export type CustomerListResult = {
+  customers: (Customer & {
     assigned_to_profile: { id: string; display_name: string } | null;
     deals: Array<{ id: string; updated_at: string; stage: string }>;
   })[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export async function getCustomers(options?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<CustomerListResult> {
+  const supabase = await createClient();
+  const page = Math.max(1, options?.page ?? 1);
+  const limit = Math.min(100, Math.max(1, options?.limit ?? 50));
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from("customers")
+    .select(CUSTOMER_SELECT, { count: "exact" })
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  const search = options?.search?.trim();
+  if (search) {
+    const q = `%${search}%`;
+    query = query.or(`name.ilike.${q},company_name.ilike.${q},email.ilike.${q}`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    customers: (data ?? []) as CustomerListResult["customers"],
+    total: count ?? 0,
+    page,
+    limit,
+  };
+}
+
+/** タブ表示用の件数（軽量） */
+export async function getCustomerCounts() {
+  const supabase = await createClient();
+  const [{ count: total }, { count: corporation }] = await Promise.all([
+    supabase.from("customers").select("*", { count: "exact", head: true }).is("deleted_at", null),
+    supabase.from("customers").select("*", { count: "exact", head: true }).is("deleted_at", null).not("company_name", "is", null),
+  ]);
+  return {
+    total: total ?? 0,
+    corporation: corporation ?? 0,
+    individual: (total ?? 0) - (corporation ?? 0),
+  };
 }
 
 export async function getCustomer(id: string) {

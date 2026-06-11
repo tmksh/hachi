@@ -5,11 +5,15 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { ChatPanelProvider } from "@/contexts/chat-panel-context";
-import { Sidebar } from "./sidebar";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
 import { BLUE_PAGE_BG } from "@/lib/blue-theme";
 import { TEAL_PAGE_BG } from "@/lib/teal-theme";
+
+const Sidebar = dynamic(
+  () => import("./sidebar").then((m) => m.Sidebar),
+  { loading: () => <aside className="fixed left-3 top-3 z-40 hidden md:block w-[68px] h-[calc(100vh-24px)]" aria-hidden /> },
+);
 
 const BRIDGE_AI_PANEL_WIDTH = 400;
 const INTERNAL_CHAT_WIDTH = 360;

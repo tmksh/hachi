@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -49,10 +48,9 @@ export function AdminSidebar() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <motion.aside
-        animate={{ width: expanded ? 220 : 68 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl"
+      <aside
+        style={{ width: expanded ? 220 : 68 }}
+        className="fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl transition-[width] duration-300 ease-out"
       >
         {/* Logo */}
         <div className="flex h-16 items-center px-3 gap-2 mb-1">
@@ -62,22 +60,14 @@ export function AdminSidebar() {
           >
             <Image src="/logo.png" alt="BRIDGE" width={40} height={34} className="object-contain w-8 h-auto" />
           </button>
-          <AnimatePresence>
-            {expanded && (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -8 }}
-                transition={{ duration: 0.15 }}
-                className="flex flex-col leading-tight overflow-hidden"
-              >
+          {expanded && (
+              <div className="flex flex-col leading-tight overflow-hidden animate-in fade-in slide-in-from-left-2 duration-150">
                 <span className="text-sm font-semibold text-foreground whitespace-nowrap">BRIDGE</span>
                 <span className="text-[10px] text-amber-600 font-medium whitespace-nowrap flex items-center gap-1">
                   <ShieldCheck className="h-3 w-3" /> 運営管理
                 </span>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
         </div>
 
         {/* Navigation */}
@@ -96,13 +86,6 @@ export function AdminSidebar() {
                 >
                   <span className="shrink-0 relative">
                     <Icon className="h-5 w-5" />
-                    {active && (
-                      <motion.div
-                        layoutId="admin-sidebar-active"
-                        className="hidden"
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      />
-                    )}
                   </span>
                   <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
                 </button>
@@ -119,13 +102,6 @@ export function AdminSidebar() {
                     )}
                   >
                     <Icon className="h-5 w-5" />
-                    {active && (
-                      <motion.div
-                        layoutId="admin-sidebar-active"
-                        className="hidden"
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      />
-                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">{label}</TooltipContent>
@@ -214,7 +190,7 @@ export function AdminSidebar() {
             </>
           )}
         </div>
-      </motion.aside>
+      </aside>
     </TooltipProvider>
   );
 }

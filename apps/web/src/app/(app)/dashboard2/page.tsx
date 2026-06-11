@@ -2,17 +2,9 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import {
   LogIn,
   LogOut,
@@ -31,23 +23,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { getDashboardData } from "@/lib/actions/dashboard";
-import { clockIn as clockInAction, clockOut as clockOutAction, getTodayAttendance } from "@/lib/actions/attendance";
-import { AnalogClock } from "@/components/shared/analog-clock";
+import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/actions/attendance";
+import { ResponsiveClock } from "@/components/dashboard/responsive-clock";
 import { SortableWidget } from "@/components/shared/sortable-widget";
 import { AdaptiveList } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
 import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
-import {
-  DndContext,
-  closestCorners,
-  type DragEndEvent,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { useDashboardData, useTodayAttendance } from "@/hooks/use-dashboard-data";
+import type { DragEndEvent } from "@dnd-kit/core";
 
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import {
@@ -63,7 +46,17 @@ import {
   CHART_PIPELINE_LEGEND,
 } from "@/lib/blue-theme";
 
-type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+const ResponsiveTrendChartBlue = dynamic(
+  () => import("@/components/dashboard/responsive-trend-chart-blue").then((m) => m.ResponsiveTrendChartBlue),
+  { ssr: false, loading: () => <Skeleton className="flex-1 min-h-[180px] w-full rounded-lg" /> },
+);
+
+const WidgetGrid = dynamic(
+  () => import("@/components/dashboard/widget-grid").then((m) => m.WidgetGrid),
+  { loading: () => <div className="flex flex-wrap gap-4"><Skeleton className="h-48 w-full md:w-1/3 rounded-2xl" /></div> },
+);
+
+type DashboardData = NonNullable<ReturnType<typeof useDashboardData>["data"]>;
 
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
@@ -92,79 +85,15 @@ function getTrendChartData(trend: DashboardData["monthlyTrend"] | undefined) {
   }));
 }
 
-/** カードの空きスペースに合わせて高さが伸びる売上トレンドチャート */
-function ResponsiveTrendChart({
-  data,
-}: {
-  data: ReturnType<typeof getTrendChartData>;
-}) {
-  return (
-    <div className="flex-1 min-h-[180px] w-full">
-      <ResponsiveContainer width="100%" height="100%" minHeight={180}>
-        <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="10%" barGap={2}>
-          <defs>
-            <linearGradient id="chartWonGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={BLUE[500]} />
-              <stop offset="100%" stopColor={BLUE[700]} />
-            </linearGradient>
-            <linearGradient id="chartPipelineGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={BLUE[50]} />
-              <stop offset="100%" stopColor={BLUE[100]} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={BLUE[50]} vertical={false} />
-          <XAxis dataKey="month" tick={{ fontSize: 11, fill: BLUE[500] }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fontSize: 11, fill: BLUE[500] }} axisLine={false} tickLine={false} />
-          <Tooltip
-            cursor={{ fill: `${BLUE[50]}88` }}
-            contentStyle={{ background: "#fff", border: `1px solid ${BLUE[100]}`, borderRadius: 10, fontSize: 12, boxShadow: "0 4px 16px rgba(0,75,146,0.08)" }}
-            formatter={(v, name) => [`¥${v}万`, name ?? ""]}
-          />
-          <Bar dataKey="パイプライン" fill="url(#chartPipelineGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
-          <Bar dataKey="受注額" fill="url(#chartWonGradient)" radius={[4, 4, 0, 0]} maxBarSize={36} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/** カードの空きスペースに合わせて自動でサイズが変わるアナログ時計 */
-function ResponsiveClock() {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState(76);
-
-  useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver((entries) => {
-      const rect = entries[0].contentRect;
-      const next = Math.max(48, Math.min(220, Math.floor(Math.min(rect.width, rect.height))));
-      setSize(next);
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return (
-    <div ref={wrapperRef} className="w-full h-full flex items-center justify-center">
-      <AnalogClock size={size} />
-    </div>
-  );
-}
 
 export default function Dashboard2Page() {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading } = useDashboardData();
+  const { data: attendanceEntry } = useTodayAttendance();
   const now = new Date();
 
   const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths } = useWidgets();
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
-  );
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -172,17 +101,11 @@ export default function Dashboard2Page() {
   }, [reorder]);
 
   useEffect(() => {
-    getDashboardData()
-      .then(setData)
-      .catch(() => toast.error("データの取得に失敗しました"))
-      .finally(() => setLoading(false));
-    getTodayAttendance().then((entry) => {
-      if (entry?.clock_in_at) {
-        setClockedIn(!entry.clock_out_at);
-        setClockInTime(new Date(entry.clock_in_at));
-      }
-    }).catch(() => {});
-  }, []);
+    if (attendanceEntry?.clock_in_at) {
+      setClockedIn(!attendanceEntry.clock_out_at);
+      setClockInTime(new Date(attendanceEntry.clock_in_at));
+    }
+  }, [attendanceEntry]);
 
   const handleClockIn = async () => {
     try {
@@ -437,7 +360,7 @@ export default function Dashboard2Page() {
             {loading ? (
               <Skeleton className="flex-1 min-h-[180px] w-full" />
             ) : (
-              <ResponsiveTrendChart data={getTrendChartData(data?.monthlyTrend)} />
+              <ResponsiveTrendChartBlue data={getTrendChartData(data?.monthlyTrend)} />
             )}
           </div>
         );
@@ -722,13 +645,7 @@ export default function Dashboard2Page() {
       </div>
 
       {/* Sortable widget grid */}
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-        <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-          <div
-            ref={gridRef}
-            data-widget-grid
-            className="flex flex-wrap gap-4 min-w-0 w-full"
-          >
+      <WidgetGrid sortableIds={sortableIds} onDragEnd={handleDragEnd} gridRef={gridRef}>
             {sortableIds.map((id) => {
               const card = renderCard(id);
               if (!card) return null;
@@ -749,9 +666,7 @@ export default function Dashboard2Page() {
                 </SortableWidget>
               );
             })}
-          </div>
-        </SortableContext>
-      </DndContext>
+      </WidgetGrid>
 
     </div>
   );
