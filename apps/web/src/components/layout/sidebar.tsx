@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   HoverCard,
   HoverCardContent,
@@ -86,7 +86,7 @@ interface SidebarProps {
   onInternalChatOpen?: () => void;
 }
 
-export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInternalChatOpen }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInternalChatOpen }: SidebarProps) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -104,15 +104,36 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
     let notifTimer: ReturnType<typeof setInterval> | undefined;
     let chatTimer: ReturnType<typeof setInterval> | undefined;
 
-    const start = () => {
+    const startPolling = () => {
       void fetchNotifs();
       void fetchUnread();
       notifTimer = setInterval(fetchNotifs, 60_000);
       chatTimer = setInterval(fetchUnread, 30_000);
     };
 
+    const stopPolling = () => {
+      if (notifTimer) clearInterval(notifTimer);
+      if (chatTimer) clearInterval(chatTimer);
+      notifTimer = undefined;
+      chatTimer = undefined;
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        stopPolling();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
     let idleId: number | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const start = () => {
+      startPolling();
+      document.addEventListener("visibilitychange", onVisibility);
+    };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
       idleId = window.requestIdleCallback(start, { timeout: 2000 });
@@ -123,8 +144,8 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
     return () => {
       if (idleId !== undefined) window.cancelIdleCallback(idleId);
       if (timeoutId !== undefined) clearTimeout(timeoutId);
-      if (notifTimer) clearInterval(notifTimer);
-      if (chatTimer) clearInterval(chatTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      stopPolling();
     };
   }, []);
 
@@ -161,18 +182,20 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
   const { canAccess: canAccessCustom } = useCompanyPermissions();
 
   /** ロールでフィルタされたナビグループ */
-  const visibleGroups = NAV_GROUPS
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if (!profile?.role) return true;
-        // システムロール制限チェック
-        if (!canAccessNavItem(item.key, profile.role)) return false;
-        // カスタム権限チェック（会社設定で上書き可能）
-        return canAccessCustom(item.key, [profile.role]);
-      }),
-    }))
-    .filter((group) => group.items.length > 0);
+  const visibleGroups = useMemo(
+    () =>
+      NAV_GROUPS
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => {
+            if (!profile?.role) return true;
+            if (!canAccessNavItem(item.key, profile.role)) return false;
+            return canAccessCustom(item.key, [profile.role]);
+          }),
+        }))
+        .filter((group) => group.items.length > 0),
+    [profile?.role, canAccessCustom],
+  );
 
   const toggleGroup = (key: string) => {
     setOpenGroup((prev) => (prev === key ? null : key));
@@ -186,7 +209,7 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
   const groupActiveText = `${TEAL_TITLE} dark:text-[#D8EDE4]`;
 
   return (
-    <TooltipProvider delayDuration={300}>
+    <>
       <motion.aside
         animate={{ width: expanded ? 220 : 68 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -500,7 +523,8 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
         </div>
       </motion.aside>
 
-      {/* 検索ダイアログ */}
+      {/* 検索ダイアログ — 開いたときだけマウント */}
+      {searchOpen && (
       <Dialog open={searchOpen} onOpenChange={(v) => { setSearchOpen(v); if (!v) { setSearchQuery(""); setSearchResults([]); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -567,8 +591,10 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
           </div>
         </DialogContent>
       </Dialog>
+      )}
 
-      {/* 通知パネル */}
+      {/* 通知パネル — 開いたときだけマウント */}
+      {notifOpen && (
       <Sheet open={notifOpen} onOpenChange={setNotifOpen}>
         <SheetContent side="right" className="w-80">
           <SheetHeader>
@@ -633,7 +659,8 @@ export function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInte
           </div>
         </SheetContent>
       </Sheet>
+      )}
 
-    </TooltipProvider>
+    </>
   );
-}
+});

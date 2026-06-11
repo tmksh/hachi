@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo, Suspense, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
-import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { ChatPanelProvider } from "@/contexts/chat-panel-context";
@@ -14,6 +13,8 @@ import { TEAL_PAGE_BG } from "@/lib/teal-theme";
 
 const BRIDGE_AI_PANEL_WIDTH = 400;
 const INTERNAL_CHAT_WIDTH = 360;
+const SIDEBAR_EXPANDED_PAD = 220 + 12 + 12;
+const SIDEBAR_COLLAPSED_PAD = 68 + 12 + 12;
 
 const BridgeAiChat = dynamic(
   () => import("@/components/ai/bridge-ai-chat").then((m) => m.BridgeAiChat),
@@ -39,6 +40,17 @@ export function MainLayout({ children }: MainLayoutProps) {
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
   const pageBg = pathname?.startsWith("/dashboard2") ? BLUE_PAGE_BG : TEAL_PAGE_BG;
 
+  const openInternalChat = useCallback(() => setInternalChatOpen(true), []);
+
+  const mainStyle = useMemo(
+    () =>
+      ({
+        "--main-pl": `${expanded ? SIDEBAR_EXPANDED_PAD : SIDEBAR_COLLAPSED_PAD}px`,
+        "--main-pr": `${(chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0) + (internalChatOpen ? INTERNAL_CHAT_WIDTH : 0)}px`,
+      }) as CSSProperties,
+    [expanded, chatOpen, internalChatOpen],
+  );
+
   if (isAdminLogin) {
     return <>{children}</>;
   }
@@ -46,13 +58,12 @@ export function MainLayout({ children }: MainLayoutProps) {
   if (isAdminConsole) {
     return (
       <div className="min-h-screen">
-        <AdminSidebar />
-        <main className="hidden md:block" style={{ paddingLeft: 220 + 12 + 12 }}>
-          <div className="mx-auto max-w-[1600px] min-w-0">
-            {children}
-          </div>
-        </main>
-        <main className="md:hidden pb-20">
+        <Suspense fallback={null}>
+          <AdminSidebar />
+        </Suspense>
+        <main
+          className="mx-auto max-w-[1600px] min-w-0 pb-20 md:pb-0 md:pl-[244px]"
+        >
           {children}
         </main>
       </div>
@@ -60,37 +71,23 @@ export function MainLayout({ children }: MainLayoutProps) {
   }
 
   return (
-    <ChatPanelProvider open={chatOpen} internalChatOpen={internalChatOpen} openInternalChat={() => setInternalChatOpen(true)}>
-      <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
+    <ChatPanelProvider open={chatOpen} internalChatOpen={internalChatOpen} openInternalChat={openInternalChat}>
+      <div className="min-h-screen" style={{ backgroundColor: pageBg, ...mainStyle }}>
         <Sidebar
           profile={profile}
           onSignOut={signOut}
           expanded={expanded}
           onExpandedChange={setExpanded}
-          onInternalChatOpen={() => setInternalChatOpen(true)}
+          onInternalChatOpen={openInternalChat}
         />
         <MobileNav profile={profile} />
-        {/* Desktop */}
-        <motion.main
-          animate={{
-            paddingLeft: expanded ? 220 + 12 + 12 : 68 + 12 + 12,
-            paddingRight: (chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0) + (internalChatOpen ? INTERNAL_CHAT_WIDTH : 0),
-          }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="hidden md:block min-w-0"
-        >
-          <div className="mx-auto max-w-[1600px] min-w-0">
-            {children}
-          </div>
-        </motion.main>
+        <main className="mx-auto max-w-[1600px] min-w-0 pb-32 md:pb-0 md:pl-[var(--main-pl)] md:pr-[var(--main-pr)] transition-[padding] duration-300 ease-out">
+          {children}
+        </main>
         {chatOpen && <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />}
         {internalChatOpen && (
           <InternalChatPanel open={internalChatOpen} onOpenChange={setInternalChatOpen} />
         )}
-        {/* Mobile */}
-        <main className="md:hidden pb-32">
-          {children}
-        </main>
       </div>
     </ChatPanelProvider>
   );

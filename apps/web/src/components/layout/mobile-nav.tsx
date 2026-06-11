@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,7 +23,7 @@ const GROUP_ICONS = {
   marketing: Megaphone,
 } as const;
 
-export function MobileNav({ profile }: { profile: Profile | null }) {
+export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
@@ -38,14 +38,18 @@ export function MobileNav({ profile }: { profile: Profile | null }) {
   };
 
   /** ロールでフィルタされたナビグループ */
-  const visibleGroups = NAV_GROUPS
-    .map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (item) => !profile?.role || canAccessNavItem(item.key, profile.role),
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
+  const visibleGroups = useMemo(
+    () =>
+      NAV_GROUPS
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (item) => !profile?.role || canAccessNavItem(item.key, profile.role),
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    [profile?.role],
+  );
 
   return (
     <>
@@ -134,4 +138,4 @@ export function MobileNav({ profile }: { profile: Profile | null }) {
       </nav>
     </>
   );
-}
+});

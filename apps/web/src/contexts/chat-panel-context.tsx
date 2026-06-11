@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 type ChatPanelContextValue = {
   bridgeChatOpen: boolean;
@@ -25,8 +25,13 @@ export function ChatPanelProvider({
   openInternalChat: () => void;
   children: React.ReactNode;
 }) {
+  const value = useMemo(
+    () => ({ bridgeChatOpen: open, internalChatOpen, openInternalChat }),
+    [open, internalChatOpen, openInternalChat],
+  );
+
   return (
-    <ChatPanelContext.Provider value={{ bridgeChatOpen: open, internalChatOpen, openInternalChat }}>
+    <ChatPanelContext.Provider value={value}>
       {children}
     </ChatPanelContext.Provider>
   );

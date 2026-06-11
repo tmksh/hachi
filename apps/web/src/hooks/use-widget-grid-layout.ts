@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { MIN_CARD_W } from "@/components/shared/sortable-widget";
 import { useChatPanelOpen } from "@/contexts/chat-panel-context";
 
@@ -73,15 +73,14 @@ export function useWidgetGridLayout(widgets: WidgetLayoutInput[]) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  useLayoutEffect(() => {
-    const el = gridRef.current;
-    if (el) setContainerWidth(el.clientWidth);
-  });
-
   useEffect(() => {
     const el = gridRef.current;
     if (!el) return;
-    const update = () => setContainerWidth(el.clientWidth);
+    const update = () => {
+      const next = el.clientWidth;
+      setContainerWidth((prev) => (prev === next ? prev : next));
+    };
+    update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
