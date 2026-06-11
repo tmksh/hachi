@@ -81,7 +81,10 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[680px] p-0 gap-0 overflow-hidden" showCloseButton={false}>
+      <DialogContent
+        className="w-full max-w-[97vw] sm:max-w-[627px] p-0 gap-0 overflow-hidden"
+        showCloseButton={false}
+      >
         <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-100 border-b">
           <DialogTitle className="text-xs font-semibold text-slate-600 min-w-0 truncate">
             見積書プレビュー — {data.estimate_no ?? "下書き"}
@@ -99,11 +102,11 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[85vh] bg-slate-200 py-6 px-4 flex justify-center">
+        <div className="overflow-y-auto max-h-[85vh] bg-slate-200 py-6 px-4 flex justify-center w-full">
           <div
             id="quote-print-area"
-            className="bg-white shadow-lg text-slate-900 font-sans"
-            style={{ width: "595px", minHeight: "842px", padding: "48px 52px", fontSize: "11px", lineHeight: "1.5", flexShrink: 0 }}
+            className="bg-white shadow-lg text-slate-900 font-sans w-full max-w-[595px] min-h-[842px] box-border"
+            style={{ padding: "48px 52px", fontSize: "11px", lineHeight: "1.5" }}
           >
             <div className="space-y-5">
               <div className="text-center pb-2 border-b-2 border-slate-900">
@@ -205,6 +208,15 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
           </div>
         </div>
       </DialogContent>
+      <style jsx global>{`
+        @media print {
+          #quote-print-area {
+            width: 595px !important;
+            max-width: none !important;
+            min-height: 842px !important;
+          }
+        }
+      `}</style>
     </Dialog>
   );
 }
