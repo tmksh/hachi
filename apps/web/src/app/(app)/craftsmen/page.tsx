@@ -54,8 +54,8 @@ export default function CraftsmenPage() {
         </div>
         <div className="segmented-control shrink-0 text-xs ml-auto">
           {([
-            { key: "grid", label: "カード", Icon: LayoutGrid },
             { key: "list", label: "一覧", Icon: List },
+            { key: "grid", label: "カード", Icon: LayoutGrid },
           ] as const).map(({ key, label, Icon }) => (
             <button
               key={key}

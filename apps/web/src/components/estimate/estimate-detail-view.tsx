@@ -599,6 +599,7 @@ export function EstimateDetailView({
       };
       onEstimateChange({ ...estimate, categories: [...prevCategories, optimistic] });
       setInlineName("");
+      setInlineAdd(null);
       setSavingLine(true);
       try {
         const cat = await addEstimateCategory(estimate.id, name);
@@ -606,7 +607,6 @@ export function EstimateDetailView({
           ...estimate,
           categories: [...prevCategories, cat],
         });
-        inlineInputRef.current?.focus();
       } catch (e) {
         onEstimateChange({ ...estimate, categories: prevCategories });
         toast.error(e instanceof Error ? e.message : "追加に失敗しました");
@@ -641,6 +641,7 @@ export function EstimateDetailView({
     };
     onEstimateChange({ ...estimate, items: [...prevItems, optimistic] });
     setInlineName("");
+    setInlineAdd(null);
     setSavingLine(true);
     try {
       const item = await addEstimateItem(estimate.id, categoryId, name);
@@ -648,7 +649,6 @@ export function EstimateDetailView({
         ...estimate,
         items: [...prevItems, item],
       });
-      inlineInputRef.current?.focus();
     } catch (e) {
       onEstimateChange({ ...estimate, items: prevItems });
       toast.error(e instanceof Error ? e.message : "追加に失敗しました");
@@ -658,7 +658,10 @@ export function EstimateDetailView({
   };
 
   const handleInlineKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") { e.preventDefault(); void commitInline(); }
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      void commitInline();
+    }
     if (e.key === "Escape") cancelInline();
   };
 

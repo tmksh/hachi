@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -121,6 +122,8 @@ const ROLE_COLOR: Record<Role, string> = {
 
 export default function SettingsPage() {
   const { profile, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const initInnerTab = searchParams.get("tab") ?? "profile";
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(null);
   const [companyLoading, setCompanyLoading] = useState(true);
@@ -576,7 +579,7 @@ export default function SettingsPage() {
 
         {/* ── 個人グループ ─── */}
         <TabsContent value="personal" className="mt-4">
-          <Tabs defaultValue="profile" className="w-full">
+          <Tabs defaultValue={initInnerTab} className="w-full">
             <TabsList className="w-fit mb-4 gap-0.5 h-auto">
               <TabsTrigger value="profile" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
                 <User className="h-3.5 w-3.5" />プロフィール

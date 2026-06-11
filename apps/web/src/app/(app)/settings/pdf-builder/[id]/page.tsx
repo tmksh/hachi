@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,19 @@ import {
   Trash2,
   Type,
   Calendar,
+  CalendarRange,
   Hash,
   AlignLeft,
   CheckSquare,
   PenLine,
   Lock,
   Loader2,
+  User,
+  MapPin,
+  Wrench,
+  Wallet,
+  CalendarClock,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -45,22 +52,44 @@ import {
   BINDING_LABELS,
   BINDINGS_FOR_TYPE,
   FIELD_TYPE_LABELS,
+  PDF_FORM_DOC_TYPE_LABELS,
   newFieldDefaults,
   type PdfFieldType,
+  type PdfFieldBinding,
+  type PdfFormDocType,
   type PdfFormField,
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
 
 const STORAGE_BUCKET = "documents";
 
-const PALETTE: { type: PdfFieldType; icon: React.ElementType }[] = [
-  { type: "text", icon: Type },
-  { type: "date", icon: Calendar },
-  { type: "number", icon: Hash },
-  { type: "textarea", icon: AlignLeft },
-  { type: "checkbox", icon: CheckSquare },
-  { type: "signature", icon: PenLine },
-  { type: "fixed", icon: Lock },
+type PaletteItem = {
+  label: string;
+  type: PdfFieldType;
+  binding: PdfFieldBinding;
+  icon: React.ElementType;
+};
+
+/** 自動入力項目：置くだけでデータソースに紐付く */
+const AUTO_PALETTE: PaletteItem[] = [
+  { label: "顧客名", type: "text", binding: "customer_name", icon: User },
+  { label: "顧客住所", type: "textarea", binding: "customer_address", icon: MapPin },
+  { label: "工事名", type: "text", binding: "construction_title", icon: Wrench },
+  { label: "工事番号", type: "text", binding: "construction_no", icon: Hash },
+  { label: "受注金額（税抜）", type: "number", binding: "order_amount", icon: Wallet },
+  { label: "受注金額（税込）", type: "number", binding: "order_amount_tax", icon: Wallet },
+  { label: "工期開始", type: "date", binding: "start_date", icon: Calendar },
+  { label: "工期終了", type: "date", binding: "end_date", icon: CalendarRange },
+  { label: "本日日付", type: "date", binding: "today", icon: CalendarClock },
+];
+
+/** 自由項目：手入力・固定文など */
+const MANUAL_PALETTE: PaletteItem[] = [
+  { label: "テキスト入力", type: "text", binding: "manual", icon: Type },
+  { label: "テキストエリア", type: "textarea", binding: "manual", icon: AlignLeft },
+  { label: "チェックボックス", type: "checkbox", binding: "manual", icon: CheckSquare },
+  { label: "署名", type: "signature", binding: "manual", icon: PenLine },
+  { label: "固定テキスト", type: "fixed", binding: "manual", icon: Lock },
 ];
 
 function uid() {
@@ -70,13 +99,17 @@ function uid() {
 export default function PdfBuilderEditPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isNew = id === "new";
+
+  const initDocType = (searchParams.get("type") ?? "contract") as PdfFormDocType;
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const [name, setName] = useState("新規テンプレート");
+  const [docType, setDocType] = useState<PdfFormDocType>(initDocType);
   const [storagePath, setStoragePath] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
   const [fields, setFields] = useState<PdfFormField[]>([]);
@@ -103,6 +136,7 @@ export default function PdfBuilderEditPage() {
           return;
         }
         setName(t.name);
+        setDocType(t.docType ?? "contract");
         setStoragePath(t.storagePath);
         setFileName(t.fileName);
         setFields(t.fields);
@@ -170,8 +204,13 @@ export default function PdfBuilderEditPage() {
   };
 
   // ─── 項目の追加 ───
-  const addField = (type: PdfFieldType) => {
-    const f: PdfFormField = { id: uid(), ...newFieldDefaults(type, activePage) };
+  const addField = (item: PaletteItem) => {
+    const f: PdfFormField = {
+      id: uid(),
+      ...newFieldDefaults(item.type, activePage),
+      label: item.label,
+      binding: item.binding,
+    };
     setFields((prev) => [...prev, f]);
     setSelectedId(f.id);
   };
@@ -276,6 +315,8 @@ export default function PdfBuilderEditPage() {
       const tpl: PdfFormTemplate = {
         id: isNew ? `tpl_${Date.now().toString(36)}` : (id as string),
         name: name.trim(),
+        docType,
+        isActive: false,
         storagePath,
         fileName,
         pageCount: pageSizes.length,
@@ -286,7 +327,7 @@ export default function PdfBuilderEditPage() {
       };
       await savePdfFormTemplate(tpl);
       toast.success("保存しました");
-      router.push("/settings/pdf-builder");
+      router.push("/settings?tab=pdf_builder");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -311,17 +352,25 @@ export default function PdfBuilderEditPage() {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between border-b px-4 py-2">
+      <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push("/settings/pdf-builder")}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push("/settings?tab=pdf_builder")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-8 w-64 text-sm font-medium"
+            className="h-8 w-56 text-sm font-medium"
             placeholder="テンプレート名"
           />
+          <select
+            value={docType}
+            onChange={(e) => setDocType(e.target.value as PdfFormDocType)}
+            className="h-8 rounded-md border-0 bg-muted/60 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {Object.entries(PDF_FORM_DOC_TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}</select>
         </div>
         <Button size="sm" onClick={handleSave} disabled={saving || !storagePath}>
           {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
@@ -360,20 +409,48 @@ export default function PdfBuilderEditPage() {
       ) : (
         <div className="flex flex-1 overflow-hidden">
           {/* 左：項目パレット */}
-          <aside className="w-44 shrink-0 overflow-y-auto border-r p-3">
-            <div className="mb-2 text-xs font-semibold text-muted-foreground">項目パレット</div>
-            <div className="space-y-1.5">
-              {PALETTE.map(({ type, icon: Icon }) => (
-                <button
-                  key={type}
-                  onClick={() => addField(type)}
-                  className="flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted"
-                >
-                  <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                  {FIELD_TYPE_LABELS[type]}
-                </button>
-              ))}
+          <aside className="w-52 shrink-0 overflow-y-auto border-r p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+              <Sparkles className="h-3 w-3" />自動入力項目
             </div>
+            <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
+              置くだけでデータが自動で入ります。
+            </p>
+            <div className="space-y-1.5">
+              {AUTO_PALETTE.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => addField(item)}
+                    className="flex w-full items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50/40 px-2.5 py-2 text-left text-xs transition-colors hover:bg-emerald-50"
+                  >
+                    <Icon className="h-3.5 w-3.5 text-emerald-600" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <PenLine className="h-3 w-3" />自由項目
+            </div>
+            <div className="space-y-1.5">
+              {MANUAL_PALETTE.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => addField(item)}
+                    className="flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted"
+                  >
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
               項目をクリックして追加し、PDF上でドラッグして配置します。
             </p>

@@ -134,6 +134,16 @@ export type EsignMessageResult = LinqResultMeta & {
   body: string;
 };
 
+export type CommunicationAgreementItem = {
+  messageId: string;
+  summary: string;
+  confidence: number;
+};
+
+export type CommunicationAgreementResult = LinqResultMeta & {
+  items: CommunicationAgreementItem[];
+};
+
 /** 将来の LLM プロバイダ設定 */
 export type LinqAiConfig = {
   enabled: boolean;

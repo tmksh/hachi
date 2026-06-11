@@ -84,6 +84,56 @@ export async function deletePdfFormTemplate(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** 指定テンプレートを採用済みにし、同種別の他テンプレートを非採用にする。管理者(hq_admin)のみ。 */
+export async function setActivePdfFormTemplate(id: string): Promise<void> {
+  const { supabase, companyId, role } = await getCompanyContext();
+  if (role !== "hq_admin") throw new Error("権限がありません");
+
+  const { data: current } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", companyId)
+    .single();
+
+  const settings = (current?.settings as Record<string, unknown> | null) ?? {};
+  const list = resolvePdfFormTemplates(settings[PDF_FORM_TEMPLATES_KEY]);
+
+  const target = list.find((t) => t.id === id);
+  if (!target) throw new Error("テンプレートが見つかりません");
+
+  const updated = list.map((t) =>
+    t.docType === target.docType ? { ...t, isActive: t.id === id } : t
+  );
+
+  const { error } = await supabase
+    .from("companies")
+    .update({ settings: { ...settings, [PDF_FORM_TEMPLATES_KEY]: updated } })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
+/** 採用を取り消す（同種別の全テンプレートを非採用にする）。管理者(hq_admin)のみ。 */
+export async function deactivatePdfFormTemplate(id: string): Promise<void> {
+  const { supabase, companyId, role } = await getCompanyContext();
+  if (role !== "hq_admin") throw new Error("権限がありません");
+
+  const { data: current } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", companyId)
+    .single();
+
+  const settings = (current?.settings as Record<string, unknown> | null) ?? {};
+  const list = resolvePdfFormTemplates(settings[PDF_FORM_TEMPLATES_KEY]);
+  const updated = list.map((t) => (t.id === id ? { ...t, isActive: false } : t));
+
+  const { error } = await supabase
+    .from("companies")
+    .update({ settings: { ...settings, [PDF_FORM_TEMPLATES_KEY]: updated } })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
 /** Storage 上の PDF への署名付きURLを返す（表示・差し込み用） */
 export async function getPdfFormTemplateUrl(storagePath: string): Promise<string | null> {
   const { supabase } = await getCompanyContext();

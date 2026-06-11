@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Trash2, Phone, Mail, MapPin,
   Building2, Plus, FileText, Briefcase, HardHat, ClipboardList, ClipboardPen,
-  ChevronRight, ChevronDown, Inbox, Mic, ListTodo, Upload, Calendar,
+  ChevronRight, Inbox, Mic, ListTodo, Upload, Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomer, deleteCustomer, getCustomerRelated } from "@/lib/actions/customers";
@@ -76,8 +76,6 @@ export default function CrmDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [mainTab, setMainTab] = useState("overview");
-  const [entryOpen, setEntryOpen] = useState(false);
-  const entryFormRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<CustomerDetail | null>(null);
   const [related, setRelated] = useState<Related | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,19 +85,8 @@ export default function CrmDetailPage() {
     const allowed = ["overview", "entry", "deals", "recording", "todo", "scheduling", "files"];
     if (tab && allowed.includes(tab)) {
       setMainTab(tab);
-      if (tab === "entry") setEntryOpen(true);
     }
   }, []);
-
-  const handleMainTabChange = (tab: string) => {
-    setMainTab(tab);
-    if (tab === "entry") {
-      setEntryOpen(true);
-      requestAnimationFrame(() => {
-        entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }
-  };
 
   const reloadCustomer = () => {
     if (!id) return;
@@ -149,44 +136,26 @@ export default function CrmDetailPage() {
         <ArrowLeft className="h-4 w-4" />顧客一覧
       </Link>
 
-      {/* プロフィールヘッダー — クリックで記入フォームを展開 */}
+      {/* プロフィールヘッダー */}
       <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
-          <div className="flex items-start gap-2 p-5 pb-0 min-w-0">
+          <div className="flex items-start gap-2 p-5 min-w-0">
             <div className="flex-1 min-w-0">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setEntryOpen((open) => !open)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setEntryOpen((open) => !open);
-                  }
-                }}
-                aria-expanded={entryOpen}
-                className="w-full min-w-0 max-w-full overflow-hidden rounded-lg p-2 cursor-pointer"
-              >
+              <div className="w-full min-w-0 max-w-full overflow-hidden rounded-lg p-2">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-4 min-w-0">
                   <CustomerAvatar seed={data.id} name={data.name} size="lg" />
                   <div className="flex-1 min-w-0 space-y-3 overflow-hidden">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 min-w-0">
-                        <h1 className="text-2xl font-semibold tracking-tight truncate max-w-full text-foreground">{data.name}</h1>
-                        <Badge variant="outline" className="text-xs shrink-0">{isCorp ? "法人" : "個人"}</Badge>
-                        <Badge className={cn(
-                          "text-xs shrink-0",
-                          data.status === "active" && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                          data.status === "inactive" && "bg-gray-100 text-gray-500 hover:bg-gray-100",
-                          data.status === "pending" && "bg-amber-100 text-amber-700 hover:bg-amber-100",
-                        )}>
-                          {CUSTOMER_STATUS[data.status] ?? data.status}
-                        </Badge>
-                      </div>
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                        {entryOpen ? "記入フォームを閉じる" : "記入フォームを開く"}
-                        <ChevronDown className={cn("h-4 w-4 transition-transform", entryOpen && "rotate-180")} />
-                      </span>
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <h1 className="text-2xl font-semibold tracking-tight truncate max-w-full text-foreground">{data.name}</h1>
+                      <Badge variant="outline" className="text-xs shrink-0">{isCorp ? "法人" : "個人"}</Badge>
+                      <Badge className={cn(
+                        "text-xs shrink-0",
+                        data.status === "active" && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                        data.status === "inactive" && "bg-gray-100 text-gray-500 hover:bg-gray-100",
+                        data.status === "pending" && "bg-amber-100 text-amber-700 hover:bg-amber-100",
+                      )}>
+                        {CUSTOMER_STATUS[data.status] ?? data.status}
+                      </Badge>
                     </div>
                     {data.company_name && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1.5 min-w-0">
@@ -237,22 +206,12 @@ export default function CrmDetailPage() {
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-
-          <div ref={entryFormRef} className={cn("px-5 pb-5 pt-4 mt-4 border-t border-border/50", !entryOpen && "hidden")}>
-            <CustomerEntryForm
-              mode="edit"
-              customerId={id as string}
-              initialCustomer={data}
-              showCard={false}
-              onSaved={() => reloadCustomer()}
-            />
-          </div>
         </CardContent>
       </Card>
 
       <StageProposalBanner customerId={id as string} />
 
-      <Tabs value={mainTab} onValueChange={handleMainTabChange}>
+      <Tabs value={mainTab} onValueChange={setMainTab}>
         <TabsList className="h-auto flex flex-wrap gap-1 w-full justify-start">
           <TabsTrigger value="overview" className="text-xs px-3">概要</TabsTrigger>
           <TabsTrigger value="entry" className="text-xs px-3 gap-1"><ClipboardPen className="h-3 w-3" />記入画面</TabsTrigger>
@@ -264,11 +223,12 @@ export default function CrmDetailPage() {
         </TabsList>
 
         <TabsContent value="entry" className="mt-4">
-          {!entryOpen ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              上の顧客カードをクリックすると記入フォームが開きます。
-            </p>
-          ) : null}
+          <CustomerEntryForm
+            mode="edit"
+            customerId={id as string}
+            initialCustomer={data}
+            onSaved={() => reloadCustomer()}
+          />
         </TabsContent>
 
         <TabsContent value="deals" className="mt-4">

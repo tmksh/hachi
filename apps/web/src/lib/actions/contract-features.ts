@@ -96,6 +96,119 @@ export async function getContractCommunications(contractId: string) {
   return data ?? [];
 }
 
+export type ContractMessagingContext = {
+  customer: {
+    id: string;
+    name: string;
+    email: string | null;
+    line_user_id: string | null;
+    slack_channel_id: string | null;
+  } | null;
+  company: {
+    emailConnected: boolean;
+    emailAddress: string | null;
+    slackConnected: boolean;
+    lineWorksConnected: boolean;
+  };
+  readiness: {
+    line: "linked" | "needs_customer_line_id";
+    slack: "linked" | "needs_customer_channel" | "needs_company_slack";
+    email: "linked" | "needs_customer_email" | "needs_mail_connect";
+  };
+};
+
+export async function getContractMessagingContext(contractId: string): Promise<ContractMessagingContext> {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("customer_id")
+    .eq("id", contractId)
+    .single();
+
+  let customer: ContractMessagingContext["customer"] = null;
+  if (contract?.customer_id) {
+    const { data: row } = await supabase
+      .from("customers")
+      .select("id, name, email, line_user_id, slack_channel_id")
+      .eq("id", contract.customer_id)
+      .single();
+    if (row) {
+      customer = {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        line_user_id: row.line_user_id,
+        slack_channel_id: row.slack_channel_id,
+      };
+    }
+  }
+
+  const { data: emailAccounts } = await supabase
+    .from("email_accounts")
+    .select("email_address")
+    .eq("user_id", user_id)
+    .limit(1);
+
+  const { data: integrations } = await supabase
+    .from("app_integrations")
+    .select("provider, is_active")
+    .eq("company_id", company_id)
+    .eq("is_active", true);
+
+  const activeProviders = new Set((integrations ?? []).map((i) => i.provider));
+  const emailConnected = (emailAccounts ?? []).length > 0;
+
+  const company = {
+    emailConnected,
+    emailAddress: emailAccounts?.[0]?.email_address ?? null,
+    slackConnected: activeProviders.has("slack"),
+    lineWorksConnected: activeProviders.has("line_works"),
+  };
+
+  const readiness: ContractMessagingContext["readiness"] = {
+    line: customer?.line_user_id?.trim() ? "linked" : "needs_customer_line_id",
+    slack: customer?.slack_channel_id?.trim()
+      ? "linked"
+      : company.slackConnected
+        ? "needs_customer_channel"
+        : "needs_company_slack",
+    email: customer?.email?.trim() && emailConnected
+      ? "linked"
+      : emailConnected
+        ? "needs_customer_email"
+        : customer?.email?.trim()
+          ? "needs_mail_connect"
+          : "needs_mail_connect",
+  };
+
+  return { customer, company, readiness };
+}
+
+export async function updateCustomerMessagingLinks(
+  customerId: string,
+  input: {
+    email?: string | null;
+    line_user_id?: string | null;
+    slack_channel_id?: string | null;
+  },
+) {
+  const { supabase } = await getCompanyContext();
+  const patch: Record<string, string | null> = {};
+  if (input.email !== undefined) patch.email = input.email?.trim() || null;
+  if (input.line_user_id !== undefined) patch.line_user_id = input.line_user_id?.trim() || null;
+  if (input.slack_channel_id !== undefined) patch.slack_channel_id = input.slack_channel_id?.trim() || null;
+
+  const { data, error } = await supabase
+    .from("customers")
+    .update(patch)
+    .eq("id", customerId)
+    .select("id, name, email, line_user_id, slack_channel_id")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function addContractCommunication(input: {
   contract_id: string;
   platform: "line" | "slack" | "email";
@@ -125,6 +238,104 @@ export async function updateCommunicationAgreementStatus(id: string, agreement_s
   const { data, error } = await supabase.from("contract_communications").update({ agreement_status }).eq("id", id).select().single();
   if (error) throw error;
   return data;
+}
+
+const DEMO_MESSAGES: Record<"line" | "slack" | "email", Array<{ direction: "inbound" | "outbound"; sender_name: string | null; body: string; hoursAgo: number }>> = {
+  line: [
+    { direction: "inbound", sender_name: "顧客", body: "お世話になっております。見積内容を確認しました。工期は3月中旬開始で合意です。", hoursAgo: 48 },
+    { direction: "outbound", sender_name: "担当", body: "ありがとうございます。3/15開始で手配いたします。", hoursAgo: 47 },
+    { direction: "inbound", sender_name: "顧客", body: "追加工事の見積15万円も了解しました。日程調整よろしくお願いします。", hoursAgo: 24 },
+    { direction: "outbound", sender_name: "担当", body: "承知しました。追加工事分の契約書を別途お送りします。", hoursAgo: 23 },
+  ],
+  slack: [
+    { direction: "inbound", sender_name: "顧客", body: "設計変更の件、平面図の修正版で問題ありません。来週火曜の打ち合わせで確定しましょう。", hoursAgo: 72 },
+    { direction: "outbound", sender_name: "設計", body: "了解です。火曜10:00でTeamsリンクを共有します。", hoursAgo: 70 },
+    { direction: "inbound", sender_name: "顧客", body: "内装仕様はAプラン、設備はBプランで合意です。", hoursAgo: 30 },
+  ],
+  email: [
+    { direction: "inbound", sender_name: "顧客", body: "見積書を拝見しました。総額1,850万円（税込）で了承いたします。契約書送付をお願いします。", hoursAgo: 96 },
+    { direction: "outbound", sender_name: "営業", body: "ありがとうございます。契約書ドラフトを本日中にお送りします。", hoursAgo: 95 },
+    { direction: "inbound", sender_name: "顧客", body: "着工日は4/1、完成希望は9月末で承知しました。", hoursAgo: 12 },
+  ],
+};
+
+/** プラットフォームからやり取り履歴を取得し、AIで合意事項を抽出（プロトタイプ: デモデータ + ヒューリスティック） */
+export async function syncContractPlatformMessages(contractId: string, platform: "line" | "slack" | "email") {
+  const { supabase, company_id } = await getCompanyContext();
+  const { extractCommunicationAgreements } = await import("@/lib/integrations/linq-ai");
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("contract_communications")
+    .select("*")
+    .eq("contract_id", contractId)
+    .eq("platform", platform)
+    .order("sent_at", { ascending: true });
+  if (fetchError) throw fetchError;
+
+  let rows = existing ?? [];
+
+  if (rows.length === 0) {
+    const now = Date.now();
+    const seeds = DEMO_MESSAGES[platform].map((m) => ({
+      company_id,
+      contract_id: contractId,
+      platform,
+      direction: m.direction,
+      sender_name: m.sender_name,
+      body: m.body,
+      sent_at: new Date(now - m.hoursAgo * 3600_000).toISOString(),
+    }));
+    const { data: inserted, error: insertError } = await supabase
+      .from("contract_communications")
+      .insert(seeds)
+      .select();
+    if (insertError) throw insertError;
+    rows = inserted ?? [];
+  }
+
+  const candidates = rows.filter((r) => r.direction === "inbound" && !r.is_important);
+  const { items, source } = await extractCommunicationAgreements(
+    candidates.map((r) => ({ id: r.id, body: r.body })),
+  );
+
+  for (const item of items) {
+    await supabase
+      .from("contract_communications")
+      .update({
+        is_important: true,
+        agreement_status: "pending",
+        body: item.summary,
+      })
+      .eq("id", item.messageId);
+  }
+
+  const { data: refreshed, error: refreshError } = await supabase
+    .from("contract_communications")
+    .select("*")
+    .eq("contract_id", contractId)
+    .order("sent_at", { ascending: false });
+  if (refreshError) throw refreshError;
+
+  return {
+    messages: refreshed ?? [],
+    extractedCount: items.length,
+    analysisSource: source,
+  };
+}
+
+/** 全プラットフォームのデモ履歴を投入し、合意事項を抽出（初回プレビュー用） */
+export async function seedContractMessagingDemo(contractId: string) {
+  const platforms = ["line", "slack", "email"] as const;
+  let extractedCount = 0;
+  let messages: Awaited<ReturnType<typeof getContractCommunications>> = [];
+
+  for (const platform of platforms) {
+    const result = await syncContractPlatformMessages(contractId, platform);
+    extractedCount += result.extractedCount;
+    messages = result.messages;
+  }
+
+  return { messages, extractedCount };
 }
 
 export async function getContractPostSignInfo(contractId: string) {

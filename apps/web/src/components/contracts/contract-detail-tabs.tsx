@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -9,29 +9,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
+import { ContractMessagingTab } from "@/components/contracts/contract-messaging-tab";
 import {
-  getContractCommunications, addContractCommunication, updateCommunicationAgreementStatus,
-  getContractPostSignInfo, saveContractPostSignInfo, getContractDocuments,
+  getContractDocuments,
   getContractEstimates, submitContractWorkflow, sendContractCloudSign,
   createEmptyEstimateForContract, copyEstimateForContract,
 } from "@/lib/actions/contract-features";
 import { getEstimate } from "@/lib/actions/estimates";
-import { Calendar, FileText } from "lucide-react";
+import { Calendar, FileText, Plus } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, type FormValues, type RenderContext } from "@/lib/contract-templates";
-import { ContractContentPreview } from "@/components/contracts/contract-content-preview";
-import { getCompany } from "@/lib/actions/profiles";
-import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
-import { buildContractPrintHtml } from "@/lib/contract-pdf";
-import { autoFillContractFields } from "@/lib/integrations/linq-ai";
+import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
+import type { FillContext, PdfFormTemplate } from "@/lib/pdf-form-template";
+import { PdfFormFiller } from "@/components/settings/pdf-form-filler";
+import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
@@ -52,7 +48,7 @@ export function ContractDetailTabs({
 }) {
   return (
     <Tabs defaultValue="customer">
-      <TabsList className="flex flex-wrap h-auto gap-1">
+      <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
         <TabsTrigger value="customer" className="text-xs">顧客情報</TabsTrigger>
         <TabsTrigger value="messaging" className="text-xs">やり取り管理</TabsTrigger>
         <TabsTrigger value="documents" className="text-xs">書類作成</TabsTrigger>
@@ -64,7 +60,9 @@ export function ContractDetailTabs({
       <TabsContent value="customer" className="mt-4">
         <CustomerTab data={data} contractId={contractId} onRefresh={onRefresh} />
       </TabsContent>
-      <TabsContent value="messaging" className="mt-4"><MessagingTab contractId={contractId} /></TabsContent>
+      <TabsContent value="messaging" className="mt-4">
+        <ContractMessagingTab contractId={contractId} customerId={data.customer_id} />
+      </TabsContent>
       <TabsContent value="documents" className="mt-4">
         <DocumentsTab contractId={contractId} data={data} onRefresh={onRefresh} />
       </TabsContent>
@@ -282,221 +280,74 @@ function CustomerTab({
   );
 }
 
-function MessagingTab({ contractId }: { contractId: string }) {
-  const [platform, setPlatform] = useState<"line" | "slack" | "email">("line");
-  const [messages, setMessages] = useState<Awaited<ReturnType<typeof getContractCommunications>>>([]);
-  const [body, setBody] = useState("");
-  const [postSign, setPostSign] = useState<{ label: string; value: string }[]>([]);
-
-  useEffect(() => {
-    getContractCommunications(contractId).then(setMessages).catch(() => {});
-    getContractPostSignInfo(contractId).then((rows) => setPostSign(rows.map((r) => ({ label: r.label, value: r.value ?? "" })))).catch(() => {});
-  }, [contractId]);
-
-  const send = async () => {
-    if (!body.trim()) return;
-    try {
-      await addContractCommunication({ contract_id: contractId, platform, body, direction: "outbound" });
-      setBody("");
-      getContractCommunications(contractId).then(setMessages);
-      toast.success("送信しました");
-    } catch { toast.error("送信に失敗"); }
-  };
-
-  const important = messages.filter((m) => m.is_important);
-
-  return (
-    <div className="space-y-4">
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">プラットフォーム連携</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Select value={platform} onValueChange={(v) => setPlatform(v as typeof platform)}>
-            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="line">LINE</SelectItem>
-              <SelectItem value="slack">Slack</SelectItem>
-              <SelectItem value="email">メール</SelectItem>
-            </SelectContent>
-          </Select>
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="クイック返信..." rows={3} />
-          <Button size="sm" onClick={send}>送信</Button>
-        </CardContent>
-      </Card>
-      {important.length > 0 && (
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">重要な合意事項</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {important.map((m) => (
-              <div key={m.id} className="flex items-start gap-2 text-sm border rounded-lg p-2">
-                <Checkbox checked={m.agreement_status === "addressed"} onCheckedChange={async (c) => {
-                  await updateCommunicationAgreementStatus(m.id, c ? "addressed" : "pending");
-                  getContractCommunications(contractId).then(setMessages);
-                }} />
-                <div><p>{m.body}</p><Badge variant="outline" className="text-[10px] mt-1">{m.platform}</Badge></div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">契約後の情報入力</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {[
-            { label: "振込口座", value: "" },
-            { label: "建物用途", value: "" },
-            { label: "法規確認事項", value: "" },
-          ].map((item, i) => (
-            <div key={i} className="grid grid-cols-[120px_1fr] gap-2 items-center">
-              <Input value={postSign[i]?.label ?? item.label} readOnly className="h-8 text-xs bg-muted/30" />
-              <Input value={postSign[i]?.value ?? ""} onChange={(e) => {
-                const next = [...postSign];
-                next[i] = { label: item.label, value: e.target.value };
-                setPostSign(next);
-              }} className="h-8 text-sm" />
-            </div>
-          ))}
-          <Button size="sm" variant="outline" onClick={async () => {
-            await saveContractPostSignInfo(contractId, postSign.length ? postSign : [{ label: "振込口座", value: "" }]);
-            toast.success("保存しました");
-          }}>保存</Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function parseContractDraft(notes: string | null | undefined): { template_id: string; form: FormValues } | null {
-  if (!notes) return null;
-  try {
-    const parsed = JSON.parse(notes) as { contract_draft?: { template_id: string; form: FormValues } };
-    if (parsed.contract_draft?.template_id) return parsed.contract_draft;
-  } catch {
-    // plain text notes
-  }
-  return null;
-}
-
 function DocumentsTab({
-  contractId,
+  contractId: _contractId,
   data,
-  onRefresh,
 }: {
   contractId: string;
   data: ContractDetail;
   onRefresh?: () => void;
 }) {
-  const draft = parseContractDraft(data.notes);
-  const [templateId, setTemplateId] = useState(draft?.template_id ?? CONTRACT_TEMPLATES[0]?.id ?? "");
-  const tpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId);
-  const renderCtx: RenderContext = {
-    construction: {
-      title: data.title,
-      start_date: data.start_date ?? null,
-      end_date: data.end_date ?? null,
-      order_amount: data.amount ?? null,
-    },
-    customer: data.customer ? {
-      name: data.customer.name,
-      address: null,
-    } : null,
-  };
-  const [form, setForm] = useState<FormValues>(() => draft?.form ?? (tpl ? buildDefaults(tpl, renderCtx) : {}));
-  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const [formTemplates, setFormTemplates] = useState<PdfFormTemplate[]>([]);
+  const [fillerTpl, setFillerTpl] = useState<PdfFormTemplate | null>(null);
 
   useEffect(() => {
-    getCompany().then((c) => {
-      const templates = resolvePdfTemplates((c?.settings as Record<string, unknown> | undefined)?.pdf_templates);
-      setPdfTemplate(templates.contract ?? templates.estimate ?? null);
-    }).catch(() => {});
+    getPdfFormTemplates().then(setFormTemplates).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (!tpl) return;
-    setForm((prev) => ({ ...buildDefaults(tpl, renderCtx), ...prev }));
-  }, [templateId]);
-
-  const persistDraft = async (nextForm: FormValues, nextTemplateId = templateId) => {
-    setSaving(true);
-    try {
-      let notesPayload: Record<string, unknown> = {};
-      try {
-        notesPayload = data.notes ? JSON.parse(data.notes) as Record<string, unknown> : {};
-      } catch {
-        notesPayload = { legacy_notes: data.notes };
-      }
-      notesPayload.contract_draft = { template_id: nextTemplateId, form: nextForm };
-      await updateContract(contractId, { notes: JSON.stringify(notesPayload) });
-      onRefresh?.();
-    } catch {
-      toast.error("保存に失敗しました");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const autoFill = async () => {
-    if (!tpl) return;
-    const mappings = tpl.fields.map((f) => ({ fieldKey: f.name, source: "customer" as const }));
-    const baseValues = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, String(v)]));
-    const result = await autoFillContractFields(mappings, baseValues);
-    const next = { ...form };
-    for (const field of result.fields) next[field.fieldKey] = field.value;
-    setForm(next);
-    void persistDraft(next);
-    toast.success("顧客情報を転記しました");
-  };
-
-  const previewPdf = async () => {
-    if (!tpl || !pdfTemplate) {
-      toast.error("プレビュー準備中です");
-      return;
-    }
-    const html = buildContractPrintHtml(renderPreview(tpl, form, renderCtx), pdfTemplate, tpl.name);
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    }
-  };
+  const fillCtx: FillContext = useMemo(() => ({
+    constructionTitle: data.title ?? null,
+    orderAmount: data.amount ?? null,
+    startDate: data.start_date ?? null,
+    endDate: data.end_date ?? null,
+    customerName: data.customer?.name ?? null,
+    customerAddress: null,
+  }), [data]);
 
   return (
-    <Card><CardContent className="p-4 space-y-4">
-      <p className="text-sm text-muted-foreground">テンプレートを選択すると顧客情報が自動転記されます（編集は自動保存）</p>
-      <div className="flex flex-wrap gap-2">
-        <Select value={templateId} onValueChange={(v) => { setTemplateId(v); void persistDraft(form, v); }}>
-          <SelectTrigger className="max-w-xs"><SelectValue placeholder="テンプレート" /></SelectTrigger>
-          <SelectContent>
-            {CONTRACT_TEMPLATES.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Button size="sm" variant="outline" onClick={() => void autoFill()}>AI自動入力</Button>
-        {saving && <span className="text-xs text-muted-foreground self-center">保存中...</span>}
-      </div>
-      {tpl && pdfTemplate && (
-        <div className="rounded-lg border overflow-auto max-h-[480px] bg-white">
-          <ContractContentPreview pdf={pdfTemplate} contractTemplateId={templateId} form={form} ctx={renderCtx} />
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm">
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">契約書</span>
+          <span className="text-muted-foreground">1</span>
         </div>
-      )}
-      {tpl && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {tpl.fields.slice(0, 8).map((field) => (
-            <div key={field.name} className="space-y-1">
-              <Label className="text-xs">{field.label}</Label>
-              <Input
-                value={String(form[field.name] ?? "")}
-                onChange={(e) => {
-                  const next = { ...form, [field.name]: e.target.value };
-                  setForm(next);
-                  void persistDraft(next);
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => void previewPdf()}>PDFプレビュー</Button>
-        <Button size="sm" onClick={() => void previewPdf()}>ダウンロード（印刷）</Button>
+        <Button size="sm" className="gap-1.5 text-xs" onClick={() => setPicker(true)}>
+          <Plus className="h-3.5 w-3.5" />契約書を作成する
+        </Button>
       </div>
-    </CardContent></Card>
+
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <FileText className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-sm truncate">{data.title}</p>
+            <StatusBadge status={data.status} className="text-[10px] px-2 py-0.5 shrink-0" />
+          </div>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            ¥{(data.amount ?? 0).toLocaleString()}
+            {data.contract_date ? ` ・ 契約日 ${data.contract_date}` : ""}
+          </p>
+        </div>
+      </div>
+
+      <ContractPdfTemplatePicker
+        open={picker}
+        onOpenChange={setPicker}
+        onSelectForm={(tpl) => setFillerTpl(tpl)}
+        formTemplates={formTemplates}
+      />
+
+      <PdfFormFiller
+        open={!!fillerTpl}
+        onOpenChange={(o) => !o && setFillerTpl(null)}
+        template={fillerTpl}
+        ctx={fillCtx}
+      />
+    </div>
   );
 }
 

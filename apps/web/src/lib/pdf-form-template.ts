@@ -90,9 +90,23 @@ export type PdfFormField = {
   align: "left" | "center" | "right";
 };
 
+export type PdfFormDocType = "contract" | "estimate" | "invoice";
+
+export const PDF_FORM_DOC_TYPE_LABELS: Record<PdfFormDocType, string> = {
+  contract: "契約書",
+  estimate: "見積書",
+  invoice: "請求書",
+};
+
+export const PDF_FORM_DOC_TYPES: PdfFormDocType[] = ["contract", "estimate", "invoice"];
+
 export type PdfFormTemplate = {
   id: string;
   name: string;
+  /** 書類種別 */
+  docType: PdfFormDocType;
+  /** この種別で採用中か */
+  isActive: boolean;
   /** Storage 上の PDF パス */
   storagePath: string;
   fileName: string;
@@ -126,9 +140,13 @@ export function newFieldDefaults(type: PdfFieldType, page: number): Omit<PdfForm
 /** company.settings から安全に取り出す */
 export function resolvePdfFormTemplates(raw: unknown): PdfFormTemplate[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter((t): t is PdfFormTemplate =>
-    !!t && typeof t === "object" && typeof (t as PdfFormTemplate).id === "string"
-  );
+  return raw
+    .filter((t): t is PdfFormTemplate => !!t && typeof t === "object" && typeof (t as PdfFormTemplate).id === "string")
+    .map((t) => ({
+      ...t,
+      docType: (t as PdfFormTemplate).docType ?? "contract",
+      isActive: (t as PdfFormTemplate).isActive ?? false,
+    }));
 }
 
 /** 差し込みコンテキスト */

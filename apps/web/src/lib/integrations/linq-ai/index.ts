@@ -16,6 +16,8 @@ import type {
   AppointmentParseResult,
   ApprovalSupportResult,
   AssigneeRecommendResult,
+  CommunicationAgreementItem,
+  CommunicationAgreementResult,
   ContractAutoFillResult,
   DurationEstimateResult,
   EstimateDraftResult,
@@ -464,5 +466,68 @@ export async function generateEsignMessage(
     source: "heuristic",
     subject: `【${contractTitle}】電子契約のご確認`,
     body: `${customerName} 様\n\nお世話になっております。\n「${contractTitle}」の電子契約書を送付いたします。\n内容をご確認のうえ、署名をお願いいたします。\n\nよろしくお願いいたします。`,
+  };
+}
+
+const AGREEMENT_KEYWORDS = [
+  "了解", "承知", "合意", "確定", "了承", "お願いします", "問題ありません", "問題ない",
+  "開始", "工期", "見積", "金額", "¥", "円", "日程", "打ち合わせ",
+];
+
+function heuristicAgreementScore(body: string): number {
+  const hits = AGREEMENT_KEYWORDS.filter((k) => body.includes(k)).length;
+  if (hits >= 3) return 0.92;
+  if (hits === 2) return 0.78;
+  if (hits === 1) return 0.55;
+  return 0;
+}
+
+/** やり取り履歴から重要な合意事項を抽出（LLM 未接続時はキーワードベース） */
+export async function extractCommunicationAgreements(
+  messages: Array<{ id: string; body: string }>,
+): Promise<CommunicationAgreementResult> {
+  const started = Date.now();
+  const config = await resolveLinqAiConfig();
+
+  if (config.enabled && config.apiKey) {
+    const prompt = `以下のメッセージから、ビジネス上の重要な合意事項のみを JSON 配列で抽出してください。
+各要素: {"messageId":"...","summary":"1文で要約","confidence":0.0-1.0}
+合意・確定・了承・日程・金額に関するもののみ。該当なしは [] を返す。
+
+${JSON.stringify(messages.map((m) => ({ messageId: m.id, body: m.body })))}`;
+
+    const raw = await callLlm(prompt, config);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()) as CommunicationAgreementItem[];
+        if (Array.isArray(parsed)) {
+          return {
+            source: "linq",
+            productionReady: true,
+            model: config.model,
+            latencyMs: Date.now() - started,
+            items: parsed.filter((i) => i.messageId && i.summary),
+          };
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+
+  const items = messages
+    .map((m) => {
+      const confidence = heuristicAgreementScore(m.body);
+      if (confidence < 0.55) return null;
+      const summary = m.body.length > 120 ? `${m.body.slice(0, 118)}…` : m.body;
+      return { messageId: m.id, summary, confidence };
+    })
+    .filter((i): i is CommunicationAgreementItem => i !== null);
+
+  return {
+    source: "heuristic",
+    productionReady: false,
+    latencyMs: Date.now() - started,
+    items,
   };
 }

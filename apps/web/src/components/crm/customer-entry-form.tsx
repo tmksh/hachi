@@ -58,6 +58,8 @@ type FormState = {
   status: string;
   tags: string[];
   notes: string;
+  line_user_id: string;
+  slack_channel_id: string;
   custom_fields: { key: string; value: string }[];
 };
 
@@ -83,6 +85,8 @@ function customerToForm(c: Customer): FormState {
     status: c.status,
     tags: c.tags ?? [],
     notes: c.notes ?? "",
+    line_user_id: c.line_user_id ?? "",
+    slack_channel_id: c.slack_channel_id ?? "",
     custom_fields: Object.entries(custom).map(([key, value]) => ({ key, value })),
   };
 }
@@ -111,6 +115,8 @@ function formToPayload(form: FormState) {
     status: form.status,
     tags: form.tags,
     notes: form.notes || null,
+    line_user_id: form.line_user_id || null,
+    slack_channel_id: form.slack_channel_id || null,
     custom_fields,
     ai_score: null,
   };
@@ -145,6 +151,8 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
     status: "active",
     tags: [],
     notes: "",
+    line_user_id: "",
+    slack_channel_id: "",
     custom_fields: [],
   });
 
@@ -403,6 +411,35 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
         <div className="space-y-2 sm:col-span-2">
           <Label>備考</Label>
           <Textarea rows={3} value={form.notes} onChange={e => set("notes", e.target.value)} />
+        </div>
+      </div>
+
+      <div className="space-y-4 pt-2 border-t">
+        <div>
+          <Label className="text-sm font-semibold">メッセージ連携</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            契約のやり取り管理で、この顧客の LINE / Slack の履歴を絞り込むための ID です
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>LINE ユーザー ID</Label>
+            <Input
+              value={form.line_user_id}
+              onChange={e => set("line_user_id", e.target.value)}
+              placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Slack チャンネル ID</Label>
+            <Input
+              value={form.slack_channel_id}
+              onChange={e => set("slack_channel_id", e.target.value)}
+              placeholder="C0123456789"
+              className="font-mono text-xs"
+            />
+          </div>
         </div>
       </div>
 

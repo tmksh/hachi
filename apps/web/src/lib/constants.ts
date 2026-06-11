@@ -23,8 +23,6 @@ export const NAV_GROUPS = [
     items: [
       { key: "contracts", label: "契約管理", href: "/contracts" },
       { key: "constructions", label: "工事管理", href: "/constructions" },
-      { key: "invoices", label: "請求管理", href: "/invoices" },
-      { key: "budget", label: "予算管理", href: "/budget" },
     ],
   },
   {

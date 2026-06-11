@@ -60,7 +60,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   }
 
   return (
-    <ChatPanelProvider open={chatOpen}>
+    <ChatPanelProvider open={chatOpen} internalChatOpen={internalChatOpen} openInternalChat={() => setInternalChatOpen(true)}>
       <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
         <Sidebar
           profile={profile}

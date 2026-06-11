@@ -48,6 +48,8 @@ export type Customer = {
   inquiry_date: string | null;
   inquiry_content: string | null;
   custom_fields: Record<string, string>;
+  line_user_id: string | null;
+  slack_channel_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

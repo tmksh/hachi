@@ -28,7 +28,9 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
   const [saving, setSaving] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = () => {
     getCustomerRecordings(customerId).then(setRecordings).catch(() => {});
@@ -38,6 +40,28 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
     setSpeechSupport(detectSpeechSupport());
     load();
   }, [customerId]);
+
+  useEffect(() => {
+    if (!listening) {
+      setElapsed(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+    const startedAt = Date.now();
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [listening]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   const startListening = () => {
     type SpeechResult = { results: ArrayLike<{ 0: { transcript: string } }> };
@@ -167,26 +191,24 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
           </CardDescription>
         </CardHeader>
         <CardContent className="px-4 py-4 space-y-3">
-          {speechSupport === "supported" && (
-            <div className="flex flex-wrap items-center gap-2">
-              {!listening ? (
-                <Button size="sm" onClick={startListening} className="gap-1.5 h-9">
-                  <Mic className="h-4 w-4" />
-                  音声入力開始
-                </Button>
-              ) : (
-                <Button size="sm" variant="destructive" onClick={stopListening} className="gap-1.5 h-9">
-                  <Square className="h-4 w-4" />
-                  音声入力停止
-                </Button>
-              )}
-              {listening && <BadgeListening />}
-            </div>
+          {speechSupport === "supported" && !listening && (
+            <Button size="sm" onClick={startListening} className="gap-1.5 h-9">
+              <Mic className="h-4 w-4" />
+              音声入力開始
+            </Button>
           )}
 
-          {transcript && (
+          {speechSupport === "supported" && listening && (
+            <VoiceInputActivePanel
+              elapsed={elapsed}
+              transcript={transcript}
+              onStop={stopListening}
+            />
+          )}
+
+          {!listening && transcript && (
             <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">文字起こし（リアルタイム）</p>
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">文字起こし</p>
               {transcript}
             </div>
           )}
@@ -272,11 +294,80 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
   );
 }
 
-function BadgeListening() {
+function formatElapsed(seconds: number) {
+  const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const ss = String(seconds % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function VoiceWaveform() {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-red-600 animate-pulse">
-      <span className="size-2 rounded-full bg-red-500" />
-      音声入力中
-    </span>
+    <div className="flex items-end justify-end gap-0.5 h-6 mt-1" aria-hidden>
+      {[40, 70, 55, 90, 45, 75, 50].map((h, i) => (
+        <span
+          key={i}
+          className="w-1 rounded-full bg-red-400/80 animate-pulse"
+          style={{ height: `${h}%`, animationDelay: `${i * 0.12}s`, animationDuration: "0.8s" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function VoiceInputActivePanel({
+  elapsed,
+  transcript,
+  onStop,
+}: {
+  elapsed: number;
+  transcript: string;
+  onStop: () => void;
+}) {
+  return (
+    <div className="rounded-xl border-2 border-red-200/80 bg-gradient-to-b from-red-50/90 to-background dark:from-red-950/30 dark:to-background dark:border-red-900/50 p-4 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative flex items-center justify-center size-12 shrink-0 rounded-full bg-red-100 dark:bg-red-950/60">
+            <span className="absolute inset-0 rounded-full bg-red-400/25 animate-ping" />
+            <Mic className="h-5 w-5 text-red-600 dark:text-red-400 relative z-10" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">音声入力中</p>
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-950/60 dark:text-red-300">
+                <span className="size-1.5 rounded-full bg-red-500 animate-pulse" />
+                REC
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">マイクに向かって話してください</p>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-2xl font-mono tabular-nums font-semibold text-red-700 dark:text-red-400">
+            {formatElapsed(elapsed)}
+          </p>
+          <VoiceWaveform />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-red-200/60 bg-white/70 dark:bg-black/20 dark:border-red-900/40 p-3 min-h-[120px] max-h-48 overflow-y-auto">
+        <p className="text-[11px] font-medium text-muted-foreground mb-2">文字起こし（リアルタイム）</p>
+        {transcript ? (
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">{transcript}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground/60 italic">音声を認識しています…</p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-red-200/50 dark:border-red-900/30">
+        <p className="text-[11px] text-muted-foreground">
+          停止すると文字起こし結果を編集・保存できます
+        </p>
+        <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5 h-9 shrink-0">
+          <Square className="h-4 w-4" />
+          音声入力停止
+        </Button>
+      </div>
+    </div>
   );
 }

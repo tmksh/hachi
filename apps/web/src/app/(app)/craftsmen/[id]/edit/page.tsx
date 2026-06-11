@@ -30,7 +30,11 @@ function TagInput({
 
   const add = () => {
     const v = input.trim();
-    if (!v || values.includes(v)) return;
+    if (!v) return;
+    if (values.includes(v)) {
+      setInput("");
+      return;
+    }
     onChange([...values, v]);
     setInput("");
   };
@@ -43,7 +47,12 @@ function TagInput({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={placeholder}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              add();
+            }
+          }}
           className="flex-1"
         />
         <Button type="button" variant="outline" size="icon" onClick={add}><Plus className="size-4" /></Button>

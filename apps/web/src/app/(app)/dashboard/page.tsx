@@ -53,6 +53,7 @@ import { AdaptiveList } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
 import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import { useBrandColor } from "@/hooks/use-brand-color";
+import { useInternalChat } from "@/contexts/chat-panel-context";
 import {
   DndContext,
   closestCorners,
@@ -70,6 +71,39 @@ import { cn } from "@/lib/utils";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 type UnfollowedLead = Awaited<ReturnType<typeof getUnfollowedLeads>>[number];
+
+const MOCK_UNFOLLOWED_LEADS: UnfollowedLead[] = [
+  {
+    id: "mock-1",
+    name: "田中 太郎",
+    company_name: "田中工務店",
+    assigned_to: "mock-user-1",
+    assigned_to_profile: { id: "mock-user-1", display_name: "山田 営業" },
+    status: "active",
+    last_deal_updated: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+    days_since_update: 10,
+  },
+  {
+    id: "mock-2",
+    name: "鈴木 花子",
+    company_name: null,
+    assigned_to: "mock-user-2",
+    assigned_to_profile: { id: "mock-user-2", display_name: "佐藤 担当" },
+    status: "active",
+    last_deal_updated: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+    days_since_update: 14,
+  },
+  {
+    id: "mock-3",
+    name: "伊藤 建設",
+    company_name: "伊藤建設株式会社",
+    assigned_to: "mock-user-1",
+    assigned_to_profile: { id: "mock-user-1", display_name: "山田 営業" },
+    status: "active",
+    last_deal_updated: null,
+    days_since_update: null,
+  },
+];
 
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
@@ -172,6 +206,7 @@ export default function DashboardPage() {
 
   const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths, toggleVisible, reset } = useWidgets();
   const { gradientHex, solidHex, mode: brandMode, setGradientColor, setSolidColor, switchMode, reset: resetColor } = useBrandColor();
+  const { openInternalChat } = useInternalChat();
   const brandHex = brandMode === "solid" ? solidHex : gradientHex;
   const brandColors = computeBrandFromHex(brandHex);
 
@@ -196,7 +231,10 @@ export default function DashboardPage() {
         setClockInTime(new Date(entry.clock_in_at));
       }
     }).catch(() => {});
-    getUnfollowedLeads().then(setUnfollowedLeads).catch(() => {}).finally(() => setUnfollowedLoading(false));
+    getUnfollowedLeads()
+      .then((leads) => setUnfollowedLeads(leads.length > 0 ? leads : MOCK_UNFOLLOWED_LEADS))
+      .catch(() => setUnfollowedLeads(MOCK_UNFOLLOWED_LEADS))
+      .finally(() => setUnfollowedLoading(false));
   }, []);
 
   const handleClockIn = async () => {
@@ -215,17 +253,27 @@ export default function DashboardPage() {
     } catch { toast.error("退勤打刻に失敗しました"); }
   };
 
+  const isMockLead = (lead: UnfollowedLead) => lead.id.startsWith("mock-");
+
   const handleSendInquiry = async () => {
     if (!inquiryTarget || !inquiryContent.trim()) return;
     if (!inquiryTarget.assigned_to) return;
     setInquirySending(true);
     try {
-      await sendFollowupInquiry(
-        inquiryTarget.assigned_to,
-        inquiryTarget.id,
-        inquiryContent.trim(),
-      );
-      toast.success("問い合わせを送信しました");
+      if (isMockLead(inquiryTarget)) {
+        await new Promise((r) => setTimeout(r, 600));
+        toast.success("問い合わせを送信しました（デモ）", {
+          description: `${inquiryTarget.assigned_to_profile?.display_name ?? "担当者"} に送信しました`,
+        });
+        openInternalChat();
+      } else {
+        await sendFollowupInquiry(
+          inquiryTarget.assigned_to,
+          inquiryTarget.id,
+          inquiryContent.trim(),
+        );
+        toast.success("問い合わせを送信しました");
+      }
       setInquiryTarget(null);
       setInquiryContent("");
     } catch {
@@ -511,7 +559,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-2">
                 {/* タブ切替 */}
-                <div className="flex rounded-lg border border-slate-100 overflow-hidden text-[10px] font-medium">
+                <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
                   <button
                     type="button"
                     onClick={() => setDealsTab("deals")}

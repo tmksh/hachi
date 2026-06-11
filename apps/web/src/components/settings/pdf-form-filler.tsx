@@ -10,13 +10,16 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Printer } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Printer, Sparkles, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { loadPdfDocument, PdfPageCanvas } from "@/components/settings/pdf-page-canvas";
 import { getPdfFormTemplateUrl } from "@/lib/actions/pdf-form-templates";
 import {
   resolveFieldValue,
+  BINDING_LABELS,
   type FillContext,
   type PdfFormField,
   type PdfFormTemplate,
@@ -34,15 +37,13 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
-  const [manual, setManual] = useState<Record<string, string>>({});
+  // 全項目の現在値（自動入力で初期化し、ユーザーが上書き可能）
+  const [values, setValues] = useState<Record<string, string>>({});
   const renderW = 560;
 
-  // 値の解決（binding優先、manualはユーザー入力で上書き）
+  // 値の解決（ユーザー編集 > 自動入力）
   const valueFor = (f: PdfFormField): string => {
-    if (f.binding === "manual" || f.type === "fixed") {
-      return manual[f.id] ?? resolveFieldValue(f, ctx);
-    }
-    return resolveFieldValue(f, ctx);
+    return values[f.id] ?? resolveFieldValue(f, ctx);
   };
 
   useEffect(() => {
@@ -55,14 +56,12 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
         if (!url) throw new Error("PDFを取得できませんでした");
         const d = await loadPdfDocument(url);
         setDoc(d);
-        // manual 初期値
+        // 全項目を自動入力値で初期化（手入力項目は空のまま）
         const init: Record<string, string> = {};
         template.fields.forEach((f) => {
-          if (f.binding === "manual" || f.type === "fixed") {
-            init[f.id] = resolveFieldValue(f, ctx);
-          }
+          init[f.id] = resolveFieldValue(f, ctx);
         });
-        setManual(init);
+        setValues(init);
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "読み込みに失敗しました");
       } finally {
@@ -71,10 +70,46 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
     })();
   }, [open, template, ctx]);
 
+  // 自動入力項目（データソースあり）と手入力項目に分ける。fixed は編集不要なので除外
+  const autoFields = useMemo(
+    () => (template?.fields ?? []).filter((f) => f.binding !== "manual" && f.type !== "fixed"),
+    [template],
+  );
   const manualFields = useMemo(
     () => (template?.fields ?? []).filter((f) => f.binding === "manual" && f.type !== "fixed"),
     [template],
   );
+
+  const setValue = (id: string, v: string) => setValues((m) => ({ ...m, [id]: v }));
+
+  const renderFieldInput = (f: PdfFormField) => {
+    if (f.type === "checkbox") {
+      const checked = !!values[f.id];
+      return (
+        <div className="flex items-center gap-2">
+          <Switch checked={checked} onCheckedChange={(c) => setValue(f.id, c ? "1" : "")} />
+          <span className="text-xs text-muted-foreground">{checked ? "あり" : "なし"}</span>
+        </div>
+      );
+    }
+    if (f.type === "textarea") {
+      return (
+        <Textarea
+          value={values[f.id] ?? ""}
+          onChange={(e) => setValue(f.id, e.target.value)}
+          rows={2}
+          className="text-sm"
+        />
+      );
+    }
+    return (
+      <Input
+        value={values[f.id] ?? ""}
+        onChange={(e) => setValue(f.id, e.target.value)}
+        className="h-8 text-sm"
+      />
+    );
+  };
 
   const handlePrint = async () => {
     if (!doc || !template) return;
@@ -162,23 +197,49 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
         </DialogHeader>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* 左：手入力 */}
-          <div className="w-72 shrink-0 overflow-y-auto border-r p-4 space-y-3">
-            <div className="text-xs font-semibold text-muted-foreground">手入力項目</div>
-            {manualFields.length === 0 ? (
-              <p className="text-xs text-muted-foreground">手入力する項目はありません。</p>
-            ) : (
-              manualFields.map((f) => (
-                <div key={f.id} className="space-y-1">
-                  <Label className="text-xs">{f.label}</Label>
-                  <Input
-                    value={manual[f.id] ?? ""}
-                    onChange={(e) => setManual((m) => ({ ...m, [f.id]: e.target.value }))}
-                    className="h-8 text-sm"
-                  />
-                </div>
-              ))
+          {/* 左：入力項目（自動入力＋手入力） */}
+          <div className="w-80 shrink-0 overflow-y-auto border-r bg-white p-4 space-y-4">
+            <div className="text-xs font-semibold text-muted-foreground">入力項目</div>
+
+            {autoFields.length === 0 && manualFields.length === 0 && (
+              <p className="text-xs text-muted-foreground">入力する項目はありません。</p>
             )}
+
+            {/* 自動入力項目 */}
+            {autoFields.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+                  <Sparkles className="h-3 w-3" />自動入力
+                </div>
+                {autoFields.map((f) => (
+                  <div key={f.id} className="space-y-1">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      {f.label}
+                      <span className="rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-normal text-emerald-600">
+                        {BINDING_LABELS[f.binding]}
+                      </span>
+                    </Label>
+                    {renderFieldInput(f)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 手入力項目 */}
+            {manualFields.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <PenLine className="h-3 w-3" />手入力
+                </div>
+                {manualFields.map((f) => (
+                  <div key={f.id} className="space-y-1">
+                    <Label className="text-xs">{f.label}</Label>
+                    {renderFieldInput(f)}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <Button onClick={handlePrint} disabled={printing || loading || !doc} className="w-full mt-2">
               {printing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Printer className="h-4 w-4 mr-1" />}
               印刷 / PDF出力
