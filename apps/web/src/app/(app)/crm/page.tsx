@@ -21,16 +21,26 @@ const DealsPipelineView = dynamic(
   { loading: () => <Skeleton className="h-[400px] w-full rounded-xl" /> },
 );
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
-import { useCustomers, useCustomerCounts, type CustomerWithDeals } from "@/hooks/use-customers";
+import {
+  useCustomers,
+  useCustomerCounts,
+  useUnfollowedCustomers,
+  useUnfollowedCustomersCount,
+  useCustomerDealSummaries,
+  type CustomerWithDeals,
+} from "@/hooks/use-customers";
+import type { UnfollowedCustomer } from "@/lib/queries/customers";
 
 type ViewMode = "grid" | "list" | "pipeline";
+type ListCustomer = CustomerWithDeals | UnfollowedCustomer;
 
-function getFollowupStatus(c: CustomerWithDeals): "unassigned" | "followed" | "unfollowed" {
+function getFollowupStatus(
+  c: ListCustomer,
+  lastDealUpdated?: string | null,
+): "unassigned" | "followed" | "unfollowed" {
   if (!c.assigned_to) return "unassigned";
-  const deals = c.deals ?? [];
-  const activeDeals = deals.filter(d => !["won", "lost"].includes(d.stage));
-  if (activeDeals.length === 0) return "unfollowed";
-  const lastUpdated = activeDeals.reduce((l, d) => d.updated_at > l ? d.updated_at : l, activeDeals[0].updated_at);
+  const lastUpdated = lastDealUpdated ?? ("last_deal_updated" in c ? c.last_deal_updated : null);
+  if (!lastUpdated) return "unfollowed";
   const daysSince = differenceInDays(new Date(), new Date(lastUpdated));
   return daysSince >= 7 ? "unfollowed" : "followed";
 }
@@ -52,29 +62,44 @@ export default function CrmPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data, isLoading: loading } = useCustomers(page, debouncedSearch);
+  const isUnfollowedTab = tab === "unfollowed";
+  const { data, isLoading: loadingCustomers } = useCustomers(page, debouncedSearch, !isUnfollowedTab);
+  const { data: unfollowedData, isLoading: loadingUnfollowed } = useUnfollowedCustomers(page, isUnfollowedTab);
   const { data: counts } = useCustomerCounts();
-  const customers = data?.customers ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / (data?.limit ?? 50)));
+  const { data: unfollowedCount = 0 } = useUnfollowedCustomersCount();
+
+  const customers = isUnfollowedTab ? (unfollowedData?.customers ?? []) : (data?.customers ?? []);
+  const total = isUnfollowedTab ? (unfollowedData?.total ?? 0) : (data?.total ?? 0);
+  const limit = isUnfollowedTab ? (unfollowedData?.limit ?? 50) : (data?.limit ?? 50);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const loading = isUnfollowedTab ? loadingUnfollowed : loadingCustomers;
+
+  const customerIds = useMemo(
+    () => (isUnfollowedTab ? [] : customers.map((c) => c.id)),
+    [customers, isUnfollowedTab],
+  );
+  const { data: dealSummaries } = useCustomerDealSummaries(customerIds);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab]);
 
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get("view");
     if (v === "pipeline" || v === "grid" || v === "list") setView(v);
   }, []);
 
-  const filtered = useMemo(() => customers.filter(c => {
-    const matchTab = tab === "all"
-      || (tab === "corporation" && c.company_name)
-      || (tab === "individual" && !c.company_name)
-      || (tab === "unfollowed" && getFollowupStatus(c) === "unfollowed");
-    return matchTab;
+  const filtered = useMemo(() => customers.filter((c) => {
+    if (tab === "all") return true;
+    if (tab === "corporation") return !!c.company_name;
+    if (tab === "individual") return !c.company_name;
+    return true;
   }), [customers, tab]);
 
-  const unfollowedCount = useMemo(
-    () => customers.filter(c => getFollowupStatus(c) === "unfollowed").length,
-    [customers],
-  );
+  const getLastDealUpdated = (c: ListCustomer) =>
+    isUnfollowedTab && "last_deal_updated" in c
+      ? c.last_deal_updated
+      : dealSummaries?.get(c.id) ?? null;
   const isPipeline = view === "pipeline";
 
   return (
@@ -147,7 +172,7 @@ export default function CrmPage() {
             ) : view === "grid" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filtered.map(c => {
-                  const followup = getFollowupStatus(c);
+                  const followup = getFollowupStatus(c, getLastDealUpdated(c));
                   return (
                     <Link key={c.id} href={`/crm/${c.id}`}>
                       <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
@@ -207,7 +232,7 @@ export default function CrmPage() {
                     </TableHeader>
                     <TableBody>
                       {filtered.map(c => {
-                        const followup = getFollowupStatus(c);
+                        const followup = getFollowupStatus(c, getLastDealUpdated(c));
                         return (
                           <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => router.push(`/crm/${c.id}`)}>
                             <TableCell>

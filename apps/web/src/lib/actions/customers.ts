@@ -5,13 +5,12 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import type { Customer } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
 
-const CUSTOMER_SELECT =
-  "*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name), deals(id, updated_at, stage)";
+const CUSTOMER_LIST_SELECT =
+  "*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
 
 export type CustomerListResult = {
   customers: (Customer & {
     assigned_to_profile: { id: string; display_name: string } | null;
-    deals: Array<{ id: string; updated_at: string; stage: string }>;
   })[];
   total: number;
   page: number;
@@ -31,7 +30,7 @@ export async function getCustomers(options?: {
 
   let query = supabase
     .from("customers")
-    .select(CUSTOMER_SELECT, { count: "exact" })
+    .select(CUSTOMER_LIST_SELECT, { count: "exact" })
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .range(from, to);
@@ -53,17 +52,17 @@ export async function getCustomers(options?: {
   };
 }
 
-/** タブ表示用の件数（軽量） */
+/** タブ表示用の件数（RPC 1本） */
 export async function getCustomerCounts() {
   const supabase = await createClient();
-  const [{ count: total }, { count: corporation }] = await Promise.all([
-    supabase.from("customers").select("*", { count: "exact", head: true }).is("deleted_at", null),
-    supabase.from("customers").select("*", { count: "exact", head: true }).is("deleted_at", null).not("company_name", "is", null),
-  ]);
+  const { data, error } = await supabase.rpc("get_customer_counts");
+  if (error) throw error;
+
+  const row = data as { total: number; corporation: number };
   return {
-    total: total ?? 0,
-    corporation: corporation ?? 0,
-    individual: (total ?? 0) - (corporation ?? 0),
+    total: row.total ?? 0,
+    corporation: row.corporation ?? 0,
+    individual: (row.total ?? 0) - (row.corporation ?? 0),
   };
 }
 
@@ -80,7 +79,7 @@ export async function getCustomer(id: string) {
 
 export async function createCustomer(input: Omit<Customer, "id" | "company_id" | "created_at" | "updated_at" | "deleted_at">) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) throw new Error("Not authenticated");
 
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
@@ -160,56 +159,41 @@ export async function deleteCustomer(id: string) {
   }
 }
 
-/**
- * 担当者アサイン済みかつ一定日数以上フォローアップ活動のない顧客を取得
- * @param days 未フォローアップとみなす日数（デフォルト7日）
- */
-export async function getUnfollowedCustomers(days = 7) {
+type UnfollowedRpcRow = {
+  id: string;
+  name: string;
+  company_name: string | null;
+  assigned_to: string | null;
+  status: string;
+  inquiry_date: string | null;
+  created_at: string;
+  assigned_to_profile_id: string | null;
+  assigned_to_display_name: string | null;
+  last_deal_updated: string | null;
+};
+
+/** 担当者アサイン済みかつ一定日数以上フォローアップ活動のない顧客を取得（RPC） */
+export async function getUnfollowedCustomers(days = 7, page = 1, limit = 50) {
   const supabase = await createClient();
-  const threshold = new Date();
-  threshold.setDate(threshold.getDate() - days);
-
-  // assigned_to がある顧客を取得（最新の商談updated_atも取得）
-  const { data: customers, error } = await supabase
-    .from("customers")
-    .select(`
-      id, name, company_name, assigned_to, status, inquiry_date, created_at,
-      assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name),
-      deals(id, updated_at, stage)
-    `)
-    .is("deleted_at", null)
-    .not("assigned_to", "is", null);
-
+  const { data, error } = await supabase.rpc("get_unfollowed_customers", {
+    p_days: days,
+    p_page: page,
+    p_limit: limit,
+  });
   if (error) throw error;
 
-  const result = (customers ?? []).filter((c) => {
-    const cDeals = (c.deals as Array<{ id: string; updated_at: string; stage: string }> | null) ?? [];
-    const activeDeals = cDeals.filter((d) => !["won", "lost"].includes(d.stage));
-    if (activeDeals.length === 0) return true; // 商談なし = フォローアップ必要
-    const lastActivity = activeDeals.reduce((latest, d) => {
-      const t = new Date(d.updated_at).getTime();
-      return t > latest ? t : latest;
-    }, 0);
-    return lastActivity < threshold.getTime();
-  });
-
-  return result.map((c) => ({
+  return ((data ?? []) as UnfollowedRpcRow[]).map((c) => ({
     id: c.id,
     name: c.name,
     company_name: c.company_name,
     assigned_to: c.assigned_to,
-    assigned_to_profile: (c.assigned_to_profile as unknown) as { id: string; display_name: string } | null,
+    assigned_to_profile: c.assigned_to_profile_id
+      ? { id: c.assigned_to_profile_id, display_name: c.assigned_to_display_name ?? "" }
+      : null,
     status: c.status,
     inquiry_date: c.inquiry_date,
     created_at: c.created_at,
-    last_deal_updated: (() => {
-      const cDeals = (c.deals as Array<{ id: string; updated_at: string; stage: string }> | null) ?? [];
-      const activeDeals = cDeals.filter((d) => !["won", "lost"].includes(d.stage));
-      if (activeDeals.length === 0) return null;
-      return activeDeals.reduce((latest, d) => {
-        return new Date(d.updated_at) > new Date(latest) ? d.updated_at : latest;
-      }, activeDeals[0].updated_at);
-    })(),
+    last_deal_updated: c.last_deal_updated,
   }));
 }
 

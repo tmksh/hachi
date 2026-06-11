@@ -1,7 +1,4 @@
-"use server";
-
-import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/client";
 import { format, startOfMonth, subMonths } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -49,7 +46,9 @@ function formatMonthlyTrend(rows: AggregatesRpc["monthly_trend"]) {
   const monthKeys = Array.from({ length: 7 }, (_, i) =>
     format(startOfMonth(subMonths(now, 6 - i)), "yyyy-MM"),
   );
+
   const byKey = new Map(rows.map((r) => [r.month_key, r]));
+
   return monthKeys.map((key) => {
     const row = byKey.get(key);
     const monthDate = new Date(`${key}-01T00:00:00`);
@@ -61,46 +60,13 @@ function formatMonthlyTrend(rows: AggregatesRpc["monthly_trend"]) {
   });
 }
 
-type UnfollowedRpcRow = {
-  id: string;
-  name: string;
-  company_name: string | null;
-  assigned_to: string | null;
-  status: string;
-  assigned_to_profile_id: string | null;
-  assigned_to_display_name: string | null;
-  last_deal_updated: string | null;
-};
-
-/** 担当者アサイン済みで一定日数以上フォローアップなしの顧客リストを取得 */
-export async function getUnfollowedLeads(days = 7) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_unfollowed_customers", {
-    p_days: days,
-    p_page: 1,
-    p_limit: 100,
-  });
-  if (error) throw error;
-
-  return ((data ?? []) as UnfollowedRpcRow[]).map((c) => ({
-    id: c.id,
-    name: c.name,
-    company_name: c.company_name,
-    assigned_to: c.assigned_to,
-    assigned_to_profile: c.assigned_to_profile_id
-      ? { id: c.assigned_to_profile_id, display_name: c.assigned_to_display_name ?? "" }
-      : null,
-    status: c.status,
-    last_deal_updated: c.last_deal_updated,
-    days_since_update: c.last_deal_updated
-      ? Math.floor((Date.now() - new Date(c.last_deal_updated).getTime()) / 86_400_000)
-      : null,
-  }));
-}
-
-export async function getDashboardData() {
-  const supabase = await createClient();
-  const user = await getAuthUser();
+/** ブラウザ → Supabase 直結（Server Action ホップなし） */
+export async function fetchDashboardData() {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const [
     { data: aggregates, error: aggError },
@@ -234,3 +200,54 @@ export async function getDashboardData() {
     },
   };
 }
+
+export type UnfollowedLead = {
+  id: string;
+  name: string;
+  company_name: string | null;
+  assigned_to: string | null;
+  assigned_to_profile: { id: string; display_name: string } | null;
+  status: string;
+  last_deal_updated: string | null;
+  days_since_update: number | null;
+};
+
+type UnfollowedRpcRow = {
+  id: string;
+  name: string;
+  company_name: string | null;
+  assigned_to: string | null;
+  status: string;
+  inquiry_date: string | null;
+  created_at: string;
+  assigned_to_profile_id: string | null;
+  assigned_to_display_name: string | null;
+  last_deal_updated: string | null;
+};
+
+export async function fetchUnfollowedLeads(days = 7): Promise<UnfollowedLead[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_unfollowed_customers", {
+    p_days: days,
+    p_page: 1,
+    p_limit: 100,
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as UnfollowedRpcRow[]).map((c) => ({
+    id: c.id,
+    name: c.name,
+    company_name: c.company_name,
+    assigned_to: c.assigned_to,
+    assigned_to_profile: c.assigned_to_profile_id
+      ? { id: c.assigned_to_profile_id, display_name: c.assigned_to_display_name ?? "" }
+      : null,
+    status: c.status,
+    last_deal_updated: c.last_deal_updated,
+    days_since_update: c.last_deal_updated
+      ? Math.floor((Date.now() - new Date(c.last_deal_updated).getTime()) / 86_400_000)
+      : null,
+  }));
+}
+
+export type DashboardData = Awaited<ReturnType<typeof fetchDashboardData>>;

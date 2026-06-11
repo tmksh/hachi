@@ -35,7 +35,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { toast } from "sonner";
-import { getUnfollowedLeads } from "@/lib/actions/dashboard";
+import { useUnfollowedLeads } from "@/hooks/use-unfollowed-leads";
+import type { UnfollowedLead } from "@/lib/queries/dashboard";
 import { sendFollowupInquiry } from "@/lib/actions/internal-messages";
 import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/actions/attendance";
 import { ResponsiveClock } from "@/components/dashboard/responsive-clock";
@@ -64,7 +65,6 @@ const WidgetGrid = dynamic(
 );
 
 type DashboardData = NonNullable<ReturnType<typeof useDashboardData>["data"]>;
-type UnfollowedLead = Awaited<ReturnType<typeof getUnfollowedLeads>>[number];
 
 const MOCK_UNFOLLOWED_LEADS: UnfollowedLead[] = [
   {
@@ -129,8 +129,11 @@ export default function DashboardPage() {
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const { data, isLoading: loading } = useDashboardData();
   const { data: attendanceEntry } = useTodayAttendance();
-  const [unfollowedLeads, setUnfollowedLeads] = useState<UnfollowedLead[]>([]);
-  const [unfollowedLoading, setUnfollowedLoading] = useState(true);
+  const { data: unfollowedData, isLoading: unfollowedLoading } = useUnfollowedLeads();
+  const unfollowedLeads = useMemo(
+    () => (unfollowedData && unfollowedData.length > 0 ? unfollowedData : MOCK_UNFOLLOWED_LEADS),
+    [unfollowedData],
+  );
   const [inquiryTarget, setInquiryTarget] = useState<UnfollowedLead | null>(null);
   const [inquiryContent, setInquiryContent] = useState("");
   const [inquirySending, setInquirySending] = useState(false);
@@ -154,21 +157,6 @@ export default function DashboardPage() {
       setClockInTime(new Date(attendanceEntry.clock_in_at));
     }
   }, [attendanceEntry]);
-
-  useEffect(() => {
-    const loadUnfollowed = () => {
-      getUnfollowedLeads()
-        .then((leads) => setUnfollowedLeads(leads.length > 0 ? leads : MOCK_UNFOLLOWED_LEADS))
-        .catch(() => setUnfollowedLeads(MOCK_UNFOLLOWED_LEADS))
-        .finally(() => setUnfollowedLoading(false));
-    };
-
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      window.requestIdleCallback(loadUnfollowed, { timeout: 3000 });
-    } else {
-      setTimeout(loadUnfollowed, 500);
-    }
-  }, []);
 
   const handleClockIn = async () => {
     try {

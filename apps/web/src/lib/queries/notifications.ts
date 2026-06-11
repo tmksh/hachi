@@ -1,7 +1,4 @@
-"use server";
-
-import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/client";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -15,9 +12,13 @@ export type Notification = {
   is_urgent?: boolean;
 };
 
-export async function getNotifications(): Promise<Notification[]> {
-  const supabase = await createClient();
-  const user = await getAuthUser();
+/** ブラウザ → Supabase 直結 */
+export async function fetchNotifications(): Promise<Notification[]> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return [];
 
   const now = new Date();
@@ -194,19 +195,4 @@ export async function getNotifications(): Promise<Notification[]> {
   ]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 20);
-}
-
-export async function markAnnouncementAsRead(announcementId: string) {
-  const supabase = await createClient();
-  const user = await getAuthUser();
-  if (!user) return;
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-  if (!profile) return;
-
-  await supabase.from("announcement_reads").upsert({
-    company_id: profile.company_id,
-    announcement_id: announcementId,
-    user_id: user.id,
-    read_at: new Date().toISOString(),
-  }, { onConflict: "announcement_id,user_id" });
 }

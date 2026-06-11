@@ -54,7 +54,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { Profile } from "@/hooks/use-auth";
-import { getNotifications, markAnnouncementAsRead, type Notification } from "@/lib/actions/notifications";
+import { markAnnouncementAsRead } from "@/lib/actions/notifications";
+import { fetchNotifications, type Notification } from "@/lib/queries/notifications";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
@@ -144,7 +145,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
   useEffect(() => {
     if (!notifOpen) return;
-    const fetchNotifs = () => getNotifications().then(setNotifications).catch(() => {});
+    const fetchNotifs = () => fetchNotifications().then(setNotifications).catch(() => {});
     void fetchNotifs();
     const timer = setInterval(fetchNotifs, 60_000);
     return () => clearInterval(timer);
