@@ -6,10 +6,11 @@ import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, Mic, Square, Copy, Sparkles, ListTodo, Save } from "lucide-react";
+import { AlertCircle, Mic, Square, Copy, Sparkles, ListTodo, Save, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 import { getCustomerRecordings, saveCustomerRecording, createCustomerTodo, type CustomerRecording } from "@/lib/actions/crm-features";
-import { processRecordingComplete } from "@/lib/actions/sales-flow";
+import { processRecordingComplete, sendRecordingSummaryEmail } from "@/lib/actions/sales-flow";
 
 type SpeechSupport = "supported" | "unsupported";
 
@@ -19,7 +20,15 @@ function detectSpeechSupport(): SpeechSupport {
   return w.webkitSpeechRecognition || w.SpeechRecognition ? "supported" : "unsupported";
 }
 
-export function RecordingSummaryTab({ customerId, dealId }: { customerId: string; dealId?: string }) {
+export function RecordingSummaryTab({
+  customerId,
+  dealId,
+  customerEmail,
+}: {
+  customerId: string;
+  dealId?: string;
+  customerEmail?: string | null;
+}) {
   const [recordings, setRecordings] = useState<CustomerRecording[]>([]);
   const [speechSupport, setSpeechSupport] = useState<SpeechSupport>("unsupported");
   const [listening, setListening] = useState(false);
@@ -28,6 +37,8 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sendToCustomer, setSendToCustomer] = useState(false);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -114,6 +125,10 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
       toast.error("文字起こしまたはメモを入力してください");
       return;
     }
+    if (sendToCustomer && !customerEmail?.trim()) {
+      toast.error("顧客のメールアドレスが未登録です。顧客情報から登録してください");
+      return;
+    }
     setSaving(true);
     try {
       const saved = await saveCustomerRecording({
@@ -133,14 +148,47 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
         memo: memo.trim(),
       });
 
-      toast.success(`保存しました（ToDo ${result.todosCreated}件${result.stageProposalId ? "・ステージ提案あり" : ""}）`);
+      let emailSent = false;
+      if (sendToCustomer && customerEmail?.trim()) {
+        try {
+          await sendRecordingSummaryEmail({ customerId, recordingId: saved.id });
+          emailSent = true;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "メール送信に失敗しました";
+          toast.error(message);
+        }
+      }
+
+      toast.success(
+        emailSent
+          ? `保存し、${customerEmail} に要約メールを送信しました（ToDo ${result.todosCreated}件${result.stageProposalId ? "・ステージ提案あり" : ""}）`
+          : `保存しました（ToDo ${result.todosCreated}件${result.stageProposalId ? "・ステージ提案あり" : ""}）`,
+      );
       setTranscript("");
       setMemo("");
+      setSendToCustomer(false);
       load();
     } catch {
       toast.error("保存に失敗しました。DBマイグレーション（00037）が未適用の可能性があります");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendSummaryEmail = async (recordingId: string) => {
+    if (!customerEmail?.trim()) {
+      toast.error("顧客のメールアドレスが未登録です");
+      return;
+    }
+    setSendingEmailId(recordingId);
+    try {
+      const { sentTo } = await sendRecordingSummaryEmail({ customerId, recordingId });
+      toast.success(`${sentTo} に要約メールを送信しました`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "メール送信に失敗しました";
+      toast.error(message);
+    } finally {
+      setSendingEmailId(null);
     }
   };
 
@@ -239,8 +287,19 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
             )}
           </div>
 
-          <div className="flex justify-end pt-1">
-            <Button onClick={saveEntry} disabled={saving} className="h-9 gap-1.5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
+            {customerEmail?.trim() ? (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                <Checkbox
+                  checked={sendToCustomer}
+                  onCheckedChange={(v) => setSendToCustomer(v === true)}
+                />
+                <span>要約完了後に <span className="font-medium text-foreground">{customerEmail}</span> へ送信</span>
+              </label>
+            ) : (
+              <p className="text-xs text-muted-foreground">顧客メール未登録のため送信できません</p>
+            )}
+            <Button onClick={saveEntry} disabled={saving} className="h-9 gap-1.5 shrink-0">
               <Save className="h-4 w-4" />
               {saving ? "保存中..." : "保存"}
             </Button>
@@ -257,11 +316,18 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
           {recordings.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">履歴なし</p>
           ) : recordings.map((r) => (
-            <button
+            <div
               key={r.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-              className="w-full text-left px-4 py-3 hover:bg-white/45 dark:hover:bg-white/5 transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelectedId(selectedId === r.id ? null : r.id);
+                }
+              }}
+              className="w-full text-left px-4 py-3 hover:bg-white/45 dark:hover:bg-white/5 transition-colors cursor-pointer"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-sm truncate">{r.title}</span>
@@ -284,9 +350,26 @@ export function RecordingSummaryTab({ customerId, dealId }: { customerId: string
                       <p className="text-xs whitespace-pre-wrap">{r.memo}</p>
                     </div>
                   )}
+                  {r.summary && customerEmail?.trim() && (
+                    <div className="pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs"
+                        disabled={sendingEmailId === r.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void sendSummaryEmail(r.id);
+                        }}
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        {sendingEmailId === r.id ? "送信中..." : "顧客に要約を送信"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
-            </button>
+            </div>
           ))}
         </div>
       </Card>

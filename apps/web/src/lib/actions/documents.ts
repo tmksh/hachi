@@ -87,6 +87,39 @@ export async function getDocuments(filters?: { category?: string; customer_id?: 
   return data;
 }
 
+/** 顧客に紐づくドキュメントを横断取得（CRM直接 + 全工事タブ分） */
+export async function getCustomerDocumentsAll(customerId: string) {
+  const supabase = await createClient();
+
+  const { data: constructions } = await supabase
+    .from("constructions")
+    .select("id")
+    .eq("customer_id", customerId);
+
+  const constructionIds = (constructions ?? []).map((c) => c.id);
+
+  const select =
+    "*, uploader:profiles!documents_uploaded_by_fkey(id, display_name), customer:customers(id, name), construction:constructions(id, title)";
+
+  let query = supabase
+    .from("documents")
+    .select(select)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (constructionIds.length > 0) {
+    query = query.or(
+      `customer_id.eq.${customerId},construction_id.in.(${constructionIds.join(",")})`,
+    );
+  } else {
+    query = query.eq("customer_id", customerId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
 export async function createDocument(input: {
   name: string;
   category?: Document["category"];
@@ -129,4 +162,53 @@ export async function deleteDocument(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("documents").update({ deleted_at: new Date().toISOString() }).eq("id", id);
   if (error) throw error;
+}
+
+const STORAGE_BUCKET = "documents";
+
+/** 確定した契約書 HTML をストレージ + documents テーブルへ保存 */
+export async function archiveContractDocumentHtml(input: {
+  html: string;
+  name: string;
+  customer_id: string;
+  construction_id?: string;
+  contract_id?: string;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const safeName = input.name.replace(/[^\w\u3000-\u9fff\-（）()]/g, "_").slice(0, 80);
+  const path = `customers/${input.customer_id}/contracts/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}.html`;
+  const bytes = Buffer.from(input.html, "utf-8");
+
+  const { error: storageError } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(path, bytes, { contentType: "text/html; charset=utf-8", upsert: false });
+  if (storageError) throw storageError;
+
+  const description = input.contract_id ? `source:contract:${input.contract_id}` : undefined;
+  const fileName = `${input.name}.html`;
+
+  const { data, error } = await supabase
+    .from("documents")
+    .insert({
+      company_id: profile.company_id,
+      name: input.name,
+      category: "other",
+      description,
+      storage_path: path,
+      file_name: fileName,
+      mime_type: "text/html",
+      size: bytes.length,
+      customer_id: input.customer_id,
+      construction_id: input.construction_id ?? null,
+      uploaded_by: user.id,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Document;
 }

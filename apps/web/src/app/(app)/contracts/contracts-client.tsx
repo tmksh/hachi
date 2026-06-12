@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { Search, Plus, FileSignature, TrendingUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -109,12 +110,19 @@ export function ContractsClient({ initialRows }: ContractsClientProps) {
         </div>
         <TabsContent value={tab} className="mt-4">
           <Card variant="inset"><div className="overflow-x-auto">
-            <Table><TableHeader><TableRow><TableHead>契約番号</TableHead><TableHead>顧客名</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>契約日</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+            <Table><TableHeader><TableRow><TableHead>顧客名</TableHead><TableHead>契約番号</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>契約日</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
             <TableBody>
               {filtered.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(c => (
                 <TableRow key={c.id} className="cursor-pointer glass-row group" onClick={() => router.push(`/contracts/${c.id}`)}>
+                  <TableCell>
+                    {c.customer ? (
+                      <div className="flex items-center gap-2.5">
+                        <CustomerAvatar seed={c.customer.id} name={c.customer.name} />
+                        <span className="font-medium">{c.customer.name}</span>
+                      </div>
+                    ) : "-"}
+                  </TableCell>
                   <TableCell><Link href={`/contracts/${c.id}`} className="font-medium text-primary hover:underline">{c.contract_no}</Link></TableCell>
-                  <TableCell>{c.customer?.name ?? "-"}</TableCell>
                   <TableCell className="text-sm">{c.title}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(c.amount ?? 0)}</TableCell>
                   <TableCell className="text-sm">{c.contract_date ?? "-"}</TableCell>

@@ -18,7 +18,7 @@ export async function getContract(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("contracts")
-    .select("*, customer:customers(id, name, company_name, email), estimate:estimates(id, estimate_no, title, total)")
+    .select("*, customer:customers(id, name, company_name, email, address), estimate:estimates(id, estimate_no, title, total)")
     .eq("id", id)
     .single();
   if (error) throw error;

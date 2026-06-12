@@ -26,13 +26,23 @@ import { Search, Trash2, FileText, Upload, Download, LayoutGrid, List } from "lu
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  getDocuments, createDocument, deleteDocument,
+  getCustomerDocumentsAll, createDocument, deleteDocument,
   getDocumentCategories, type DocCategory,
 } from "@/lib/actions/documents";
 import { createClient } from "@/lib/supabase/client";
 
-type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
+type Doc = Awaited<ReturnType<typeof getCustomerDocumentsAll>>[number] & {
+  construction?: { id: string; title: string } | null;
+};
 const STORAGE_BUCKET = "documents";
+
+export const CUSTOMER_DOCUMENTS_DESCRIPTION =
+  "CRM・契約・工事からアップロードされた顧客関連ドキュメントを横断表示します。";
+
+function contractSourceId(description: string | null | undefined) {
+  const m = description?.match(/^source:contract:([a-f0-9-]+)$/);
+  return m?.[1] ?? null;
+}
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes}B`;
@@ -40,11 +50,26 @@ function formatSize(bytes: number) {
   return `${(bytes / 1048576).toFixed(1)}MB`;
 }
 
-interface Props {
-  customerId: string;
+function docSourceLabel(
+  d: Doc,
+  context?: { constructionId?: string; contractId?: string },
+) {
+  if (context?.constructionId && d.construction_id === context.constructionId) return "この工事";
+  const taggedContractId = contractSourceId(d.description);
+  if (context?.contractId && taggedContractId === context.contractId) return "この契約";
+  if (taggedContractId) return "契約";
+  if (d.construction_id && d.construction?.title) return d.construction.title;
+  return "顧客共通";
 }
 
-export function CustomerFilesTab({ customerId }: Props) {
+interface Props {
+  customerId: string;
+  constructionId?: string;
+  contractId?: string;
+  description?: string;
+}
+
+export function CustomerFilesTab({ customerId, constructionId, contractId, description }: Props) {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -62,7 +87,7 @@ export function CustomerFilesTab({ customerId }: Props) {
 
   const load = () => {
     setLoading(true);
-    getDocuments({ customer_id: customerId })
+    getCustomerDocumentsAll(customerId)
       .then(setDocs)
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -105,11 +130,13 @@ export function CustomerFilesTab({ customerId }: Props) {
       await createDocument({
         name: uploadName.trim(),
         category: (uploadCategory || undefined) as Doc["category"],
+        description: contractId ? `source:contract:${contractId}` : undefined,
         storage_path: path,
         file_name: uploadFile.name,
         mime_type: uploadFile.type,
         size: uploadFile.size,
         customer_id: customerId,
+        construction_id: constructionId,
       });
 
       toast.success("アップロードしました");
@@ -145,6 +172,9 @@ export function CustomerFilesTab({ customerId }: Props) {
 
   return (
     <div className="space-y-4">
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
       <div className="flex items-center gap-3 justify-between">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -199,6 +229,7 @@ export function CustomerFilesTab({ customerId }: Props) {
                     {d.category && (
                       <Badge variant="outline" className="text-xs">{catLabel(d.category)}</Badge>
                     )}
+                    <Badge variant="secondary" className="text-[10px]">{docSourceLabel(d, { constructionId, contractId })}</Badge>
                     <div className="flex gap-1 pt-1">
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDownload(d.storage_path, d.file_name)}>
                         <Download className="h-3.5 w-3.5" />
@@ -219,6 +250,7 @@ export function CustomerFilesTab({ customerId }: Props) {
               <TableHeader>
                 <TableRow>
                   <TableHead>文書名</TableHead>
+                  <TableHead>登録元</TableHead>
                   <TableHead>ファイル名</TableHead>
                   <TableHead>カテゴリ</TableHead>
                   <TableHead>サイズ</TableHead>
@@ -231,7 +263,7 @@ export function CustomerFilesTab({ customerId }: Props) {
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 7 }).map((__, j) => (
+                        {Array.from({ length: 8 }).map((__, j) => (
                           <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                         ))}
                       </TableRow>
@@ -239,7 +271,7 @@ export function CustomerFilesTab({ customerId }: Props) {
                   : filtered.length === 0
                   ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                           文書がありません
                         </TableCell>
                       </TableRow>
@@ -251,6 +283,11 @@ export function CustomerFilesTab({ customerId }: Props) {
                             <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                             {d.name}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px] font-normal">
+                            {docSourceLabel(d, { constructionId, contractId })}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{d.file_name}</TableCell>
                         <TableCell>

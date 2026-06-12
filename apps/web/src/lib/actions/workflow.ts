@@ -114,7 +114,7 @@ async function syncWorkflowPayloadSideEffects(
 
   const payload = request.payload as Record<string, unknown>;
   const estimateId = payload.estimate_id as string | undefined;
-  if (!estimateId) return;
+  const contractId = payload.contract_id as string | undefined;
 
   const statusMap = {
     approved: "approved",
@@ -122,10 +122,24 @@ async function syncWorkflowPayloadSideEffects(
     returned: "returned",
   } as const;
 
-  await supabase.from("estimates").update({
-    approval_status: statusMap[outcome],
-    updated_at: new Date().toISOString(),
-  }).eq("id", estimateId);
+  if (estimateId) {
+    await supabase.from("estimates").update({
+      approval_status: statusMap[outcome],
+      updated_at: new Date().toISOString(),
+    }).eq("id", estimateId);
+  }
+
+  if (contractId) {
+    if (outcome === "approved") {
+      await supabase.from("contracts").update({
+        status: "contracted",
+        updated_at: new Date().toISOString(),
+      }).eq("id", contractId);
+
+      const { archiveContractDocumentFromRecord } = await import("@/lib/actions/contract-document-archive");
+      void archiveContractDocumentFromRecord(contractId).catch(() => {});
+    }
+  }
 }
 
 export async function approveWorkflowStep(stepId: string, comment?: string) {

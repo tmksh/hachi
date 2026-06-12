@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getResend, FROM_EMAIL, buildInviteEmailHtml } from "@/lib/resend";
+import { getResend, INVITE_FROM_EMAIL, buildInviteEmailHtml } from "@/lib/resend";
 import type { Profile } from "@/lib/database.types";
 import type { AssignableRole } from "@/lib/constants";
 
@@ -152,7 +152,7 @@ export async function inviteTeamMember(input: {
     const inviterName = actorProfile?.display_name ?? "管理者";
 
     const { error: mailError } = await getResend().emails.send({
-      from: FROM_EMAIL,
+      from: INVITE_FROM_EMAIL,
       to: input.email.trim(),
       subject: `【${companyName}】システムへのご招待`,
       html: buildInviteEmailHtml({
@@ -303,7 +303,7 @@ export async function resendTeamInvite(userId: string): Promise<void> {
   const inviteeName = (target.display_name as string | null) ?? target.email;
 
   const { error: mailError } = await getResend().emails.send({
-    from: FROM_EMAIL,
+    from: INVITE_FROM_EMAIL,
     to: target.email,
     subject: `【${companyName}】招待メール（再送）`,
     html: buildInviteEmailHtml({

@@ -23,7 +23,7 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
   ArrowLeft, MapPin, CalendarRange,
-  Wallet, User2, FileText,
+  Wallet, User2, FileText, Users,
   PackageCheck, ExternalLink,
   Plus, Trash2, Loader2, Wand2,
   CalendarDays, ScrollText, PencilLine, BookOpen, FolderOpen,
@@ -43,7 +43,9 @@ import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
 import { ContractTab } from "@/components/constructions/contract-tab";
 import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
-import { ConstructionDocumentsTab } from "@/components/constructions/construction-documents-tab";
+import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
+import { CustomerFilesTab, CUSTOMER_DOCUMENTS_DESCRIPTION } from "@/components/crm/customer-files-tab";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
 import { EstimateListView, type EstimateListItem } from "@/components/estimate/estimate-list-view";
 import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
@@ -741,7 +743,15 @@ function ConstructionDetailPageContent({
               {customer && (
                 <>
                   <span aria-hidden className="text-border/80">·</span>
-                  <span>{customer.name}</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CustomerAvatar seed={customer.id} name={customer.name} className="h-6 w-6 text-[10px]" />
+                    <Link
+                      href={`/crm/${customer.id}`}
+                      className="hover:text-foreground hover:underline transition-colors"
+                    >
+                      {customer.name}
+                    </Link>
+                  </span>
                 </>
               )}
             </p>
@@ -786,6 +796,7 @@ function ConstructionDetailPageContent({
       {/* ── タブ ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
+          <TabsTrigger value="customer"  className="text-xs gap-1.5"><Users       className="h-3.5 w-3.5" />顧客情報</TabsTrigger>
           <TabsTrigger value="schedule"  className="text-xs gap-1.5"><CalendarDays className="h-3.5 w-3.5" />工程表</TabsTrigger>
           <TabsTrigger value="estimate"  className="text-xs gap-1.5"><FileText     className="h-3.5 w-3.5" />見積もり</TabsTrigger>
           <TabsTrigger value="contract"  className="text-xs gap-1.5"><ScrollText   className="h-3.5 w-3.5" />契約書</TabsTrigger>
@@ -794,6 +805,18 @@ function ConstructionDetailPageContent({
           <TabsTrigger value="orders"    className="text-xs gap-1.5"><PackageCheck className="h-3.5 w-3.5" />発注書・請書</TabsTrigger>
           <TabsTrigger value="documents" className="text-xs gap-1.5"><FolderOpen   className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="customer" className="mt-4">
+          {customer?.id ? (
+            <CustomerInfoPanel
+              customerId={customer.id}
+              context="construction"
+              onSaved={reload}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground py-6 text-center">顧客が紐づいていません</p>
+          )}
+        </TabsContent>
 
         <TabsContent value="schedule" className="mt-4">
           <GanttTab
@@ -815,6 +838,7 @@ function ConstructionDetailPageContent({
         <TabsContent value="contract" className="mt-4">
           <ContractTab
             constructionId={id as string}
+            customerId={customer?.id}
             initialDocs={docs}
             ctx={{
               construction: {
@@ -873,7 +897,15 @@ function ConstructionDetailPageContent({
         </TabsContent>
 
         <TabsContent value="documents" className="mt-4">
-          <ConstructionDocumentsTab constructionId={id as string} />
+          {customer?.id ? (
+            <CustomerFilesTab
+              customerId={customer.id}
+              constructionId={id as string}
+              description={CUSTOMER_DOCUMENTS_DESCRIPTION}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground py-6 text-center">顧客が紐づいていません</p>
+          )}
         </TabsContent>
       </Tabs>
     </div>

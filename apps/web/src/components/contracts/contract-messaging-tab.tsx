@@ -20,6 +20,7 @@ import {
   type ContractMessagingContext,
 } from "@/lib/actions/contract-features";
 import { MessagingLinkSetup } from "@/components/contracts/messaging-link-setup";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -195,11 +196,11 @@ export function ContractMessagingTab({
               <div className="px-3 py-3 border-b border-border/40 bg-white dark:bg-[#1F2937]">
                 {linkContext?.customer ? (
                   <div className="flex items-center gap-2">
-                    <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-bold text-primary">
-                        {linkContext.customer.name.charAt(0)}
-                      </span>
-                    </div>
+                    <CustomerAvatar
+                      seed={linkContext.customer.id}
+                      name={linkContext.customer.name}
+                      className="h-6 w-6 text-[10px]"
+                    />
                     <p className="text-xs font-semibold truncate">{linkContext.customer.name}</p>
                   </div>
                 ) : (

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCloudSignConfig, sendToCloudSign } from "@/lib/integrations/cloudsign";
 import { createWorkflowRequest } from "@/lib/actions/workflow";
 import { dispatchWebhook } from "@/lib/webhooks";
+import { findTemplate } from "@/lib/contract-templates";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -111,11 +112,33 @@ export type ContractMessagingContext = {
     lineWorksConnected: boolean;
   };
   readiness: {
-    line: "linked" | "needs_customer_line_id";
+    line: "linked" | "needs_customer_line_id" | "needs_company_line";
     slack: "linked" | "needs_customer_channel" | "needs_company_slack";
     email: "linked" | "needs_customer_email" | "needs_mail_connect";
   };
 };
+
+async function getCompanyEmailConnection(
+  supabase: Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>,
+  companyId: string,
+) {
+  const { data: members } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("company_id", companyId);
+  const memberIds = (members ?? []).map((m) => m.id);
+  if (memberIds.length === 0) return { connected: false, address: null as string | null };
+
+  const { data: accounts } = await supabase
+    .from("email_accounts")
+    .select("email_address")
+    .in("user_id", memberIds)
+    .limit(1);
+  return {
+    connected: (accounts ?? []).length > 0,
+    address: accounts?.[0]?.email_address ?? null,
+  };
+}
 
 export async function getContractMessagingContext(contractId: string): Promise<ContractMessagingContext> {
   const { supabase, company_id, user_id } = await getCompanyContext();
@@ -150,6 +173,8 @@ export async function getContractMessagingContext(contractId: string): Promise<C
     .eq("user_id", user_id)
     .limit(1);
 
+  const companyEmail = await getCompanyEmailConnection(supabase, company_id);
+
   const { data: integrations } = await supabase
     .from("app_integrations")
     .select("provider, is_active")
@@ -157,29 +182,31 @@ export async function getContractMessagingContext(contractId: string): Promise<C
     .eq("is_active", true);
 
   const activeProviders = new Set((integrations ?? []).map((i) => i.provider));
-  const emailConnected = (emailAccounts ?? []).length > 0;
+  const emailConnected = companyEmail.connected;
 
   const company = {
     emailConnected,
-    emailAddress: emailAccounts?.[0]?.email_address ?? null,
+    emailAddress: companyEmail.address ?? emailAccounts?.[0]?.email_address ?? null,
     slackConnected: activeProviders.has("slack"),
     lineWorksConnected: activeProviders.has("line_works"),
   };
 
   const readiness: ContractMessagingContext["readiness"] = {
-    line: customer?.line_user_id?.trim() ? "linked" : "needs_customer_line_id",
-    slack: customer?.slack_channel_id?.trim()
-      ? "linked"
-      : company.slackConnected
-        ? "needs_customer_channel"
-        : "needs_company_slack",
-    email: customer?.email?.trim() && emailConnected
-      ? "linked"
-      : emailConnected
-        ? "needs_customer_email"
-        : customer?.email?.trim()
-          ? "needs_mail_connect"
-          : "needs_mail_connect",
+    line: !company.lineWorksConnected
+      ? "needs_company_line"
+      : customer?.line_user_id?.trim()
+        ? "linked"
+        : "needs_customer_line_id",
+    slack: !company.slackConnected
+      ? "needs_company_slack"
+      : customer?.slack_channel_id?.trim()
+        ? "linked"
+        : "needs_customer_channel",
+    email: !company.emailConnected
+      ? "needs_mail_connect"
+      : customer?.email?.trim()
+        ? "linked"
+        : "needs_customer_email",
   };
 
   return { customer, company, readiness };
@@ -562,8 +589,62 @@ export async function copyEstimateForContract(
   return newEstimate;
 }
 
+export async function getContractWorkflowRequests(contractId: string) {
+  const { supabase, company_id } = await getCompanyContext();
+  const { data, error } = await supabase
+    .from("workflow_requests")
+    .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+    .eq("company_id", company_id)
+    .contains("payload", { contract_id: contractId })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function submitContractWorkflow(contractId: string, title: string, workflowTypeKey = "contract_08") {
   const { supabase, company_id, user_id } = await getCompanyContext();
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("notes, amount, title, customer:customers(name)")
+    .eq("id", contractId)
+    .eq("company_id", company_id)
+    .single();
+  if (!contract) throw new Error("契約が見つかりません");
+
+  type ContractDraft = { template_id: string; form: Record<string, string | number> };
+  let draft: ContractDraft | null = null;
+  if (contract.notes) {
+    try {
+      const parsed = JSON.parse(contract.notes) as { contract_draft?: ContractDraft };
+      draft = parsed.contract_draft ?? null;
+    } catch {
+      // plain text notes
+    }
+  }
+
+  const form = draft?.form ?? {};
+  const template = draft?.template_id ? findTemplate(draft.template_id) : null;
+  const excl = Number(form.amount_excl_tax) || 0;
+  const taxRate = Number(form.tax_rate) || 10;
+  const computedAmount = excl > 0 ? excl + Math.floor(excl * taxRate / 100) : (contract.amount ?? null);
+  const customerName = (contract.customer as { name?: string } | null)?.name;
+
+  const payload: Record<string, unknown> = {
+    contract_id: contractId,
+    template_id: draft?.template_id ?? null,
+    contract_draft: draft,
+    契約書: template?.name ?? contract.title ?? title,
+    発注者: form.kou_name ?? customerName ?? "",
+    工事名称: form.work_name ?? contract.title ?? title,
+  };
+  if (form.start_date || form.end_date) {
+    payload.工期 = `${form.start_date ?? "—"} ～ ${form.end_date ?? "—"}`;
+  }
+  if (excl > 0) {
+    payload["契約金額（税抜）"] = `¥${excl.toLocaleString()}`;
+  }
+
   const { data: wfType } = await supabase
     .from("workflow_types")
     .select("id, approval_route")
@@ -586,7 +667,8 @@ export async function submitContractWorkflow(contractId: string, title: string, 
   const request = await createWorkflowRequest({
     type_id: type.id,
     title: `契約承認: ${title}`,
-    payload: { contract_id: contractId },
+    amount: computedAmount ?? undefined,
+    payload,
     approver_ids: approverIds,
   });
 

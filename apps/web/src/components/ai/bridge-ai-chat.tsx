@@ -88,11 +88,11 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="fixed bottom-6 right-6 z-50 size-10 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform"
+          className="fixed bottom-6 right-6 z-50 size-14 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform"
           style={{ background: TEAL_ACTIVE_GRADIENT }}
           aria-label="BRIDGE AI"
         >
-          <Sparkles className="h-4 w-4" />
+          <Sparkles className="h-6 w-6" />
         </button>
       )}
 

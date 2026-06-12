@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -10,24 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
+import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
+import { CustomerFilesTab, CUSTOMER_DOCUMENTS_DESCRIPTION } from "@/components/crm/customer-files-tab";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { ContractMessagingTab } from "@/components/contracts/contract-messaging-tab";
+import { ContractWorkflowTab } from "@/components/contracts/contract-workflow-tab";
 import {
-  getContractDocuments,
-  getContractEstimates, submitContractWorkflow, sendContractCloudSign,
+  getContractEstimates, sendContractCloudSign,
   createEmptyEstimateForContract, copyEstimateForContract,
 } from "@/lib/actions/contract-features";
 import { getEstimate } from "@/lib/actions/estimates";
-import { Calendar, FileText, Plus } from "lucide-react";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
-import type { FillContext, PdfFormTemplate } from "@/lib/pdf-form-template";
-import { PdfFormFiller } from "@/components/settings/pdf-form-filler";
-import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { Calendar, FileText, RefreshCw, Download, Loader2, RotateCcw, FolderOpen, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
@@ -36,6 +29,21 @@ import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dial
 import { StatusSelect } from "@/components/shared/status-select";
 import { Label } from "@/components/ui/label";
 import { updateContract } from "@/lib/actions/contracts";
+import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, mergeDefaults, syncFromContext, resolveCompanyContext, type FormValues, type RenderContext } from "@/lib/contract-templates";
+import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
+import { getCompany } from "@/lib/actions/profiles";
+import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
+import { buildContractPrintHtml } from "@/lib/contract-pdf";
+import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
+import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
+import type { FillContext, PdfFormTemplate } from "@/lib/pdf-form-template";
+import { PdfFormFillerPanel } from "@/components/settings/pdf-form-filler";
+import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
+import { archiveContractDocumentHtml } from "@/lib/actions/documents";
+import {
+  buildContractArchiveHtml,
+  contractArchiveDocumentName,
+} from "@/lib/contract-document-archive";
 
 export function ContractDetailTabs({
   data,
@@ -54,7 +62,7 @@ export function ContractDetailTabs({
         <TabsTrigger value="documents" className="text-xs">書類作成</TabsTrigger>
         <TabsTrigger value="workflow" className="text-xs">承認WF</TabsTrigger>
         <TabsTrigger value="esign" className="text-xs">電子契約</TabsTrigger>
-        <TabsTrigger value="files" className="text-xs">ドキュメント</TabsTrigger>
+        <TabsTrigger value="files" className="text-xs gap-1.5"><FolderOpen className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
         <TabsTrigger value="estimates" className="text-xs">見積もり</TabsTrigger>
       </TabsList>
       <TabsContent value="customer" className="mt-4">
@@ -66,9 +74,11 @@ export function ContractDetailTabs({
       <TabsContent value="documents" className="mt-4">
         <DocumentsTab contractId={contractId} data={data} onRefresh={onRefresh} />
       </TabsContent>
-      <TabsContent value="workflow" className="mt-4"><WorkflowTab contractId={contractId} title={data.title} /></TabsContent>
+      <TabsContent value="workflow" className="mt-4">
+        <ContractWorkflowTab contractId={contractId} data={data} onRefresh={onRefresh} />
+      </TabsContent>
       <TabsContent value="esign" className="mt-4"><EsignTab contractId={contractId} customerEmail={data.customer?.email} /></TabsContent>
-      <TabsContent value="files" className="mt-4"><FilesTab contractId={contractId} /></TabsContent>
+      <TabsContent value="files" className="mt-4"><FilesTab contractId={contractId} customerId={data.customer_id} /></TabsContent>
       <TabsContent value="estimates" className="mt-4">
         <EstimatesTab
           contractId={contractId}
@@ -169,9 +179,7 @@ function CustomerTab({
           <CardContent className="space-y-4">
             {data.customer && (
               <div className="flex items-center gap-3 pb-4 border-b border-border/50">
-                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-base font-medium text-primary">{data.customer.name.charAt(0)}</span>
-                </div>
+                <CustomerAvatar seed={data.customer.id} name={data.customer.name} size="sm" className="h-9 w-9" />
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{data.customer.name}</p>
                   <p className="text-xs text-muted-foreground">{data.customer.company_name ?? "個人"}</p>
@@ -272,7 +280,11 @@ function CustomerTab({
         </Card>
 
       {data.customer_id ? (
-        <CustomerEntryForm mode="edit" customerId={data.customer_id} />
+        <CustomerInfoPanel
+          customerId={data.customer_id}
+          context="contract"
+          onSaved={onRefresh}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">顧客が紐づいていません</p>
       )}
@@ -280,21 +292,56 @@ function CustomerTab({
   );
 }
 
+function parseContractDraft(notes: string | null | undefined): { template_id: string; form: FormValues } | null {
+  if (!notes) return null;
+  try {
+    const parsed = JSON.parse(notes) as { contract_draft?: { template_id: string; form: FormValues } };
+    if (parsed.contract_draft?.template_id) return parsed.contract_draft;
+  } catch {
+    // plain text notes
+  }
+  return null;
+}
+
 function DocumentsTab({
-  contractId: _contractId,
+  contractId,
   data,
+  onRefresh,
 }: {
   contractId: string;
   data: ContractDetail;
   onRefresh?: () => void;
 }) {
-  const [picker, setPicker] = useState(false);
+  const draft = parseContractDraft(data.notes);
+  const [templateId, setTemplateId] = useState(draft?.template_id ?? CONTRACT_TEMPLATES[0]?.id ?? "");
+  const tpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId);
+  const baseCtx: RenderContext = useMemo(() => ({
+    construction: {
+      title: data.title,
+      start_date: data.start_date ?? null,
+      end_date: data.end_date ?? null,
+      order_amount: data.amount ?? null,
+    },
+    customer: data.customer ? {
+      name: data.customer.name,
+      address: data.customer.address ?? null,
+    } : null,
+  }), [data]);
+  const [companyCtx, setCompanyCtx] = useState<RenderContext["company"]>(null);
+  const renderCtx: RenderContext = useMemo(
+    () => ({ ...baseCtx, company: companyCtx }),
+    [baseCtx, companyCtx],
+  );
+  const [form, setForm] = useState<FormValues>(() => draft?.form ?? (tpl ? buildDefaults(tpl, baseCtx) : {}));
+  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [formTemplates, setFormTemplates] = useState<PdfFormTemplate[]>([]);
+  const [pdfFormPicker, setPdfFormPicker] = useState(false);
   const [fillerTpl, setFillerTpl] = useState<PdfFormTemplate | null>(null);
-
-  useEffect(() => {
-    getPdfFormTemplates().then(setFormTemplates).catch(() => {});
-  }, []);
+  const [companyReady, setCompanyReady] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const fillCtx: FillContext = useMemo(() => ({
     constructionTitle: data.title ?? null,
@@ -302,96 +349,186 @@ function DocumentsTab({
     startDate: data.start_date ?? null,
     endDate: data.end_date ?? null,
     customerName: data.customer?.name ?? null,
-    customerAddress: null,
+    customerAddress: data.customer?.address ?? null,
   }), [data]);
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">契約書</span>
-          <span className="text-muted-foreground">1</span>
-        </div>
-        <Button size="sm" className="gap-1.5 text-xs" onClick={() => setPicker(true)}>
-          <Plus className="h-3.5 w-3.5" />契約書を作成する
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <FileText className="h-4 w-4 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-sm truncate">{data.title}</p>
-            <StatusBadge status={data.status} className="text-[10px] px-2 py-0.5 shrink-0" />
-          </div>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">
-            ¥{(data.amount ?? 0).toLocaleString()}
-            {data.contract_date ? ` ・ 契約日 ${data.contract_date}` : ""}
-          </p>
-        </div>
-      </div>
-
-      <ContractPdfTemplatePicker
-        open={picker}
-        onOpenChange={setPicker}
-        onSelectForm={(tpl) => setFillerTpl(tpl)}
-        formTemplates={formTemplates}
-      />
-
-      <PdfFormFiller
-        open={!!fillerTpl}
-        onOpenChange={(o) => !o && setFillerTpl(null)}
-        template={fillerTpl}
-        ctx={fillCtx}
-      />
-    </div>
-  );
-}
-
-function WorkflowTab({ contractId, title }: { contractId: string; title: string }) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const submit = async () => {
-    setSubmitting(true);
+  const persistDraft = useCallback(async (nextForm: FormValues, nextTemplateId = templateId) => {
+    setSaving(true);
     try {
-      const req = await submitContractWorkflow(contractId, title);
-      toast.success(`申請しました（${req.id.slice(0, 8)}…）`);
-      setConfirmOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "申請に失敗");
+      let notesPayload: Record<string, unknown> = {};
+      try {
+        notesPayload = data.notes ? JSON.parse(data.notes) as Record<string, unknown> : {};
+      } catch {
+        notesPayload = { legacy_notes: data.notes };
+      }
+      notesPayload.contract_draft = { template_id: nextTemplateId, form: nextForm };
+      await updateContract(contractId, { notes: JSON.stringify(notesPayload) });
+      setSavedAt(new Date().toLocaleTimeString().slice(0, 5));
+      onRefresh?.();
+    } catch {
+      toast.error("保存に失敗しました");
     } finally {
-      setSubmitting(false);
+      setSaving(false);
+    }
+  }, [contractId, data.notes, onRefresh, templateId]);
+
+  useEffect(() => {
+    getPdfFormTemplates().then(setFormTemplates).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getCompany().then((c) => {
+      const templates = resolvePdfTemplates((c?.settings as Record<string, unknown> | undefined)?.pdf_templates);
+      const pdf = templates.contract ?? templates.estimate ?? null;
+      setPdfTemplate(pdf);
+      const company = resolveCompanyContext(c, pdf);
+      setCompanyCtx(company.name || company.address ? company : null);
+      setCompanyReady(true);
+    }).catch(() => setCompanyReady(true));
+  }, []);
+
+  // 自社情報ロード後：空欄を補完してドラフト保存
+  useEffect(() => {
+    if (!companyReady || !tpl) return;
+    setForm((prev) => {
+      const next = mergeDefaults(tpl, renderCtx, prev);
+      const changed = JSON.stringify(next) !== JSON.stringify(prev);
+      if (changed) void persistDraft(next);
+      return next;
+    });
+  }, [companyReady, companyCtx, tpl, renderCtx, persistDraft]);
+
+  useEffect(() => {
+    if (!tpl) return;
+    setForm((prev) => mergeDefaults(tpl, renderCtx, prev));
+  }, [templateId, tpl, renderCtx]);
+
+  const setField = (name: string, value: string | number) => {
+    const next = { ...form, [name]: value };
+    setForm(next);
+    void persistDraft(next);
+  };
+
+  const handleSyncSchedule = () => {
+    const next = syncFromContext(form, renderCtx);
+    if (JSON.stringify(next) === JSON.stringify(form)) {
+      toast.info("反映できる新しい情報はありません");
+      return;
+    }
+    setForm(next);
+    void persistDraft(next);
+    toast.success("顧客・工事・工程表の情報を反映しました");
+  };
+
+  const handlePdfPrint = () => {
+    if (!tpl) return;
+    const pdf = pdfTemplate ?? resolvePdfTemplates(null).contract;
+    const html = buildContractPrintHtml(renderPreview(tpl, form, renderCtx), pdf, tpl.name);
+    const w = window.open("", "_blank", "width=900,height=1200");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
+  };
+
+  const handleConfirm = async () => {
+    if (!tpl || !data.customer_id) {
+      toast.error("顧客が紐づいていないため確定できません");
+      return;
+    }
+    setConfirming(true);
+    try {
+      await persistDraft(form);
+      const pdf = pdfTemplate ?? resolvePdfTemplates(null).contract;
+      const html = buildContractArchiveHtml(tpl, form, renderCtx, pdf);
+      await archiveContractDocumentHtml({
+        html,
+        name: contractArchiveDocumentName(tpl.name),
+        customer_id: data.customer_id,
+        contract_id: contractId,
+      });
+      toast.success("契約書を確定し、ドキュメント一覧に保存しました");
+      onRefresh?.();
+    } catch {
+      toast.error("確定・保存に失敗しました");
+    } finally {
+      setConfirming(false);
     }
   };
 
+  if (!tpl) {
+    return (
+      <Card><CardContent className="p-6 text-sm text-muted-foreground">テンプレートが見つかりません。</CardContent></Card>
+    );
+  }
+
   return (
-    <>
-      <Card><CardContent className="p-4 space-y-3">
-        <p className="text-sm">最新契約書の内容でワークフロー申請を行います</p>
-        <Button size="sm" onClick={() => setConfirmOpen(true)}>承認ワークフローに申請</Button>
-        <Link href="/workflow" className="text-xs text-primary hover:underline block">ワークフロー履歴を見る →</Link>
-      </CardContent></Card>
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>社内承認を取りますか？</AlertDialogTitle>
-            <AlertDialogDescription>
-              契約書の内容を確定し、社内承認ワークフロー（営業部長 / 工事課長 / 取締役 等）に申請します。よろしいですか？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>キャンセル</AlertDialogCancel>
-            <AlertDialogAction disabled={submitting} onClick={(e) => { e.preventDefault(); void submit(); }}>
-              {submitting ? "申請中..." : "申請する"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <div className="-mt-2 space-y-3">
+      <div className="sticky top-0 z-20 bg-white border border-border rounded-xl px-4 py-2.5 flex items-center gap-2">
+        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+        <h2 className="text-sm font-semibold truncate">{tpl.name}</h2>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">下書き</span>
+        {saving
+          ? <span className="text-[10px] text-muted-foreground shrink-0 inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />保存中…</span>
+          : savedAt && <span className="text-[10px] text-muted-foreground shrink-0">保存済み {savedAt}</span>}
+
+        <div className="ml-auto flex items-center gap-1 shrink-0 flex-wrap justify-end">
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="テンプレート変更" onClick={() => setPickerOpen(true)}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="工程表と同期" onClick={handleSyncSchedule}>
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          {formTemplates.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5" title="アップロードPDF" onClick={() => setPdfFormPicker(true)}>
+              PDFフォーム
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5 gap-1.5" title="PDF出力" onClick={handlePdfPrint}>
+            <Download className="h-3.5 w-3.5" />PDF出力
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 text-xs px-3 gap-1.5 bg-green-600 hover:bg-green-700"
+            onClick={handleConfirm}
+            disabled={confirming || !data.customer_id}
+          >
+            {confirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            確定する
+          </Button>
+        </div>
+      </div>
+
+      <ContractDocumentEditorLayout
+        templateId={templateId}
+        form={form}
+        renderCtx={renderCtx}
+        pdfTemplate={pdfTemplate}
+        onFieldChange={setField}
+        autoSaveNote="入力内容は右のプレビューにリアルタイム反映されます（自動保存）"
+      />
+
+      {fillerTpl && (
+        <PdfFormFillerPanel
+          template={fillerTpl}
+          ctx={fillCtx}
+          onClose={() => setFillerTpl(null)}
+        />
+      )}
+
+      <TemplatePicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={(t) => { setTemplateId(t.id); setPickerOpen(false); void persistDraft(form, t.id); }}
+      />
+
+      <ContractPdfTemplatePicker
+        open={pdfFormPicker}
+        onOpenChange={setPdfFormPicker}
+        onSelectForm={(t) => { setPdfFormPicker(false); setFillerTpl(t); }}
+        formTemplates={formTemplates}
+      />
+    </div>
   );
 }
 
@@ -414,18 +551,16 @@ function EsignTab({ contractId, customerEmail }: { contractId: string; customerE
   );
 }
 
-function FilesTab({ contractId }: { contractId: string }) {
-  const [docs, setDocs] = useState<Awaited<ReturnType<typeof getContractDocuments>>>([]);
-  useEffect(() => { getContractDocuments(contractId).then(setDocs).catch(() => {}); }, [contractId]);
+function FilesTab({ contractId, customerId }: { contractId: string; customerId?: string | null }) {
+  if (!customerId) {
+    return <p className="text-sm text-muted-foreground py-6 text-center">顧客が紐づいていません</p>;
+  }
   return (
-    <div className="space-y-2">
-      {docs.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">ドキュメントなし</p> : docs.map((d) => (
-        <div key={d.id} className="flex items-center justify-between border rounded-lg px-3 py-2 text-sm">
-          <span>{d.name}</span>
-          <span className="text-xs text-muted-foreground">{format(new Date(d.created_at), "yyyy/MM/dd", { locale: ja })}</span>
-        </div>
-      ))}
-    </div>
+    <CustomerFilesTab
+      customerId={customerId}
+      contractId={contractId}
+      description={CUSTOMER_DOCUMENTS_DESCRIPTION}
+    />
   );
 }
 

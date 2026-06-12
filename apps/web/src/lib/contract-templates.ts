@@ -38,6 +38,11 @@ export type RenderContext = {
     name: string;
     address: string | null;
   } | null;
+  /** 乙（請負者＝自社）— 設定の発行元情報または会社名 */
+  company?: {
+    name: string;
+    address: string;
+  } | null;
 };
 
 export const CONTRACT_TEMPLATES: ContractTemplate[] = [
@@ -132,10 +137,10 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
         v[f.name] = ctx.construction?.end_date ?? "";
         break;
       case "otsu_name":
-        v[f.name] = "";
+        v[f.name] = ctx.company?.name ?? "";
         break;
       case "otsu_address":
-        v[f.name] = "";
+        v[f.name] = ctx.company?.address ?? "";
         break;
       case "work_name":
       case "original_work":
@@ -164,6 +169,50 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
     }
   }
   return v;
+}
+
+/** 設定のPDF発行元情報から自社（乙）情報を解決 */
+export function resolveCompanyContext(
+  company: { name: string } | null | undefined,
+  pdf: { issuerName?: string; issuerAddress?: string } | null | undefined,
+): { name: string; address: string } {
+  return {
+    name: pdf?.issuerName?.trim() || company?.name || "",
+    address: pdf?.issuerAddress?.trim() || "",
+  };
+}
+
+/** 顧客・工事・工程表のマスタデータをフォームに反映 */
+export function syncFromContext(form: FormValues, ctx: RenderContext): FormValues {
+  const next = { ...form };
+  if (ctx.customer?.name) next.kou_name = ctx.customer.name;
+  if (ctx.customer?.address) {
+    next.kou_address = ctx.customer.address;
+    if (!next.work_location) next.work_location = ctx.customer.address;
+  }
+  if (ctx.construction?.title) next.work_name = ctx.construction.title;
+  if (ctx.construction?.order_amount != null) next.amount_excl_tax = ctx.construction.order_amount;
+  if (ctx.construction?.start_date) next.start_date = ctx.construction.start_date;
+  if (ctx.construction?.end_date) next.end_date = ctx.construction.end_date;
+  if (ctx.company?.name && !next.otsu_name) next.otsu_name = ctx.company.name;
+  if (ctx.company?.address && !next.otsu_address) next.otsu_address = ctx.company.address;
+  return next;
+}
+
+/** 空欄のみ buildDefaults で補完（既存入力は保持） */
+export function mergeDefaults(
+  template: ContractTemplate,
+  ctx: RenderContext,
+  current: FormValues,
+): FormValues {
+  const defaults = buildDefaults(template, ctx);
+  const merged: FormValues = { ...defaults };
+  for (const f of template.fields) {
+    const cur = current[f.name];
+    const hasValue = cur !== undefined && cur !== "" && cur !== 0;
+    if (hasValue) merged[f.name] = cur;
+  }
+  return merged;
 }
 
 /* ───────────────────── プレビュー生成（プレーンHTML文字列） ───────────────────── */

@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Printer, Sparkles, PenLine } from "lucide-react";
+import { Loader2, Printer, Sparkles, PenLine, X } from "lucide-react";
 import { toast } from "sonner";
 import { loadPdfDocument, PdfPageCanvas } from "@/components/settings/pdf-page-canvas";
 import { getPdfFormTemplateUrl } from "@/lib/actions/pdf-form-templates";
@@ -24,59 +24,65 @@ import {
   type PdfFormField,
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
+import { cn } from "@/lib/utils";
 
-type Props = {
+type PanelProps = {
+  template: PdfFormTemplate;
+  ctx: FillContext;
+  onClose?: () => void;
+  className?: string;
+};
+
+type DialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: PdfFormTemplate | null;
   ctx: FillContext;
 };
 
-/** 配置済みテンプレートにデータを差し込み、プレビュー・印刷出力する */
-export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
+/** タブ内インライン表示：左に入力項目、右に PDF プレビュー */
+export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
-  // 全項目の現在値（自動入力で初期化し、ユーザーが上書き可能）
   const [values, setValues] = useState<Record<string, string>>({});
   const renderW = 560;
 
-  // 値の解決（ユーザー編集 > 自動入力）
-  const valueFor = (f: PdfFormField): string => {
-    return values[f.id] ?? resolveFieldValue(f, ctx);
-  };
+  const valueFor = (f: PdfFormField): string => values[f.id] ?? resolveFieldValue(f, ctx);
 
   useEffect(() => {
-    if (!open || !template) return;
     setLoading(true);
     setDoc(null);
+    let cancelled = false;
     (async () => {
       try {
         const url = await getPdfFormTemplateUrl(template.storagePath);
         if (!url) throw new Error("PDFを取得できませんでした");
         const d = await loadPdfDocument(url);
+        if (cancelled) return;
         setDoc(d);
-        // 全項目を自動入力値で初期化（手入力項目は空のまま）
         const init: Record<string, string> = {};
         template.fields.forEach((f) => {
           init[f.id] = resolveFieldValue(f, ctx);
         });
         setValues(init);
       } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "読み込みに失敗しました");
+        if (!cancelled) {
+          toast.error(e instanceof Error ? e.message : "読み込みに失敗しました");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [open, template, ctx]);
+    return () => { cancelled = true; };
+  }, [template, ctx]);
 
-  // 自動入力項目（データソースあり）と手入力項目に分ける。fixed は編集不要なので除外
   const autoFields = useMemo(
-    () => (template?.fields ?? []).filter((f) => f.binding !== "manual" && f.type !== "fixed"),
+    () => template.fields.filter((f) => f.binding !== "manual" && f.type !== "fixed"),
     [template],
   );
   const manualFields = useMemo(
-    () => (template?.fields ?? []).filter((f) => f.binding === "manual" && f.type !== "fixed"),
+    () => template.fields.filter((f) => f.binding === "manual" && f.type !== "fixed"),
     [template],
   );
 
@@ -112,7 +118,7 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
   };
 
   const handlePrint = async () => {
-    if (!doc || !template) return;
+    if (!doc) return;
     setPrinting(true);
     try {
       const pagesHtml: string[] = [];
@@ -145,9 +151,7 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
             const justify = f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start";
             const content =
               f.type === "checkbox"
-                ? v
-                  ? "✓"
-                  : ""
+                ? v ? "✓" : ""
                 : escapeHtml(v).replace(/\n/g, "<br/>");
             return `<div style="position:absolute;left:${left}%;top:${top}%;width:${width}%;height:${height}%;display:flex;align-items:center;justify-content:${justify};color:${f.color};font-size:${f.fontSize}px;line-height:1.2;white-space:pre-wrap;overflow:hidden;">${content}</div>`;
           })
@@ -186,121 +190,143 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: Props) {
     }
   };
 
-  if (!template) return null;
   const aspect = template.pageSizes[0] ? template.pageSizes[0].height / template.pageSizes[0].width : 1.414;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[960px] max-w-[95vw] max-h-[90vh] overflow-hidden p-0 flex flex-col">
-        <DialogHeader className="border-b px-5 py-3">
-          <DialogTitle className="text-base">{template.name}</DialogTitle>
-        </DialogHeader>
+    <div className={cn("rounded-xl border border-border bg-card overflow-hidden flex flex-col", className)}>
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3 bg-muted/20">
+        <p className="text-sm font-semibold truncate">{template.name}</p>
+        {onClose && (
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0" onClick={onClose}>
+            <X className="h-4 w-4 mr-1" />
+            閉じる
+          </Button>
+        )}
+      </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* 左：入力項目（自動入力＋手入力） */}
-          <div className="w-80 shrink-0 overflow-y-auto border-r bg-white p-4 space-y-4">
-            <div className="text-xs font-semibold text-muted-foreground">入力項目</div>
+      <div className="flex flex-col lg:flex-row min-h-[min(72vh,620px)] max-h-[min(80vh,720px)]">
+        {/* 左：入力項目 */}
+        <div className="w-full lg:w-80 shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r bg-background p-4 space-y-4">
+          <div className="text-xs font-semibold text-muted-foreground">入力項目</div>
 
-            {autoFields.length === 0 && manualFields.length === 0 && (
-              <p className="text-xs text-muted-foreground">入力する項目はありません。</p>
-            )}
+          {autoFields.length === 0 && manualFields.length === 0 && (
+            <p className="text-xs text-muted-foreground">入力する項目はありません。</p>
+          )}
 
-            {/* 自動入力項目 */}
-            {autoFields.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
-                  <Sparkles className="h-3 w-3" />自動入力
+          {autoFields.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+                <Sparkles className="h-3 w-3" />自動入力
+              </div>
+              {autoFields.map((f) => (
+                <div key={f.id} className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1.5">
+                    {f.label}
+                    <span className="rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-normal text-emerald-600">
+                      {BINDING_LABELS[f.binding]}
+                    </span>
+                  </Label>
+                  {renderFieldInput(f)}
                 </div>
-                {autoFields.map((f) => (
-                  <div key={f.id} className="space-y-1">
-                    <Label className="text-xs flex items-center gap-1.5">
-                      {f.label}
-                      <span className="rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-normal text-emerald-600">
-                        {BINDING_LABELS[f.binding]}
-                      </span>
-                    </Label>
-                    {renderFieldInput(f)}
-                  </div>
-                ))}
-              </div>
-            )}
+              ))}
+            </div>
+          )}
 
-            {/* 手入力項目 */}
-            {manualFields.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  <PenLine className="h-3 w-3" />手入力
+          {manualFields.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <PenLine className="h-3 w-3" />手入力
+              </div>
+              {manualFields.map((f) => (
+                <div key={f.id} className="space-y-1">
+                  <Label className="text-xs">{f.label}</Label>
+                  {renderFieldInput(f)}
                 </div>
-                {manualFields.map((f) => (
-                  <div key={f.id} className="space-y-1">
-                    <Label className="text-xs">{f.label}</Label>
-                    {renderFieldInput(f)}
-                  </div>
-                ))}
-              </div>
-            )}
+              ))}
+            </div>
+          )}
 
-            <Button onClick={handlePrint} disabled={printing || loading || !doc} className="w-full mt-2">
-              {printing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Printer className="h-4 w-4 mr-1" />}
-              印刷 / PDF出力
-            </Button>
-          </div>
-
-          {/* 右：プレビュー */}
-          <div className="flex-1 overflow-auto bg-muted/30 p-5">
-            {loading || !doc ? (
-              <div className="flex h-40 items-center justify-center text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-              </div>
-            ) : (
-              <div className="mx-auto space-y-4" style={{ maxWidth: renderW }}>
-                {Array.from({ length: template.pageCount }).map((_, p) => {
-                  const h = renderW * (template.pageSizes[p]
-                    ? template.pageSizes[p].height / template.pageSizes[p].width
-                    : aspect);
-                  return (
-                    <div
-                      key={p}
-                      className="relative mx-auto bg-white shadow"
-                      style={{ width: renderW, height: h }}
-                    >
-                      <PdfPageCanvas
-                        doc={doc}
-                        pageNumber={p + 1}
-                        width={renderW}
-                        className="absolute inset-0"
-                      />
-                      {template.fields
-                        .filter((f) => f.page === p)
-                        .map((f) => {
-                          const v = valueFor(f);
-                          const justify =
-                            f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start";
-                          return (
-                            <div
-                              key={f.id}
-                              className="absolute flex items-center overflow-hidden whitespace-pre-wrap leading-tight"
-                              style={{
-                                left: `${f.xPct * 100}%`,
-                                top: `${f.yPct * 100}%`,
-                                width: `${f.wPct * 100}%`,
-                                height: `${f.hPct * 100}%`,
-                                color: f.color,
-                                fontSize: f.fontSize * (renderW / (template.pageSizes[p]?.width ?? renderW)),
-                                justifyContent: justify,
-                              }}
-                            >
-                              {f.type === "checkbox" ? (v ? "✓" : "") : v}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <Button onClick={handlePrint} disabled={printing || loading || !doc} className="w-full mt-2">
+            {printing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Printer className="h-4 w-4 mr-1" />}
+            印刷 / PDF出力
+          </Button>
         </div>
+
+        {/* 右：プレビュー */}
+        <div className="flex-1 overflow-auto bg-muted/30 p-5 min-h-[320px]">
+          {loading || !doc ? (
+            <div className="flex h-40 items-center justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : (
+            <div className="mx-auto space-y-4" style={{ maxWidth: renderW }}>
+              {Array.from({ length: template.pageCount }).map((_, p) => {
+                const h = renderW * (template.pageSizes[p]
+                  ? template.pageSizes[p].height / template.pageSizes[p].width
+                  : aspect);
+                return (
+                  <div
+                    key={p}
+                    className="relative mx-auto bg-white shadow"
+                    style={{ width: renderW, height: h }}
+                  >
+                    <PdfPageCanvas
+                      doc={doc}
+                      pageNumber={p + 1}
+                      width={renderW}
+                      className="absolute inset-0"
+                    />
+                    {template.fields
+                      .filter((f) => f.page === p)
+                      .map((f) => {
+                        const v = valueFor(f);
+                        const justify =
+                          f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start";
+                        return (
+                          <div
+                            key={f.id}
+                            className="absolute flex items-center overflow-hidden whitespace-pre-wrap leading-tight"
+                            style={{
+                              left: `${f.xPct * 100}%`,
+                              top: `${f.yPct * 100}%`,
+                              width: `${f.wPct * 100}%`,
+                              height: `${f.hPct * 100}%`,
+                              color: f.color,
+                              fontSize: f.fontSize * (renderW / (template.pageSizes[p]?.width ?? renderW)),
+                              justifyContent: justify,
+                            }}
+                          >
+                            {f.type === "checkbox" ? (v ? "✓" : "") : v}
+                          </div>
+                        );
+                      })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** ダイアログ表示（後方互換） */
+export function PdfFormFiller({ open, onOpenChange, template, ctx }: DialogProps) {
+  if (!template) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[960px] max-w-[95vw] max-h-[90vh] overflow-hidden p-0 flex flex-col gap-0">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{template.name}</DialogTitle>
+        </DialogHeader>
+        <PdfFormFillerPanel
+          template={template}
+          ctx={ctx}
+          onClose={() => onOpenChange(false)}
+          className="border-0 rounded-none min-h-0 max-h-[85vh]"
+        />
       </DialogContent>
     </Dialog>
   );

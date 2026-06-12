@@ -88,7 +88,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <main className="mx-auto max-w-[1600px] min-w-0 pb-32 md:pb-0 md:pl-[var(--main-pl)] md:pr-[var(--main-pr)] transition-[padding] duration-300 ease-out">
           {children}
         </main>
-        {chatOpen && <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />}
+        <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />
         {internalChatOpen && (
           <InternalChatPanel open={internalChatOpen} onOpenChange={setInternalChatOpen} />
         )}

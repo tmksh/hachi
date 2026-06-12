@@ -161,6 +161,10 @@ export function WorkflowDetailClient({
   const steps = (data.steps ?? []) as Step[];
   const comments = (data.comments ?? []) as Comment[];
   const fields = (data as Detail & { payload?: Record<string, unknown> }).payload ?? {};
+  const contractId = fields.contract_id as string | undefined;
+  const displayFields = Object.entries(fields).filter(([k]) =>
+    !["contract_id", "template_id", "contract_draft"].includes(k),
+  );
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -202,7 +206,15 @@ export function WorkflowDetailClient({
                 <span>{(data as Detail & { due_date: string }).due_date}</span>
               </div>
             )}
-            {Object.entries(fields).map(([k, v]) => (
+            {contractId && (
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">関連契約</span>
+                <Link href={`/contracts/${contractId}`} className="text-primary hover:underline text-right">
+                  契約詳細を開く →
+                </Link>
+              </div>
+            )}
+            {displayFields.map(([k, v]) => (
               <div key={k} className="flex justify-between gap-4">
                 <span className="text-muted-foreground shrink-0">{k}</span>
                 <span className="text-right break-all">{String(v)}</span>

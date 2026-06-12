@@ -3,6 +3,14 @@ import { Resend } from "resend";
 export const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ?? "noreply@example.com";
 
+/** 招待メール専用の送信元（Resend で eightdesign.jp を verify 済みであること） */
+export const INVITE_FROM_EMAIL =
+  process.env.RESEND_INVITE_FROM_EMAIL ?? "BRIDGE <info@eightdesign.jp>";
+
+/** 顧客向けメールの送信元（未設定時は INVITE_FROM_EMAIL と同じ） */
+export const CUSTOMER_FROM_EMAIL =
+  process.env.RESEND_CUSTOMER_FROM_EMAIL ?? INVITE_FROM_EMAIL;
+
 /** Resend クライアントを遅延初期化（APIキー未設定時のクラッシュを防ぐ） */
 export function getResend(): Resend {
   const key = process.env.RESEND_API_KEY;
@@ -93,6 +101,75 @@ export function buildInviteEmailHtml(opts: {
             </td>
           </tr>
 
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** 商談要約メールのHTML本文を生成 */
+export function buildRecordingSummaryEmailHtml(opts: {
+  customerName: string;
+  companyName: string;
+  senderName: string;
+  title: string;
+  summary: string;
+  recordedAt: string;
+}): string {
+  const { customerName, companyName, senderName, title, summary, recordedAt } = opts;
+  const escapedSummary = summary.replace(/\n/g, "<br/>");
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商談内容のご共有</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#1e293b 0%,#334155 100%);padding:28px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">${companyName}</h1>
+              <p style="margin:6px 0 0;color:#94a3b8;font-size:13px;">商談内容のご共有</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:36px 40px 32px;">
+              <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.7;">
+                <strong style="color:#111827;">${customerName}</strong> 様
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.7;">
+                先日はお時間をいただき、誠にありがとうございました。<br/>
+                商談内容を整理いたしましたので、ご確認ください。
+              </p>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+                <p style="margin:0 0 8px;font-size:12px;color:#64748b;font-weight:600;">${title}</p>
+                <p style="margin:0 0 12px;font-size:11px;color:#94a3b8;">${recordedAt}</p>
+                <p style="margin:0;font-size:14px;color:#374151;line-height:1.8;">${escapedSummary}</p>
+              </div>
+              <p style="margin:0;font-size:14px;color:#374151;line-height:1.7;">
+                ご不明な点がございましたら、お気軽にお問い合わせください。<br/>
+                引き続きよろしくお願いいたします。
+              </p>
+              <p style="margin:24px 0 0;font-size:13px;color:#64748b;line-height:1.6;">
+                ${companyName}<br/>
+                ${senderName}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px 32px;border-top:1px solid #f1f5f9;">
+              <p style="margin:0;font-size:11px;color:#94a3b8;text-align:center;line-height:1.6;">
+                このメールは商談記録に基づき自動送信されています。
+              </p>
+            </td>
+          </tr>
         </table>
       </td>
     </tr>

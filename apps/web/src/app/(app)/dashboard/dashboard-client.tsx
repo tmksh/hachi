@@ -488,17 +488,17 @@ export function DashboardClient({
               </div>
               <div className="flex items-center gap-2">
                 {/* タブ切替 */}
-                <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
+                <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setDealsTab("deals")}
-                    className={cn("px-2 py-1 transition-colors", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                    className={cn("px-2 py-1 transition-colors rounded-l-lg", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
                     style={dealsTab === "deals" ? { background: "var(--brand-gradient)" } : undefined}
                   >商談</button>
                   <button
                     type="button"
                     onClick={() => setDealsTab("unfollowed")}
-                    className={cn("px-2 py-1 transition-colors relative", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                    className={cn("px-2 py-1 transition-colors relative rounded-r-lg", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
                     style={dealsTab === "unfollowed" ? { background: "var(--brand-gradient)" } : undefined}
                   >
                     未フォロー

@@ -11,18 +11,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { KpiRow } from "@/components/shared/kpi-row";
-import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
+import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
 import { DealsTimelineTab } from "@/components/crm/deals-timeline-tab";
 import { RecordingSummaryTab } from "@/components/crm/recording-summary-tab";
 import { StageProposalBanner } from "@/components/crm/stage-proposal-banner";
 import { CustomerTodoTab } from "@/components/crm/customer-todo-tab";
 import { SchedulingTab } from "@/components/crm/scheduling-tab";
-import { CustomerFilesTab } from "@/components/crm/customer-files-tab";
+import { CustomerFilesTab, CUSTOMER_DOCUMENTS_DESCRIPTION } from "@/components/crm/customer-files-tab";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Trash2, Phone, Mail, MapPin,
   Building2, Plus, FileText, Briefcase, HardHat, ClipboardList, ClipboardPen,
-  ChevronRight, Inbox, Mic, ListTodo, Upload, Calendar,
+  ChevronRight, Inbox, Mic, ListTodo, Calendar, FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomer, deleteCustomer, getCustomerRelated } from "@/lib/actions/customers";
@@ -77,21 +77,26 @@ type CrmDetailClientProps = {
   initialRelated: Related | null;
 };
 
-const ALLOWED_TABS = ["overview", "entry", "deals", "recording", "todo", "scheduling", "files"];
+const ALLOWED_TABS = ["overview", "entry", "deals", "recording", "todo", "scheduling", "documents"];
+
+function normalizeMainTab(tab: string | null) {
+  if (tab === "files") return "documents";
+  return tab;
+}
 
 function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientProps) {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mainTab, setMainTab] = useState(() => {
-    const tab = searchParams.get("tab");
+    const tab = normalizeMainTab(searchParams.get("tab"));
     return tab && ALLOWED_TABS.includes(tab) ? tab : "overview";
   });
   const [data, setData] = useState<CustomerDetail | null>(initialData);
   const [related] = useState<Related | null>(initialRelated);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
+    const tab = normalizeMainTab(searchParams.get("tab"));
     if (tab && ALLOWED_TABS.includes(tab)) {
       setMainTab(tab);
     }
@@ -215,13 +220,13 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
           <TabsTrigger value="recording" className="text-xs px-3 gap-1"><Mic className="h-3 w-3" />録音・要約</TabsTrigger>
           <TabsTrigger value="todo" className="text-xs px-3 gap-1"><ListTodo className="h-3 w-3" />ToDo</TabsTrigger>
           <TabsTrigger value="scheduling" className="text-xs px-3 gap-1"><Calendar className="h-3 w-3" />スケジューリング</TabsTrigger>
-          <TabsTrigger value="files" className="text-xs px-3 gap-1"><Upload className="h-3 w-3" />ファイル</TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs px-3 gap-1.5"><FolderOpen className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
         </TabsList>
 
         <TabsContent value="entry" className="mt-4">
-          <CustomerEntryForm
-            mode="edit"
+          <CustomerInfoPanel
             customerId={id as string}
+            context="crm"
             initialCustomer={data}
             onSaved={() => reloadCustomer()}
           />
@@ -235,6 +240,7 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
           <RecordingSummaryTab
             customerId={id as string}
             dealId={related?.deals?.find((d) => d.stage !== "won" && d.stage !== "lost")?.id}
+            customerEmail={data.email}
           />
         </TabsContent>
 
@@ -246,8 +252,11 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
           <SchedulingTab customerId={id as string} />
         </TabsContent>
 
-        <TabsContent value="files" className="mt-4">
-          <CustomerFilesTab customerId={id as string} />
+        <TabsContent value="documents" className="mt-4">
+          <CustomerFilesTab
+            customerId={id as string}
+            description={CUSTOMER_DOCUMENTS_DESCRIPTION}
+          />
         </TabsContent>
 
         <TabsContent value="overview" className="mt-4 space-y-4">

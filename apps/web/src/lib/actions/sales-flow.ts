@@ -444,12 +444,95 @@ export async function processRecordingComplete(input: {
 
   return {
     summary: summaryResult.summary,
+    title: summaryResult.title,
     todosCreated: summaryResult.todos.length,
     stageProposalId,
     calendarEventId,
     customerFieldsUpdated: Object.keys(customerPatch).length,
     source: summaryResult.source,
   };
+}
+
+export async function sendRecordingSummaryEmail(input: {
+  customerId: string;
+  recordingId: string;
+}) {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("name, email, company_name")
+    .eq("id", input.customerId)
+    .single();
+  if (!customer?.email?.trim()) {
+    throw new Error("顧客のメールアドレスが登録されていません");
+  }
+
+  const { data: recording } = await supabase
+    .from("customer_recordings")
+    .select("title, summary, recorded_at")
+    .eq("id", input.recordingId)
+    .eq("customer_id", input.customerId)
+    .single();
+  if (!recording?.summary?.trim()) {
+    throw new Error("要約がまだ生成されていません。先に保存してください");
+  }
+
+  const [{ data: company }, { data: sender }] = await Promise.all([
+    supabase.from("companies").select("name").eq("id", company_id).single(),
+    supabase.from("profiles").select("display_name").eq("id", user_id).single(),
+  ]);
+
+  const customerName = customer.company_name?.trim() || customer.name;
+  const companyName = company?.name ?? "BRIDGE";
+  const senderName = sender?.display_name ?? companyName;
+  const recordedAt = new Date(recording.recorded_at).toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const { getResend, CUSTOMER_FROM_EMAIL, buildRecordingSummaryEmailHtml } = await import("@/lib/resend");
+  const html = buildRecordingSummaryEmailHtml({
+    customerName,
+    companyName,
+    senderName,
+    title: recording.title,
+    summary: recording.summary,
+    recordedAt,
+  });
+  const text = [
+    `${customerName} 様`,
+    "",
+    "先日はお時間をいただき、誠にありがとうございました。",
+    "商談内容を整理いたしましたので、ご確認ください。",
+    "",
+    `■ ${recording.title}`,
+    recordedAt,
+    "",
+    recording.summary,
+    "",
+    "ご不明な点がございましたら、お気軽にお問い合わせください。",
+    "引き続きよろしくお願いいたします。",
+    "",
+    companyName,
+    senderName,
+  ].join("\n");
+
+  const { error: mailError } = await getResend().emails.send({
+    from: CUSTOMER_FROM_EMAIL,
+    to: customer.email.trim(),
+    subject: `【${companyName}】商談内容のご共有`,
+    html,
+    text,
+  });
+  if (mailError) {
+    throw new Error(`メール送信に失敗しました: ${mailError.message}`);
+  }
+
+  return { sentTo: customer.email.trim() };
 }
 
 // ---------------------------------------------------------------------------

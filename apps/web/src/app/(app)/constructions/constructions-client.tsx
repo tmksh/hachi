@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
+import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { Search, Plus, HardHat, ArrowUpDown, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -185,9 +186,9 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>顧客名</TableHead>
                     <TableHead>工事番号</TableHead>
                     <TableHead>件名</TableHead>
-                    <TableHead>顧客</TableHead>
                     <TableHead className="text-right">受注額</TableHead>
                     <TableHead>工期</TableHead>
                     <TableHead className="w-[120px]">進捗</TableHead>
@@ -211,6 +212,16 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
                         onClick={() => router.push(`/constructions/${r.id}`)}
                       >
                         <TableCell>
+                          {r.customer ? (
+                            <div className="flex items-center gap-2.5">
+                              <CustomerAvatar seed={r.customer.id} name={r.customer.name} />
+                              <span className="font-medium">{r.customer.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <Link
                             href={`/constructions/${r.id}`}
                             className="font-medium text-primary hover:underline"
@@ -220,7 +231,6 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
                           </Link>
                         </TableCell>
                         <TableCell className="max-w-[220px] truncate">{r.title}</TableCell>
-                        <TableCell className="text-muted-foreground">{r.customer?.name ?? "-"}</TableCell>
                         <TableCell className="text-right tabular-nums font-medium">{fmt(r.order_amount ?? 0)}</TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           {fmtPeriod(r.start_date, r.end_date)}
