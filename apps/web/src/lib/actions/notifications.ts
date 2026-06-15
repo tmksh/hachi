@@ -196,6 +196,45 @@ export async function getNotifications(): Promise<Notification[]> {
     .slice(0, 20);
 }
 
+export async function notifyManagerOfOverload(urgentCount: number): Promise<{ managerName: string | null }> {
+  const supabase = await createClient();
+  const user = await getAuthUser();
+  if (!user) return { managerName: null };
+
+  const { data: myProfile } = await supabase
+    .from("profiles")
+    .select("company_id, display_name")
+    .eq("id", user.id)
+    .single();
+
+  if (!myProfile) return { managerName: null };
+
+  const { data: managers } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .eq("company_id", myProfile.company_id)
+    .in("role", ["owner", "hq_admin"])
+    .neq("id", user.id);
+
+  if (!managers || managers.length === 0) return { managerName: null };
+
+  const content = `⚠️ ${myProfile.display_name} さんの緊急通知が ${urgentCount} 件未対応になっています。確認を促してください。`;
+
+  await Promise.all(
+    managers.map((manager) =>
+      supabase.from("internal_messages").insert({
+        company_id: myProfile.company_id,
+        sender_id: user.id,
+        recipient_id: manager.id,
+        content,
+        message_type: "chat",
+      })
+    )
+  );
+
+  return { managerName: managers[0].display_name };
+}
+
 export async function markAnnouncementAsRead(announcementId: string) {
   const supabase = await createClient();
   const user = await getAuthUser();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, memo, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -56,6 +56,9 @@ import {
 import type { Profile } from "@/hooks/use-auth";
 import { markAnnouncementAsRead } from "@/lib/actions/notifications";
 import { fetchNotifications, type Notification } from "@/lib/queries/notifications";
+import { BombAlert } from "@/components/layout/bomb-alert";
+
+const BOMB_THRESHOLD = 10;
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
@@ -96,6 +99,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   const [searchLoading, setSearchLoading] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [showBombAlert, setShowBombAlert] = useState(false);
+  const [bombUrgentCount, setBombUrgentCount] = useState(0);
+  const bombChecked = useRef(false);
 
   useEffect(() => {
     const fetchUnread = () => getUnreadMessageCount().then(setChatUnreadCount).catch(() => {});
@@ -141,6 +147,24 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       document.removeEventListener("visibilitychange", onVisibility);
       stopPolling();
     };
+  }, []);
+
+  // ログイン時の爆弾チェック（1日1回、緊急通知が10件以上で発火）
+  useEffect(() => {
+    if (bombChecked.current) return;
+    bombChecked.current = true;
+    const today = new Date().toDateString();
+    const lastCheck = localStorage.getItem("hachi_bomb_check");
+    if (lastCheck === today) return;
+    fetchNotifications().then((notifs) => {
+      setNotifications(notifs);
+      const urgentCount = notifs.filter((n) => n.is_urgent).length;
+      if (urgentCount >= BOMB_THRESHOLD) {
+        localStorage.setItem("hachi_bomb_check", today);
+        setBombUrgentCount(urgentCount);
+        setShowBombAlert(true);
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -640,6 +664,17 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
           </div>
         </SheetContent>
       </Sheet>
+      )}
+
+      {/* 爆弾アラート */}
+      {showBombAlert && (
+        <BombAlert
+          urgentCount={bombUrgentCount}
+          onDismiss={() => {
+            setShowBombAlert(false);
+            setNotifOpen(true);
+          }}
+        />
       )}
 
     </>

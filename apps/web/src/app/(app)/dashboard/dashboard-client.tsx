@@ -55,6 +55,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { computeBrandFromHex } from "@/lib/brand-color";
 import { cn } from "@/lib/utils";
+import { BombAlert } from "@/components/layout/bomb-alert";
 
 import { ResponsiveTrendChart } from "@/components/dashboard/responsive-trend-chart";
 
@@ -133,6 +134,7 @@ export function DashboardClient({
   initialAttendance,
   initialUnfollowedLeads,
 }: DashboardClientProps) {
+  const [showBombPreview, setShowBombPreview] = useState(false);
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const { data, isLoading: loading } = useDashboardData(initialData);
@@ -876,9 +878,19 @@ export function DashboardClient({
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">ダッシュボード</h1>
           <p className="text-sm mt-1 text-muted-foreground">{format(now, "yyyy年M月d日（EEEE）", { locale: ja })}</p>
         </div>
-        <Popover>
+        <div className="flex items-center gap-2 shrink-0 mt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setShowBombPreview(true)}
+            title="爆弾アラートをプレビュー"
+          >
+            💣
+          </Button>
+          <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5 shrink-0 mt-1">
+            <Button variant="outline" size="sm" className="gap-1.5">
               <Settings2 className="h-4 w-4" />
               表示設定
             </Button>
@@ -964,7 +976,8 @@ export function DashboardClient({
               ))}
             </div>
           </PopoverContent>
-        </Popover>
+          </Popover>
+        </div>
       </div>
 
       {/* KPI row — 個別表示制御 */}
@@ -1000,6 +1013,14 @@ export function DashboardClient({
             })}
       </WidgetGrid>
 
+      {/* 爆弾アラートプレビュー */}
+      {showBombPreview && (
+        <BombAlert
+          urgentCount={10}
+          preview
+          onDismiss={() => setShowBombPreview(false)}
+        />
+      )}
     </div>
   );
 }
