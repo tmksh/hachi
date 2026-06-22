@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,9 +23,9 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   ArrowLeft, MapPin, CalendarRange,
   Wallet, User2, FileText, Users,
-  PackageCheck, ExternalLink,
+  PackageCheck, CheckCircle2,
   Plus, Trash2, Loader2, Wand2,
-  CalendarDays, ScrollText, PencilLine, BookOpen, FolderOpen,
+  CalendarDays, ScrollText, PencilLine, BookOpen, FolderOpen, Receipt,
 } from "lucide-react";
 import {
   getConstruction,
@@ -38,11 +37,12 @@ import {
 } from "@/lib/actions/constructions";
 import { getCraftsmen } from "@/lib/actions/craftsmen";
 import type { Craftsman } from "@/lib/database.types";
-import { getCompany } from "@/lib/actions/profiles";
 import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
 import { GanttTab } from "@/components/constructions/gantt-tab";
 import { ContractTab } from "@/components/constructions/contract-tab";
 import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
+import { InvoicesTab } from "@/components/constructions/invoices-tab";
+import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
 import { CustomerFilesTab, CUSTOMER_DOCUMENTS_DESCRIPTION } from "@/components/crm/customer-files-tab";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
@@ -59,6 +59,7 @@ import {
   copyEstimateForConstruction,
 } from "@/lib/actions/constructions";
 import { getChangeOrders } from "@/lib/actions/change-orders";
+import { getInvoicesForConstruction } from "@/lib/actions/invoices";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 
 type Detail = Awaited<ReturnType<typeof getConstruction>>;
@@ -269,10 +270,10 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
    発注書タブ
 ────────────────────────────────────────────────── */
 const ORDER_STATUS_MAP = {
-  draft:     { label: "下書き",   cls: "bg-gray-100 text-gray-600" },
-  submitted: { label: "提出済み", cls: "bg-blue-100 text-blue-700" },
-  approved:  { label: "承認済み", cls: "bg-green-100 text-green-700" },
-  rejected:  { label: "差戻し",   cls: "bg-red-100 text-red-600" },
+  draft:     { label: "下書き",     cls: "bg-gray-100 text-gray-600" },
+  submitted: { label: "発注済",     cls: "bg-blue-100 text-blue-700" },
+  approved:  { label: "請書受領済", cls: "bg-green-100 text-green-700" },
+  rejected:  { label: "差戻し",     cls: "bg-red-100 text-red-600" },
 } as const;
 
 const PAYMENT_COUNT_OPTIONS = ["1回", "2回", "3回", "4回", "6回", "12回", "その他"];
@@ -501,15 +502,26 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
                         ¥{order.amount.toLocaleString()}
                       </td>
                       <td className="pr-2 py-3 rounded-r-[10px]">
-                        <button
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 transition-all"
-                          onClick={() => handleDelete(order.id)}
-                          disabled={deletingId === order.id}
-                        >
-                          {deletingId === order.id
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <Trash2 className="h-3.5 w-3.5" />}
-                        </button>
+                        <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-all">
+                          {order.status === "submitted" && (
+                            <button
+                              className="text-[10px] font-semibold px-2 py-1 rounded bg-green-500 text-white hover:bg-green-600 transition-colors whitespace-nowrap"
+                              onClick={() => handleStatusChange(order.id, "approved")}
+                              title="請書を受領済みにする"
+                            >
+                              請書受領
+                            </button>
+                          )}
+                          <button
+                            className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 transition-all"
+                            onClick={() => handleDelete(order.id)}
+                            disabled={deletingId === order.id}
+                          >
+                            {deletingId === order.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {isExpanded && schedule.length > 0 && (
@@ -665,11 +677,22 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
 type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[number];
 type ChangeOrderRow = Awaited<ReturnType<typeof getChangeOrders>>[number];
 
+type InvoiceRow = {
+  id: string;
+  invoice_no: string;
+  invoice_date: string | null;
+  due_date: string | null;
+  total: number;
+  status: string;
+  created_at: string;
+};
+
 type ConstructionDetailClientProps = {
   initialData: Detail | null;
   initialDocs: ContractDoc[];
   initialChangeOrders: ChangeOrderRow[];
   initialClosingDayLabel: string;
+  initialInvoices: InvoiceRow[];
 };
 
 function ConstructionDetailPageContent({
@@ -677,6 +700,7 @@ function ConstructionDetailPageContent({
   initialDocs,
   initialChangeOrders,
   initialClosingDayLabel,
+  initialInvoices,
 }: ConstructionDetailClientProps) {
   const { id } = useParams();
   const searchParams = useSearchParams();
@@ -685,7 +709,9 @@ function ConstructionDetailPageContent({
   const [docs, setDocs] = useState<ContractDoc[]>(initialDocs);
   const [changeOrders, setChangeOrders] = useState<ChangeOrderRow[]>(initialChangeOrders);
   const [closingDayLabel, setClosingDayLabel] = useState(initialClosingDayLabel);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") ?? "schedule");
+  const [completionOpen, setCompletionOpen] = useState(false);
   const initialEstimateId = searchParams.get("estimateId");
 
   useEffect(() => {
@@ -699,10 +725,12 @@ function ConstructionDetailPageContent({
       getConstruction(id as string).catch(() => null),
       getConstructionContractDocs(id as string).catch(() => []),
       getChangeOrders(id as string).catch(() => []),
-    ]).then(([d, docsList, cos]) => {
+      getInvoicesForConstruction(id as string).catch(() => []),
+    ]).then(([d, docsList, cos, invs]) => {
       setData(d);
       setDocs(docsList);
       setChangeOrders(cos);
+      setInvoices(invs);
     });
   };
 
@@ -711,7 +739,8 @@ function ConstructionDetailPageContent({
     setDocs(initialDocs);
     setChangeOrders(initialChangeOrders);
     setClosingDayLabel(initialClosingDayLabel);
-  }, [initialData, initialDocs, initialChangeOrders, initialClosingDayLabel]);
+    setInvoices(initialInvoices);
+  }, [initialData, initialDocs, initialChangeOrders, initialClosingDayLabel, initialInvoices]);
 
   if (!data) return (
     <div className="p-4 md:p-8">
@@ -738,7 +767,7 @@ function ConstructionDetailPageContent({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.title}</h1>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
               <span className="font-mono">{data.construction_no}</span>
               {customer && (
                 <>
@@ -754,10 +783,37 @@ function ConstructionDetailPageContent({
                   </span>
                 </>
               )}
-            </p>
+            </div>
           </div>
-          <StatusBadge status={data.status} className="shrink-0 mt-0.5" />
+          <div className="flex items-center gap-2 shrink-0">
+            <StatusBadge status={data.status} className="mt-0.5" />
+            {data.status !== "completed" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs gap-1 border-green-500 text-green-700 hover:bg-green-50"
+                onClick={() => setCompletionOpen(true)}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                完了にする
+              </Button>
+            )}
+          </div>
         </div>
+        {completionOpen && data && (
+          <CompletionDialog
+            open={completionOpen}
+            onOpenChange={setCompletionOpen}
+            construction={{
+              id: data.id,
+              title: data.title,
+              order_amount: data.order_amount ?? null,
+              actual_cost: data.actual_cost ?? null,
+              customer: customer ?? null,
+            }}
+            onCompleted={reload}
+          />
+        )}
 
         {/* 4カラム情報 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 rounded-xl border border-border bg-card p-4">
@@ -803,6 +859,7 @@ function ConstructionDetailPageContent({
           <TabsTrigger value="change"    className="text-xs gap-1.5"><PencilLine   className="h-3.5 w-3.5" />追加変更</TabsTrigger>
           <TabsTrigger value="budget"    className="text-xs gap-1.5"><BookOpen     className="h-3.5 w-3.5" />工事台帳</TabsTrigger>
           <TabsTrigger value="orders"    className="text-xs gap-1.5"><PackageCheck className="h-3.5 w-3.5" />発注書・請書</TabsTrigger>
+          <TabsTrigger value="invoices"  className="text-xs gap-1.5"><Receipt      className="h-3.5 w-3.5" />請求書</TabsTrigger>
           <TabsTrigger value="documents" className="text-xs gap-1.5"><FolderOpen   className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
         </TabsList>
 
@@ -819,6 +876,13 @@ function ConstructionDetailPageContent({
         </TabsContent>
 
         <TabsContent value="schedule" className="mt-4">
+          <div className="flex justify-end mb-2">
+            <Link href={`/constructions/${id}/reports/new`}>
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                <Plus className="h-3.5 w-3.5" />日報を追加
+              </Button>
+            </Link>
+          </div>
           <GanttTab
             constructionId={id as string}
             initialTasks={(data.tasks ?? []) as { id: string; name: string; start_date: string | null; end_date: string | null; progress: number; status: string }[]}
@@ -883,6 +947,7 @@ function ConstructionDetailPageContent({
             }))}
             periodStart={data.start_date}
             authorName={profile?.display_name ?? "ユーザー"}
+            onNavigateToOrders={() => setActiveTab("orders")}
           />
         </TabsContent>
 
@@ -893,6 +958,16 @@ function ConstructionDetailPageContent({
             constructionStartDate={data.start_date}
             constructionEndDate={data.end_date}
             estimateId={estimate?.id ?? contract?.estimate_id ?? null}
+          />
+        </TabsContent>
+
+        <TabsContent value="invoices" className="mt-4">
+          <InvoicesTab
+            constructionId={id as string}
+            initialInvoices={invoices}
+            hasSchedule={!!(data.start_date && data.end_date)}
+            closingDayLabel={closingDayLabel}
+            onRefresh={reload}
           />
         </TabsContent>
 

@@ -380,6 +380,7 @@ interface Props {
     category_id: string | null;
   }>;
   authorName?: string;
+  onNavigateToOrders?: () => void;
 }
 
 function mapEstimateItemsToRows(items: Props["initialEstimateItems"]): ContractorRow[] {
@@ -420,15 +421,14 @@ function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
   }));
 }
 
-export function CostBudgetTab({ constructionId, contractAmount: propAmount, periodStart, initialOrders, initialEstimateItems, authorName = "ユーザー" }: Props) {
+export function CostBudgetTab({ constructionId, contractAmount: propAmount, periodStart, initialOrders, initialEstimateItems, authorName = "ユーザー", onNavigateToOrders }: Props) {
   const mappedRows = useMemo(() => mapOrdersToRows(initialOrders), [initialOrders]);
   const estimateRows = useMemo(() => mapEstimateItemsToRows(initialEstimateItems), [initialEstimateItems]);
-  const fallbackPattern = PATTERNS[constructionId.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % PATTERNS.length];
   const initialRows = mappedRows.length > 0
     ? mappedRows
     : estimateRows.length > 0
       ? estimateRows
-      : fallbackPattern.rows.map(r => ({ ...r, monthly: { ...r.monthly } }));
+      : [];
 
   const [rows, setRows] = useState<ContractorRow[]>(() =>
     initialRows.map(r => ({ ...r, monthly: { ...r.monthly } }))
@@ -439,8 +439,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   const [loaded, setLoaded] = useState(false);
 
   const defaultPeriod = periodStart?.slice(0, 7) ?? "2025-01";
-  const resolvedContractAmount =
-    propAmount && propAmount > 0 ? propAmount : fallbackPattern.contract_amount;
+  const resolvedContractAmount = propAmount && propAmount > 0 ? propAmount : 0;
 
   useEffect(() => {
     getCostBudget(constructionId).then((data) => {
@@ -705,19 +704,29 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                   onClick={commentMode ? undefined : undefined}
                 >
                   <td className={cn(tcc, "bg-gray-50 text-gray-400 text-[11px]")}>{idx + 1}</td>
-                  {/* 発注ステータス (クリックで切替) */}
+                  {/* 発注ステータス / 発注アクション */}
                   <td className={cn(tcc)}>
-                    <button
-                      onClick={() => toggleStatus(row.id)}
-                      className={cn(
-                        "inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-tight cursor-pointer transition-colors",
-                        row.status === "発注済"
-                          ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                      )}
-                    >
-                      {row.status}
-                    </button>
+                    {row.status === "未発注" && onNavigateToOrders ? (
+                      <button
+                        onClick={onNavigateToOrders}
+                        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-tight cursor-pointer transition-colors bg-blue-500 text-white hover:bg-blue-600"
+                        title="発注書・請書タブへ移動"
+                      >
+                        発注
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => toggleStatus(row.id)}
+                        className={cn(
+                          "inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-tight cursor-pointer transition-colors",
+                          row.status === "発注済"
+                            ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        )}
+                      >
+                        {row.status}
+                      </button>
+                    )}
                   </td>
                   {/* 施工業者名 */}
                   <td className={cn(tdl, "font-medium")}>

@@ -130,10 +130,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+const SSR_DEFAULT: AuthContextValue = {
+  user: null,
+  profile: null,
+  loading: true,
+  signOut: async () => {},
+  role: null,
+  isAdmin: false,
+  isOwner: false,
+  isManager: false,
+  isEmployee: false,
+  hasRole: () => false,
+  canAccess: () => false,
+  supabase: null as unknown as ReturnType<typeof createClient>,
+};
+
+export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return ctx;
+  // SSR時はAuthProviderのコンテキストが存在しないためSSRデフォルトを返す
+  return ctx ?? SSR_DEFAULT;
 }

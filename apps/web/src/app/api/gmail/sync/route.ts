@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 interface GmailThread {
   id: string;
@@ -94,21 +95,23 @@ export async function POST() {
   }
 
   // Refresh token if expired
-  let accessToken = account.access_token_encrypted as string;
+  let accessToken = await decrypt(account.access_token_encrypted as string);
   const expiresAt = account.token_expires_at
     ? new Date(account.token_expires_at as string).getTime()
     : 0;
 
   if (Date.now() >= expiresAt - 60_000) {
-    const newToken = await refreshAccessToken(account.refresh_token_encrypted as string);
+    const refreshToken = await decrypt(account.refresh_token_encrypted as string);
+    const newToken = await refreshAccessToken(refreshToken);
     if (!newToken) {
       return NextResponse.json({ error: "Token refresh failed. Please reconnect Gmail." }, { status: 401 });
     }
     accessToken = newToken;
+    const encNewToken = await encrypt(newToken);
     await admin
       .from("email_accounts")
       .update({
-        access_token_encrypted: newToken,
+        access_token_encrypted: encNewToken,
         token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         updated_at: new Date().toISOString(),
       })

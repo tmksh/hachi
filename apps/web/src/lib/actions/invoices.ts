@@ -14,6 +14,17 @@ export async function getInvoices() {
   return data;
 }
 
+export async function getInvoicesForConstruction(constructionId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("id, invoice_no, invoice_date, due_date, total, status, created_at")
+    .eq("construction_id", constructionId)
+    .order("invoice_date", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getInvoice(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase

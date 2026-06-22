@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { decrypt } from "@/lib/crypto";
 
 export async function POST() {
   const supabase = await createClient();
@@ -24,13 +25,15 @@ export async function POST() {
     return NextResponse.json({ error: "No IMAP account connected" }, { status: 404 });
   }
 
+  const imapPass = await decrypt(account.imap_password_encrypted as string);
+
   const client = new ImapFlow({
     host: account.imap_host as string,
     port: account.imap_port as number,
     secure: (account.imap_port as number) === 993,
     auth: {
       user: account.imap_username as string,
-      pass: account.imap_password_encrypted as string,
+      pass: imapPass,
     },
     logger: false,
   });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ImapFlow } from "imapflow";
+import { encrypt } from "@/lib/crypto";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -69,6 +70,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "プロフィールが見つかりません" }, { status: 404 });
   }
 
+  const [encImapPass, encSmtpPass] = await Promise.all([
+    encrypt(imap_password),
+    smtp_password ? encrypt(smtp_password) : Promise.resolve(null),
+  ]);
+
   const { error: upsertError } = await admin
     .from("email_accounts")
     .upsert(
@@ -81,11 +87,11 @@ export async function POST(request: NextRequest) {
         imap_host,
         imap_port,
         imap_username,
-        imap_password_encrypted: imap_password,
+        imap_password_encrypted: encImapPass,
         smtp_host: smtp_host ?? null,
         smtp_port: smtp_port ?? null,
         smtp_username: smtp_username ?? null,
-        smtp_password_encrypted: smtp_password ?? null,
+        smtp_password_encrypted: encSmtpPass,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,provider", ignoreDuplicates: false }

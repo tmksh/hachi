@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestOrigin } from "@/lib/request-origin";
+import { encrypt } from "@/lib/crypto";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -59,6 +60,11 @@ export async function GET(request: NextRequest) {
       Date.now() + (expires_in ?? 3600) * 1000
     ).toISOString();
 
+    const [encAccessToken, encRefreshToken] = await Promise.all([
+      encrypt(access_token),
+      refresh_token ? encrypt(refresh_token) : Promise.resolve(null),
+    ]);
+
     // Upsert email_account
     const { error: upsertError } = await supabase
       .from("email_accounts")
@@ -69,8 +75,8 @@ export async function GET(request: NextRequest) {
           provider: "gmail",
           email_address: emailAddress,
           oauth_subject: userInfo.id,
-          access_token_encrypted: access_token,
-          refresh_token_encrypted: refresh_token ?? null,
+          access_token_encrypted: encAccessToken,
+          refresh_token_encrypted: encRefreshToken,
           token_expires_at: tokenExpiresAt,
           updated_at: new Date().toISOString(),
         },

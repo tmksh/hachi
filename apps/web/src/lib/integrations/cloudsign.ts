@@ -32,14 +32,35 @@ export function getCloudSignConfig(settings: Record<string, unknown> | null | un
   };
 }
 
-/** クラウドサイン Webhook 署名検証（本番は client_secret で HMAC 検証） */
+/** クラウドサイン Webhook 署名検証（HMAC-SHA256） */
 export function verifyCloudSignWebhook(
-  _payload: string,
-  _signature: string | null,
-  _config: CloudSignConfig,
+  payload: string,
+  signature: string | null,
+  config: CloudSignConfig,
 ): boolean {
-  // TODO: CloudSign webhook signature verification
-  return true;
+  // CloudSign未連携（enabled=false）の場合は全リクエストを拒否
+  if (!config.enabled) return false;
+
+  // APIキー未設定の場合も拒否
+  if (!config.api_key) return false;
+
+  // 署名ヘッダーがない場合は拒否
+  if (!signature) return false;
+
+  try {
+    const { createHmac, timingSafeEqual } = require("crypto") as typeof import("crypto");
+    const expected = createHmac("sha256", config.api_key)
+      .update(payload)
+      .digest("hex");
+
+    const sigBuf = Buffer.from(signature, "hex");
+    const expBuf = Buffer.from(expected, "hex");
+
+    if (sigBuf.length !== expBuf.length) return false;
+    return timingSafeEqual(sigBuf, expBuf);
+  } catch {
+    return false;
+  }
 }
 
 export type CloudSignWebhookEvent = {

@@ -46,6 +46,7 @@ export function AnalogClock({ size = 88, className = "", flat = false }: AnalogC
 
   return (
     <div
+      suppressHydrationWarning
       className={`shrink-0 ${className}`}
       style={{
         width: size,
@@ -64,7 +65,7 @@ export function AnalogClock({ size = 88, className = "", flat = false }: AnalogC
             ].join(", "),
       }}
     >
-      <svg width="100%" height="100%" viewBox={`0 0 ${VB} ${VB}`}>
+      <svg suppressHydrationWarning width="100%" height="100%" viewBox={`0 0 ${VB} ${VB}`}>
         <defs>
           <radialGradient id={faceGradientId} cx="38%" cy="32%" r="68%">
             <stop offset="0%" stopColor="#ffffff" />
