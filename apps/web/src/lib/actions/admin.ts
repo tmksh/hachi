@@ -512,33 +512,83 @@ export async function updateAdminLinqAiSettings(input: {
   apiKey?: string;
   sttProvider?: "whisper" | "google_speech" | "web_speech";
 }) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
   await assertSuperAdmin();
-  await savePlatformLinqAiConfig(input, user?.id);
+  await savePlatformLinqAiConfig(input, undefined);
   return getPlatformLinqAiPublicConfig();
 }
 
 export async function testAdminLinqAiConnection() {
   await assertSuperAdmin();
   const config = await resolveLinqAiConfig();
-  if (!config.enabled || !config.apiKey) {
-    return { ok: false, message: "AI が無効、または API キーが未設定です" };
+  if (!config.apiKey) {
+    return { ok: false, message: "API キーが未設定です" };
   }
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: "OK とだけ返してください" }] }],
-        generationConfig: { maxOutputTokens: 16 },
-      }),
-    },
-  );
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    return { ok: false, message: `Gemini API エラー (${res.status}): ${body.slice(0, 200)}` };
+
+  const provider = config.provider ?? "openai";
+
+  try {
+    if (provider === "openai" || provider === "azure") {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.model ?? "gpt-4o-mini",
+          messages: [{ role: "user", content: "「OK」とだけ返してください" }],
+          max_tokens: 16,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        return { ok: false, message: `OpenAI API エラー (${res.status}): ${body.slice(0, 200)}` };
+      }
+      return { ok: true, message: `接続成功 — OpenAI (${config.model})` };
+    }
+
+    if (provider === "google") {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "OK とだけ返してください" }] }],
+            generationConfig: { maxOutputTokens: 16 },
+          }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        return { ok: false, message: `Gemini API エラー (${res.status}): ${body.slice(0, 200)}` };
+      }
+      return { ok: true, message: `接続成功 — Google Gemini (${config.model})` };
+    }
+
+    if (provider === "anthropic") {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": config.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: config.model ?? "claude-3-5-haiku-20241022",
+          max_tokens: 16,
+          messages: [{ role: "user", content: "「OK」とだけ返してください" }],
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        return { ok: false, message: `Anthropic API エラー (${res.status}): ${body.slice(0, 200)}` };
+      }
+      return { ok: true, message: `接続成功 — Anthropic Claude (${config.model})` };
+    }
+
+    return { ok: false, message: `未対応のプロバイダーです: ${provider}` };
+  } catch (e) {
+    return { ok: false, message: `接続エラー: ${e instanceof Error ? e.message : String(e)}` };
   }
-  return { ok: true, message: `接続成功 (${config.model})` };
 }

@@ -167,6 +167,9 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const [addSaving, setAddSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [aiEnabled, setAiEnabled] = useState(initialData.aiSettings.enabled);
+  const [aiProvider, setAiProvider] = useState<"openai" | "google" | "anthropic" | "azure">(
+    (initialData.aiSettings.provider as "openai" | "google" | "anthropic" | "azure") ?? "openai",
+  );
   const [aiModel, setAiModel] = useState(initialData.aiSettings.model);
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiKeyConfigured, setAiKeyConfigured] = useState(initialData.aiSettings.apiKeyConfigured);
@@ -177,6 +180,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const loadAiSettings = useCallback(async () => {
     const s = await getAdminLinqAiSettings();
     setAiEnabled(s.enabled);
+    setAiProvider((s.provider as "openai" | "google" | "anthropic" | "azure") ?? "openai");
     setAiModel(s.model);
     setAiKeyConfigured(s.apiKeyConfigured);
   }, []);
@@ -234,7 +238,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
     try {
       await updateAdminLinqAiSettings({
         enabled: aiEnabled,
-        provider: "google",
+        provider: aiProvider,
         model: aiModel,
         apiKey: aiApiKey || undefined,
       });
@@ -255,7 +259,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
       if (aiApiKey.trim()) {
         await updateAdminLinqAiSettings({
           enabled: true,
-          provider: "google",
+          provider: aiProvider,
           model: aiModel,
           apiKey: aiApiKey.trim(),
         });
@@ -628,80 +632,180 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
 
         {/* AI 設定（全テナント共通） */}
         <TabsContent value="ai" className="mt-4">
-          <Card variant="inset">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Linq AI（プラットフォーム共通）
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                ここで設定した API キーは全会社（全テナント）の営業フロー AI 機能で共通利用されます。
-                各社の設定画面からは変更できません。
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-5 max-w-lg">
-              <div className="flex items-center justify-between rounded-lg border p-4">
+          <div className="space-y-4">
+            {/* ヘッダーカード */}
+            <Card>
+              <CardContent className="flex items-start gap-4 py-4">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </div>
                 <div>
-                  <p className="font-medium text-sm">AI 機能を有効化</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">録音要約・ステージ提案など</p>
+                  <p className="font-semibold text-sm">Linq AI — プラットフォーム共通設定</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                    ここで設定した API キーは全テナント（全加盟店）の営業フロー AI 機能で共通利用されます。<br />
+                    各社の管理画面からは変更できません。
+                  </p>
                 </div>
-                <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>プロバイダー</Label>
-                <Input value="Google Gemini" disabled />
-              </div>
-
-              <div className="space-y-2">
-                <Label>モデル</Label>
-                <Select value={aiModel} onValueChange={setAiModel}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gemini-2.0-flash">gemini-2.0-flash（推奨・無料枠あり）</SelectItem>
-                    <SelectItem value="gemini-1.5-flash">gemini-1.5-flash</SelectItem>
-                    <SelectItem value="gemini-1.5-pro">gemini-1.5-pro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Gemini API キー</Label>
-                <Input
-                  type="password"
-                  value={aiApiKey}
-                  onChange={(e) => setAiApiKey(e.target.value)}
-                  placeholder={aiKeyConfigured ? "●●●●●●●●（設定済み・変更時のみ入力）" : "AIza..."}
-                />
-                <p className="text-xs text-muted-foreground">
-                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                    Google AI Studio
-                  </a>
-                  {" "}で無料取得できます
-                </p>
-              </div>
-
-              {aiTestResult && (
-                <div className={cn(
-                  "rounded-lg px-3 py-2 text-sm",
-                  aiTestResult.ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-800 border border-rose-200",
-                )}>
-                  {aiTestResult.message}
+                <div className="ml-auto shrink-0">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      aiEnabled && aiKeyConfigured
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200",
+                    )}
+                  >
+                    {aiEnabled && aiKeyConfigured ? "稼働中" : "未設定"}
+                  </Badge>
                 </div>
-              )}
+              </CardContent>
+            </Card>
 
-              <div className="flex gap-2">
-                <Button onClick={handleSaveAiSettings} disabled={aiSaving}>
-                  {aiSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                  保存
-                </Button>
-                <Button variant="outline" onClick={handleTestAiConnection} disabled={aiTesting}>
-                  {aiTesting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                  接続テスト
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            {/* 設定フォームカード */}
+            <Card variant="inset">
+              <CardContent className="py-5 space-y-5">
+                {/* ON/OFF */}
+                <div className="flex items-center justify-between rounded-xl border bg-background/60 px-4 py-3.5">
+                  <div>
+                    <p className="font-medium text-sm">AI 機能を有効化</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">録音要約・ステージ提案・メール生成など</p>
+                  </div>
+                  <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+                </div>
+
+                {/* プロバイダー */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">プロバイダー</Label>
+                    <Select
+                      value={aiProvider}
+                      onValueChange={(v) => {
+                        const p = v as typeof aiProvider;
+                        setAiProvider(p);
+                        const defaults: Record<typeof aiProvider, string> = {
+                          openai: "gpt-4o-mini",
+                          google: "gemini-2.0-flash",
+                          anthropic: "claude-3-5-haiku-20241022",
+                          azure: "gpt-4o",
+                        };
+                        setAiModel(defaults[p]);
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="google">Google Gemini</SelectItem>
+                        <SelectItem value="anthropic">Anthropic Claude</SelectItem>
+                        <SelectItem value="azure">Azure OpenAI</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">モデル</Label>
+                    <Select value={aiModel} onValueChange={setAiModel}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {aiProvider === "openai" && (
+                          <>
+                            <SelectItem value="gpt-4o-mini">gpt-4o-mini（推奨・低コスト）</SelectItem>
+                            <SelectItem value="gpt-4o">gpt-4o</SelectItem>
+                            <SelectItem value="gpt-4.1-mini">gpt-4.1-mini</SelectItem>
+                            <SelectItem value="gpt-4.1">gpt-4.1</SelectItem>
+                          </>
+                        )}
+                        {aiProvider === "google" && (
+                          <>
+                            <SelectItem value="gemini-2.0-flash">gemini-2.0-flash（推奨・無料枠あり）</SelectItem>
+                            <SelectItem value="gemini-1.5-flash">gemini-1.5-flash</SelectItem>
+                            <SelectItem value="gemini-1.5-pro">gemini-1.5-pro</SelectItem>
+                          </>
+                        )}
+                        {aiProvider === "anthropic" && (
+                          <>
+                            <SelectItem value="claude-3-5-haiku-20241022">claude-3-5-haiku（推奨・低コスト）</SelectItem>
+                            <SelectItem value="claude-3-5-sonnet-20241022">claude-3-5-sonnet</SelectItem>
+                            <SelectItem value="claude-opus-4-5">claude-opus-4</SelectItem>
+                          </>
+                        )}
+                        {aiProvider === "azure" && (
+                          <>
+                            <SelectItem value="gpt-4o">gpt-4o</SelectItem>
+                            <SelectItem value="gpt-4o-mini">gpt-4o-mini</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* API キー */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {aiProvider === "openai" && "OpenAI API キー"}
+                    {aiProvider === "google" && "Gemini API キー"}
+                    {aiProvider === "anthropic" && "Anthropic API キー"}
+                    {aiProvider === "azure" && "Azure OpenAI API キー"}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={aiApiKey}
+                    onChange={(e) => setAiApiKey(e.target.value)}
+                    placeholder={
+                      aiKeyConfigured
+                        ? "●●●●●●●●（設定済み — 変更する場合のみ入力）"
+                        : aiProvider === "openai" ? "sk-..."
+                        : aiProvider === "google" ? "AIza..."
+                        : aiProvider === "anthropic" ? "sk-ant-..."
+                        : "your-azure-api-key"
+                    }
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {aiProvider === "openai" && (
+                      <><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> で取得できます</>
+                    )}
+                    {aiProvider === "google" && (
+                      <><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google AI Studio</a> で無料取得できます</>
+                    )}
+                    {aiProvider === "anthropic" && (
+                      <><a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Anthropic Console</a> で取得できます</>
+                    )}
+                    {aiProvider === "azure" && "Azure Portal の Azure OpenAI リソースから取得してください"}
+                  </p>
+                </div>
+
+                {/* テスト結果 */}
+                {aiTestResult && (
+                  <div className={cn(
+                    "flex items-start gap-2 rounded-xl px-4 py-3 text-sm border",
+                    aiTestResult.ok
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border-rose-200",
+                  )}>
+                    <span className="mt-0.5 text-base leading-none">{aiTestResult.ok ? "✓" : "✕"}</span>
+                    <span>{aiTestResult.message}</span>
+                  </div>
+                )}
+
+                {/* ボタン */}
+                <div className="flex items-center gap-2 pt-1">
+                  <Button onClick={handleSaveAiSettings} disabled={aiSaving} className="gap-1.5">
+                    {aiSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    保存する
+                  </Button>
+                  <Button variant="outline" onClick={handleTestAiConnection} disabled={aiTesting} className="gap-1.5">
+                    {aiTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    接続テスト
+                  </Button>
+                  {aiKeyConfigured && !aiTesting && !aiSaving && (
+                    <span className="text-xs text-muted-foreground ml-1">API キー設定済み</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ユーザー一覧タブ */}

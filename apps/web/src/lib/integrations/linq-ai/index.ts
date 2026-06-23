@@ -47,6 +47,59 @@ export function getLinqAiConfig(_settings?: Record<string, unknown> | null | und
   };
 }
 
+async function callOpenAi(prompt: string, config: LinqAiConfig, systemPrompt?: string): Promise<string | null> {
+  if (!config.apiKey) return null;
+  const model = config.model ?? "gpt-4o-mini";
+  const started = Date.now();
+  const messages: Array<{ role: string; content: string }> = [];
+  if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+  messages.push({ role: "user", content: prompt });
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 2048 }),
+  });
+  if (!res.ok) {
+    console.error("[linq-ai] OpenAI error:", res.status, await res.text().catch(() => ""));
+    return null;
+  }
+  const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const text = json.choices?.[0]?.message?.content ?? null;
+  if (text) console.info(`[linq-ai] OpenAI ${model} ${Date.now() - started}ms`);
+  return text;
+}
+
+async function callAnthropic(prompt: string, config: LinqAiConfig, systemPrompt?: string): Promise<string | null> {
+  if (!config.apiKey) return null;
+  const model = config.model ?? "claude-3-5-haiku-20241022";
+  const started = Date.now();
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": config.apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2048,
+      ...(systemPrompt ? { system: systemPrompt } : {}),
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) {
+    console.error("[linq-ai] Anthropic error:", res.status, await res.text().catch(() => ""));
+    return null;
+  }
+  const json = await res.json() as { content?: Array<{ text?: string }> };
+  const text = json.content?.[0]?.text ?? null;
+  if (text) console.info(`[linq-ai] Anthropic ${model} ${Date.now() - started}ms`);
+  return text;
+}
+
 async function callGemini(prompt: string, config: LinqAiConfig): Promise<string | null> {
   if (!config.apiKey || config.provider !== "google") return null;
   const model = config.model ?? "gemini-2.0-flash";
@@ -74,10 +127,15 @@ async function callGemini(prompt: string, config: LinqAiConfig): Promise<string 
   return text;
 }
 
-/** プラットフォーム共通 LLM 呼び出し */
-async function callLlm(prompt: string, config: LinqAiConfig): Promise<string | null> {
+/** プラットフォーム共通 LLM 呼び出し（OpenAI / Anthropic / Google 対応） */
+async function callLlm(prompt: string, config: LinqAiConfig, systemPrompt?: string): Promise<string | null> {
   if (!config.enabled || !config.apiKey) return null;
   switch (config.provider) {
+    case "openai":
+    case "azure":
+      return callOpenAi(prompt, config, systemPrompt);
+    case "anthropic":
+      return callAnthropic(prompt, config, systemPrompt);
     case "google":
       return callGemini(prompt, config);
     default:
@@ -164,9 +222,24 @@ export async function generateFollowUpEmail(
   input: FollowUpEmailRequest,
   _config?: LinqAiConfig,
 ): Promise<FollowUpEmailResult> {
-  const llm = _config ? await callLlm("", _config) : null;
-  if (llm) {
-    return { source: "linq", productionReady: true, subject: "", body: llm };
+  const ai = _config ?? await resolveLinqAiConfig();
+  if (ai.enabled) {
+    const tone = input.tone === "friendly" ? "親しみやすい丁寧語" : "フォーマルなビジネス文体";
+    const llm = await callLlm(
+      `工務店・リフォーム会社の営業担当として、以下の問い合わせへのフォローアップメールを作成してください。
+顧客名: ${input.customerName}
+問い合わせ内容: ${input.inquiryContent.slice(0, 500)}
+文体: ${tone}
+JSONのみ返してください: {"subject":"件名","body":"本文"}`,
+      ai,
+      "あなたは工務店の優秀な営業アシスタントです。",
+    );
+    if (llm) {
+      const parsed = parseJsonBlock<{ subject?: string; body?: string }>(llm);
+      if (parsed?.subject && parsed?.body) {
+        return { source: "linq", productionReady: true, model: ai.model, subject: parsed.subject, body: parsed.body };
+      }
+    }
   }
   return {
     ...STUB_META,
@@ -327,9 +400,42 @@ export async function generateEstimateDraft(
   context: { customerName: string; recordings: string[]; inquiryContent?: string },
   _config?: LinqAiConfig,
 ): Promise<EstimateDraftResult> {
+  const ai = _config ?? await resolveLinqAiConfig();
   const combined = [...context.recordings, context.inquiryContent ?? ""].join("\n");
-  const items: EstimateDraftResult["items"] = [];
 
+  if (ai.enabled && combined.trim()) {
+    const llm = await callLlm(
+      `工務店・リフォーム会社の見積ドラフトを作成してください。
+顧客名: ${context.customerName}
+商談・問い合わせ内容: ${combined.slice(0, 3000)}
+
+JSONのみ返してください:
+{"title":"見積タイトル","items":[{"categoryName":"カテゴリ","name":"工事名","quantity":1,"unit":"式","costPrice":原価数値,"sellingPrice":販売価格数値,"specification":"仕様詳細（任意）"}],"notes":"備考"}
+
+粗利率は概ね40〜55%を目安にしてください。`,
+      ai,
+      "あなたは工務店・リフォーム会社の見積専門家です。",
+    );
+    if (llm) {
+      const parsed = parseJsonBlock<{
+        title?: string;
+        items?: Array<{ categoryName: string; name: string; quantity: number; unit: string; costPrice: number; sellingPrice: number; specification?: string }>;
+        notes?: string;
+      }>(llm);
+      if (parsed?.items && parsed.items.length > 0) {
+        return {
+          source: "linq",
+          productionReady: true,
+          model: ai.model,
+          title: parsed.title ?? `${context.customerName} 様 見積ドラフト`,
+          items: parsed.items,
+          notes: parsed.notes ?? "AIが商談ナレッジから自動生成（要確認・調整）",
+        };
+      }
+    }
+  }
+
+  const items: EstimateDraftResult["items"] = [];
   if (/リフォーム|改修|改装/.test(combined)) {
     items.push(
       { categoryName: "解体・撤去", name: "既存設備撤去", quantity: 1, unit: "式", costPrice: 200000, sellingPrice: 350000 },
@@ -345,7 +451,6 @@ export async function generateEstimateDraft(
       { categoryName: "工事費", name: "一式工事", quantity: 1, unit: "式", costPrice: 1000000, sellingPrice: 1800000 },
     );
   }
-
   return {
     ...STUB_META,
     source: "heuristic",
@@ -365,13 +470,42 @@ export async function generateApprovalSupport(
   applicationComment: string,
   _config?: LinqAiConfig,
 ): Promise<ApprovalSupportResult> {
+  const ai = _config ?? await resolveLinqAiConfig();
   const avgRate = similarEstimates.length
     ? similarEstimates.reduce((s, e) => s + e.grossProfitRate, 0) / similarEstimates.length
     : 50;
 
+  if (ai.enabled) {
+    const llm = await callLlm(
+      `工務店の見積承認支援を行ってください。
+対象見積: "${estimate.title}" 粗利率${estimate.grossProfitRate.toFixed(1)}% 合計¥${estimate.total.toLocaleString()}
+類似見積平均粗利率: ${avgRate.toFixed(1)}%
+申請理由: ${applicationComment || "（未記載）"}
+
+JSONのみ: {"analysis":"分析コメント（2文以内）","recommendation":"approve|conditional|return|reject","suggestedComment":"上長コメント案（任意）"}
+recommendationの基準: approve=粗利率50%以上, conditional=40-50%で理由あり, return=40%未満または理由なし, reject=著しく低い`,
+      ai,
+      "あなたは工務店の経験豊富な上長です。",
+    );
+    if (llm) {
+      const parsed = parseJsonBlock<{ analysis?: string; recommendation?: string; suggestedComment?: string }>(llm);
+      if (parsed?.analysis && parsed?.recommendation) {
+        return {
+          source: "linq",
+          productionReady: true,
+          model: ai.model,
+          similarEstimates: similarEstimates.slice(0, 5),
+          analysis: parsed.analysis,
+          recommendation: (["approve", "conditional", "return", "reject"].includes(parsed.recommendation)
+            ? parsed.recommendation : "conditional") as ApprovalSupportResult["recommendation"],
+          suggestedComment: parsed.suggestedComment,
+        };
+      }
+    }
+  }
+
   let recommendation: ApprovalSupportResult["recommendation"] = "approve";
   let analysis = `粗利率 ${estimate.grossProfitRate.toFixed(1)}% は類似見積平均 ${avgRate.toFixed(1)}% と比較しています。`;
-
   if (estimate.grossProfitRate < 40) {
     recommendation = "return";
     analysis += " 大幅に基準を下回るため、原価見直しまたは値引き理由の追加確認を推奨します。";
@@ -379,7 +513,6 @@ export async function generateApprovalSupport(
     recommendation = applicationComment.trim() ? "conditional" : "return";
     analysis += " 基準未満ですが、申請理由が記載されていれば条件付き承認も検討可能です。";
   }
-
   return {
     ...STUB_META,
     source: "heuristic",
@@ -461,6 +594,23 @@ export async function generateEsignMessage(
   contractTitle: string,
   _config?: LinqAiConfig,
 ): Promise<EsignMessageResult> {
+  const ai = _config ?? await resolveLinqAiConfig();
+  if (ai.enabled) {
+    const llm = await callLlm(
+      `工務店の電子契約送付メールを作成してください。
+顧客名: ${customerName}
+契約書タイトル: ${contractTitle}
+JSONのみ: {"subject":"件名","body":"本文（署名依頼の丁寧な文面）"}`,
+      ai,
+      "あなたは工務店の営業担当です。",
+    );
+    if (llm) {
+      const parsed = parseJsonBlock<{ subject?: string; body?: string }>(llm);
+      if (parsed?.subject && parsed?.body) {
+        return { source: "linq", productionReady: true, model: ai.model, subject: parsed.subject, body: parsed.body };
+      }
+    }
+  }
   return {
     ...STUB_META,
     source: "heuristic",

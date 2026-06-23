@@ -22,6 +22,7 @@ export async function resolveLinqAiConfig(): Promise<LinqAiConfig> {
 
   const apiKey =
     stored.apiKey?.trim() ||
+    process.env.OPENAI_API_KEY?.trim() ||
     process.env.GEMINI_API_KEY?.trim() ||
     process.env.LINQ_AI_API_KEY?.trim() ||
     undefined;
@@ -30,9 +31,9 @@ export async function resolveLinqAiConfig(): Promise<LinqAiConfig> {
 
   return {
     enabled,
-    provider: stored.provider ?? "google",
+    provider: stored.provider ?? "openai",
     apiKey,
-    model: stored.model ?? process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+    model: stored.model ?? process.env.LINQ_AI_MODEL ?? "gpt-4o-mini",
     sttProvider: stored.sttProvider ?? "web_speech",
   };
 }
@@ -53,19 +54,19 @@ export async function getPlatformLinqAiPublicConfig() {
   } catch {
     return {
       enabled: false,
-      provider: "google" as const,
-      model: "gemini-2.0-flash",
+      provider: "openai" as const,
+      model: "gpt-4o-mini",
       sttProvider: "web_speech" as const,
-      apiKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.LINQ_AI_API_KEY),
+      apiKeyConfigured: Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.LINQ_AI_API_KEY),
       updatedAt: null as string | null,
     };
   }
 
-  const envKey = Boolean(process.env.GEMINI_API_KEY || process.env.LINQ_AI_API_KEY);
+  const envKey = Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.LINQ_AI_API_KEY);
   return {
     enabled: Boolean(stored.enabled),
-    provider: (stored.provider ?? "google") as LinqAiConfig["provider"],
-    model: stored.model ?? "gemini-2.0-flash",
+    provider: (stored.provider ?? "openai") as LinqAiConfig["provider"],
+    model: stored.model ?? "gpt-4o-mini",
     sttProvider: (stored.sttProvider ?? "web_speech") as LinqAiConfig["sttProvider"],
     apiKeyConfigured: Boolean(stored.apiKey?.trim()) || envKey,
     updatedAt,
@@ -92,8 +93,8 @@ export async function savePlatformLinqAiConfig(
   const prev = (current?.value ?? {}) as StoredLinqAi;
   const nextValue: StoredLinqAi = {
     enabled: input.enabled,
-    provider: input.provider ?? prev.provider ?? "google",
-    model: input.model ?? prev.model ?? "gemini-2.0-flash",
+    provider: input.provider ?? prev.provider ?? "openai",
+    model: input.model ?? prev.model ?? "gpt-4o-mini",
     sttProvider: input.sttProvider ?? prev.sttProvider ?? "web_speech",
     apiKey: input.apiKey?.trim() ? input.apiKey.trim() : prev.apiKey,
   };

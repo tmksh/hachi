@@ -1,24 +1,37 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, Mic, Square, Copy, Sparkles, ListTodo, Save, Mail } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Mic, Square, Copy, Sparkles, ListTodo, Save, Mail,
+  Loader2, Upload, CheckCircle2, AlertCircle, Clock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getCustomerRecordings, saveCustomerRecording, createCustomerTodo, type CustomerRecording } from "@/lib/actions/crm-features";
-import { processRecordingComplete, sendRecordingSummaryEmail } from "@/lib/actions/sales-flow";
+import { sendRecordingSummaryEmail } from "@/lib/actions/sales-flow";
+import { uploadVoiceRecording, saveVoiceTranscriptResult } from "@/lib/actions/voice-recording";
+import { improveRecordingText } from "@/lib/actions/bridge-ai";
+import { cn } from "@/lib/utils";
 
-type SpeechSupport = "supported" | "unsupported";
+const POLL_INTERVAL_MS = 3000;
+const ASYNC_THRESHOLD_SEC = 720;  // 12分
 
-function detectSpeechSupport(): SpeechSupport {
-  if (typeof window === "undefined") return "unsupported";
-  const w = window as unknown as { webkitSpeechRecognition?: unknown; SpeechRecognition?: unknown };
-  return w.webkitSpeechRecognition || w.SpeechRecognition ? "supported" : "unsupported";
-}
+type RecordingState = "idle" | "recording" | "uploading" | "transcribing" | "done" | "error";
+
+type MeetingResult = {
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  todos: Array<{ title: string; priority: "high" | "medium" | "low"; dueDate?: string }>;
+  speakers: Array<{ label: string; role: string; highlights: string[] }>;
+  customerUpdates: Record<string, string | null>;
+};
 
 export function RecordingSummaryTab({
   customerId,
@@ -30,68 +43,210 @@ export function RecordingSummaryTab({
   customerEmail?: string | null;
 }) {
   const [recordings, setRecordings] = useState<CustomerRecording[]>([]);
-  const [speechSupport, setSpeechSupport] = useState<SpeechSupport>("unsupported");
-  const [listening, setListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [memo, setMemo] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selection, setSelection] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [sendToCustomer, setSendToCustomer] = useState(false);
-  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [elapsed, setElapsed] = useState(0);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const [transcript, setTranscript] = useState("");
+  const [liveTranscript, setLiveTranscript] = useState(""); // Web Speech API リアルタイム
+  const [result, setResult] = useState<MeetingResult | null>(null);
+  const [memo, setMemo] = useState("");
+  const [selection, setSelection] = useState("");
+  const [sendToCustomer, setSendToCustomer] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [improving, setImproving] = useState(false);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [pollProgress, setPollProgress] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechRef = useRef<{ stop: () => void } | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAtRef = useRef<number>(0);
 
-  const load = () => {
+  const load = useCallback(() => {
     getCustomerRecordings(customerId).then(setRecordings).catch(() => {});
-  };
-
-  useEffect(() => {
-    setSpeechSupport(detectSpeechSupport());
-    load();
   }, [customerId]);
 
-  useEffect(() => {
-    if (!listening) {
-      setElapsed(0);
-      if (timerRef.current) clearInterval(timerRef.current);
-      return;
-    }
-    const startedAt = Date.now();
-    timerRef.current = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [listening]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      mediaRecorderRef.current?.stop();
+      speechRef.current?.stop();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
 
-  const startListening = () => {
-    type SpeechResult = { results: ArrayLike<{ 0: { transcript: string } }> };
-    type SpeechCtor = new () => {
-      lang: string;
-      continuous: boolean;
-      interimResults: boolean;
-      onresult: (e: SpeechResult) => void;
-      onerror: () => void;
-      start: () => void;
-      stop: () => void;
-    };
-    const SR = (window as unknown as { webkitSpeechRecognition?: SpeechCtor; SpeechRecognition?: SpeechCtor }).webkitSpeechRecognition
-      ?? (window as unknown as { SpeechRecognition?: SpeechCtor }).SpeechRecognition;
+  // ── 録音開始 ──────────────────────────────────────────────
+  const startRecording = async () => {
+    setErrorMsg(null);
+    setTranscript("");
+    setLiveTranscript("");
+    setResult(null);
 
-    if (!SR) {
-      toast.info("このブラウザでは音声入力に非対応です。メモ欄に直接入力してください");
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      toast.error("マイクへのアクセスが拒否されました。ブラウザの設定を確認してください");
       return;
     }
+
+    // MediaRecorder セットアップ（WebM/Opus 32kbps）
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/ogg";
+
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType,
+      audioBitsPerSecond: 32000,
+    });
+    audioChunksRef.current = [];
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    mediaRecorder.start(1000); // 1秒ごとにチャンク
+    mediaRecorderRef.current = mediaRecorder;
+    startedAtRef.current = Date.now();
+
+    // Web Speech API でリアルタイム表示
+    startWebSpeech();
+
+    // タイマー
+    setElapsed(0);
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
+    }, 1000);
+
+    setRecordingState("recording");
+  };
+
+  // ── 録音停止 ──────────────────────────────────────────────
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current) return;
+
+    mediaRecorderRef.current.onstop = async () => {
+      const durationSec = Math.floor((Date.now() - startedAtRef.current) / 1000);
+      const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType ?? "audio/webm" });
+      speechRef.current?.stop();
+      if (timerRef.current) clearInterval(timerRef.current);
+      await processAudio(audioBlob, durationSec);
+    };
+
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+    setRecordingState("uploading");
+  };
+
+  // ── 音声処理（アップロード → 文字起こし） ───────────────────
+  const processAudio = async (audioBlob: Blob, durationSec: number) => {
+    setRecordingState("uploading");
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob);
+      formData.append("customerId", customerId);
+      if (dealId) formData.append("dealId", dealId);
+      formData.append("durationSec", String(durationSec));
+
+      const { mode, storagePath, jobId: newJobId } = await uploadVoiceRecording(formData);
+
+      setRecordingState("transcribing");
+
+      if (mode === "sync") {
+        // 同期処理（12分以内）
+        const res = await fetch("/api/voice-transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storagePath, customerId, dealId, durationSec, fileSizeBytes: audioBlob.size }),
+        });
+        const data = await res.json() as { transcript?: string; result?: MeetingResult; error?: string };
+
+        if (!res.ok || data.error) throw new Error(data.error ?? "文字起こしに失敗しました");
+
+        // Web Speech の結果と比較して良い方を採用
+        const finalTranscript = pickBestTranscript(data.transcript ?? "", liveTranscript);
+        setTranscript(finalTranscript);
+        setResult(data.result ?? null);
+        if (data.result?.summary) setMemo(data.result.summary);
+        setRecordingState("done");
+        toast.success("文字起こし完了！結果を確認してください");
+      } else {
+        // 非同期処理（12分超）
+        if (!newJobId) throw new Error("ジョブIDが取得できませんでした");
+        setJobId(newJobId);
+        startPolling(newJobId, storagePath);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "処理に失敗しました";
+      setErrorMsg(msg);
+      setRecordingState("error");
+      toast.error(msg);
+    }
+  };
+
+  // ── 非同期ジョブのポーリング ───────────────────────────────
+  const startPolling = (jId: string, storagePath: string) => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/voice-job-status?jobId=${jId}`);
+        const job = await res.json() as {
+          status: string;
+          transcript?: string;
+          result?: MeetingResult & { progress?: number };
+          error?: string;
+        };
+
+        if (job.result?.progress) setPollProgress(job.result.progress);
+
+        if (job.status === "done") {
+          clearInterval(pollRef.current!);
+          const finalTranscript = pickBestTranscript(job.transcript ?? "", liveTranscript);
+          setTranscript(finalTranscript);
+          setResult(job.result ?? null);
+          if (job.result?.summary) setMemo(job.result.summary);
+          setJobId(null);
+          setPollProgress(0);
+          setRecordingState("done");
+          toast.success("文字起こし完了！結果を確認してください");
+
+          // 営業フロー後処理
+          if (job.transcript && job.result) {
+            saveVoiceTranscriptResult({
+              customerId,
+              dealId,
+              storagePath,
+              transcript: job.transcript,
+              result: job.result,
+            }).catch(() => {});
+          }
+        } else if (job.status === "error") {
+          clearInterval(pollRef.current!);
+          setErrorMsg(job.error ?? "文字起こしに失敗しました");
+          setRecordingState("error");
+          toast.error(job.error ?? "文字起こしに失敗しました");
+        }
+      } catch {
+        // ポーリングエラーは無視して継続
+      }
+    }, POLL_INTERVAL_MS);
+  };
+
+  // ── Web Speech API（リアルタイム表示補助） ──────────────────
+  const startWebSpeech = () => {
+    type SpeechCtor = new () => {
+      lang: string; continuous: boolean; interimResults: boolean;
+      onresult: (e: { results: ArrayLike<{ 0: { transcript: string } }> }) => void;
+      onerror: () => void; start: () => void; stop: () => void;
+    };
+    const w = window as unknown as { webkitSpeechRecognition?: SpeechCtor; SpeechRecognition?: SpeechCtor };
+    const SR = w.webkitSpeechRecognition ?? w.SpeechRecognition;
+    if (!SR) return;
 
     const rec = new SR();
     rec.lang = "ja-JP";
@@ -100,33 +255,19 @@ export function RecordingSummaryTab({
     rec.onresult = (e) => {
       let text = "";
       for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      setTranscript(text);
+      setLiveTranscript(text);
     };
-    rec.onerror = () => {
-      toast.error("音声認識を開始できませんでした。マイク権限を確認してください");
-      setListening(false);
-      recognitionRef.current = null;
-    };
+    rec.onerror = () => {};
     rec.start();
-    recognitionRef.current = rec;
-    setListening(true);
-    setTranscript("");
+    speechRef.current = rec;
   };
 
-  const stopListening = () => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setListening(false);
-  };
-
+  // ── 保存 ─────────────────────────────────────────────────
   const saveEntry = async () => {
     const text = [transcript, memo].filter(Boolean).join("\n\n").trim();
-    if (!text) {
-      toast.error("文字起こしまたはメモを入力してください");
-      return;
-    }
+    if (!text) { toast.error("文字起こしまたはメモを入力してください"); return; }
     if (sendToCustomer && !customerEmail?.trim()) {
-      toast.error("顧客のメールアドレスが未登録です。顧客情報から登録してください");
+      toast.error("顧客のメールアドレスが未登録です");
       return;
     }
     setSaving(true);
@@ -135,17 +276,9 @@ export function RecordingSummaryTab({
         customer_id: customerId,
         deal_id: dealId,
         transcript: transcript.trim(),
-        summary: (transcript || memo).slice(0, 120) + ((transcript || memo).length > 120 ? "…" : ""),
+        summary: result?.summary ?? (transcript || memo).slice(0, 120),
         memo: memo.trim(),
-        title: `商談 ${format(new Date(), "M/d HH:mm", { locale: ja })}`,
-      });
-
-      const result = await processRecordingComplete({
-        customerId,
-        recordingId: saved.id,
-        dealId,
-        transcript: transcript.trim(),
-        memo: memo.trim(),
+        title: result?.title ?? `商談 ${format(new Date(), "M/d HH:mm", { locale: ja })}`,
       });
 
       let emailSent = false;
@@ -154,41 +287,38 @@ export function RecordingSummaryTab({
           await sendRecordingSummaryEmail({ customerId, recordingId: saved.id });
           emailSent = true;
         } catch (err) {
-          const message = err instanceof Error ? err.message : "メール送信に失敗しました";
-          toast.error(message);
+          toast.error(err instanceof Error ? err.message : "メール送信に失敗しました");
         }
       }
 
-      toast.success(
-        emailSent
-          ? `保存し、${customerEmail} に要約メールを送信しました（ToDo ${result.todosCreated}件${result.stageProposalId ? "・ステージ提案あり" : ""}）`
-          : `保存しました（ToDo ${result.todosCreated}件${result.stageProposalId ? "・ステージ提案あり" : ""}）`,
-      );
+      toast.success(emailSent ? `保存し、${customerEmail} へ要約メールを送信しました` : "保存しました");
       setTranscript("");
+      setLiveTranscript("");
+      setResult(null);
       setMemo("");
+      setRecordingState("idle");
       setSendToCustomer(false);
       load();
     } catch {
-      toast.error("保存に失敗しました。DBマイグレーション（00037）が未適用の可能性があります");
+      toast.error("保存に失敗しました");
     } finally {
       setSaving(false);
     }
   };
 
-  const sendSummaryEmail = async (recordingId: string) => {
-    if (!customerEmail?.trim()) {
-      toast.error("顧客のメールアドレスが未登録です");
-      return;
-    }
-    setSendingEmailId(recordingId);
+  // ── 文章改善 ──────────────────────────────────────────────
+  const improveText = async () => {
+    const text = selection || memo;
+    if (!text.trim()) return;
+    setImproving(true);
     try {
-      const { sentTo } = await sendRecordingSummaryEmail({ customerId, recordingId });
-      toast.success(`${sentTo} に要約メールを送信しました`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "メール送信に失敗しました";
-      toast.error(message);
+      const { result: improved, ok } = await improveRecordingText(text);
+      if (ok) { setMemo(improved); toast.success("文章を改善しました"); }
+      else toast.error("AI機能が設定されていません");
+    } catch {
+      toast.error("文章改善に失敗しました");
     } finally {
-      setSendingEmailId(null);
+      setImproving(false);
     }
   };
 
@@ -198,69 +328,95 @@ export function RecordingSummaryTab({
     try {
       await createCustomerTodo({ customer_id: customerId, title: text.slice(0, 80), description: text, source: "recording" });
       toast.success("ToDoに追加しました");
-    } catch {
-      toast.error("追加に失敗しました");
-    }
+    } catch { toast.error("追加に失敗しました"); }
   };
 
-  const improveText = () => {
-    const text = selection || memo;
-    if (!text.trim()) return;
-    setMemo(`${text}\n\n【改善案】要点を整理し、次のアクションを明記した文面に整えました。`);
-    toast.info("AI連携は準備中です（現在はサンプル文を挿入しています）");
+  const sendSummaryEmail = async (recordingId: string) => {
+    if (!customerEmail?.trim()) { toast.error("顧客のメールアドレスが未登録です"); return; }
+    setSendingEmailId(recordingId);
+    try {
+      const { sentTo } = await sendRecordingSummaryEmail({ customerId, recordingId });
+      toast.success(`${sentTo} に要約メールを送信しました`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "メール送信に失敗しました");
+    } finally { setSendingEmailId(null); }
   };
+
+  const isProcessing = recordingState === "uploading" || recordingState === "transcribing";
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
-        <div className="flex gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-          <div className="space-y-1 text-xs leading-relaxed">
-            <p className="font-semibold">現在はプロトタイプです</p>
-            <p>
-              「録音開始」は<strong>ブラウザの音声認識（Web Speech API）</strong>で文字起こしする簡易版です。
-              音声ファイルの保存や電話録音の取り込みは未対応です。
-            </p>
-            <p className="text-amber-900/80 dark:text-amber-200/80">
-              本番運用には STT（Whisper / Google Speech 等）・AI要約・Storage 連携が必要です。
-              {speechSupport === "unsupported" && " このブラウザではメモ欄への手入力のみ利用できます。"}
-            </p>
-          </div>
-        </div>
-      </div>
-
+      {/* 録音コントロール */}
       <Card variant="inset" className="py-0 overflow-hidden">
         <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
-          <CardTitle className="text-sm font-semibold">文字起こし・メモ</CardTitle>
+          <CardTitle className="text-sm font-semibold">録音・文字起こし</CardTitle>
           <CardDescription className="text-xs">
-            {speechSupport === "supported"
-              ? "音声入力または手入力 → 保存で履歴に追加"
-              : "メモ欄に入力 → 保存で履歴に追加"}
+            MediaRecorder + OpenAI Whisper（60分以上対応）
           </CardDescription>
         </CardHeader>
         <CardContent className="px-4 py-4 space-y-3">
-          {speechSupport === "supported" && !listening && (
-            <Button size="sm" onClick={startListening} className="gap-1.5 h-9">
+          {/* 録音ボタン */}
+          {recordingState === "idle" && (
+            <Button size="sm" onClick={startRecording} className="gap-1.5 h-9">
               <Mic className="h-4 w-4" />
-              音声入力開始
+              録音開始
             </Button>
           )}
 
-          {speechSupport === "supported" && listening && (
-            <VoiceInputActivePanel
+          {recordingState === "recording" && (
+            <RecordingActivePanel
               elapsed={elapsed}
-              transcript={transcript}
-              onStop={stopListening}
+              liveTranscript={liveTranscript}
+              onStop={stopRecording}
             />
           )}
 
-          {!listening && transcript && (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">文字起こし</p>
+          {isProcessing && (
+            <ProcessingPanel
+              state={recordingState}
+              progress={pollProgress}
+              jobId={jobId}
+            />
+          )}
+
+          {recordingState === "error" && errorMsg && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">処理に失敗しました</p>
+                <p className="text-xs mt-0.5">{errorMsg}</p>
+              </div>
+              <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 text-xs" onClick={() => setRecordingState("idle")}>
+                リセット
+              </Button>
+            </div>
+          )}
+
+          {/* 文字起こし結果 */}
+          {recordingState === "done" && transcript && (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-medium text-muted-foreground">文字起こし結果</p>
+                <Button size="icon" variant="ghost" className="size-6 h-5" onClick={() => { navigator.clipboard.writeText(transcript); toast.success("コピーしました"); }}>
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
               {transcript}
             </div>
           )}
 
+          {/* 話者情報 */}
+          {result?.speakers && result.speakers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {result.speakers.map((s, i) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  {s.label}（{s.role}）
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {/* メモ欄 */}
           <div className="relative">
             <Textarea
               value={memo}
@@ -270,15 +426,15 @@ export function RecordingSummaryTab({
                 (e.target as HTMLTextAreaElement).selectionEnd,
               ))}
               rows={5}
-              placeholder="営業メモ（手入力可。テキスト選択で ToDo追加・コピー）"
+              placeholder={recordingState === "done" ? "AI要約（編集可能）" : "営業メモ（手入力可）"}
             />
             {(selection || memo) && (
               <div className="absolute bottom-2 right-2 flex gap-1 rounded-lg border bg-background shadow-sm p-1">
                 <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={addTodoFromSelection}>
                   <ListTodo className="h-3.5 w-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-7" title="文章を改善（準備中）" onClick={improveText}>
-                  <Sparkles className="h-3.5 w-3.5" />
+                <Button size="icon" variant="ghost" className="size-7" title="AIで改善" onClick={() => void improveText()} disabled={improving}>
+                  {improving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                 </Button>
                 <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection || memo); toast.success("コピーしました"); }}>
                   <Copy className="h-3.5 w-3.5" />
@@ -287,19 +443,32 @@ export function RecordingSummaryTab({
             )}
           </div>
 
+          {/* ToDo プレビュー */}
+          {result?.todos && result.todos.length > 0 && (
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">AIが提案したToDo</p>
+              {result.todos.map((t, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className={cn("inline-block w-1.5 h-1.5 rounded-full shrink-0",
+                    t.priority === "high" ? "bg-rose-500" : t.priority === "medium" ? "bg-amber-500" : "bg-emerald-500"
+                  )} />
+                  <span>{t.title}</span>
+                  {t.dueDate && <span className="text-muted-foreground ml-auto">{t.dueDate}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
             {customerEmail?.trim() ? (
               <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <Checkbox
-                  checked={sendToCustomer}
-                  onCheckedChange={(v) => setSendToCustomer(v === true)}
-                />
-                <span>要約完了後に <span className="font-medium text-foreground">{customerEmail}</span> へ送信</span>
+                <Checkbox checked={sendToCustomer} onCheckedChange={(v) => setSendToCustomer(v === true)} />
+                <span>要約を <span className="font-medium text-foreground">{customerEmail}</span> へ送信</span>
               </label>
             ) : (
               <p className="text-xs text-muted-foreground">顧客メール未登録のため送信できません</p>
             )}
-            <Button onClick={saveEntry} disabled={saving} className="h-9 gap-1.5 shrink-0">
+            <Button onClick={saveEntry} disabled={saving || isProcessing || recordingState === "recording"} className="h-9 gap-1.5 shrink-0">
               <Save className="h-4 w-4" />
               {saving ? "保存中..." : "保存"}
             </Button>
@@ -307,10 +476,11 @@ export function RecordingSummaryTab({
         </CardContent>
       </Card>
 
+      {/* 履歴 */}
       <Card variant="inset" className="py-0 overflow-hidden">
         <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
           <CardTitle className="text-sm font-semibold">履歴</CardTitle>
-          <CardDescription className="text-xs">保存した文字起こし・メモ</CardDescription>
+          <CardDescription className="text-xs">保存した録音・文字起こし</CardDescription>
         </CardHeader>
         <div className="divide-y divide-border/40">
           {recordings.length === 0 ? (
@@ -321,12 +491,7 @@ export function RecordingSummaryTab({
               role="button"
               tabIndex={0}
               onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setSelectedId(selectedId === r.id ? null : r.id);
-                }
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(selectedId === r.id ? null : r.id); } }}
               className="w-full text-left px-4 py-3 hover:bg-white/45 dark:hover:bg-white/5 transition-colors cursor-pointer"
             >
               <div className="flex items-center justify-between gap-2">
@@ -341,7 +506,7 @@ export function RecordingSummaryTab({
                   {r.transcript && (
                     <div>
                       <p className="text-[11px] font-medium text-muted-foreground mb-1">文字起こし</p>
-                      <p className="whitespace-pre-wrap">{r.transcript}</p>
+                      <p className="whitespace-pre-wrap text-xs">{r.transcript}</p>
                     </div>
                   )}
                   {r.memo && (
@@ -352,16 +517,8 @@ export function RecordingSummaryTab({
                   )}
                   {r.summary && customerEmail?.trim() && (
                     <div className="pt-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 gap-1.5 text-xs"
-                        disabled={sendingEmailId === r.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void sendSummaryEmail(r.id);
-                        }}
-                      >
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" disabled={sendingEmailId === r.id}
+                        onClick={(e) => { e.stopPropagation(); void sendSummaryEmail(r.id); }}>
                         <Mail className="h-3.5 w-3.5" />
                         {sendingEmailId === r.id ? "送信中..." : "顧客に要約を送信"}
                       </Button>
@@ -377,9 +534,18 @@ export function RecordingSummaryTab({
   );
 }
 
-function formatElapsed(seconds: number) {
-  const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
-  const ss = String(seconds % 60).padStart(2, "0");
+/** Web Speech と Whisper の結果を比較して長い方・精度高そうな方を採用 */
+function pickBestTranscript(serverText: string, liveText: string): string {
+  if (!serverText) return liveText;
+  if (!liveText) return serverText;
+  // Whisperの方が精度が高いので基本的にサーバー結果を優先
+  // ただし極端に短い場合はWeb Speechの方が詳しいことがある
+  return serverText.length >= liveText.length * 0.7 ? serverText : liveText;
+}
+
+function formatTime(sec: number): string {
+  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+  const ss = String(sec % 60).padStart(2, "0");
   return `${mm}:${ss}`;
 }
 
@@ -387,25 +553,19 @@ function VoiceWaveform() {
   return (
     <div className="flex items-end justify-end gap-0.5 h-6 mt-1" aria-hidden>
       {[40, 70, 55, 90, 45, 75, 50].map((h, i) => (
-        <span
-          key={i}
-          className="w-1 rounded-full bg-red-400/80 animate-pulse"
-          style={{ height: `${h}%`, animationDelay: `${i * 0.12}s`, animationDuration: "0.8s" }}
-        />
+        <span key={i} className="w-1 rounded-full bg-red-400/80 animate-pulse"
+          style={{ height: `${h}%`, animationDelay: `${i * 0.12}s`, animationDuration: "0.8s" }} />
       ))}
     </div>
   );
 }
 
-function VoiceInputActivePanel({
-  elapsed,
-  transcript,
-  onStop,
-}: {
+function RecordingActivePanel({ elapsed, liveTranscript, onStop }: {
   elapsed: number;
-  transcript: string;
+  liveTranscript: string;
   onStop: () => void;
 }) {
+  const isLong = elapsed > ASYNC_THRESHOLD_SEC;
   return (
     <div className="rounded-xl border-2 border-red-200/80 bg-gradient-to-b from-red-50/90 to-background dark:from-red-950/30 dark:to-background dark:border-red-900/50 p-4 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -416,41 +576,80 @@ function VoiceInputActivePanel({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-red-700 dark:text-red-400">音声入力中</p>
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">録音中</p>
               <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-950/60 dark:text-red-300">
                 <span className="size-1.5 rounded-full bg-red-500 animate-pulse" />
                 REC
               </span>
+              {isLong && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                  <Clock className="h-2.5 w-2.5" />
+                  非同期処理
+                </span>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">マイクに向かって話してください</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isLong ? "12分超のため非同期処理になります" : "マイクに向かって話してください"}
+            </p>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-2xl font-mono tabular-nums font-semibold text-red-700 dark:text-red-400">
-            {formatElapsed(elapsed)}
-          </p>
+          <p className="text-2xl font-mono tabular-nums font-semibold text-red-700 dark:text-red-400">{formatTime(elapsed)}</p>
           <VoiceWaveform />
         </div>
       </div>
 
-      <div className="rounded-lg border border-red-200/60 bg-white/70 dark:bg-black/20 dark:border-red-900/40 p-3 min-h-[120px] max-h-48 overflow-y-auto">
-        <p className="text-[11px] font-medium text-muted-foreground mb-2">文字起こし（リアルタイム）</p>
-        {transcript ? (
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{transcript}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground/60 italic">音声を認識しています…</p>
-        )}
-      </div>
+      {liveTranscript && (
+        <div className="rounded-lg border border-red-200/60 bg-white/70 dark:bg-black/20 dark:border-red-900/40 p-3 min-h-[80px] max-h-36 overflow-y-auto">
+          <p className="text-[11px] font-medium text-muted-foreground mb-1">リアルタイム（Web Speech）</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">{liveTranscript}</p>
+        </div>
+      )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-red-200/50 dark:border-red-900/30">
-        <p className="text-[11px] text-muted-foreground">
-          停止すると文字起こし結果を編集・保存できます
-        </p>
+      <div className="flex items-center justify-between gap-3 pt-1 border-t border-red-200/50 dark:border-red-900/30">
+        <p className="text-[11px] text-muted-foreground">停止後にWhisperで高精度文字起こしします</p>
         <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5 h-9 shrink-0">
           <Square className="h-4 w-4" />
-          音声入力停止
+          録音停止
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ProcessingPanel({ state, progress, jobId }: {
+  state: RecordingState;
+  progress: number;
+  jobId: string | null;
+}) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        {state === "uploading" ? (
+          <Upload className="h-5 w-5 text-primary animate-bounce shrink-0" />
+        ) : (
+          <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
+        )}
+        <div>
+          <p className="text-sm font-medium">
+            {state === "uploading" ? "音声をアップロード中..." : jobId ? "文字起こし中（非同期）..." : "文字起こし中..."}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {jobId ? "長時間録音のため時間がかかる場合があります（最大15分）" : "しばらくお待ちください"}
+          </p>
+        </div>
+      </div>
+      {jobId && progress > 0 && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>処理中...</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

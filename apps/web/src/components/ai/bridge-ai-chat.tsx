@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Send, X } from "lucide-react";
+import { Sparkles, Send, X, Loader2 } from "lucide-react";
+import { sendBridgeAiMessage } from "@/lib/actions/bridge-ai";
 
 export const BRIDGE_AI_PANEL_WIDTH = 400;
 
@@ -47,6 +48,7 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
   const pathname = usePathname();
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const TEAL_ACTIVE_GRADIENT = "var(--brand-gradient)";
 
@@ -67,17 +69,24 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const isInitial = messages.length === 1 && messages[0]?.role === "assistant";
 
-  const send = () => {
-    if (!input.trim()) return;
+  const send = async () => {
+    if (!input.trim() || sending) return;
     const userMsg = input.trim();
-    setMessages((m) => [...m, { role: "user", text: userMsg }]);
+    const nextMessages: { role: "user" | "assistant"; text: string }[] = [
+      ...messages,
+      { role: "user", text: userMsg },
+    ];
+    setMessages(nextMessages);
     setInput("");
-    setTimeout(() => {
-      setMessages((m) => [...m, {
-        role: "assistant",
-        text: `「${userMsg}」について確認しました。現在の画面（${pathname}）のコンテキストに基づき、詳細は各機能画面から操作できます。`,
-      }]);
-    }, 400);
+    setSending(true);
+    try {
+      const { text } = await sendBridgeAiMessage(nextMessages, pathname ?? "/");
+      setMessages((m) => [...m, { role: "assistant", text }]);
+    } catch {
+      setMessages((m) => [...m, { role: "assistant", text: "通信エラーが発生しました。もう一度お試しください。" }]);
+    } finally {
+      setSending(false);
+    }
   };
 
   if (pathname?.startsWith("/admin/login")) return null;
@@ -143,17 +152,33 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.map((m, i) => (
               <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-                <span className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                <span className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                   {m.text}
                 </span>
               </div>
             ))}
+            {sending && (
+              <div className="text-left">
+                <span className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm bg-muted text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  考え中...
+                </span>
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
         <div className="p-3 border-t flex gap-2">
-          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="メッセージを入力..." onKeyDown={(e) => e.key === "Enter" && send()} />
-          <Button size="icon" onClick={send}><Send className="h-4 w-4" /></Button>
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="メッセージを入力..."
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+            disabled={sending}
+          />
+          <Button size="icon" onClick={() => void send()} disabled={sending || !input.trim()}>
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
         </div>
       </aside>
     </>
