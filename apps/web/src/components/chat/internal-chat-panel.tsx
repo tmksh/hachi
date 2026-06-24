@@ -32,94 +32,6 @@ import Link from "next/link";
 type Contact = Awaited<ReturnType<typeof getChatContacts>>[number];
 type ConversationView = { type: "list" } | { type: "chat"; contact: Contact } | { type: "inquiries" };
 
-const MOCK_CONTACTS: Contact[] = [
-  { id: "mock-contact-1", display_name: "山田 営業", avatar_url: null, role: "contractor_admin", department: "営業部" },
-  { id: "mock-contact-2", display_name: "佐藤 担当", avatar_url: null, role: "contractor_admin", department: "営業部" },
-];
-
-const MOCK_CONVERSATIONS: Record<string, InternalMessage[]> = {
-  "mock-contact-1": [
-    {
-      id: "mock-msg-1",
-      company_id: "mock",
-      sender_id: "mock-contact-1",
-      recipient_id: "mock-me",
-      content: "田中様の件、先週資料送付しました。今週中に返答いただける予定です。",
-      message_type: "chat",
-      related_customer_id: null,
-      related_deal_id: null,
-      read_at: new Date().toISOString(),
-      created_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
-    },
-    {
-      id: "mock-msg-2",
-      company_id: "mock",
-      sender_id: "mock-me",
-      recipient_id: "mock-contact-1",
-      content: "了解です。返答来たら共有お願いします。",
-      message_type: "chat",
-      related_customer_id: null,
-      related_deal_id: null,
-      read_at: new Date().toISOString(),
-      created_at: new Date(Date.now() - 90 * 60_000).toISOString(),
-    },
-    {
-      id: "mock-msg-3",
-      company_id: "mock",
-      sender_id: "mock-contact-1",
-      recipient_id: "mock-me",
-      content: "承知しました！",
-      message_type: "chat",
-      related_customer_id: null,
-      related_deal_id: null,
-      read_at: new Date().toISOString(),
-      created_at: new Date(Date.now() - 85 * 60_000).toISOString(),
-    },
-  ],
-  "mock-contact-2": [
-    {
-      id: "mock-msg-4",
-      company_id: "mock",
-      sender_id: "mock-me",
-      recipient_id: "mock-contact-2",
-      content: "鈴木様の見積、今週中に出せますか？",
-      message_type: "chat",
-      related_customer_id: null,
-      related_deal_id: null,
-      read_at: new Date().toISOString(),
-      created_at: new Date(Date.now() - 5 * 3600_000).toISOString(),
-    },
-    {
-      id: "mock-msg-5",
-      company_id: "mock",
-      sender_id: "mock-contact-2",
-      recipient_id: "mock-me",
-      content: "木曜までには出せます。現場確認が必要なので少し時間ください。",
-      message_type: "chat",
-      related_customer_id: null,
-      related_deal_id: null,
-      read_at: new Date().toISOString(),
-      created_at: new Date(Date.now() - 4 * 3600_000).toISOString(),
-    },
-  ],
-};
-
-const MOCK_INQUIRIES: InternalMessage[] = [
-  {
-    id: "mock-inq-1",
-    company_id: "mock",
-    sender_id: "mock-manager",
-    recipient_id: "mock-contact-1",
-    content: "田中 太郎 様の件ですが、フォローアップの状況を教えてください。",
-    message_type: "followup_inquiry",
-    related_customer_id: "mock-1",
-    related_deal_id: null,
-    read_at: null,
-    created_at: new Date(Date.now() - 5 * 60_000).toISOString(),
-    sender: { id: "mock-manager", display_name: "あなた", avatar_url: null },
-    related_customer: { id: "mock-1", name: "田中 太郎" },
-  },
-];
 
 export const INTERNAL_CHAT_WIDTH = 360;
 
@@ -164,17 +76,10 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
         getUnreadMessageCount(),
         getFollowupInquiries(),
       ]);
-      const isMock = c.length === 0;
-      setContacts(isMock ? MOCK_CONTACTS : c);
-      setLatestConvs(isMock
-        ? [
-            ...(MOCK_CONVERSATIONS["mock-contact-1"]?.slice(-1) ?? []),
-            ...(MOCK_CONVERSATIONS["mock-contact-2"]?.slice(-1) ?? []),
-          ]
-        : latest
-      );
+      setContacts(c);
+      setLatestConvs(latest);
       setUnreadCount(count);
-      setInquiries(inq.length > 0 ? inq : MOCK_INQUIRIES);
+      setInquiries(inq);
     } finally {
       setLoadingContacts(false);
     }
@@ -193,15 +98,10 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
     setView({ type: "chat", contact });
     setLoadingMessages(true);
     try {
-      if (contact.id.startsWith("mock-")) {
-        await new Promise((r) => setTimeout(r, 300));
-        setMessages(MOCK_CONVERSATIONS[contact.id] ?? []);
-      } else {
-        const msgs = await getConversation(contact.id);
-        setMessages(msgs);
-        await markConversationAsRead(contact.id);
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      }
+      const msgs = await getConversation(contact.id);
+      setMessages(msgs);
+      await markConversationAsRead(contact.id);
+      setUnreadCount(prev => Math.max(0, prev - 1));
     } finally {
       setLoadingMessages(false);
     }
@@ -213,25 +113,8 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
     setInput("");
     setSending(true);
     try {
-      if (view.contact.id.startsWith("mock-")) {
-        await new Promise((r) => setTimeout(r, 300));
-        const mockMsg: InternalMessage = {
-          id: `mock-sent-${Date.now()}`,
-          company_id: "mock",
-          sender_id: "mock-me",
-          recipient_id: view.contact.id,
-          content: text,
-          message_type: "chat",
-          related_customer_id: null,
-          related_deal_id: null,
-          read_at: null,
-          created_at: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, mockMsg]);
-      } else {
-        const msg = await sendChatMessage(view.contact.id, text);
-        setMessages(prev => [...prev, msg]);
-      }
+      const msg = await sendChatMessage(view.contact.id, text);
+      setMessages(prev => [...prev, msg]);
     } catch {
       setInput(text);
     } finally {
