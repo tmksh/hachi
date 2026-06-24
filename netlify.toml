@@ -9,6 +9,19 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# www → apex ドメインへ統一（301 永続リダイレクト）
+[[redirects]]
+  from = "https://www.bridge-linq.com/*"
+  to = "https://bridge-linq.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://www.bridge-linq.com/*"
+  to = "https://bridge-linq.com/:splat"
+  status = 301
+  force = true
+
 # Netlify デフォルト URL → 本番ドメインへ統一
 [[redirects]]
   from = "https://hachigreen.netlify.app/*"
