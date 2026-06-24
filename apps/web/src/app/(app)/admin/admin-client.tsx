@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   getAdminStats,
@@ -14,6 +14,7 @@ import {
   getAdminBiGrossRateDistribution,
   createAdminCompany,
   deleteAdminCompany,
+  setAdminCompanySlug,
   getAdminLinqAiSettings,
   updateAdminLinqAiSettings,
   testAdminLinqAiConnection,
@@ -23,7 +24,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   Dialog,
@@ -52,7 +52,6 @@ import {
   Users,
   HardHat,
   FileText,
-  ShieldCheck,
   TrendingUp,
   Activity,
   Wallet,
@@ -63,6 +62,7 @@ import {
   Download,
   BarChart3,
   Sparkles,
+  Globe,
 } from "lucide-react";
 import { LineChart } from "@/components/charts/line-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
@@ -152,6 +152,8 @@ export type AdminInitialData = {
 
 export function AdminClient({ initialData }: { initialData: AdminInitialData }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab") ?? "bi";
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [stats, setStats] = useState(initialData.stats);
@@ -166,6 +168,9 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const [addForm, setAddForm] = useState({ companyName: "", plan: "", slug: "", ownerName: "", ownerEmail: "", ownerPassword: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [slugDialog, setSlugDialog] = useState<{ id: string; name: string; currentSlug: string } | null>(null);
+  const [slugInput, setSlugInput] = useState("");
+  const [slugSaving, setSlugSaving] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(initialData.aiSettings.enabled);
   const [aiProvider, setAiProvider] = useState<"openai" | "google" | "anthropic" | "azure">(
     (initialData.aiSettings.provider as "openai" | "google" | "anthropic" | "azure") ?? "openai",
@@ -227,9 +232,36 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const handleDeleteCompany = async (id: string, name: string) => {
     if (!confirm(`「${name}」を削除しますか？\n\n⚠️ この企業に紐づくすべてのデータが削除されます。`)) return;
     setDeletingId(id);
-    try { await deleteAdminCompany(id); await loadData(); }
+    try {
+      await deleteAdminCompany(id);
+      setCompanies((prev) => prev.filter((c) => c.id !== id));
+    }
     catch (e) { setErrorMsg(extractErrorMessage(e)); }
     finally { setDeletingId(null); }
+  };
+
+  const handleOpenSlugDialog = (c: { id: string; name: string; slug?: string | null }) => {
+    setSlugInput(c.slug ?? "");
+    setSlugDialog({ id: c.id, name: c.name, currentSlug: c.slug ?? "" });
+  };
+
+  const handleSaveSlug = async () => {
+    if (!slugDialog) return;
+    setSlugSaving(true);
+    try {
+      const res = await setAdminCompanySlug(slugDialog.id, slugInput);
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === slugDialog.id ? { ...c, slug: res.slug } : c)),
+      );
+      if (res.netlifyError) {
+        alert(`slug を保存しましたが Netlify への追加に失敗しました:\n${res.netlifyError}`);
+      }
+      setSlugDialog(null);
+    } catch (e) {
+      setErrorMsg(extractErrorMessage(e));
+    } finally {
+      setSlugSaving(false);
+    }
   };
 
   const handleSaveAiSettings = async () => {
@@ -318,10 +350,6 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
     <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
       <PageHeader title="管理コンソール" description="プラットフォーム全体の管理 / 全国加盟店BI">
-        <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs">
-          <ShieldCheck className="h-3 w-3 mr-1" />
-          BRIDGE 運営
-        </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1.5">
@@ -387,19 +415,11 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
         </CardContent>
       </Card>
 
-      {/* Tabs */}
-      <Tabs defaultValue="bi">
-        <TabsList>
-          <TabsTrigger value="bi">全国 BI</TabsTrigger>
-          <TabsTrigger value="companies">企業一覧</TabsTrigger>
-          <TabsTrigger value="ai" className="gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
-            AI 設定
-          </TabsTrigger>
-        </TabsList>
+      {/* コンテンツ（サイドバーのtabパラメータで切り替え） */}
+      <div>
 
-        {/* BI タブ */}
-        <TabsContent value="bi" className="space-y-6 mt-4">
+        {/* BI */}
+        {currentTab === "bi" && <div className="space-y-6 mt-4">
           {loading || !bi ? (
             <>
               <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
@@ -571,10 +591,10 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </div>}
 
-        {/* 企業一覧タブ */}
-        <TabsContent value="companies" className="mt-4">
+        {/* 企業一覧 */}
+        {currentTab === "companies" && <div className="mt-4">
           <div className="flex justify-end mb-3">
             <Button size="sm" className="gap-1.5" onClick={() => setAddDialog(true)}>
               <Plus className="h-4 w-4" />企業を追加
@@ -590,6 +610,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
                     <thead>
                       <tr className="border-b">
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">企業名</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">サブドメイン</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">プラン</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">ユーザー数</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">登録日</th>
@@ -602,7 +623,11 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
                       ) : companies.map((c) => {
                         const memberCount = users.filter((u) => u.company_id === c.id).length;
                         return (
-                          <tr key={c.id} className="border-b hover:bg-muted/30 transition-colors group">
+                          <tr
+                            key={c.id}
+                            onClick={() => handleOpenSlugDialog(c)}
+                            className="border-b hover:bg-muted/30 transition-colors group cursor-pointer"
+                          >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -611,10 +636,23 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
                                 <span className="text-sm font-medium">{c.name}</span>
                               </div>
                             </td>
+                            <td className="px-4 py-3">
+                              {c.slug ? (
+                                <span className="flex items-center gap-1 text-xs font-mono text-primary">
+                                  <Globe className="h-3 w-3 shrink-0" />
+                                  {c.slug}
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Globe className="h-3 w-3 shrink-0" />
+                                  未設定
+                                </span>
+                              )}
+                            </td>
                             <td className="px-4 py-3"><Badge variant="outline" className="text-xs">{c.plan ?? "Free"}</Badge></td>
                             <td className="px-4 py-3 text-sm tabular-nums">{memberCount}名</td>
                             <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">{format(new Date(c.created_at), "yyyy/MM/dd", { locale: ja })}</td>
-                            <td className="pr-2 py-3">
+                            <td className="pr-2 py-3" onClick={(e) => e.stopPropagation()}>
                               <button onClick={() => handleDeleteCompany(c.id, c.name)} disabled={deletingId === c.id} className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-all">
                                 {deletingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
@@ -628,10 +666,10 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>}
 
-        {/* AI 設定（全テナント共通） */}
-        <TabsContent value="ai" className="mt-4">
+        {/* AI設定 */}
+        {currentTab === "ai" && <div className="mt-4">
           <div className="space-y-4">
             {/* ヘッダーカード */}
             <Card>
@@ -806,10 +844,10 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </div>}
 
-        {/* ユーザー一覧タブ */}
-        <TabsContent value="users" className="mt-4">
+        {/* ユーザー一覧（サイドバーに項目がないため非表示化しているが残す） */}
+        {currentTab === "users" && <div className="mt-4">
           <Card variant="inset">
             <CardContent className="p-0">
               {loading ? (
@@ -851,8 +889,48 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>}
+      </div>
+
+      {/* サブドメイン設定ダイアログ */}
+      <Dialog open={!!slugDialog} onOpenChange={(open) => { if (!open) setSlugDialog(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" />
+              サブドメイン設定
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{slugDialog?.name}</span> のサブドメインを設定します。
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">slug（半角英数字・ハイフンのみ）</Label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  placeholder="acme-construction"
+                  value={slugInput}
+                  onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  autoFocus
+                />
+              </div>
+              {slugInput && (
+                <p className="text-xs text-muted-foreground font-mono">
+                  → {slugInput}.{process.env.NEXT_PUBLIC_APP_DOMAIN ?? "bridge-linq.com"}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSlugDialog(null)} disabled={slugSaving}>キャンセル</Button>
+            <Button onClick={handleSaveSlug} disabled={slugSaving || !slugInput.trim()} className="gap-1.5">
+              {slugSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+              設定する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 企業追加ダイアログ */}
       <Dialog open={addDialog} onOpenChange={setAddDialog}>

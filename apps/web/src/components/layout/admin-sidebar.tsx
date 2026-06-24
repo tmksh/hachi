@@ -23,12 +23,14 @@ import {
   ShieldCheck,
   LogOut,
   ArrowLeft,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const ADMIN_NAV = [
   { key: "bi", label: "全国加盟店BI", icon: BarChart3 },
   { key: "companies", label: "企業一覧", icon: Building2 },
+  { key: "ai", label: "AI設定", icon: Sparkles },
 ] as const;
 
 type TabKey = (typeof ADMIN_NAV)[number]["key"];

@@ -454,6 +454,41 @@ export async function createAdminCompany(input: {
   return { companyId: company.id, userId: authData.user.id, netlifyDomain, netlifyError };
 }
 
+/** 既存企業に slug を設定し Netlify にドメインエイリアスを追加する */
+export async function setAdminCompanySlug(companyId: string, slug: string) {
+  const supabase = await assertSuperAdmin();
+
+  const normalized = slug.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!normalized) throw new Error("有効な slug を入力してください（半角英数字・ハイフンのみ）");
+
+  // 重複チェック
+  const { data: existing } = await supabase
+    .from("companies")
+    .select("id")
+    .eq("slug", normalized)
+    .neq("id", companyId)
+    .maybeSingle();
+  if (existing) throw new Error(`slug「${normalized}」はすでに別の企業で使われています`);
+
+  // DB 更新
+  const { error } = await supabase
+    .from("companies")
+    .update({ slug: normalized })
+    .eq("id", companyId);
+  if (error) throw error;
+
+  // Netlify ドメイン追加（失敗してもエラーは返すが DB は維持）
+  let netlifyDomain: string | null = null;
+  let netlifyError: string | null = null;
+  try {
+    netlifyDomain = await netlifyAddDomain(normalized);
+  } catch (e) {
+    netlifyError = e instanceof Error ? e.message : String(e);
+  }
+
+  return { slug: normalized, netlifyDomain, netlifyError };
+}
+
 /** 既存企業のサブドメインを Netlify に再同期する */
 export async function syncAdminCompanyDomain(companyId: string) {
   await assertSuperAdmin();
