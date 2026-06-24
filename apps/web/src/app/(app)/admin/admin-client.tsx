@@ -14,7 +14,7 @@ import {
   getAdminBiGrossRateDistribution,
   createAdminCompany,
   deleteAdminCompany,
-  setAdminCompanySlug,
+  updateAdminCompany,
   getAdminLinqAiSettings,
   updateAdminLinqAiSettings,
   testAdminLinqAiConnection,
@@ -168,9 +168,8 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const [addForm, setAddForm] = useState({ companyName: "", plan: "", slug: "", ownerName: "", ownerEmail: "", ownerPassword: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [slugDialog, setSlugDialog] = useState<{ id: string; name: string; currentSlug: string } | null>(null);
-  const [slugInput, setSlugInput] = useState("");
-  const [slugSaving, setSlugSaving] = useState(false);
+  const [editDialog, setEditDialog] = useState<{ id: string; name: string; slug: string; plan: string } | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(initialData.aiSettings.enabled);
   const [aiProvider, setAiProvider] = useState<"openai" | "google" | "anthropic" | "azure">(
     (initialData.aiSettings.provider as "openai" | "google" | "anthropic" | "azure") ?? "openai",
@@ -240,27 +239,35 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
     finally { setDeletingId(null); }
   };
 
-  const handleOpenSlugDialog = (c: { id: string; name: string; slug?: string | null }) => {
-    setSlugInput(c.slug ?? "");
-    setSlugDialog({ id: c.id, name: c.name, currentSlug: c.slug ?? "" });
+  const handleOpenEditDialog = (c: { id: string; name: string; slug: string | null; plan: string | null }) => {
+    setEditDialog({ id: c.id, name: c.name, slug: c.slug ?? "", plan: c.plan ?? "" });
   };
 
-  const handleSaveSlug = async () => {
-    if (!slugDialog) return;
-    setSlugSaving(true);
+  const handleSaveEdit = async () => {
+    if (!editDialog) return;
+    setEditSaving(true);
     try {
-      const res = await setAdminCompanySlug(slugDialog.id, slugInput);
+      const res = await updateAdminCompany({
+        id: editDialog.id,
+        name: editDialog.name.trim(),
+        slug: editDialog.slug.trim() || null,
+        plan: editDialog.plan.trim() || null,
+      });
       setCompanies((prev) =>
-        prev.map((c) => (c.id === slugDialog.id ? { ...c, slug: res.slug } : c)),
+        prev.map((c) =>
+          c.id === editDialog.id
+            ? { ...c, name: editDialog.name.trim(), slug: res.slug, plan: editDialog.plan.trim() || null }
+            : c,
+        ),
       );
       if (res.netlifyError) {
-        alert(`slug を保存しましたが Netlify への追加に失敗しました:\n${res.netlifyError}`);
+        alert(`保存しましたが Netlify への反映に失敗しました:\n${res.netlifyError}`);
       }
-      setSlugDialog(null);
+      setEditDialog(null);
     } catch (e) {
       setErrorMsg(extractErrorMessage(e));
     } finally {
-      setSlugSaving(false);
+      setEditSaving(false);
     }
   };
 
@@ -625,7 +632,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
                         return (
                           <tr
                             key={c.id}
-                            onClick={() => handleOpenSlugDialog(c)}
+                            onClick={() => handleOpenEditDialog(c)}
                             className="border-b hover:bg-muted/30 transition-colors group cursor-pointer"
                           >
                             <td className="px-4 py-3">
@@ -892,41 +899,72 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
         </div>}
       </div>
 
-      {/* サブドメイン設定ダイアログ */}
-      <Dialog open={!!slugDialog} onOpenChange={(open) => { if (!open) setSlugDialog(null); }}>
-        <DialogContent className="sm:max-w-sm">
+      {/* 企業情報編集ダイアログ */}
+      <Dialog open={!!editDialog} onOpenChange={(open) => { if (!open) setEditDialog(null); }}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-primary" />
-              サブドメイン設定
+              <Building2 className="h-4 w-4 text-primary" />
+              企業情報を編集
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{slugDialog?.name}</span> のサブドメインを設定します。
-            </p>
-            <div className="space-y-1.5">
-              <Label className="text-xs">slug（半角英数字・ハイフンのみ）</Label>
-              <div className="flex items-center gap-1.5">
+          {editDialog && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">企業名</Label>
                 <Input
-                  placeholder="acme-construction"
-                  value={slugInput}
-                  onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  placeholder="企業名"
+                  value={editDialog.name}
+                  onChange={(e) => setEditDialog((d) => d ? { ...d, name: e.target.value } : d)}
                   autoFocus
                 />
               </div>
-              {slugInput && (
-                <p className="text-xs text-muted-foreground font-mono">
-                  → {slugInput}.{process.env.NEXT_PUBLIC_APP_DOMAIN ?? "bridge-linq.com"}
-                </p>
-              )}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">プラン</Label>
+                <Select
+                  value={editDialog.plan || "_none"}
+                  onValueChange={(v) => setEditDialog((d) => d ? { ...d, plan: v === "_none" ? "" : v } : d)}
+                >
+                  <SelectTrigger><SelectValue placeholder="プランを選択" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Free</SelectItem>
+                    <SelectItem value="starter">Starter</SelectItem>
+                    <SelectItem value="pro">Pro</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  サブドメイン slug
+                  <span className="ml-1 font-normal normal-case text-muted-foreground">（半角英数字・ハイフンのみ）</span>
+                </Label>
+                <Input
+                  placeholder="acme-construction"
+                  value={editDialog.slug}
+                  onChange={(e) =>
+                    setEditDialog((d) =>
+                      d ? { ...d, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") } : d
+                    )
+                  }
+                />
+                {editDialog.slug && (
+                  <p className="text-xs text-muted-foreground font-mono">
+                    → {editDialog.slug}.bridge-linq.com
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSlugDialog(null)} disabled={slugSaving}>キャンセル</Button>
-            <Button onClick={handleSaveSlug} disabled={slugSaving || !slugInput.trim()} className="gap-1.5">
-              {slugSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
-              設定する
+            <Button variant="outline" onClick={() => setEditDialog(null)} disabled={editSaving}>キャンセル</Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={editSaving || !editDialog?.name.trim()}
+              className="gap-1.5"
+            >
+              {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              保存する
             </Button>
           </DialogFooter>
         </DialogContent>

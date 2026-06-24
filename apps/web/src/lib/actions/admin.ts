@@ -397,6 +397,67 @@ async function netlifyRemoveDomain(slug: string): Promise<void> {
   });
 }
 
+/* ─────────────────────── 既存企業 更新 ─────────────────────── */
+
+export async function updateAdminCompany(input: {
+  id: string;
+  name: string;
+  slug: string | null;
+  plan: string | null;
+}) {
+  const supabase = await assertSuperAdmin();
+
+  const normalizedSlug = input.slug
+    ? input.slug.toLowerCase().replace(/[^a-z0-9-]/g, "") || null
+    : null;
+
+  // slug 重複チェック
+  if (normalizedSlug) {
+    const { data: existing } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("slug", normalizedSlug)
+      .neq("id", input.id)
+      .maybeSingle();
+    if (existing) throw new Error(`slug「${normalizedSlug}」はすでに別の企業で使われています`);
+  }
+
+  // 既存 slug を取得（Netlify 操作に使う）
+  const { data: before } = await supabase
+    .from("companies")
+    .select("slug, settings")
+    .eq("id", input.id)
+    .single();
+
+  const prevSlug = before?.slug as string | null ?? null;
+  const prevSettings = (before?.settings ?? {}) as Record<string, unknown>;
+
+  const newSettings = input.plan
+    ? { ...prevSettings, plan: input.plan }
+    : (({ plan: _p, ...rest }) => rest)(prevSettings as Record<string, unknown> & { plan?: unknown });
+
+  const { error } = await supabase
+    .from("companies")
+    .update({ name: input.name, slug: normalizedSlug, settings: newSettings })
+    .eq("id", input.id);
+  if (error) throw error;
+
+  // Netlify ドメイン変更
+  let netlifyError: string | null = null;
+  try {
+    if (prevSlug && prevSlug !== normalizedSlug) {
+      await netlifyRemoveDomain(prevSlug).catch(() => {});
+    }
+    if (normalizedSlug && normalizedSlug !== prevSlug) {
+      await netlifyAddDomain(normalizedSlug);
+    }
+  } catch (e) {
+    netlifyError = e instanceof Error ? e.message : String(e);
+  }
+
+  return { slug: normalizedSlug, netlifyError };
+}
+
 /* ─────────────────────── 企業追加（オーナーアカウント込み） ─────────────────────── */
 
 export async function createAdminCompany(input: {
