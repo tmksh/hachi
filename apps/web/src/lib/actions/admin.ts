@@ -56,7 +56,7 @@ export async function getAdminCompanies() {
 
   const { data, error } = await supabase
     .from("companies")
-    .select("id, name, settings, created_at")
+    .select("id, name, slug, settings, created_at")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -67,7 +67,7 @@ export async function getAdminCompanies() {
       typeof settings.plan === "string" && settings.plan.length > 0
         ? (settings.plan as string)
         : null;
-    return { id: c.id, name: c.name, plan, created_at: c.created_at };
+    return { id: c.id, name: c.name, slug: c.slug as string | null, plan, created_at: c.created_at };
   });
 }
 
