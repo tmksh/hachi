@@ -63,6 +63,8 @@ import {
   BarChart3,
   Sparkles,
   Globe,
+  Copy,
+  Check,
 } from "lucide-react";
 import { LineChart } from "@/components/charts/line-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
@@ -170,6 +172,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editDialog, setEditDialog] = useState<{ id: string; name: string; slug: string; plan: string } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(initialData.aiSettings.enabled);
   const [aiProvider, setAiProvider] = useState<"openai" | "google" | "anthropic" | "azure">(
     (initialData.aiSettings.provider as "openai" | "google" | "anthropic" | "azure") ?? "openai",
@@ -949,9 +952,23 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
                   }
                 />
                 {editDialog.slug && (
-                  <p className="text-xs text-muted-foreground font-mono">
-                    → {editDialog.slug}.bridge-linq.com
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs text-muted-foreground font-mono flex-1">
+                      https://{editDialog.slug}.bridge-linq.com
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`https://${editDialog.slug}.bridge-linq.com`);
+                        setCopiedUrl(true);
+                        setTimeout(() => setCopiedUrl(false), 2000);
+                      }}
+                      className="shrink-0 p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                      title="URLをコピー"
+                    >
+                      {copiedUrl ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
