@@ -140,7 +140,7 @@ function downloadCsv(filename: string, rows: string[][]) {
 
 export type AdminInitialData = {
   stats: { companyCount: number; userCount: number; constructionCount: number; contractCount: number };
-  companies: Array<{ id: string; name: string; plan: string | null; created_at: string }>;
+  companies: Array<{ id: string; name: string; slug: string | null; plan: string | null; created_at: string }>;
   users: Array<{ id: string; display_name: string; email: string; role: string; company_id: string; created_at: string; companies: { name: string } | null }>;
   bi: BiOverview;
   biRanking: BiRanking;

@@ -51,7 +51,9 @@ export async function getAdminStats() {
   };
 }
 
-export async function getAdminCompanies() {
+export async function getAdminCompanies(): Promise<
+  { id: string; name: string; slug: string | null; plan: string | null; created_at: string }[]
+> {
   const supabase = await assertSuperAdmin();
 
   const { data, error } = await supabase
@@ -61,13 +63,20 @@ export async function getAdminCompanies() {
 
   if (error) throw error;
 
-  return (data ?? []).map((c) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((c: any) => {
     const settings = (c.settings ?? {}) as Record<string, unknown>;
     const plan =
       typeof settings.plan === "string" && settings.plan.length > 0
         ? (settings.plan as string)
         : null;
-    return { id: c.id, name: c.name, slug: c.slug as string | null, plan, created_at: c.created_at };
+    return {
+      id: c.id as string,
+      name: c.name as string,
+      slug: (c.slug ?? null) as string | null,
+      plan,
+      created_at: c.created_at as string,
+    };
   });
 }
 
