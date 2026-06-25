@@ -43,15 +43,22 @@ function redirectToCanonicalDomain(request: NextRequest): NextResponse | null {
 }
 
 function extractSubdomain(request: NextRequest): string | null {
-  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN; // 例: "bridge.jp"
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN; // 例: "bridge-linq.com"
   if (!appDomain) return null;
 
   const host = request.headers.get("host") ?? "";
   // ポート番号を除去
   const hostname = host.split(":")[0];
 
-  // localhost や IP は開発環境なのでスキップ
+  // 素の localhost や IP はスキップ
   if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return null;
+
+  // 開発環境: {slug}.localhost → slug を返す
+  if (hostname.endsWith(".localhost")) {
+    const slug = hostname.slice(0, -".localhost".length);
+    if (!slug.includes(".") && !RESERVED_SUBDOMAINS.has(slug)) return slug;
+    return null;
+  }
 
   // apex ドメインまたは www はスキップ
   if (hostname === appDomain || hostname === `www.${appDomain}`) return null;
@@ -61,7 +68,7 @@ function extractSubdomain(request: NextRequest): string | null {
   if (!hostname.endsWith(suffix)) return null;
 
   const slug = hostname.slice(0, -suffix.length);
-  // ネストしたサブドメイン（a.b.bridge.jp）や予約語はスキップ
+  // ネストしたサブドメイン（a.b.bridge-linq.com）や予約語はスキップ
   if (slug.includes(".") || RESERVED_SUBDOMAINS.has(slug)) return null;
 
   return slug;
