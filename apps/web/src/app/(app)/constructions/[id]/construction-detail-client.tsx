@@ -1255,7 +1255,7 @@ function ConstructionDetailPageContent({
             constructionId={id as string}
             contractAmount={contract?.amount ?? data.order_amount ?? undefined}
             initialOrders={data.orders as Order[]}
-            estimates={((data as Detail & { estimates?: Array<{ id: string; estimate_no: string; title: string | null; total: number }> }).estimates ?? []).map((e) => ({
+            estimates={((data as Detail & { estimates?: Array<{ id: string; estimate_no: string; title: string | null; total: number }> }).estimates ?? []).map((e: { id: string; estimate_no: string; title: string | null; total: number }) => ({
               id: e.id,
               estimate_no: e.estimate_no,
               title: e.title,
