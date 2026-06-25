@@ -530,7 +530,7 @@ export async function createAdminCompany(input: {
       .eq("key", wf.key)
       .maybeSingle();
     if (!existing) {
-      await supabase.from("workflow_types").insert({
+      const { error: wfErr } = await supabase.from("workflow_types").insert({
         company_id: company.id,
         key: wf.key,
         name: wf.name,
@@ -538,7 +538,8 @@ export async function createAdminCompany(input: {
         fields_schema: [],
         approval_route: [],
         sort_order: 0,
-      }).catch((e) => console.error(`[seedWorkflowType] ${wf.key}`, e));
+      });
+      if (wfErr) console.error(`[seedWorkflowType] ${wf.key}`, wfErr);
     }
   }
 
