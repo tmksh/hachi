@@ -1,3 +1,6 @@
+"use client";
+
+import { useRef, useState, useEffect } from "react";
 import { buildTicks, niceMax } from "./chart-utils";
 
 export type GroupedBarSeries = {
@@ -26,13 +29,30 @@ export function GroupedBarChart({
   labelKey,
   series,
   idPrefix = "grouped-bar",
-  height = 180,
+  height: heightProp = 180,
   formatValue = (v) => String(v),
   gridColor = "currentColor",
   labelColor = "currentColor",
   tickColor = "currentColor",
 }: GroupedBarChartProps) {
-  const width = 480;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 480, height: heightProp });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0) setSize({ width: w, height: Math.max(h || 0, heightProp) });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [heightProp]);
+
+  const { width, height } = size;
   const pad = { top: 8, right: 8, bottom: 28, left: 36 };
   const chartW = width - pad.left - pad.right;
   const chartH = height - pad.top - pad.bottom;
@@ -46,32 +66,41 @@ export function GroupedBarChart({
   const yMax = niceMax(maxValue);
   const yTicks = buildTicks(yMax, 4);
   const groupWidth = chartW / Math.max(data.length, 1);
-  const barWidth = Math.min(16, (groupWidth * 0.7) / series.length);
+  // コンテナが広いほど棒を太く（上限は32px）
+  const barWidth = Math.min(32, (groupWidth * 0.7) / series.length);
   const groupGap = groupWidth * 0.15;
 
   return (
-    <div className="flex-1 min-h-[180px] w-full text-[var(--brand-light)]" style={{ color: labelColor }}>
+    <div
+      ref={containerRef}
+      className="flex-1 min-h-[180px] w-full text-[var(--brand-light)]"
+      style={{ color: labelColor }}
+    >
       <svg
         viewBox={`0 0 ${width} ${height}`}
+        width={width}
+        height={height}
         className="h-full w-full min-h-[180px]"
         role="img"
         aria-label="棒グラフ"
       >
-        {series.map((s, seriesIndex) =>
-          s.gradient ? (
-            <linearGradient
-              key={s.key}
-              id={`${idPrefix}-${s.key}`}
-              x1="0"
-              y1="0"
-              x2="0"
-              y2="1"
-            >
-              <stop offset="0%" stopColor={s.gradient[0]} />
-              <stop offset="100%" stopColor={s.gradient[1]} />
-            </linearGradient>
-          ) : null,
-        )}
+        <defs>
+          {series.map((s) =>
+            s.gradient ? (
+              <linearGradient
+                key={s.key}
+                id={`${idPrefix}-${s.key}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor={s.gradient[0]} />
+                <stop offset="100%" stopColor={s.gradient[1]} />
+              </linearGradient>
+            ) : null,
+          )}
+        </defs>
 
         {yTicks.map((tick) => {
           const y = pad.top + chartH - (tick / yMax) * chartH;

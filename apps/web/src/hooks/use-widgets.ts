@@ -2,16 +2,23 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getDashboardSettings, saveDashboardSettings } from "@/lib/actions/dashboard-settings";
+import { ROW_H, MIN_ROWS } from "@/components/shared/sortable-widget";
+
+function snapHeight(px: number): number {
+  return Math.max(MIN_ROWS * ROW_H, Math.round(px / ROW_H) * ROW_H);
+}
 
 export interface WidgetConfig {
   id: string;
   label: string;
   visible: boolean;
   order: number;
-  /** ピクセル単位の幅（未設定なら 1/3 列を占める） */
-  widthPx?: number;
+  /** 12カラムグリッドでのスパン数（1〜12、デフォルト4 = 1/3幅） */
+  cols?: number;
   /** ピクセル単位の高さ（未設定ならコンテンツに追従） */
   height?: number;
+  /** @deprecated cols に移行済み。マイグレーション用に残置 */
+  widthPx?: number;
   /** @deprecated 旧グリッド版の互換用 */
   colSpan?: number;
   /** @deprecated 旧グリッド版の互換用 */
@@ -42,8 +49,18 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
 
 const STORAGE_KEY = "dashboard-widgets-v1";
 
+/** widthPx（旧形式）→ cols（新形式）への一回限りのマイグレーション */
+function migrateWidget(w: WidgetConfig): WidgetConfig {
+  if (!w.cols && w.widthPx) {
+    // 1200px コンテナを仮定して 12 カラムに概算変換
+    const cols = Math.max(3, Math.min(12, Math.round((w.widthPx / 1200) * 12)));
+    return { ...w, cols, widthPx: undefined };
+  }
+  return w;
+}
+
 function mergeWithDefaults(stored: WidgetConfig[]): WidgetConfig[] {
-  const map = new Map(stored.map((w) => [w.id, w]));
+  const map = new Map(stored.map((w) => [w.id, migrateWidget(w)]));
   return DEFAULT_WIDGETS.map((def) =>
     map.has(def.id) ? { ...def, ...map.get(def.id) } : def
   ).sort((a, b) => a.order - b.order);
@@ -137,30 +154,20 @@ export function useWidgets() {
     });
   }, []);
 
-  /** ピクセル単位で width / height を自由設定（スナップなし） */
-  const resizeWidget = useCallback((id: string, widthPx: number, height: number) => {
+  /** 12カラムグリッドのスパン数と高さ（ROW_H 倍数スナップ済み）を保存 */
+  const resizeWidget = useCallback((id: string, cols: number, height: number) => {
     setWidgets((prev) =>
       prev.map((w) =>
         w.id === id
-          ? { ...w, widthPx: Math.max(160, Math.round(widthPx)), height: Math.max(100, Math.round(height)) }
+          ? { ...w, cols: Math.max(3, Math.min(12, cols)), height: snapHeight(height) }
           : w,
       ),
     );
   }, []);
 
-  const setWidgetWidth = useCallback((id: string, widthPx: number) => {
+  const setWidgetCols = useCallback((id: string, cols: number) => {
     setWidgets((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, widthPx: Math.max(160, Math.round(widthPx)) } : w)),
-    );
-  }, []);
-
-  const initWidths = useCallback((updates: Record<string, number>) => {
-    setWidgets((prev) =>
-      prev.map((w) =>
-        updates[w.id] !== undefined && w.widthPx === undefined
-          ? { ...w, widthPx: updates[w.id] }
-          : w,
-      ),
+      prev.map((w) => (w.id === id ? { ...w, cols: Math.max(3, Math.min(12, cols)) } : w)),
     );
   }, []);
 
@@ -191,8 +198,7 @@ export function useWidgets() {
     moveDown,
     reorder,
     resizeWidget,
-    setWidgetWidth,
-    initWidths,
+    setWidgetCols,
     reset,
   };
 }

@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -114,7 +114,7 @@ export function DashboardClient({
   const [dealsTab, setDealsTab] = useState<"deals" | "unfollowed">("deals");
   const now = new Date();
 
-  const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths, toggleVisible, reset } = useWidgets();
+  const { widgets, hydrated, reorder, resizeWidget, toggleVisible, reset } = useWidgets();
   const { gradientHex, solidHex, mode: brandMode, setGradientColor, setSolidColor, switchMode, reset: resetColor } = useBrandColor();
   const { openInternalChat, refreshInternalChat } = useInternalChat();
   const brandHex = brandMode === "solid" ? solidHex : gradientHex;
@@ -246,8 +246,8 @@ export function DashboardClient({
 
       case "workflow":
         return !isVisible("workflow") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <span className={`text-xs font-bold text-slate-800`}>ワークフロー</span>
               <Link href="/workflow"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
@@ -270,8 +270,8 @@ export function DashboardClient({
 
       case "ai-focus":
         return !isVisible("ai-focus") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />
                 <span className={`text-xs font-bold text-slate-800`}>今日のフォーカス</span>
@@ -317,8 +317,8 @@ export function DashboardClient({
 
       case "mail":
         return !isVisible("mail") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <span className={`text-xs font-bold text-slate-800`}>お知らせ</span>
                 {!loading && data?.announcements && data.announcements.length > 0 && (
@@ -338,14 +338,14 @@ export function DashboardClient({
             ) : (
               <AdaptiveList
                 items={data?.announcements ?? []}
-                itemHeightPx={68}
+                itemHeightPx={60}
                 max={15}
                 className="gap-2"
                 empty={<p className="text-xs text-slate-400 py-4 text-center">お知らせはありません</p>}
               >
                 {(ann) => (
                 <Link key={ann.id} href={`/circulation/${ann.id}`}
-                  className="group flex gap-3 py-2 border-b border-slate-50 last:border-0 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
+                  className="group flex gap-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
                   <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
@@ -363,8 +363,8 @@ export function DashboardClient({
 
       case "customers":
         return !isVisible("customers") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <span className={`text-xs font-bold text-slate-800`}>最近の顧客</span>
               <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
@@ -380,7 +380,7 @@ export function DashboardClient({
             ) : (
               <AdaptiveList
                 items={data?.recentCustomers ?? []}
-                itemHeightPx={52}
+                itemHeightPx={46}
                 max={15}
                 empty={<p className="text-xs text-slate-400 py-4">顧客データはありません</p>}
               >
@@ -388,7 +388,7 @@ export function DashboardClient({
                 const avatar = getCustomerAvatarColor(customer.id);
                 return (
                 <Link key={customer.id} href={`/crm/${customer.id}`}
-                  className="flex items-center gap-3 py-2 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-xl transition-colors group shrink-0">
+                  className="flex items-center gap-3 py-1.5 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-xl transition-colors group shrink-0">
                   <div
                     className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold shadow-sm"
                     style={{ background: avatar.avatarGradient }}
@@ -409,8 +409,8 @@ export function DashboardClient({
 
       case "trend":
         return !isVisible("trend") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0 w-full">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0 w-full">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`text-xs font-bold text-slate-800`}>売上トレンド</span>
                 <span className={`text-[11px] text-primary/80 opacity-70 hidden sm:inline truncate`}>直近7ヶ月 / 万円</span>
@@ -432,9 +432,9 @@ export function DashboardClient({
 
       case "deals":
         return !isVisible("deals") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
             {/* ヘッダー */}
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-800">
                   {dealsTab === "deals" ? "商談パイプライン" : "未フォローアップ"}
@@ -486,7 +486,7 @@ export function DashboardClient({
               ) : (
                 <AdaptiveList
                   items={data?.recentDeals ?? []}
-                  itemHeightPx={56}
+                  itemHeightPx={50}
                   max={20}
                   empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
                 >
@@ -496,7 +496,7 @@ export function DashboardClient({
                   const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
                   return (
                   <Link key={deal.id} href="/deals"
-                    className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
+                    className="flex items-center justify-between gap-2 py-1.5 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <div
                         className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
@@ -542,14 +542,14 @@ export function DashboardClient({
               ) : (
                 <AdaptiveList
                   items={unfollowedLeads}
-                  itemHeightPx={60}
+                  itemHeightPx={52}
                   max={10}
                   empty={null}
                 >
                   {(lead) => {
                     const avatar = getCustomerAvatarColor(lead.id);
                     return (
-                      <div key={lead.id} className="flex items-center gap-2 py-2 px-1 rounded-xl shrink-0">
+                      <div key={lead.id} className="flex items-center gap-2 py-1.5 px-1 rounded-xl shrink-0">
                         <div
                           className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
                           style={{ background: avatar.avatarGradient }}
@@ -588,8 +588,8 @@ export function DashboardClient({
 
       case "quotes":
         return !isVisible("quotes") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <span className={`text-xs font-bold text-slate-800`}>最近の見積</span>
               <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
@@ -604,7 +604,7 @@ export function DashboardClient({
             ) : (
               <AdaptiveList
                 items={data?.recentEstimates ?? []}
-                itemHeightPx={52}
+                itemHeightPx={46}
                 max={15}
                 empty={<p className="text-xs text-slate-400 py-4">見積データはありません</p>}
               >
@@ -628,8 +628,8 @@ export function DashboardClient({
 
       case "production":
         return !isVisible("production") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <span className={`text-xs font-bold text-slate-800`}>生産サマリー</span>
               <Link href="/contracts"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
@@ -686,8 +686,8 @@ export function DashboardClient({
 
       case "constructions":
         return !isVisible("constructions") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3 h-full">
-            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <span className={`text-xs font-bold text-slate-800`}>進行中の工事</span>
               <Link href="/constructions"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
             </div>
@@ -772,18 +772,10 @@ export function DashboardClient({
   };
 
   const sortableIds = widgets.filter((w) => w.id !== "kpi" && w.visible).map((w) => w.id);
-  const layoutWidgets = useMemo(
-    () =>
-      sortableIds.map((id) => {
-        const w = widgets.find((x) => x.id === id);
-        return { id, widthPx: w?.widthPx };
-      }),
-    [sortableIds, widgets],
-  );
-  const { gridRef, displayWidths, stackFullWidth } = useWidgetGridLayout(layoutWidgets);
+  const { gridRef, stackFullWidth, defaultCols } = useWidgetGridLayout();
 
   return (
-    <div className="@container p-4 md:p-6 space-y-4 min-h-screen min-w-0">
+    <div className="@container p-3 md:p-4 xl:p-5 2xl:p-6 space-y-3 md:space-y-4 min-h-screen min-w-0">
 
       {/* フォローアップ問い合わせダイアログ */}
       <Dialog open={!!inquiryTarget} onOpenChange={(o) => { if (!o) { setInquiryTarget(null); setInquiryContent(""); } }}>
@@ -957,13 +949,11 @@ export function DashboardClient({
                 <SortableWidget
                   key={id}
                   id={id}
-                  widthPx={wc?.widthPx}
-                  layoutWidthPx={displayWidths[id]}
+                  cols={wc?.cols}
+                  defaultCols={defaultCols}
                   stackFullWidth={stackFullWidth}
                   height={wc?.height}
                   onResize={resizeWidget}
-                  onResizeWidth={setWidgetWidth}
-                  onInitWidths={initWidths}
                 >
                   {card}
                 </SortableWidget>

@@ -28,7 +28,7 @@ export function WidgetGrid({ sortableIds, onDragEnd, gridRef, children }: Widget
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
       <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-        <div ref={gridRef} data-widget-grid className="flex flex-wrap gap-4 min-w-0 w-full">
+        <div ref={gridRef} data-widget-grid className="grid grid-cols-12 gap-3 md:gap-4 min-w-0 w-full items-start">
           {children}
         </div>
       </SortableContext>
