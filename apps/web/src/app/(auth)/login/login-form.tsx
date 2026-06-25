@@ -14,8 +14,6 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Loader2, Mail, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useBrandColor } from "@/hooks/use-brand-color";
-import Image from "next/image";
-
 interface LoginFormProps {
   companyName?: string | null;
 }
@@ -74,12 +72,6 @@ export function LoginForm({ companyName }: LoginFormProps) {
     <div className="w-full max-w-md px-4">
       <Card className="border-0 shadow-xl shadow-primary/5">
         <CardHeader className="text-center space-y-4 pb-2">
-          <div className="flex items-center justify-center gap-3">
-            <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: "var(--brand-gradient)" }}>
-              <Image src="/logo.png" alt="BRIDGE" width={28} height={28} className="object-contain w-7 h-auto" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight">BRIDGE</h1>
-          </div>
           {companyName ? (
             <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
               <Building2 className="h-3.5 w-3.5 shrink-0" />
