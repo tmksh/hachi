@@ -149,6 +149,47 @@ export async function updateCustomer(id: string, input: Partial<Omit<Customer, "
 export async function deleteCustomer(id: string) {
   const supabase = await createClient();
   const { data: existing } = await supabase.from("customers").select("company_id, name").eq("id", id).single();
+
+  // 紐づく契約書を削除（工事の contract_id を先に外す）
+  const { data: contracts } = await supabase.from("contracts").select("id").eq("customer_id", id);
+  const contractIds = (contracts ?? []).map((c) => c.id);
+  if (contractIds.length > 0) {
+    await supabase.from("constructions").update({ contract_id: null }).in("contract_id", contractIds);
+    await supabase.from("contracts").delete().in("id", contractIds);
+  }
+
+  // 紐づく工事と関連データを削除
+  const { data: constructions } = await supabase.from("constructions").select("id").eq("customer_id", id);
+  const constructionIds = (constructions ?? []).map((c) => c.id);
+  if (constructionIds.length > 0) {
+    const { data: invoices } = await supabase.from("invoices").select("id").in("construction_id", constructionIds);
+    const invIds = (invoices ?? []).map((i) => i.id);
+    if (invIds.length > 0) {
+      await supabase.from("invoice_items").delete().in("invoice_id", invIds);
+      await supabase.from("invoices").delete().in("id", invIds);
+    }
+    await supabase.from("construction_cost_budgets").delete().in("construction_id", constructionIds);
+    await supabase.from("change_orders").delete().in("construction_id", constructionIds);
+    await supabase.from("construction_tasks").delete().in("construction_id", constructionIds);
+    await supabase.from("contractor_orders").delete().in("construction_id", constructionIds);
+    await supabase.from("documents").delete().in("construction_id", constructionIds);
+    await supabase.from("constructions").delete().in("id", constructionIds);
+  }
+
+  // 紐づく見積もり（明細・カテゴリ含む）を物理削除
+  const { data: estimates } = await supabase
+    .from("estimates")
+    .select("id")
+    .eq("customer_id", id);
+  const estimateIds = (estimates ?? []).map((e) => e.id);
+  if (estimateIds.length > 0) {
+    await supabase.from("contracts").update({ estimate_id: null }).in("estimate_id", estimateIds);
+    await supabase.from("change_orders").update({ estimate_id: null }).in("estimate_id", estimateIds);
+    await supabase.from("estimate_items").delete().in("estimate_id", estimateIds);
+    await supabase.from("estimate_categories").delete().in("estimate_id", estimateIds);
+    await supabase.from("estimates").delete().in("id", estimateIds);
+  }
+
   const { error } = await supabase
     .from("customers")
     .update({ deleted_at: new Date().toISOString() })

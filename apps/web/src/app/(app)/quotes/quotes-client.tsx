@@ -54,6 +54,23 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
   }, [initialRows, initialCustomers]);
 
   const handleStatusChange = async (id: string, status: Row["status"]) => {
+    // 粗利率未達かつ未承認の見積は draft 以外のステータスへ変更不可
+    if (status !== "draft") {
+      const row = rows.find((r) => r.id === id);
+      if (row) {
+        const threshold = ((row as { default_gross_profit_rate?: number | null }).default_gross_profit_rate ?? 0.5) * 100;
+        const rate = (row as { gross_profit_rate?: number | null }).gross_profit_rate ?? 0;
+        const approvalStatus = (row as { approval_status?: string | null }).approval_status ?? "none";
+        if (rate < threshold && approvalStatus !== "approved") {
+          toast.error(
+            `粗利率 ${rate.toFixed(1)}% が基準 ${threshold.toFixed(0)}% を下回っています。上長の承認を得てからステータスを変更してください。`,
+            { duration: 5000 }
+          );
+          return;
+        }
+      }
+    }
+
     const prev = rows;
     setRows((current) => current.map((r) => (r.id === id ? { ...r, status } : r)));
     setUpdating(id);

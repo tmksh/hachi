@@ -327,8 +327,21 @@ export async function updateConstruction(id: string, input: Partial<Omit<Constru
 
 export async function deleteConstruction(id: string) {
   const supabase = await createClient();
+
+  // 請求書（明細含む）
+  const { data: invoices } = await supabase.from("invoices").select("id").eq("construction_id", id);
+  const invIds = (invoices ?? []).map((i) => i.id);
+  if (invIds.length > 0) {
+    await supabase.from("invoice_items").delete().in("invoice_id", invIds);
+    await supabase.from("invoices").delete().in("id", invIds);
+  }
+
+  await supabase.from("construction_cost_budgets").delete().eq("construction_id", id);
+  await supabase.from("change_orders").delete().eq("construction_id", id);
   await supabase.from("construction_tasks").delete().eq("construction_id", id);
   await supabase.from("contractor_orders").delete().eq("construction_id", id);
+  await supabase.from("documents").delete().eq("construction_id", id);
+
   const { error } = await supabase.from("constructions").delete().eq("id", id);
   if (error) throw error;
 }
@@ -458,6 +471,7 @@ export async function createContractorOrder(input: {
   paymentCount?: string;
   workContent?: string;
   specialNotes?: string;
+  customPaymentSchedule?: Array<{ phase: string; rate: number; amount: number; due_date: string | null }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -466,12 +480,14 @@ export async function createContractorOrder(input: {
   if (!profile) throw new Error("Profile not found");
 
   const paymentCount = input.paymentCount || "1回";
-  const schedule = buildPaymentSchedule(
-    input.amount,
-    paymentCount,
-    input.startDate,
-    input.endDate,
-  );
+  const schedule = input.customPaymentSchedule?.length
+    ? input.customPaymentSchedule
+    : buildPaymentSchedule(
+        input.amount,
+        paymentCount,
+        input.startDate,
+        input.endDate,
+      );
 
   const { data, error } = await supabase
     .from("contractor_orders")
@@ -1231,6 +1247,69 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
 
   const totals = await recalculateEstimateTotals(supabase, current.estimate_id);
   return { item, totals };
+}
+
+/**
+ * 全明細に対して粗利率を基準に原価単価 or 見積単価を一括計算して更新する。
+ * mode='cost'  : selling_price が基準 → cost_price = selling_price × (1 - rate)
+ * mode='sell'  : cost_price が基準   → selling_price = cost_price / (1 - rate)
+ */
+export async function bulkApplyMarginToEstimate(
+  estimateId: string,
+  mode: "cost" | "sell",
+  ratePercent: number,
+) {
+  if (ratePercent < 0 || ratePercent >= 100) throw new Error("粗利率は 0〜99.9% の範囲で入力してください");
+  const rate = ratePercent / 100;
+
+  const { supabase, companyId } = await assertEstimateAccess(estimateId);
+
+  const { data: allItems, error: fetchErr } = await supabase
+    .from("estimate_items")
+    .select("*")
+    .eq("estimate_id", estimateId)
+    .eq("company_id", companyId);
+  throwIfSupabaseError(fetchErr);
+  if (!allItems || allItems.length === 0) throw new Error("明細がありません");
+
+  const updates = allItems.map((item) => {
+    const qty = Number(item.quantity) || 0;
+    let costPrice: number;
+    let sellingPrice: number;
+
+    if (mode === "cost") {
+      sellingPrice = Number(item.selling_price) || 0;
+      costPrice = Math.round(sellingPrice * (1 - rate));
+    } else {
+      costPrice = Number(item.cost_price) || 0;
+      sellingPrice = rate < 1 ? Math.round(costPrice / (1 - rate)) : costPrice;
+    }
+
+    const amounts = calcItemAmounts(qty, costPrice, sellingPrice);
+    return {
+      id: item.id,
+      cost_price: costPrice,
+      selling_price: sellingPrice,
+      ...amounts,
+      updated_at: new Date().toISOString(),
+    };
+  });
+
+  const { error: updateErr } = await supabase
+    .from("estimate_items")
+    .upsert(updates, { onConflict: "id" });
+  throwIfSupabaseError(updateErr);
+
+  const totals = await recalculateEstimateTotals(supabase, estimateId);
+
+  const { data: updatedItems, error: reloadErr } = await supabase
+    .from("estimate_items")
+    .select("*")
+    .eq("estimate_id", estimateId)
+    .eq("company_id", companyId);
+  throwIfSupabaseError(reloadErr);
+
+  return { items: updatedItems ?? [], totals };
 }
 
 export async function getConstructionEstimate(estimateId: string) {

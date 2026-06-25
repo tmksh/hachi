@@ -8,13 +8,10 @@ export type CostBudgetRow = {
   name: string;
   work_type: string;
   budget: number;
-  add_contract_1: number;
-  add_contract_2: number;
+  add_contracts: number[];
   management_budget: number;
   order_amount: number;
-  add_order_1: number;
-  add_order_2: number;
-  add_order_3: number;
+  add_orders: number[];
   monthly: Partial<Record<string, number>>;
 };
 

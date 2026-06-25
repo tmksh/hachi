@@ -46,7 +46,7 @@ export async function getConversation(otherUserId: string) {
     .from("internal_messages")
     .select("*, sender:profiles!internal_messages_sender_id_fkey(id, display_name, avatar_url), recipient:profiles!internal_messages_recipient_id_fkey(id, display_name, avatar_url), related_customer:customers(id, name)")
     .or(`and(sender_id.eq.${user.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user.id})`)
-    .eq("message_type", "chat")
+    .in("message_type", ["chat", "followup_inquiry"])
     .order("created_at", { ascending: true })
     .limit(100);
   return (data ?? []) as InternalMessage[];
@@ -157,7 +157,7 @@ export async function getLatestConversations() {
     .from("internal_messages")
     .select("*, sender:profiles!internal_messages_sender_id_fkey(id, display_name, avatar_url), recipient:profiles!internal_messages_recipient_id_fkey(id, display_name, avatar_url), related_customer:customers(id, name)")
     .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
-    .eq("message_type", "chat")
+    .in("message_type", ["chat", "followup_inquiry"])
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -185,6 +185,22 @@ export async function getFollowupInquiries() {
     .from("internal_messages")
     .select("*, sender:profiles!internal_messages_sender_id_fkey(id, display_name, avatar_url), related_customer:customers(id, name)")
     .eq("recipient_id", user.id)
+    .eq("message_type", "followup_inquiry")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  return (data ?? []) as InternalMessage[];
+}
+
+/** フォローアップ問い合わせ送信一覧（管理者・送信者向け） */
+export async function getSentFollowupInquiries() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("internal_messages")
+    .select("*, recipient:profiles!internal_messages_recipient_id_fkey(id, display_name, avatar_url), related_customer:customers(id, name)")
+    .eq("sender_id", user.id)
     .eq("message_type", "followup_inquiry")
     .order("created_at", { ascending: false })
     .limit(20);

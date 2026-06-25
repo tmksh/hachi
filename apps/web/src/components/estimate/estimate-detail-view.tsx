@@ -12,6 +12,7 @@ import {
   addEstimateItem,
   updateEstimateItem,
   importCategoryFromReference,
+  bulkApplyMarginToEstimate,
   type EstimateItemUpdatePatch,
 } from "@/lib/actions/constructions";
 import { updateEstimate } from "@/lib/actions/estimates";
@@ -380,6 +381,11 @@ export function EstimateDetailView({
   const [refLoading, setRefLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [refSearch, setRefSearch] = useState("");
+  const [bulkCostOpen, setBulkCostOpen] = useState(false);
+  const [bulkSellOpen, setBulkSellOpen] = useState(false);
+  const [bulkRateCost, setBulkRateCost] = useState(String(Math.round((estimate.default_gross_profit_rate ?? 0.5) * 100)));
+  const [bulkRateSell, setBulkRateSell] = useState(String(Math.round((estimate.default_gross_profit_rate ?? 0.5) * 100)));
+  const [bulkApplying, setBulkApplying] = useState(false);
   const [reserve1Rate, setReserve1Rate] = useState(estimate.reserve_fee_1_rate ?? 0.02);
   const [reserve2Rate, setReserve2Rate] = useState(estimate.reserve_fee_2_rate ?? 0.03);
   const [savingReserve, setSavingReserve] = useState(false);
@@ -673,6 +679,26 @@ export function EstimateDetailView({
     });
   };
 
+  const applyBulkMargin = async (mode: "cost" | "sell", rateStr: string) => {
+    const rate = parseFloat(rateStr);
+    if (Number.isNaN(rate) || rate < 0 || rate >= 100) {
+      toast.error("粗利率は 0〜99.9% の範囲で入力してください");
+      return;
+    }
+    setBulkApplying(true);
+    try {
+      const { items: newItems, totals } = await bulkApplyMarginToEstimate(estimate.id, mode, rate);
+      onEstimateChange({ ...estimate, items: newItems as EstimateItem[], ...(totals ?? {}) });
+      toast.success(mode === "cost" ? "原価を一括設定しました" : "見積金額を一括設定しました");
+      if (mode === "cost") setBulkCostOpen(false);
+      else setBulkSellOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "一括設定に失敗しました");
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
   const toggleCategory = (categoryId: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
@@ -874,24 +900,100 @@ export function EstimateDetailView({
             <tr>
               <th colSpan={6} className="bg-muted/40" />
               <th colSpan={2} className="px-2 py-1.5 bg-amber-50/50 border-b border-border/40">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full text-[11px] gap-1 text-amber-800 border-amber-200/80 bg-amber-50/60 hover:bg-amber-50"
-                  disabled
-                >
-                  <ArrowLeft className="h-3 w-3 shrink-0" />原価を一覧作成
-                </Button>
+                <Popover open={bulkCostOpen} onOpenChange={setBulkCostOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-full text-[11px] gap-1 text-amber-800 border-amber-200/80 bg-amber-50/60 hover:bg-amber-100"
+                      disabled={bulkApplying}
+                    >
+                      {bulkApplying && bulkCostOpen
+                        ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                        : <ArrowLeft className="h-3 w-3 shrink-0" />
+                      }
+                      原価を一覧作成
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-3" align="center">
+                    <p className="text-xs font-semibold mb-1">目標粗利率を設定</p>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      全明細の「原価」を<br />
+                      <code className="bg-muted px-1 rounded text-[10px]">原価 = 見積単価 × (1 − 粗利率)</code><br />
+                      で一括計算します。
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={99}
+                        step={0.5}
+                        className="h-8 text-xs text-right"
+                        value={bulkRateCost}
+                        onChange={(e) => setBulkRateCost(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") void applyBulkMargin("cost", bulkRateCost); }}
+                        autoFocus
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">%</span>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs shrink-0"
+                        disabled={bulkApplying}
+                        onClick={() => void applyBulkMargin("cost", bulkRateCost)}
+                      >
+                        {bulkApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : "適用"}
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </th>
               <th colSpan={2} className="px-2 py-1.5 bg-blue-50/50 border-b border-border/40">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full text-[11px] gap-1 text-blue-800 border-blue-200/80 bg-blue-50/60 hover:bg-blue-50"
-                  disabled
-                >
-                  見積金額を一覧作成<Plus className="h-3 w-3 shrink-0" />
-                </Button>
+                <Popover open={bulkSellOpen} onOpenChange={setBulkSellOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-full text-[11px] gap-1 text-blue-800 border-blue-200/80 bg-blue-50/60 hover:bg-blue-100"
+                      disabled={bulkApplying}
+                    >
+                      見積金額を一覧作成
+                      {bulkApplying && bulkSellOpen
+                        ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                        : <Plus className="h-3 w-3 shrink-0" />
+                      }
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-3" align="center">
+                    <p className="text-xs font-semibold mb-1">目標粗利率を設定</p>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      全明細の「見積金額」を<br />
+                      <code className="bg-muted px-1 rounded text-[10px]">見積単価 = 原価 ÷ (1 − 粗利率)</code><br />
+                      で一括計算します。
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={99}
+                        step={0.5}
+                        className="h-8 text-xs text-right"
+                        value={bulkRateSell}
+                        onChange={(e) => setBulkRateSell(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") void applyBulkMargin("sell", bulkRateSell); }}
+                        autoFocus
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">%</span>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs shrink-0"
+                        disabled={bulkApplying}
+                        onClick={() => void applyBulkMargin("sell", bulkRateSell)}
+                      >
+                        {bulkApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : "適用"}
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </th>
               <th colSpan={2} className="bg-muted/40 border-b border-border/40" />
             </tr>

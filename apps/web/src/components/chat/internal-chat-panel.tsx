@@ -10,7 +10,6 @@ import {
   Send,
   X,
   ChevronLeft,
-  AlertCircle,
   Check,
   CheckCheck,
 } from "lucide-react";import { cn } from "@/lib/utils";
@@ -23,14 +22,13 @@ import {
   getLatestConversations,
   markConversationAsRead,
   getUnreadMessageCount,
-  getFollowupInquiries,
   type InternalMessage,
 } from "@/lib/actions/internal-messages";
 import { useAuth } from "@/hooks/use-auth";
-import Link from "next/link";
+import { useInternalChat } from "@/contexts/chat-panel-context";
 
 type Contact = Awaited<ReturnType<typeof getChatContacts>>[number];
-type ConversationView = { type: "list" } | { type: "chat"; contact: Contact } | { type: "inquiries" };
+type ConversationView = { type: "list" } | { type: "chat"; contact: Contact };
 
 
 export const INTERNAL_CHAT_WIDTH = 360;
@@ -56,6 +54,7 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
 
 export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps) {
   const { profile } = useAuth();
+  const { internalChatRefreshKey } = useInternalChat();
   const [view, setView] = useState<ConversationView>({ type: "list" });
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [latestConvs, setLatestConvs] = useState<InternalMessage[]>([]);
@@ -65,21 +64,18 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [inquiries, setInquiries] = useState<InternalMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const refreshContacts = useCallback(async () => {
     try {
-      const [c, latest, count, inq] = await Promise.all([
+      const [c, latest, count] = await Promise.all([
         getChatContacts(),
         getLatestConversations(),
         getUnreadMessageCount(),
-        getFollowupInquiries(),
       ]);
       setContacts(c);
       setLatestConvs(latest);
       setUnreadCount(count);
-      setInquiries(inq);
     } finally {
       setLoadingContacts(false);
     }
@@ -87,8 +83,9 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
 
   useEffect(() => {
     if (!open) return;
+    setLoadingContacts(true);
     refreshContacts();
-  }, [open, refreshContacts]);
+  }, [open, internalChatRefreshKey, refreshContacts]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -126,10 +123,26 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
     return latestConvs.find(m => m.sender_id === contactId || m.recipient_id === contactId);
   };
 
+  const formatLastMessagePreview = (msg: InternalMessage) => {
+    if (msg.message_type === "followup_inquiry") {
+      const prefix = msg.sender_id === profile?.id ? "問い合わせ送信: " : "問い合わせ: ";
+      return `${prefix}${msg.content}`;
+    }
+    return msg.content;
+  };
+
   const isUnread = (contactId: string) => {
     const msg = getLastMessage(contactId);
     return msg && msg.sender_id === contactId && !msg.read_at;
   };
+
+  const activeContacts = contacts
+    .filter((c) => getLastMessage(c.id))
+    .sort((a, b) => {
+      const aTime = getLastMessage(a.id)!.created_at;
+      const bTime = getLastMessage(b.id)!.created_at;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
 
   if (!open) return null;
 
@@ -177,8 +190,6 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
           </button>
         </div>
 
-        {/* タブ（一覧ビューのみ）は廃止 — メッセージと問い合わせを1リストで表示 */}
-
         {/* メイン コンテンツ */}
         {view.type === "list" && (
           <div className="flex-1 overflow-y-auto">
@@ -194,37 +205,15 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
                   </div>
                 ))}
               </div>
+            ) : activeContacts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-6">
+                <MessageCircle className="h-8 w-8 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">メッセージがありません</p>
+              </div>
             ) : (
               <div className="divide-y divide-border/40">
-                {/* フォローアップ問い合わせ（未読のみ優先表示） */}
-                {inquiries.filter(i => !i.read_at).map(inq => (
-                  <div key={inq.id} className="px-4 py-3 space-y-1 bg-primary/5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <AlertCircle className="h-3 w-3 text-primary shrink-0" />
-                        <p className="text-xs font-semibold text-foreground truncate">
-                          {(inq.sender as { display_name?: string } | null)?.display_name ?? "不明"} より
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground shrink-0">{format(new Date(inq.created_at), "M/d HH:mm", { locale: ja })}</span>
-                    </div>
-                    {inq.related_customer && (
-                      <Link href={`/crm/${inq.related_customer.id}`} className="text-[11px] text-primary hover:underline block truncate">
-                        顧客: {inq.related_customer.name}
-                      </Link>
-                    )}
-                    <p className="text-xs text-foreground/80 leading-relaxed">{inq.content}</p>
-                  </div>
-                ))}
-
-                {/* メンバー一覧（チャット） */}
-                {contacts.length === 0 && inquiries.filter(i => !i.read_at).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-6">
-                    <MessageCircle className="h-8 w-8 text-muted-foreground/30" />
-                    <p className="text-sm text-muted-foreground">メンバーがいません</p>
-                  </div>
-                ) : contacts.map(contact => {
-                  const lastMsg = getLastMessage(contact.id);
+                {activeContacts.map((contact) => {
+                  const lastMsg = getLastMessage(contact.id)!;
                   const unread = isUnread(contact.id);
                   return (
                     <button
@@ -242,21 +231,13 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className={cn("text-sm truncate", unread ? "font-semibold text-foreground" : "font-medium")}>{contact.display_name}</p>
-                          {lastMsg && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">{format(new Date(lastMsg.created_at), "M/d HH:mm", { locale: ja })}</span>
-                          )}
+                          <span className="text-[10px] text-muted-foreground shrink-0">{format(new Date(lastMsg.created_at), "M/d HH:mm", { locale: ja })}</span>
                         </div>
                         <p className={cn("text-xs truncate mt-0.5", unread ? "text-foreground/80" : "text-muted-foreground")}>
-                          {lastMsg ? (
-                            <>
-                              {lastMsg.sender_id === profile?.id && (
-                                lastMsg.read_at ? <CheckCheck className="h-3 w-3 inline mr-0.5 text-primary" /> : <Check className="h-3 w-3 inline mr-0.5 text-muted-foreground" />
-                              )}
-                              {lastMsg.content}
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground/60">{contact.department || contact.role}</span>
+                          {lastMsg.sender_id === profile?.id && lastMsg.message_type === "chat" && (
+                            lastMsg.read_at ? <CheckCheck className="h-3 w-3 inline mr-0.5 text-primary" /> : <Check className="h-3 w-3 inline mr-0.5 text-muted-foreground" />
                           )}
+                          {formatLastMessagePreview(lastMsg)}
                         </p>
                       </div>
                     </button>
@@ -288,15 +269,21 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
               ) : (
                 messages.map((msg, i) => {
                   const isMe = msg.sender_id === profile?.id;
+                  const isInquiry = msg.message_type === "followup_inquiry";
                   return (
                     <div key={msg.id ?? i} className={cn("flex gap-2 items-end", isMe && "justify-end")}>
                       {!isMe && <Avatar name={view.contact.display_name} />}
                       <div className={cn("max-w-[75%] space-y-0.5", isMe && "items-end flex flex-col")}>
+                        {isInquiry && (
+                          <span className="text-[10px] text-primary font-medium px-1">フォローアップ問い合わせ</span>
+                        )}
                         <div className={cn(
                           "rounded-2xl px-3 py-2 text-sm leading-relaxed",
-                          isMe
-                            ? "bg-primary text-primary-foreground rounded-br-sm"
-                            : "bg-muted rounded-bl-sm"
+                          isInquiry
+                            ? "bg-primary/10 border border-primary/20 text-foreground rounded-bl-sm"
+                            : isMe
+                              ? "bg-primary text-primary-foreground rounded-br-sm"
+                              : "bg-muted rounded-bl-sm"
                         )}>
                           {msg.content}
                         </div>

@@ -101,6 +101,7 @@ export async function updateContract(id: string, input: Partial<Omit<Contract, "
 
 export async function deleteContract(id: string) {
   const supabase = await createClient();
+  await supabase.from("constructions").update({ contract_id: null }).eq("contract_id", id);
   const { error } = await supabase.from("contracts").delete().eq("id", id);
   if (error) throw error;
 }

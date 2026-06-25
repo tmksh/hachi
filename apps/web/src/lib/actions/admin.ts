@@ -509,7 +509,40 @@ export async function createAdminCompany(input: {
     throw profileError;
   }
 
-  // 4. slug が設定されていれば Netlify にドメインエイリアスを追加（失敗しても登録自体はロールバックしない）
+  // 4. 必須ワークフロー種別を自動シード（失敗してもロールバックしない）
+  const defaultWorkflowTypes = [
+    {
+      key: "estimate_margin",
+      name: "見積承認（粗利率未達）",
+      description: "粗利率が基準を下回る見積を上長が承認するフロー",
+    },
+    {
+      key: "contract_08",
+      name: "契約書承認",
+      description: "契約書の社内承認フロー",
+    },
+  ];
+  for (const wf of defaultWorkflowTypes) {
+    const { data: existing } = await supabase
+      .from("workflow_types")
+      .select("id")
+      .eq("company_id", company.id)
+      .eq("key", wf.key)
+      .maybeSingle();
+    if (!existing) {
+      await supabase.from("workflow_types").insert({
+        company_id: company.id,
+        key: wf.key,
+        name: wf.name,
+        description: wf.description,
+        fields_schema: [],
+        approval_route: [],
+        sort_order: 0,
+      }).catch((e) => console.error(`[seedWorkflowType] ${wf.key}`, e));
+    }
+  }
+
+  // 5. slug が設定されていれば Netlify にドメインエイリアスを追加（失敗しても登録自体はロールバックしない）
   let netlifyDomain: string | null = null;
   let netlifyError: string | null = null;
   if (input.slug) {

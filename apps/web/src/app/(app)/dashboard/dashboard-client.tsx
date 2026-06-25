@@ -65,39 +65,6 @@ const WidgetGrid = dynamic(
 );
 
 
-const MOCK_UNFOLLOWED_LEADS: UnfollowedLead[] = [
-  {
-    id: "mock-1",
-    name: "田中 太郎",
-    company_name: "田中工務店",
-    assigned_to: "mock-user-1",
-    assigned_to_profile: { id: "mock-user-1", display_name: "山田 営業" },
-    status: "active",
-    last_deal_updated: new Date(Date.now() - 10 * 86_400_000).toISOString(),
-    days_since_update: 10,
-  },
-  {
-    id: "mock-2",
-    name: "鈴木 花子",
-    company_name: null,
-    assigned_to: "mock-user-2",
-    assigned_to_profile: { id: "mock-user-2", display_name: "佐藤 担当" },
-    status: "active",
-    last_deal_updated: new Date(Date.now() - 14 * 86_400_000).toISOString(),
-    days_since_update: 14,
-  },
-  {
-    id: "mock-3",
-    name: "伊藤 建設",
-    company_name: "伊藤建設株式会社",
-    assigned_to: "mock-user-1",
-    assigned_to_profile: { id: "mock-user-1", display_name: "山田 営業" },
-    status: "active",
-    last_deal_updated: null,
-    days_since_update: null,
-  },
-];
-
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
   if (n >= 10_000) return `¥${(n / 10_000).toFixed(0)}万`;
@@ -140,10 +107,7 @@ export function DashboardClient({
   const { data, isLoading: loading } = useDashboardData(initialData);
   const { data: attendanceEntry } = useTodayAttendance(initialAttendance);
   const { data: unfollowedData, isLoading: unfollowedLoading } = useUnfollowedLeads(7, initialUnfollowedLeads);
-  const unfollowedLeads = useMemo(
-    () => (unfollowedData && unfollowedData.length > 0 ? unfollowedData : MOCK_UNFOLLOWED_LEADS),
-    [unfollowedData],
-  );
+  const unfollowedLeads = unfollowedData ?? [];
   const [inquiryTarget, setInquiryTarget] = useState<UnfollowedLead | null>(null);
   const [inquiryContent, setInquiryContent] = useState("");
   const [inquirySending, setInquirySending] = useState(false);
@@ -152,7 +116,7 @@ export function DashboardClient({
 
   const { widgets, hydrated, reorder, resizeWidget, setWidgetWidth, initWidths, toggleVisible, reset } = useWidgets();
   const { gradientHex, solidHex, mode: brandMode, setGradientColor, setSolidColor, switchMode, reset: resetColor } = useBrandColor();
-  const { openInternalChat } = useInternalChat();
+  const { openInternalChat, refreshInternalChat } = useInternalChat();
   const brandHex = brandMode === "solid" ? solidHex : gradientHex;
   const brandColors = computeBrandFromHex(brandHex);
 
@@ -184,27 +148,21 @@ export function DashboardClient({
     } catch { toast.error("退勤打刻に失敗しました"); }
   };
 
-  const isMockLead = (lead: UnfollowedLead) => lead.id.startsWith("mock-");
-
   const handleSendInquiry = async () => {
     if (!inquiryTarget || !inquiryContent.trim()) return;
     if (!inquiryTarget.assigned_to) return;
     setInquirySending(true);
     try {
-      if (isMockLead(inquiryTarget)) {
-        await new Promise((r) => setTimeout(r, 600));
-        toast.success("問い合わせを送信しました（デモ）", {
-          description: `${inquiryTarget.assigned_to_profile?.display_name ?? "担当者"} に送信しました`,
-        });
-        openInternalChat();
-      } else {
-        await sendFollowupInquiry(
-          inquiryTarget.assigned_to,
-          inquiryTarget.id,
-          inquiryContent.trim(),
-        );
-        toast.success("問い合わせを送信しました");
-      }
+      await sendFollowupInquiry(
+        inquiryTarget.assigned_to,
+        inquiryTarget.id,
+        inquiryContent.trim(),
+      );
+      toast.success("問い合わせを送信しました", {
+        description: `${inquiryTarget.assigned_to_profile?.display_name ?? "担当者"} に送信しました`,
+      });
+      refreshInternalChat();
+      openInternalChat();
       setInquiryTarget(null);
       setInquiryContent("");
     } catch {

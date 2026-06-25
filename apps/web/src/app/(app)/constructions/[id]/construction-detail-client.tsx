@@ -60,7 +60,7 @@ import {
 } from "@/lib/actions/constructions";
 import { getChangeOrders } from "@/lib/actions/change-orders";
 import { getInvoicesForConstruction } from "@/lib/actions/invoices";
-import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
+import { buildPaymentSchedule, type PaymentScheduleItem } from "@/lib/construction/payment-schedule";
 
 type Detail = Awaited<ReturnType<typeof getConstruction>>;
 type Order = Detail["orders"][number] & { craftsman?: { id: string; name: string } | null };
@@ -278,21 +278,26 @@ const ORDER_STATUS_MAP = {
 
 const PAYMENT_COUNT_OPTIONS = ["1回", "2回", "3回", "4回", "6回", "12回", "その他"];
 
-function OrdersTab({ constructionId, initialOrders, constructionStartDate, constructionEndDate, estimateId }: {
+function OrdersTab({ constructionId, initialOrders, constructionStartDate, constructionEndDate, estimateId, initialForm }: {
   constructionId: string;
   initialOrders: Order[];
   constructionStartDate?: string | null;
   constructionEndDate?: string | null;
   estimateId?: string | null;
+  initialForm?: { title?: string; amount?: string; workContent?: string } | null;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [dialog, setDialog] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(() => !!(initialForm?.title || initialForm?.amount));
   const [seeding, setSeeding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [craftsmen, setCraftsmen] = useState<Craftsman[]>([]);
+  const [pdfPreviewOrder, setPdfPreviewOrder] = useState<Order | null>(null);
+  const [estimateItems, setEstimateItems] = useState<EstimateItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
   const [form, setForm] = useState({
-    title: "",
-    amount: "",
+    title: initialForm?.title ?? "",
+    craftsmanName: initialForm?.title ?? "",
+    amount: initialForm?.amount ?? "",
     craftsmanId: "",
     notes: "",
     orderDate: new Date().toISOString().split("T")[0],
@@ -301,24 +306,70 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
     completionDate: constructionEndDate ?? "",
     paymentDate: "",
     paymentCount: "1回",
-    workContent: "",
+    workContent: initialForm?.workContent ?? "",
     specialNotes: "",
   });
+  const [customSchedule, setCustomSchedule] = useState<PaymentScheduleItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const openDialog = () => {
-    setForm(f => ({
-      ...f,
+  const rebuildSchedule = (amount: string, paymentCount: string, startDate: string, endDate: string) => {
+    const amt = Number(amount) || 0;
+    if (paymentCount === "1回" || amt === 0) { setCustomSchedule([]); return; }
+    const sched = buildPaymentSchedule(amt, paymentCount, startDate || null, endDate || null);
+    setCustomSchedule(sched);
+  };
+
+  const scheduleTotal = customSchedule.reduce((s, r) => s + r.rate * 100, 0);
+  const scheduleValid = customSchedule.length === 0 || Math.abs(scheduleTotal - 100) < 0.1;
+
+  const loadEstimateItems = async () => {
+    if (!estimateId || estimateItems.length > 0) return;
+    setLoadingItems(true);
+    try {
+      const est = await getConstructionEstimate(estimateId);
+      setEstimateItems((est.items ?? []) as EstimateItem[]);
+    } catch { /* silent */ } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  // CostBudgetTabの「発注」ボタン経由で開いた場合、見積もり項目を自動ロード
+  React.useEffect(() => {
+    if (showCreateForm && estimateId) {
+      void loadEstimateItems();
+      if (craftsmen.length === 0) getCraftsmen().then(setCraftsmen).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreateForm]);
+
+  const filteredEstimateItems = form.craftsmanName
+    ? estimateItems.filter(i => (i.notes ?? "").trim() === form.craftsmanName.trim())
+    : estimateItems;
+
+  const itemsTotal = filteredEstimateItems.reduce((s, i) => s + (i.selling_amount ?? 0), 0);
+
+  const openCreateForm = () => {
+    setForm({
+      title: "",
+      craftsmanName: "",
+      amount: "",
+      craftsmanId: "",
+      notes: "",
+      orderDate: new Date().toISOString().split("T")[0],
       startDate: constructionStartDate ?? "",
       endDate: constructionEndDate ?? "",
       completionDate: constructionEndDate ?? "",
-    }));
-    setDialog(true);
-    if (craftsmen.length === 0) {
-      getCraftsmen().then(setCraftsmen).catch(() => {});
-    }
+      paymentDate: "",
+      paymentCount: "1回",
+      workContent: "",
+      specialNotes: "",
+    });
+    setCustomSchedule([]);
+    setShowCreateForm(true);
+    if (craftsmen.length === 0) getCraftsmen().then(setCraftsmen).catch(() => {});
+    void loadEstimateItems();
   };
 
   async function handleSeed() {
@@ -327,44 +378,6 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
       const created = await seedContractorOrders(constructionId);
       setOrders(prev => [...(created as Order[]), ...prev]);
     } catch (e) { console.error(e); } finally { setSeeding(false); }
-  }
-
-  async function handleAdd() {
-    if (!form.title.trim() || !form.amount) return;
-    setSaving(true);
-    try {
-      const created = await createContractorOrder({
-        constructionId,
-        title: form.title,
-        amount: Number(form.amount),
-        craftsmanId: form.craftsmanId || undefined,
-        notes: form.notes || undefined,
-        orderDate: form.orderDate || undefined,
-        startDate: form.startDate || undefined,
-        endDate: form.endDate || undefined,
-        completionDate: form.completionDate || undefined,
-        paymentDate: form.paymentDate || undefined,
-        paymentCount: form.paymentCount || undefined,
-        workContent: form.workContent || undefined,
-        specialNotes: form.specialNotes || undefined,
-      });
-      setOrders(prev => [created as Order, ...prev]);
-      setDialog(false);
-      setForm({
-        title: "",
-        amount: "",
-        craftsmanId: "",
-        notes: "",
-        orderDate: new Date().toISOString().split("T")[0],
-        startDate: constructionStartDate ?? "",
-        endDate: constructionEndDate ?? "",
-        completionDate: constructionEndDate ?? "",
-        paymentDate: "",
-        paymentCount: "1回",
-        workContent: "",
-        specialNotes: "",
-      });
-    } catch (e) { console.error(e); } finally { setSaving(false); }
   }
 
   async function handleDelete(id: string) {
@@ -411,24 +424,302 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
 
   const total = orders.reduce((s, o) => s + o.amount, 0);
 
+  /* ---- 発注書作成フォーム（フルパネル） ---- */
+  if (showCreateForm) {
+    const displayItems = filteredEstimateItems;
+    const calcAmount = displayItems.length > 0 ? itemsTotal : (Number(form.amount) || 0);
+    const tax = Math.round(calcAmount * 0.1);
+
+    return (
+      <div className="rounded-xl border border-border bg-card">
+        {/* ヘッダー */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+          <button
+            type="button"
+            onClick={() => setShowCreateForm(false)}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <h2 className="text-base font-semibold">発注書を作成</h2>
+        </div>
+
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-280px)]">
+          {/* Row 1: 発注先業者 | 発注日 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>発注先業者</Label>
+              <Select
+                value={form.craftsmanId || "__none__"}
+                onValueChange={v => {
+                  const id = v === "__none__" ? "" : v;
+                  const name = craftsmen.find(c => c.id === id)?.name ?? "";
+                  setForm(f => ({ ...f, craftsmanId: id, craftsmanName: name, title: name || f.title }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={form.craftsmanName || "業者を選択"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">指定なし</SelectItem>
+                  {craftsmen.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>発注日</Label>
+              <Input type="date" value={form.orderDate} onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))} />
+            </div>
+          </div>
+
+          {/* Row 2: 工期 | 完了予定日 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>工期（開始日〜終了日）</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" placeholder="開始日" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+                <Input type="date" placeholder="終了日" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>完了予定日</Label>
+              <Input type="date" value={form.completionDate} onChange={e => setForm(f => ({ ...f, completionDate: e.target.value }))} />
+            </div>
+          </div>
+
+          {/* Row 3: 支払予定日 | 支払回数 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>支払予定日</Label>
+              <Input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>支払回数</Label>
+              <Select
+                value={form.paymentCount}
+                onValueChange={v => {
+                  setForm(f => ({ ...f, paymentCount: v }));
+                  rebuildSchedule(form.amount, v, form.startDate, form.endDate);
+                }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_COUNT_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* 支払スケジュール（複数回） */}
+          {customSchedule.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>支払スケジュール</Label>
+                <span className={`text-[11px] font-semibold ${scheduleValid ? "text-green-600" : "text-red-500"}`}>
+                  合計 {scheduleTotal.toFixed(1)}%{scheduleValid ? " ✓" : " ← 100%にしてください"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-1.5 text-left font-medium">区分</th>
+                      <th className="px-2 py-1.5 text-center font-medium w-20">割合（%）</th>
+                      <th className="px-3 py-1.5 text-right font-medium w-28">金額</th>
+                      <th className="px-2 py-1.5 text-left font-medium">支払期日</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customSchedule.map((row, idx) => (
+                      <tr key={idx} className="border-t border-border/40">
+                        <td className="px-3 py-1.5 font-medium">{row.phase}</td>
+                        <td className="px-1 py-1">
+                          <input
+                            type="number" min={0} max={100} step={1}
+                            className="w-full text-center text-xs border rounded px-1 py-0.5 bg-background"
+                            value={Math.round(row.rate * 1000) / 10}
+                            onChange={e => {
+                              const pct = Number(e.target.value) || 0;
+                              const newRate = pct / 100;
+                              const amt = Number(form.amount) || calcAmount;
+                              setCustomSchedule(prev => prev.map((r, i) => i === idx ? { ...r, rate: newRate, amount: Math.round(amt * newRate) } : r));
+                            }}
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                          ¥{Math.round(calcAmount * row.rate).toLocaleString()}
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            type="date"
+                            className="w-full text-xs border rounded px-1 py-0.5 bg-background"
+                            value={row.due_date ?? ""}
+                            onChange={e => setCustomSchedule(prev => prev.map((r, i) => i === idx ? { ...r, due_date: e.target.value || null } : r))}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 明細項目（見積もりより自動取得） */}
+          <div className="space-y-1.5">
+            <Label>
+              明細項目
+              <span className="text-[11px] text-muted-foreground font-normal ml-2">（見積もりより自動取得）</span>
+            </Label>
+            {loadingItems ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />読み込み中…
+              </div>
+            ) : displayItems.length > 0 ? (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40">
+                    <tr className="text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left font-medium">品名</th>
+                      <th className="px-3 py-2 text-right font-medium w-16">数量</th>
+                      <th className="px-3 py-2 text-center font-medium w-12">単位</th>
+                      <th className="px-3 py-2 text-right font-medium w-28">金額</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayItems.map(item => (
+                      <tr key={item.id} className="border-t border-border/40">
+                        <td className="px-3 py-2">{item.name}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{item.quantity}</td>
+                        <td className="px-3 py-2 text-center text-muted-foreground">{item.unit ?? "式"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">¥{(item.selling_amount ?? 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-2">
+                {estimateId ? "見積もりに明細項目がありません（業者名でフィルタリングされています）" : "見積もりが紐付いていません"}
+              </p>
+            )}
+          </div>
+
+          {/* 工事内容 */}
+          <div className="space-y-1.5">
+            <Label>工事内容</Label>
+            <Textarea value={form.workContent} onChange={e => setForm(f => ({ ...f, workContent: e.target.value }))}
+              placeholder="工事内容を入力" rows={3} />
+          </div>
+
+          {/* Row: 金額 | 特記事項 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>金額（税抜）<span className="text-red-500 ml-1">*</span></Label>
+              <Input
+                type="number" min={0}
+                value={form.amount || (displayItems.length > 0 ? String(itemsTotal) : "")}
+                onChange={e => {
+                  const v = e.target.value;
+                  setForm(f => ({ ...f, amount: v }));
+                  if (customSchedule.length > 0) {
+                    const amt = Number(v) || 0;
+                    setCustomSchedule(prev => prev.map(r => ({ ...r, amount: Math.round(amt * r.rate) })));
+                  }
+                }}
+                placeholder={displayItems.length > 0 ? String(itemsTotal) : "1200000"}
+              />
+              {(() => {
+                const amt = Number(form.amount) || (displayItems.length > 0 ? itemsTotal : 0);
+                if (!amt) return null;
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    消費税: ¥{Math.round(amt * 0.1).toLocaleString()} / 合計: ¥{Math.round(amt * 1.1).toLocaleString()}
+                  </p>
+                );
+              })()}
+            </div>
+            <div className="space-y-1.5">
+              <Label>特記事項</Label>
+              <Textarea value={form.specialNotes} onChange={e => setForm(f => ({ ...f, specialNotes: e.target.value }))}
+                placeholder="特記事項を入力" rows={3} />
+            </div>
+          </div>
+
+          {/* 備考 */}
+          <div className="space-y-1.5">
+            <Label>備考</Label>
+            <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="備考・注意事項" rows={2} />
+          </div>
+        </div>
+
+        {/* フッター */}
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border">
+          <Button variant="outline" onClick={() => setShowCreateForm(false)}>キャンセル</Button>
+          <Button
+            onClick={async () => {
+              const amt = Number(form.amount) || (displayItems.length > 0 ? itemsTotal : 0);
+              if (!(form.title || form.craftsmanName).trim() || !amt) {
+                toast.error("業者名と金額は必須です");
+                return;
+              }
+              if (!scheduleValid) { toast.error("支払割合の合計が100%になっていません"); return; }
+              setSaving(true);
+              try {
+                const scheduledItems = customSchedule.length > 0
+                  ? customSchedule.map(s => ({ ...s, amount: Math.round(amt * s.rate) }))
+                  : undefined;
+                const created = await createContractorOrder({
+                  constructionId,
+                  title: form.title || form.craftsmanName,
+                  amount: amt,
+                  craftsmanId: form.craftsmanId || undefined,
+                  notes: form.notes || undefined,
+                  orderDate: form.orderDate || undefined,
+                  startDate: form.startDate || undefined,
+                  endDate: form.endDate || undefined,
+                  completionDate: form.completionDate || undefined,
+                  paymentDate: form.paymentDate || undefined,
+                  paymentCount: form.paymentCount || undefined,
+                  workContent: form.workContent || undefined,
+                  specialNotes: form.specialNotes || undefined,
+                  customPaymentSchedule: scheduledItems,
+                });
+                setOrders(prev => [created as Order, ...prev]);
+                setShowCreateForm(false);
+                setCustomSchedule([]);
+                toast.success("発注書を作成しました");
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "作成に失敗しました");
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            作成する
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{orders.length} 件（見積項目から自動取得・支払回数別配分）</p>
+        <p className="text-sm text-muted-foreground">{orders.length} 件</p>
         <div className="flex gap-2">
           {estimateId && (
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleImportFromEstimate} disabled={importing}>
               {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-              見積から発注書を取得
+              見積から一括作成
             </Button>
           )}
-          {orders.length === 0 && (
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleSeed} disabled={seeding}>
-              {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-              サンプルデータを追加
-            </Button>
-          )}
-          <Button size="sm" className="gap-1.5 text-xs" onClick={openDialog}>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={openCreateForm}>
             <Plus className="h-3.5 w-3.5" />発注書を追加
           </Button>
         </div>
@@ -513,6 +804,13 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
                             </button>
                           )}
                           <button
+                            className="text-[10px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap"
+                            onClick={() => setPdfPreviewOrder(order)}
+                            title="発注書をプレビュー"
+                          >
+                            PDF確認
+                          </button>
+                          <button
                             className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 transition-all"
                             onClick={() => handleDelete(order.id)}
                             disabled={deletingId === order.id}
@@ -555,118 +853,137 @@ function OrdersTab({ constructionId, initialOrders, constructionStartDate, const
         </Card>
       )}
 
-      {/* 発注書追加ダイアログ */}
-      <Dialog open={dialog} onOpenChange={setDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>発注書を追加</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-y-auto flex-1 space-y-4 py-2 pr-1">
-            {/* 件名 */}
-            <div className="space-y-1.5">
-              <Label>件名 <span className="text-red-500">*</span></Label>
-              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                placeholder="例: 基礎工事 下請発注" autoFocus />
+      {/* 発注書PDFプレビューダイアログ */}
+      {pdfPreviewOrder && (
+        <Dialog open={!!pdfPreviewOrder} onOpenChange={() => setPdfPreviewOrder(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>発注書プレビュー</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto">
+              <OrderPdfPreview order={pdfPreviewOrder} />
             </div>
-
-            {/* 発注先業者 */}
-            <div className="space-y-1.5">
-              <Label>発注先業者</Label>
-              <Select
-                value={form.craftsmanId || "__none__"}
-                onValueChange={v => setForm(f => ({ ...f, craftsmanId: v === "__none__" ? "" : v }))}
-              >
-                <SelectTrigger><SelectValue placeholder="業者を選択" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">指定なし</SelectItem>
-                  {craftsmen.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 発注日 */}
-            <div className="space-y-1.5">
-              <Label>発注日</Label>
-              <Input type="date" value={form.orderDate} onChange={e => setForm(f => ({ ...f, orderDate: e.target.value }))} />
-            </div>
-
-            {/* 工期 */}
-            <div className="space-y-1.5">
-              <Label>工期（開始日〜終了日）</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
-                <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* 完了予定日 / 支払予定日 */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>完了予定日</Label>
-                <Input type="date" value={form.completionDate} onChange={e => setForm(f => ({ ...f, completionDate: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>支払予定日</Label>
-                <Input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* 支払回数 */}
-            <div className="space-y-1.5">
-              <Label>支払回数</Label>
-              <Select value={form.paymentCount} onValueChange={v => setForm(f => ({ ...f, paymentCount: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_COUNT_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* 工事内容 */}
-            <div className="space-y-1.5">
-              <Label>工事内容</Label>
-              <Textarea value={form.workContent} onChange={e => setForm(f => ({ ...f, workContent: e.target.value }))}
-                placeholder="発注する工事の内容を記入" rows={3} />
-            </div>
-
-            {/* 発注金額 */}
-            <div className="space-y-1.5">
-              <Label>発注金額（税抜・円） <span className="text-red-500">*</span></Label>
-              <Input type="number" min={0} value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                placeholder="1200000" />
-              {form.amount && (
-                <p className="text-xs text-muted-foreground">
-                  消費税（10%）: ¥{Math.round(Number(form.amount) * 0.1).toLocaleString()} &nbsp;／&nbsp;
-                  合計: ¥{Math.round(Number(form.amount) * 1.1).toLocaleString()}
-                </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPdfPreviewOrder(null)}>閉じる</Button>
+              <Button onClick={() => window.print()} variant="outline">
+                <FileText className="h-4 w-4 mr-1" />印刷
+              </Button>
+              {pdfPreviewOrder.status === "draft" && (
+                <Button
+                  onClick={async () => {
+                    await handleStatusChange(pdfPreviewOrder.id, "submitted");
+                    setPdfPreviewOrder(null);
+                  }}
+                >
+                  申請する
+                </Button>
               )}
-            </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
 
-            {/* 備考 / 特記事項 */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>備考</Label>
-                <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  placeholder="備考・注意事項" rows={2} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>特記事項</Label>
-                <Textarea value={form.specialNotes} onChange={e => setForm(f => ({ ...f, specialNotes: e.target.value }))}
-                  placeholder="特記事項" rows={2} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="shrink-0 pt-2">
-            <Button variant="outline" onClick={() => setDialog(false)}>キャンセル</Button>
-            <Button onClick={handleAdd} disabled={saving || !form.title.trim() || !form.amount}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              追加する
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+/* ──────────────────────────────────────────────────
+   発注書PDFプレビューコンポーネント
+────────────────────────────────────────────────── */
+function OrderPdfPreview({ order }: { order: { title: string; amount: number; craftsman?: { name: string } | null; order_date?: string | null; start_date?: string | null; end_date?: string | null; completion_date?: string | null; payment_date?: string | null; payment_count?: string | null; work_content?: string | null; special_notes?: string | null; notes?: string | null; payment_schedule?: Array<{ phase: string; amount: number; due_date: string | null }> | null } }) {
+  const schedule = (order.payment_schedule && order.payment_schedule.length > 0)
+    ? order.payment_schedule
+    : buildPaymentSchedule(order.amount, order.payment_count ?? "1回", order.start_date, order.end_date);
+  const tax = Math.round(order.amount * 0.1);
+  const total = order.amount + tax;
+
+  return (
+    <div className="bg-white text-black p-6 space-y-4 text-sm font-sans print:p-0">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold tracking-wide mb-1">発 注 書</h1>
+        <p className="text-xs text-gray-500">発注日: {order.order_date ?? "—"}</p>
+      </div>
+
+      <div className="flex justify-between gap-4 border-b pb-3">
+        <div>
+          <p className="text-xs text-gray-500 mb-0.5">発注先</p>
+          <p className="text-base font-semibold">{order.craftsman?.name ?? "（未設定）"} 御中</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500 mb-0.5">件名</p>
+          <p className="font-semibold">{order.title}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div><span className="text-gray-500">工期開始：</span>{order.start_date ?? "—"}</div>
+        <div><span className="text-gray-500">工期終了：</span>{order.end_date ?? "—"}</div>
+        <div><span className="text-gray-500">完了予定日：</span>{order.completion_date ?? "—"}</div>
+        <div><span className="text-gray-500">支払予定日：</span>{order.payment_date ?? "—"}</div>
+        <div><span className="text-gray-500">支払回数：</span>{order.payment_count ?? "1回"}</div>
+      </div>
+
+      {order.work_content && (
+        <div className="border rounded p-2">
+          <p className="text-[11px] font-semibold text-gray-500 mb-1">工事内容</p>
+          <p className="text-xs whitespace-pre-wrap">{order.work_content}</p>
+        </div>
+      )}
+
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="bg-gray-100">
+            <th className="border px-2 py-1.5 text-left">項目</th>
+            <th className="border px-2 py-1.5 text-right w-28">金額</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="border px-2 py-1.5">{order.title}</td>
+            <td className="border px-2 py-1.5 text-right tabular-nums">¥{order.amount.toLocaleString()}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td className="border px-2 py-1.5 text-right text-gray-500">消費税（10%）</td>
+            <td className="border px-2 py-1.5 text-right tabular-nums">¥{tax.toLocaleString()}</td>
+          </tr>
+          <tr className="bg-gray-50 font-bold">
+            <td className="border px-2 py-1.5 text-right">合計（税込）</td>
+            <td className="border px-2 py-1.5 text-right tabular-nums text-base">¥{total.toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {schedule.length > 1 && (
+        <div>
+          <p className="text-[11px] font-semibold text-gray-500 mb-1">支払スケジュール</p>
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border px-2 py-1 text-left">区分</th>
+                <th className="border px-2 py-1 text-right">金額</th>
+                <th className="border px-2 py-1 text-left">支払期日</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((s, i) => (
+                <tr key={i}>
+                  <td className="border px-2 py-1">{s.phase}</td>
+                  <td className="border px-2 py-1 text-right tabular-nums">¥{s.amount.toLocaleString()}</td>
+                  <td className="border px-2 py-1">{s.due_date ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {order.special_notes && (
+        <div className="border rounded p-2 border-gray-300">
+          <p className="text-[11px] font-semibold text-gray-500 mb-1">特記事項</p>
+          <p className="text-xs whitespace-pre-wrap">{order.special_notes}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -712,6 +1029,7 @@ function ConstructionDetailPageContent({
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") ?? "schedule");
   const [completionOpen, setCompletionOpen] = useState(false);
+  const [prefillOrder, setPrefillOrder] = useState<{ title?: string; amount?: string; workContent?: string } | null>(null);
   const initialEstimateId = searchParams.get("estimateId");
 
   useEffect(() => {
@@ -851,16 +1169,15 @@ function ConstructionDetailPageContent({
 
       {/* ── タブ ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
-          <TabsTrigger value="customer"  className="text-xs gap-1.5"><Users       className="h-3.5 w-3.5" />顧客情報</TabsTrigger>
-          <TabsTrigger value="schedule"  className="text-xs gap-1.5"><CalendarDays className="h-3.5 w-3.5" />工程表</TabsTrigger>
-          <TabsTrigger value="estimate"  className="text-xs gap-1.5"><FileText     className="h-3.5 w-3.5" />見積もり</TabsTrigger>
-          <TabsTrigger value="contract"  className="text-xs gap-1.5"><ScrollText   className="h-3.5 w-3.5" />契約書</TabsTrigger>
-          <TabsTrigger value="change"    className="text-xs gap-1.5"><PencilLine   className="h-3.5 w-3.5" />追加変更</TabsTrigger>
-          <TabsTrigger value="budget"    className="text-xs gap-1.5"><BookOpen     className="h-3.5 w-3.5" />工事台帳</TabsTrigger>
-          <TabsTrigger value="orders"    className="text-xs gap-1.5"><PackageCheck className="h-3.5 w-3.5" />発注書・請書</TabsTrigger>
-          <TabsTrigger value="invoices"  className="text-xs gap-1.5"><Receipt      className="h-3.5 w-3.5" />請求書</TabsTrigger>
-          <TabsTrigger value="documents" className="text-xs gap-1.5"><FolderOpen   className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
+        <TabsList className="grid grid-cols-8 w-full h-auto gap-0.5">
+          <TabsTrigger value="customer"  className="text-xs gap-1 min-w-0"><Users       className="h-3.5 w-3.5 shrink-0" /><span className="truncate">顧客情報</span></TabsTrigger>
+          <TabsTrigger value="schedule"  className="text-xs gap-1 min-w-0"><CalendarDays className="h-3.5 w-3.5 shrink-0" /><span className="truncate">工程表</span></TabsTrigger>
+          <TabsTrigger value="estimate"  className="text-xs gap-1 min-w-0"><FileText     className="h-3.5 w-3.5 shrink-0" /><span className="truncate">見積もり</span></TabsTrigger>
+          <TabsTrigger value="contract"  className="text-xs gap-1 min-w-0"><ScrollText   className="h-3.5 w-3.5 shrink-0" /><span className="truncate">契約書</span></TabsTrigger>
+          <TabsTrigger value="change"    className="text-xs gap-1 min-w-0"><PencilLine   className="h-3.5 w-3.5 shrink-0" /><span className="truncate">追加変更</span></TabsTrigger>
+          <TabsTrigger value="budget"    className="text-xs gap-1 min-w-0"><BookOpen     className="h-3.5 w-3.5 shrink-0" /><span className="truncate">工事台帳</span></TabsTrigger>
+          <TabsTrigger value="orders"    className="text-xs gap-1 min-w-0"><PackageCheck className="h-3.5 w-3.5 shrink-0" /><span className="truncate">発注書・請書</span></TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs gap-1 min-w-0"><FolderOpen   className="h-3.5 w-3.5 shrink-0" /><span className="truncate">ドキュメント</span></TabsTrigger>
         </TabsList>
 
         <TabsContent value="customer" className="mt-4">
@@ -938,16 +1255,23 @@ function ConstructionDetailPageContent({
             constructionId={id as string}
             contractAmount={contract?.amount ?? data.order_amount ?? undefined}
             initialOrders={data.orders as Order[]}
-            initialEstimateItems={(estimate as { items?: EstimateItem[] } | null)?.items?.map(i => ({
-              id: i.id,
-              name: i.name,
-              cost_amount: i.cost_amount,
-              selling_amount: i.selling_amount,
-              category_id: i.category_id,
+            estimates={((data as Detail & { estimates?: Array<{ id: string; estimate_no: string; title: string | null; total: number }> }).estimates ?? []).map((e) => ({
+              id: e.id,
+              estimate_no: e.estimate_no,
+              title: e.title,
+              total: e.total ?? 0,
+            }))}
+            changeOrders={changeOrders.map((co) => ({
+              id: co.id,
+              title: co.title,
+              diff_amount: (co as { diff_amount?: number | null }).diff_amount ?? 0,
             }))}
             periodStart={data.start_date}
             authorName={profile?.display_name ?? "ユーザー"}
-            onNavigateToOrders={() => setActiveTab("orders")}
+            onNavigateToOrders={(row) => {
+              setPrefillOrder(row ? { title: row.name || row.work_type, amount: row.budget ? String(row.budget) : "", workContent: row.work_type } : null);
+              setActiveTab("orders");
+            }}
           />
         </TabsContent>
 
@@ -958,6 +1282,7 @@ function ConstructionDetailPageContent({
             constructionStartDate={data.start_date}
             constructionEndDate={data.end_date}
             estimateId={estimate?.id ?? contract?.estimate_id ?? null}
+            initialForm={prefillOrder}
           />
         </TabsContent>
 

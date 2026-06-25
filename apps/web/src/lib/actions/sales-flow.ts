@@ -229,14 +229,31 @@ export async function submitEstimateApproval(input: {
     throw new Error(`粗利率が基準(${threshold.toFixed(0)}%)以上のため承認申請は不要です`);
   }
 
-  const { data: wfType } = await supabase
+  let { data: wfType } = await supabase
     .from("workflow_types")
     .select("id, approval_route")
     .eq("company_id", company_id)
     .eq("key", "estimate_margin")
     .maybeSingle();
 
-  if (!wfType) throw new Error("見積承認ワークフロー種別が未設定です");
+  // 未設定の場合は自動作成する（既存会社向けフォールバック）
+  if (!wfType) {
+    const { data: created } = await supabase
+      .from("workflow_types")
+      .insert({
+        company_id,
+        key: "estimate_margin",
+        name: "見積承認（粗利率未達）",
+        description: "粗利率が基準を下回る見積を上長が承認するフロー",
+        fields_schema: [],
+        approval_route: [],
+        sort_order: 0,
+      })
+      .select("id, approval_route")
+      .single();
+    if (!created) throw new Error("見積承認ワークフロー種別の自動作成に失敗しました");
+    wfType = created;
+  }
 
   const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
   const approverIds = approvalRoute.length > 0
