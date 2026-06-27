@@ -448,7 +448,7 @@ export function DashboardClient({
               </div>
               <div className="flex items-center gap-2">
                 {/* タブ切替 */}
-                <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium overflow-hidden">
+                <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
                   <button
                     type="button"
                     onClick={() => setDealsTab("deals")}

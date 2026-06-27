@@ -59,6 +59,7 @@ import { fetchNotifications, type Notification } from "@/lib/queries/notificatio
 import { BombAlert } from "@/components/layout/bomb-alert";
 
 const BOMB_THRESHOLD = 10;
+const CHAT_BOMB_LS_KEY = "hachi_chat_bomb_check";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
@@ -102,9 +103,26 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   const [showBombAlert, setShowBombAlert] = useState(false);
   const [bombUrgentCount, setBombUrgentCount] = useState(0);
   const bombChecked = useRef(false);
+  const chatBombFired = useRef(false);
 
   useEffect(() => {
-    const fetchUnread = () => getUnreadMessageCount().then(setChatUnreadCount).catch(() => {});
+    const fetchUnread = async () => {
+      try {
+        const count = await getUnreadMessageCount();
+        setChatUnreadCount(count);
+        // 未読チャットが10件以上溜まったら爆弾アラートを発動（1日1回・セッション1回）
+        if (count >= BOMB_THRESHOLD && !chatBombFired.current) {
+          const today = new Date().toDateString();
+          const lastFired = localStorage.getItem(CHAT_BOMB_LS_KEY);
+          if (lastFired !== today) {
+            chatBombFired.current = true;
+            localStorage.setItem(CHAT_BOMB_LS_KEY, today);
+            setBombUrgentCount(count);
+            setShowBombAlert(true);
+          }
+        }
+      } catch {}
+    };
 
     let chatTimer: ReturnType<typeof setInterval> | undefined;
 

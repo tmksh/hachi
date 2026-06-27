@@ -27,14 +27,19 @@ type AttSettings = {
 };
 
 function calcWorkMinutes(clockIn: string, clockOut: string, breakMins: number): number {
-  const mins = differenceInMinutes(parseISO(clockOut), parseISO(clockIn)) - breakMins;
-  return Math.max(0, mins);
+  const rawMins = differenceInMinutes(parseISO(clockOut), parseISO(clockIn));
+  if (rawMins <= 0) return 0;
+  // 実働時間が休憩時間以下の場合は控除しない（短時間・テスト打刻で負にならないよう）
+  if (rawMins <= breakMins) return rawMins;
+  return rawMins - breakMins;
 }
 
 function minutesToHM(mins: number): string {
-  if (mins <= 0) return "-";
+  if (mins < 0) return "-";
+  if (mins === 0) return "0h";
   const h = Math.floor(mins / 60);
   const m = mins % 60;
+  if (h === 0) return `${m}m`;
   return m > 0 ? `${h}h${m}m` : `${h}h`;
 }
 
@@ -408,11 +413,15 @@ export function AttendanceClient({
                           </TableCell>
                           {isAdmin && (
                             <TableCell>
-                              {e.status === "pending" && (
+                              {/* 自己承認禁止: 自分のレコードは操作不可 */}
+                              {e.status === "pending" && e.user_id !== user?.id && (
                                 <div className="flex gap-1">
                                   <Button size="sm" variant="outline" onClick={() => handleApprove(e.id)} className="h-7 px-2"><Check className="h-3 w-3" /></Button>
                                   <Button size="sm" variant="outline" onClick={() => handleReject(e.id)} className="h-7 px-2"><X className="h-3 w-3" /></Button>
                                 </div>
+                              )}
+                              {e.user_id === user?.id && e.status === "pending" && (
+                                <span className="text-[10px] text-muted-foreground">自己承認不可</span>
                               )}
                             </TableCell>
                           )}
