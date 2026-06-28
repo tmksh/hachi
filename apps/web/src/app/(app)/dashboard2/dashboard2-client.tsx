@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/actions/attendance";
 import { ResponsiveClock } from "@/components/dashboard/responsive-clock";
 import { SortableWidget } from "@/components/shared/sortable-widget";
-import { AdaptiveList } from "@/components/shared/adaptive-list";
+import { ListWidgetCard } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
 import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import { useDashboardData, useTodayAttendance } from "@/hooks/use-dashboard-data";
@@ -255,59 +255,57 @@ export function Dashboard2Client({
 
       case "mail":
         return !isVisible("mail") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-bold ${BLUE_TITLE}`}>お知らせ</span>
-                {!loading && data?.announcements && data.announcements.length > 0 && (
-                  <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 tabular-nums shadow-sm">{data.announcements.length}</span>
-                )}
-              </div>
-              <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-2 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={60}
+            items={data?.announcements ?? []}
+            loading={loading}
+            listClassName="gap-2"
+            loadingSkeleton={
+              <div className="flex flex-col gap-2">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="space-y-1.5 py-2 border-b border-slate-50 last:border-0">
                     <Skeleton className="h-3 w-3/4" /><Skeleton className="h-2.5 w-full" />
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.announcements ?? []}
-                itemHeightPx={60}
-                max={15}
-                className="gap-2"
-                empty={<p className="text-xs text-slate-400 py-4 text-center">お知らせはありません</p>}
-              >
-                {(ann) => (
-                <Link key={ann.id} href={`/circulation/${ann.id}`}
-                  className="group flex gap-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-[#A3DAF6]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
-                  <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-800 line-clamp-1">{ann.title}</p>
-                      <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{format(new Date(ann.published_at), "M/d", { locale: ja })}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{ann.body}</p>
-                  </div>
-                </Link>
-              )}
-              </AdaptiveList>
+            }
+            empty={<p className="text-xs text-slate-400 py-4 text-center">お知らせはありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold ${BLUE_TITLE}`}>お知らせ</span>
+                  {!loading && data?.announcements && data.announcements.length > 0 && (
+                    <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 tabular-nums shadow-sm">{data.announcements.length}</span>
+                  )}
+                </div>
+                <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+              </div>
             )}
-          </div>
+          >
+            {(ann) => (
+              <Link key={ann.id} href={`/circulation/${ann.id}`}
+                className="group flex gap-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-[#A3DAF6]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
+                <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-800 line-clamp-1">{ann.title}</p>
+                    <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{format(new Date(ann.published_at), "M/d", { locale: ja })}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate mt-0.5">{ann.body}</p>
+                </div>
+              </Link>
+            )}
+          </ListWidgetCard>
         );
 
       case "customers":
         return !isVisible("customers") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${BLUE_TITLE}`}>最近の顧客</span>
-              <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-1 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={46}
+            items={data?.recentCustomers ?? []}
+            loading={loading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-3 py-2">
                     <Skeleton className="h-8 w-8 rounded-full shrink-0" />
@@ -315,16 +313,18 @@ export function Dashboard2Client({
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.recentCustomers ?? []}
-                itemHeightPx={46}
-                max={15}
-                empty={<p className="text-xs text-slate-400 py-4">顧客データはありません</p>}
-              >
-                {(customer) => {
-                const avatar = getCustomerAvatarColor(customer.id);
-                return (
+            }
+            empty={<p className="text-xs text-slate-400 py-4">顧客データはありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                <span className={`text-xs font-bold ${BLUE_TITLE}`}>最近の顧客</span>
+                <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+              </div>
+            )}
+          >
+            {(customer) => {
+              const avatar = getCustomerAvatarColor(customer.id);
+              return (
                 <Link key={customer.id} href={`/crm/${customer.id}`}
                   className="flex items-center gap-3 py-1.5 hover:bg-[#A3DAF6]/50 -mx-1 px-1 rounded-xl transition-colors group shrink-0">
                   <div
@@ -339,10 +339,9 @@ export function Dashboard2Client({
                   </div>
                   <span className="text-[10px] text-slate-400 bg-slate-100 rounded-full px-2 py-0.5 shrink-0">{customer.status}</span>
                 </Link>
-              );}}
-              </AdaptiveList>
-            )}
-          </div>
+              );
+            }}
+          </ListWidgetCard>
         );
 
       case "trend":
@@ -370,31 +369,32 @@ export function Dashboard2Client({
 
       case "deals":
         return !isVisible("deals") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${BLUE_TITLE}`}>商談パイプライン</span>
-              <Link href="/deals"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-1 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={50}
+            items={data?.recentDeals ?? []}
+            loading={loading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="py-2 space-y-1.5">
                     <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.recentDeals ?? []}
-                itemHeightPx={50}
-                max={20}
-                empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
-              >
-                {(deal) => {
-                const colorSeed = deal.customerId ?? deal.customerName;
-                const avatar = getCustomerAvatarColor(colorSeed);
-                const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
-                return (
+            }
+            empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <span className={`text-xs font-bold ${BLUE_TITLE}`}>商談パイプライン</span>
+                <Link href="/deals"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+              </div>
+            )}
+          >
+            {(deal) => {
+              const colorSeed = deal.customerId ?? deal.customerName;
+              const avatar = getCustomerAvatarColor(colorSeed);
+              const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
+              return (
                 <Link key={deal.id} href="/deals"
                   className="flex items-center justify-between gap-2 py-1.5 px-1 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors shrink-0">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -419,50 +419,48 @@ export function Dashboard2Client({
                     </span>
                   </div>
                 </Link>
-              );}}
-              </AdaptiveList>
-            )}
-          </div>
+              );
+            }}
+          </ListWidgetCard>
         );
 
       case "quotes":
         return !isVisible("quotes") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold ${BLUE_TITLE}`}>最近の見積</span>
-              <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-1 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={46}
+            items={data?.recentEstimates ?? []}
+            loading={loading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="py-2 space-y-1.5">
                     <Skeleton className="h-3 w-24" /><Skeleton className="h-3 w-16" />
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.recentEstimates ?? []}
-                itemHeightPx={46}
-                max={15}
-                empty={<p className="text-xs text-slate-400 py-4">見積データはありません</p>}
-              >
-                {(est) => (
-                <Link key={est.id} href={`/quotes/${est.id}`}
-                  className="flex items-center justify-between gap-2 py-1.5 px-1 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors shrink-0">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-800 truncate">{est.estimateNo}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{est.title}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(est.total ?? 0)}</p>
-                    <span className="text-[10px] text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 mt-0.5 inline-block">{est.statusLabel}</span>
-                  </div>
-                </Link>
-              )}
-              </AdaptiveList>
+            }
+            empty={<p className="text-xs text-slate-400 py-4">見積データはありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <span className={`text-xs font-bold ${BLUE_TITLE}`}>最近の見積</span>
+                <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-[#2B6EA8] transition-colors" /></Link>
+              </div>
             )}
-          </div>
+          >
+            {(est) => (
+              <Link key={est.id} href={`/quotes/${est.id}`}
+                className="flex items-center justify-between gap-2 py-1.5 px-1 rounded-xl hover:bg-[#A3DAF6]/50 transition-colors shrink-0">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 truncate">{est.estimateNo}</p>
+                  <p className="text-[11px] text-slate-400 truncate">{est.title}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(est.total ?? 0)}</p>
+                  <span className="text-[10px] text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 mt-0.5 inline-block">{est.statusLabel}</span>
+                </div>
+              </Link>
+            )}
+          </ListWidgetCard>
         );
 
       case "production":

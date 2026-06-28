@@ -9,7 +9,7 @@ export function useVisibleItemCount(
 ) {
   const { min = 1, max = 20, gapPx = 4 } = options ?? {};
   const ref = useRef<HTMLDivElement>(null);
-  const [count, setCount] = useState(min);
+  const [count, setCount] = useState(max);
 
   useEffect(() => {
     const el = ref.current;

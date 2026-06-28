@@ -42,7 +42,7 @@ import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/acti
 import { ResponsiveClock } from "@/components/dashboard/responsive-clock";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { SortableWidget } from "@/components/shared/sortable-widget";
-import { AdaptiveList } from "@/components/shared/adaptive-list";
+import { ListWidgetCard } from "@/components/shared/adaptive-list";
 import { useWidgets } from "@/hooks/use-widgets";
 import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import { useBrandColor } from "@/hooks/use-brand-color";
@@ -317,59 +317,57 @@ export function DashboardClient({
 
       case "mail":
         return !isVisible("mail") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-bold text-slate-800`}>お知らせ</span>
-                {!loading && data?.announcements && data.announcements.length > 0 && (
-                  <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 tabular-nums shadow-sm">{data.announcements.length}</span>
-                )}
-              </div>
-              <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-2 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={60}
+            items={data?.announcements ?? []}
+            loading={loading}
+            listClassName="gap-2"
+            loadingSkeleton={
+              <div className="flex flex-col gap-2">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="space-y-1.5 py-2 border-b border-slate-50 last:border-0">
                     <Skeleton className="h-3 w-3/4" /><Skeleton className="h-2.5 w-full" />
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.announcements ?? []}
-                itemHeightPx={60}
-                max={15}
-                className="gap-2"
-                empty={<p className="text-xs text-slate-400 py-4 text-center">お知らせはありません</p>}
-              >
-                {(ann) => (
-                <Link key={ann.id} href={`/circulation/${ann.id}`}
-                  className="group flex gap-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
-                  <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-800 line-clamp-1">{ann.title}</p>
-                      <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{format(new Date(ann.published_at), "M/d", { locale: ja })}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{ann.body}</p>
-                  </div>
-                </Link>
-              )}
-              </AdaptiveList>
+            }
+            empty={<p className="text-xs text-slate-400 py-4 text-center">お知らせはありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800">お知らせ</span>
+                  {!loading && data?.announcements && data.announcements.length > 0 && (
+                    <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-full px-2 py-0.5 tabular-nums shadow-sm">{data.announcements.length}</span>
+                  )}
+                </div>
+                <Link href="/circulation"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
+              </div>
             )}
-          </div>
+          >
+            {(ann) => (
+              <Link key={ann.id} href={`/circulation/${ann.id}`}
+                className="group flex gap-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
+                <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-800 line-clamp-1">{ann.title}</p>
+                    <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{format(new Date(ann.published_at), "M/d", { locale: ja })}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate mt-0.5">{ann.body}</p>
+                </div>
+              </Link>
+            )}
+          </ListWidgetCard>
         );
 
       case "customers":
         return !isVisible("customers") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold text-slate-800`}>最近の顧客</span>
-              <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-1 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={46}
+            items={data?.recentCustomers ?? []}
+            loading={loading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-3 py-2">
                     <Skeleton className="h-8 w-8 rounded-full shrink-0" />
@@ -377,16 +375,18 @@ export function DashboardClient({
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.recentCustomers ?? []}
-                itemHeightPx={46}
-                max={15}
-                empty={<p className="text-xs text-slate-400 py-4">顧客データはありません</p>}
-              >
-                {(customer) => {
-                const avatar = getCustomerAvatarColor(customer.id);
-                return (
+            }
+            empty={<p className="text-xs text-slate-400 py-4">顧客データはありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                <span className="text-xs font-bold text-slate-800">最近の顧客</span>
+                <Link href="/crm"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
+              </div>
+            )}
+          >
+            {(customer) => {
+              const avatar = getCustomerAvatarColor(customer.id);
+              return (
                 <Link key={customer.id} href={`/crm/${customer.id}`}
                   className="flex items-center gap-3 py-1.5 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-xl transition-colors group shrink-0">
                   <div
@@ -401,10 +401,9 @@ export function DashboardClient({
                   </div>
                   <span className="text-[10px] text-slate-400 bg-slate-100 rounded-full px-2 py-0.5 shrink-0">{customer.status}</span>
                 </Link>
-              );}}
-              </AdaptiveList>
-            )}
-          </div>
+              );
+            }}
+          </ListWidgetCard>
         );
 
       case "trend":
@@ -432,69 +431,76 @@ export function DashboardClient({
 
       case "deals":
         return !isVisible("deals") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            {/* ヘッダー */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-800">
-                  {dealsTab === "deals" ? "商談パイプライン" : "未フォローアップ"}
-                </span>
-                {dealsTab === "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
-                  <span
-                    className="text-[10px] font-bold rounded-full px-1.5 py-0.5 border"
-                    style={{ color: brandColors.dark, background: brandColors.accent + "40", borderColor: brandColors.mid }}
-                  >{unfollowedLeads.length}件</span>
-                )}
+          <ListWidgetCard
+            items={dealsTab === "deals" ? (data?.recentDeals ?? []) : unfollowedLeads}
+            itemHeightPx={dealsTab === "deals" ? 50 : 52}
+            loading={dealsTab === "deals" ? loading : unfollowedLoading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="py-2 space-y-1.5">
+                    <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-2">
-                {/* タブ切替 */}
-                <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setDealsTab("deals")}
-                    className={cn("px-2 py-1 transition-colors rounded-l-lg", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
-                    style={dealsTab === "deals" ? { background: "var(--brand-gradient)" } : undefined}
-                  >商談</button>
-                  <button
-                    type="button"
-                    onClick={() => setDealsTab("unfollowed")}
-                    className={cn("px-2 py-1 transition-colors relative rounded-r-lg", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
-                    style={dealsTab === "unfollowed" ? { background: "var(--brand-gradient)" } : undefined}
-                  >
-                    未フォロー
-                    {dealsTab !== "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
-                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
-                    )}
-                  </button>
-                </div>
-                <Link href={dealsTab === "deals" ? "/deals" : "/crm?tab=unfollowed"}>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" />
-                </Link>
-              </div>
-            </div>
-
-            {/* 商談一覧 */}
-            {dealsTab === "deals" && (
-              loading ? (
-                <div className="flex flex-col gap-1 flex-1 min-h-0">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="py-2 space-y-1.5">
-                      <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
-                    </div>
-                  ))}
+            }
+            empty={
+              dealsTab === "unfollowed" ? (
+                <div className="flex flex-col items-center justify-center gap-1.5 py-4">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                  <p className="text-[11px] text-slate-400">全員フォローアップ済みです</p>
                 </div>
               ) : (
-                <AdaptiveList
-                  items={data?.recentDeals ?? []}
-                  itemHeightPx={50}
-                  max={20}
-                  empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
-                >
-                  {(deal) => {
-                  const colorSeed = deal.customerId ?? deal.customerName;
-                  const avatar = getCustomerAvatarColor(colorSeed);
-                  const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
-                  return (
+                <p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>
+              )
+            }
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800">
+                    {dealsTab === "deals" ? "商談パイプライン" : "未フォローアップ"}
+                  </span>
+                  {dealsTab === "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
+                    <span
+                      className="text-[10px] font-bold rounded-full px-1.5 py-0.5 border"
+                      style={{ color: brandColors.dark, background: brandColors.accent + "40", borderColor: brandColors.mid }}
+                    >{unfollowedLeads.length}件</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setDealsTab("deals")}
+                      className={cn("px-2 py-1 transition-colors rounded-l-lg", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                      style={dealsTab === "deals" ? { background: "var(--brand-gradient)" } : undefined}
+                    >商談</button>
+                    <button
+                      type="button"
+                      onClick={() => setDealsTab("unfollowed")}
+                      className={cn("px-2 py-1 transition-colors relative rounded-r-lg", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                      style={dealsTab === "unfollowed" ? { background: "var(--brand-gradient)" } : undefined}
+                    >
+                      未フォロー
+                      {dealsTab !== "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
+                      )}
+                    </button>
+                  </div>
+                  <Link href={dealsTab === "deals" ? "/deals" : "/crm?tab=unfollowed"}>
+                    <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" />
+                  </Link>
+                </div>
+              </div>
+            )}
+          >
+            {(item) => {
+              if (dealsTab === "deals") {
+                const deal = item as NonNullable<typeof data>["recentDeals"][number];
+                const colorSeed = deal.customerId ?? deal.customerName;
+                const avatar = getCustomerAvatarColor(colorSeed);
+                const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
+                return (
                   <Link key={deal.id} href="/deals"
                     className="flex items-center justify-between gap-2 py-1.5 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -519,111 +525,82 @@ export function DashboardClient({
                       </span>
                     </div>
                   </Link>
-                );}}
-                </AdaptiveList>
-              )
-            )}
-
-            {/* 未フォローアップ一覧 */}
-            {dealsTab === "unfollowed" && (
-              unfollowedLoading ? (
-                <div className="flex flex-col gap-1 flex-1 min-h-0">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="py-2 space-y-1.5">
-                      <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
-                    </div>
-                  ))}
+                );
+              }
+              const lead = item as typeof unfollowedLeads[number];
+              const avatar = getCustomerAvatarColor(lead.id);
+              return (
+                <div key={lead.id} className="flex items-center gap-2 py-1.5 px-1 rounded-xl shrink-0">
+                  <div
+                    className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
+                    style={{ background: avatar.avatarGradient }}
+                  >
+                    {lead.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/crm/${lead.id}`} className="text-xs font-semibold text-slate-800 truncate hover:text-primary block">{lead.name}</Link>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      担当: {lead.assigned_to_profile?.display_name ?? "不明"}
+                      {lead.days_since_update != null && (
+                        <span className="ml-1" style={{ color: brandColors.dark }}>{lead.days_since_update}日前</span>
+                      )}
+                    </p>
+                  </div>
+                  {lead.assigned_to && (
+                    <button
+                      type="button"
+                      onClick={() => { setInquiryTarget(lead); setInquiryContent(`${lead.name} 様の件ですが、フォローアップの状況を教えてください。`); }}
+                      className="shrink-0 text-[10px] font-medium px-2 py-1 rounded-lg flex items-center gap-1 border transition-colors"
+                      style={{ color: brandColors.dark, background: brandColors.accent + "30", borderColor: brandColors.mid }}
+                      onMouseEnter={e => (e.currentTarget.style.background = brandColors.accent + "60")}
+                      onMouseLeave={e => (e.currentTarget.style.background = brandColors.accent + "30")}
+                    >
+                      <MessageSquare className="h-3 w-3" />問い合わせ
+                    </button>
+                  )}
                 </div>
-              ) : unfollowedLeads.length === 0 ? (
-                <div className="flex flex-col items-center justify-center flex-1 gap-1.5 py-4">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                  <p className="text-[11px] text-slate-400">全員フォローアップ済みです</p>
-                </div>
-              ) : (
-                <AdaptiveList
-                  items={unfollowedLeads}
-                  itemHeightPx={52}
-                  max={10}
-                  empty={null}
-                >
-                  {(lead) => {
-                    const avatar = getCustomerAvatarColor(lead.id);
-                    return (
-                      <div key={lead.id} className="flex items-center gap-2 py-1.5 px-1 rounded-xl shrink-0">
-                        <div
-                          className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[10px] font-bold shadow-sm"
-                          style={{ background: avatar.avatarGradient }}
-                        >
-                          {lead.name.charAt(0)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <Link href={`/crm/${lead.id}`} className="text-xs font-semibold text-slate-800 truncate hover:text-primary block">{lead.name}</Link>
-                          <p className="text-[11px] text-slate-400 truncate">
-                            担当: {lead.assigned_to_profile?.display_name ?? "不明"}
-                            {lead.days_since_update != null && (
-                              <span className="ml-1" style={{ color: brandColors.dark }}>{lead.days_since_update}日前</span>
-                            )}
-                          </p>
-                        </div>
-                        {lead.assigned_to && (
-                          <button
-                            type="button"
-                            onClick={() => { setInquiryTarget(lead); setInquiryContent(`${lead.name} 様の件ですが、フォローアップの状況を教えてください。`); }}
-                            className="shrink-0 text-[10px] font-medium px-2 py-1 rounded-lg flex items-center gap-1 border transition-colors"
-                            style={{ color: brandColors.dark, background: brandColors.accent + "30", borderColor: brandColors.mid }}
-                            onMouseEnter={e => (e.currentTarget.style.background = brandColors.accent + "60")}
-                            onMouseLeave={e => (e.currentTarget.style.background = brandColors.accent + "30")}
-                          >
-                            <MessageSquare className="h-3 w-3" />問い合わせ
-                          </button>
-                        )}
-                      </div>
-                    );
-                  }}
-                </AdaptiveList>
-              )
-            )}
-          </div>
+              );
+            }}
+          </ListWidgetCard>
         );
 
       case "quotes":
         return !isVisible("quotes") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-              <span className={`text-xs font-bold text-slate-800`}>最近の見積</span>
-              <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-1 flex-1 min-h-0">
+          <ListWidgetCard
+            itemHeightPx={46}
+            items={data?.recentEstimates ?? []}
+            loading={loading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="py-2 space-y-1.5">
                     <Skeleton className="h-3 w-24" /><Skeleton className="h-3 w-16" />
                   </div>
                 ))}
               </div>
-            ) : (
-              <AdaptiveList
-                items={data?.recentEstimates ?? []}
-                itemHeightPx={46}
-                max={15}
-                empty={<p className="text-xs text-slate-400 py-4">見積データはありません</p>}
-              >
-                {(est) => (
-                <Link key={est.id} href={`/quotes/${est.id}`}
-                  className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-800 truncate">{est.estimateNo}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{est.title}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(est.total ?? 0)}</p>
-                    <span className="text-[10px] text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 mt-0.5 inline-block">{est.statusLabel}</span>
-                  </div>
-                </Link>
-              )}
-              </AdaptiveList>
+            }
+            empty={<p className="text-xs text-slate-400 py-4">見積データはありません</p>}
+            header={(
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-800">最近の見積</span>
+                <Link href="/quotes"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
+              </div>
             )}
-          </div>
+          >
+            {(est) => (
+              <Link key={est.id} href={`/quotes/${est.id}`}
+                className="flex items-center justify-between gap-2 py-2 px-1 rounded-xl hover:bg-[#D8EDE4]/50 transition-colors shrink-0">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 truncate">{est.estimateNo}</p>
+                  <p className="text-[11px] text-slate-400 truncate">{est.title}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-bold tabular-nums text-slate-900">{formatYen(est.total ?? 0)}</p>
+                  <span className="text-[10px] text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 mt-0.5 inline-block">{est.statusLabel}</span>
+                </div>
+              </Link>
+            )}
+          </ListWidgetCard>
         );
 
       case "production":

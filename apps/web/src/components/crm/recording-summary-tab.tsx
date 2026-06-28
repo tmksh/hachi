@@ -346,190 +346,210 @@ export function RecordingSummaryTab({
 
   return (
     <div className="space-y-4">
-      {/* 録音コントロール */}
-      <Card variant="inset" className="py-0 overflow-hidden">
-        <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
-          <CardTitle className="text-sm font-semibold">録音・文字起こし</CardTitle>
-          <CardDescription className="text-xs">
-            MediaRecorder + OpenAI Whisper（60分以上対応）
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-4 py-4 space-y-3">
-          {/* 録音ボタン */}
-          {recordingState === "idle" && (
-            <Button size="sm" onClick={startRecording} className="gap-1.5 h-9">
-              <Mic className="h-4 w-4" />
-              録音開始
-            </Button>
-          )}
-
-          {recordingState === "recording" && (
-            <RecordingActivePanel
-              elapsed={elapsed}
-              liveTranscript={liveTranscript}
-              onStop={stopRecording}
-            />
-          )}
-
-          {isProcessing && (
-            <ProcessingPanel
-              state={recordingState}
-              progress={pollProgress}
-              jobId={jobId}
-            />
-          )}
-
-          {recordingState === "error" && errorMsg && (
-            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium">処理に失敗しました</p>
-                <p className="text-xs mt-0.5">{errorMsg}</p>
-              </div>
-              <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 text-xs" onClick={() => setRecordingState("idle")}>
-                リセット
-              </Button>
-            </div>
-          )}
-
-          {/* 文字起こし結果 */}
-          {recordingState === "done" && transcript && (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[11px] font-medium text-muted-foreground">文字起こし結果</p>
-                <Button size="icon" variant="ghost" className="size-6 h-5" onClick={() => { navigator.clipboard.writeText(transcript); toast.success("コピーしました"); }}>
-                  <Copy className="h-3 w-3" />
+      {/* 録音 / 文字起こし（2カラム） */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-stretch">
+        {/* 左: 録音 + 履歴 */}
+        <Card variant="inset" className="py-0 overflow-hidden h-full">
+          <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
+            <CardTitle className="text-sm font-semibold">録音</CardTitle>
+            <CardDescription className="text-xs">
+              MediaRecorder + OpenAI Whisper（60分以上対応）
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 py-4 flex-1 flex flex-col gap-4">
+            <div className="space-y-3">
+              {recordingState === "idle" && (
+                <Button size="sm" onClick={startRecording} className="gap-1.5 h-9 w-fit">
+                  <Mic className="h-4 w-4" />
+                  録音開始
                 </Button>
-              </div>
-              {transcript}
-            </div>
-          )}
+              )}
 
-          {/* 話者情報 */}
-          {result?.speakers && result.speakers.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {result.speakers.map((s, i) => (
-                <Badge key={i} variant="outline" className="text-xs">
-                  {s.label}（{s.role}）
-                </Badge>
-              ))}
-            </div>
-          )}
+              {recordingState === "recording" && (
+                <RecordingActivePanel
+                  elapsed={elapsed}
+                  liveTranscript={liveTranscript}
+                  onStop={stopRecording}
+                />
+              )}
 
-          {/* メモ欄 */}
-          <div className="relative">
-            <Textarea
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              onSelect={(e) => setSelection((e.target as HTMLTextAreaElement).value.substring(
-                (e.target as HTMLTextAreaElement).selectionStart,
-                (e.target as HTMLTextAreaElement).selectionEnd,
-              ))}
-              rows={5}
-              placeholder={recordingState === "done" ? "AI要約（編集可能）" : "営業メモ（手入力可）"}
-            />
-            {(selection || memo) && (
-              <div className="absolute bottom-2 right-2 flex gap-1 rounded-lg border bg-background shadow-sm p-1">
-                <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={addTodoFromSelection}>
-                  <ListTodo className="h-3.5 w-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="size-7" title="AIで改善" onClick={() => void improveText()} disabled={improving}>
-                  {improving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                </Button>
-                <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection || memo); toast.success("コピーしました"); }}>
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
-          </div>
+              {isProcessing && (
+                <ProcessingPanel
+                  state={recordingState}
+                  progress={pollProgress}
+                  jobId={jobId}
+                />
+              )}
 
-          {/* ToDo プレビュー */}
-          {result?.todos && result.todos.length > 0 && (
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-1">
-              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">AIが提案したToDo</p>
-              {result.todos.map((t, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className={cn("inline-block w-1.5 h-1.5 rounded-full shrink-0",
-                    t.priority === "high" ? "bg-rose-500" : t.priority === "medium" ? "bg-amber-500" : "bg-emerald-500"
-                  )} />
-                  <span>{t.title}</span>
-                  {t.dueDate && <span className="text-muted-foreground ml-auto">{t.dueDate}</span>}
+              {recordingState === "error" && errorMsg && (
+                <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">処理に失敗しました</p>
+                    <p className="text-xs mt-0.5">{errorMsg}</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 text-xs" onClick={() => setRecordingState("idle")}>
+                    リセット
+                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
-            {customerEmail?.trim() ? (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <Checkbox checked={sendToCustomer} onCheckedChange={(v) => setSendToCustomer(v === true)} />
-                <span>要約を <span className="font-medium text-foreground">{customerEmail}</span> へ送信</span>
-              </label>
-            ) : (
-              <p className="text-xs text-muted-foreground">顧客メール未登録のため送信できません</p>
-            )}
-            <Button onClick={saveEntry} disabled={saving || isProcessing || recordingState === "recording"} className="h-9 gap-1.5 shrink-0">
-              <Save className="h-4 w-4" />
-              {saving ? "保存中..." : "保存"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 履歴 */}
-      <Card variant="inset" className="py-0 overflow-hidden">
-        <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
-          <CardTitle className="text-sm font-semibold">履歴</CardTitle>
-          <CardDescription className="text-xs">保存した録音・文字起こし</CardDescription>
-        </CardHeader>
-        <div className="divide-y divide-border/40">
-          {recordings.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">履歴なし</p>
-          ) : recordings.map((r) => (
-            <div
-              key={r.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(selectedId === r.id ? null : r.id); } }}
-              className="w-full text-left px-4 py-3 hover:bg-white/45 dark:hover:bg-white/5 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm truncate">{r.title}</span>
-                <span className="text-[11px] text-muted-foreground shrink-0">
-                  {format(new Date(r.recorded_at), "yyyy/MM/dd HH:mm", { locale: ja })}
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
+                {customerEmail?.trim() ? (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                    <Checkbox checked={sendToCustomer} onCheckedChange={(v) => setSendToCustomer(v === true)} />
+                    <span>要約を <span className="font-medium text-foreground">{customerEmail}</span> へ送信</span>
+                  </label>
+                ) : (
+                  <p className="text-xs text-muted-foreground">顧客メール未登録のため送信できません</p>
+                )}
+                <Button onClick={saveEntry} disabled={saving || isProcessing || recordingState === "recording"} className="h-9 gap-1.5 shrink-0">
+                  <Save className="h-4 w-4" />
+                  {saving ? "保存中..." : "保存"}
+                </Button>
               </div>
-              {selectedId === r.id && (
-                <div className="mt-2 space-y-2 text-sm text-left">
-                  {r.summary && <p className="text-muted-foreground"><strong>要約:</strong> {r.summary}</p>}
-                  {r.transcript && (
-                    <div>
-                      <p className="text-[11px] font-medium text-muted-foreground mb-1">文字起こし</p>
-                      <p className="whitespace-pre-wrap text-xs">{r.transcript}</p>
+            </div>
+
+            <div className="border-t border-border/40 pt-4 flex-1 flex flex-col min-h-0">
+              <p className="text-sm font-semibold">履歴</p>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">保存した録音・文字起こし</p>
+              {recordings.length === 0 ? (
+                <p className="text-xs text-muted-foreground flex-1 flex items-center justify-center py-4 text-center rounded-lg border border-dashed border-border/60 bg-muted/10">
+                  履歴なし
+                </p>
+              ) : (
+                <div className="divide-y divide-border/40 rounded-lg border border-border/60 overflow-hidden flex-1 min-h-0 overflow-y-auto">
+                  {recordings.map((r) => (
+                    <div
+                      key={r.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(selectedId === r.id ? null : r.id); } }}
+                      className="w-full text-left px-3 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-sm truncate">{r.title}</span>
+                        <span className="text-[11px] text-muted-foreground shrink-0">
+                          {format(new Date(r.recorded_at), "yyyy/MM/dd HH:mm", { locale: ja })}
+                        </span>
+                      </div>
+                      {selectedId === r.id && (
+                        <div className="mt-2 space-y-2 text-sm text-left">
+                          {r.summary && <p className="text-muted-foreground text-xs"><strong>要約:</strong> {r.summary}</p>}
+                          {r.transcript && (
+                            <div>
+                              <p className="text-[11px] font-medium text-muted-foreground mb-1">文字起こし</p>
+                              <p className="whitespace-pre-wrap text-xs">{r.transcript}</p>
+                            </div>
+                          )}
+                          {r.memo && (
+                            <div>
+                              <p className="text-[11px] font-medium text-muted-foreground mb-1">メモ</p>
+                              <p className="text-xs whitespace-pre-wrap">{r.memo}</p>
+                            </div>
+                          )}
+                          {r.summary && customerEmail?.trim() && (
+                            <div className="pt-1">
+                              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" disabled={sendingEmailId === r.id}
+                                onClick={(e) => { e.stopPropagation(); void sendSummaryEmail(r.id); }}>
+                                <Mail className="h-3.5 w-3.5" />
+                                {sendingEmailId === r.id ? "送信中..." : "顧客に要約を送信"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {r.memo && (
-                    <div>
-                      <p className="text-[11px] font-medium text-muted-foreground mb-1">メモ</p>
-                      <p className="text-xs whitespace-pre-wrap">{r.memo}</p>
-                    </div>
-                  )}
-                  {r.summary && customerEmail?.trim() && (
-                    <div className="pt-1">
-                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" disabled={sendingEmailId === r.id}
-                        onClick={(e) => { e.stopPropagation(); void sendSummaryEmail(r.id); }}>
-                        <Mail className="h-3.5 w-3.5" />
-                        {sendingEmailId === r.id ? "送信中..." : "顧客に要約を送信"}
-                      </Button>
-                    </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
-          ))}
-        </div>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card variant="inset" className="py-0 overflow-hidden h-full">
+          <CardHeader className="pb-2 pt-4 px-4 border-b border-border/40">
+            <CardTitle className="text-sm font-semibold">文字起こし・要約</CardTitle>
+            <CardDescription className="text-xs">
+              録音後にAIが文字起こしと要約を生成します
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 py-4 flex-1 flex flex-col gap-3 min-h-0">
+            {recordingState === "done" && transcript ? (
+              <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm whitespace-pre-wrap flex-[3] min-h-[160px] overflow-y-auto">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">文字起こし結果</p>
+                  <Button size="icon" variant="ghost" className="size-6 h-5" onClick={() => { navigator.clipboard.writeText(transcript); toast.success("コピーしました"); }}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                {transcript}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 p-3 flex-[3] min-h-[160px] flex items-center justify-center">
+                <p className="text-xs text-muted-foreground text-center">
+                  {recordingState === "recording" || isProcessing
+                    ? "録音停止後に文字起こし結果がここに表示されます"
+                    : "録音後、文字起こし結果がここに表示されます"}
+                </p>
+              </div>
+            )}
+
+            {result?.speakers && result.speakers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {result.speakers.map((s, i) => (
+                  <Badge key={i} variant="outline" className="text-xs">
+                    {s.label}（{s.role}）
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            <div className="relative shrink-0">
+              <Textarea
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                onSelect={(e) => setSelection((e.target as HTMLTextAreaElement).value.substring(
+                  (e.target as HTMLTextAreaElement).selectionStart,
+                  (e.target as HTMLTextAreaElement).selectionEnd,
+                ))}
+                rows={3}
+                className="min-h-[72px] resize-none [field-sizing:fixed]"
+                placeholder={recordingState === "done" ? "AI要約（編集可能）" : "営業メモ（手入力可）"}
+              />
+              {(selection || memo) && (
+                <div className="absolute bottom-2 right-2 flex gap-1 rounded-lg border bg-background shadow-sm p-1">
+                  <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={addTodoFromSelection}>
+                    <ListTodo className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="size-7" title="AIで改善" onClick={() => void improveText()} disabled={improving}>
+                    {improving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  </Button>
+                  <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection || memo); toast.success("コピーしました"); }}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {result?.todos && result.todos.length > 0 && (
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-1">
+                <p className="text-[11px] font-medium text-muted-foreground mb-1.5">AIが提案したToDo</p>
+                {result.todos.map((t, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className={cn("inline-block w-1.5 h-1.5 rounded-full shrink-0",
+                      t.priority === "high" ? "bg-rose-500" : t.priority === "medium" ? "bg-amber-500" : "bg-emerald-500"
+                    )} />
+                    <span>{t.title}</span>
+                    {t.dueDate && <span className="text-muted-foreground ml-auto">{t.dueDate}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

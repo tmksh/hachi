@@ -244,9 +244,10 @@ export function AttendanceClient({
 
             {/* 操作エリア */}
             {isCurrentMonth && (
-              <div className="flex flex-col justify-center gap-2 px-4 py-4 border-b md:border-b-0 md:border-r border-border/60 md:w-56 shrink-0">
-                <div className="space-y-1.5">
-                  <p className="text-[11px] text-muted-foreground font-medium">勤務区分</p>
+              <div className="flex flex-col justify-center gap-2.5 px-4 py-4 border-b md:border-b-0 md:border-r border-border/60 md:w-60 shrink-0">
+                {/* 勤務区分セレクト */}
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">勤務区分</p>
                   <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType} disabled={isOnLeaveToday}>
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue />
@@ -259,6 +260,29 @@ export function AttendanceClient({
                   </Select>
                 </div>
 
+                {/* 今日の打刻サマリー */}
+                {todayEntry?.clock_in_at && !isOnLeaveToday && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs tabular-nums">
+                    <LogIn className="h-3 w-3 text-emerald-500 shrink-0" />
+                    <span className="font-medium">{format(parseISO(todayEntry.clock_in_at), "HH:mm")}</span>
+                    <span className="text-muted-foreground/50">→</span>
+                    {todayEntry.clock_out_at ? (
+                      <>
+                        <LogOut className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="font-medium">{format(parseISO(todayEntry.clock_out_at), "HH:mm")}</span>
+                        <span className="ml-auto text-muted-foreground">
+                          {minutesToHM(calcWorkMinutes(todayEntry.clock_in_at, todayEntry.clock_out_at, attSettings.break_minutes ?? 60))}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="ml-auto text-emerald-600 font-medium animate-pulse">
+                        {minutesToHM(Math.max(0, differenceInMinutes(now, parseISO(todayEntry.clock_in_at))))}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* アクションボタン */}
                 {isOnLeaveToday ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-center gap-2 dark:bg-amber-950/30 dark:border-amber-900">
                     <Sun className="h-4 w-4 text-amber-600 shrink-0" />
@@ -273,10 +297,22 @@ export function AttendanceClient({
                   </Button>
                 ) : (
                   <div className="flex gap-2">
-                    <Button onClick={handleClockIn} disabled={clockedIn} size="sm" className="gap-1.5 flex-1">
+                    <Button
+                      onClick={handleClockIn}
+                      disabled={clockedIn}
+                      size="sm"
+                      variant={clockedIn ? "outline" : "default"}
+                      className="gap-1.5 flex-1"
+                    >
                       <LogIn className="h-4 w-4" />出勤
                     </Button>
-                    <Button variant="outline" onClick={handleClockOut} disabled={!clockedIn} size="sm" className="gap-1.5 flex-1">
+                    <Button
+                      onClick={handleClockOut}
+                      disabled={!clockedIn}
+                      size="sm"
+                      variant={clockedIn ? "default" : "outline"}
+                      className={`gap-1.5 flex-1 ${clockedIn ? "bg-rose-500 hover:bg-rose-600 border-rose-500" : ""}`}
+                    >
                       <LogOut className="h-4 w-4" />退勤
                     </Button>
                   </div>
