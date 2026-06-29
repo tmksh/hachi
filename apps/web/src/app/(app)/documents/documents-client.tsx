@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -188,9 +187,23 @@ export function DocumentsClient({
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-3 justify-between">
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Select value={tab} onValueChange={setTab}>
+            <SelectTrigger className="w-[140px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">すべて</SelectItem>
+              {catLoading
+                ? <SelectItem value="_loading" disabled>読込中...</SelectItem>
+                : categories.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)
+              }
+            </SelectContent>
+          </Select>
         </div>
         <div className="segmented-control shrink-0 text-xs">
           {([
@@ -213,16 +226,7 @@ export function DocumentsClient({
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="all">すべて</TabsTrigger>
-          {catLoading
-            ? <TabsTrigger value="_loading" disabled>読込中...</TabsTrigger>
-            : categories.map(c => <TabsTrigger key={c.key} value={c.key}>{c.label}</TabsTrigger>)
-          }
-        </TabsList>
-        <TabsContent value={tab} className="mt-4">
-          {viewMode === "grid" ? (
+      {viewMode === "grid" ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {loading ? Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
@@ -311,8 +315,6 @@ export function DocumentsClient({
             </div>
           </Card>
           )}
-        </TabsContent>
-      </Tabs>
 
       {/* アップロードダイアログ */}
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>

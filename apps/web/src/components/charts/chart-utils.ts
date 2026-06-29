@@ -13,6 +13,19 @@ export function buildTicks(max: number, count = 4): number[] {
   return Array.from({ length: count + 1 }, (_, i) => Math.round(step * i));
 }
 
+// 上下で必要な分だけ軸を確保する非対称目盛り（財務P&L向け）
+export function buildAsymmetricTicks(min: number, max: number, count = 4): number[] {
+  const span = Math.max(max, 1) - Math.min(min, 0);
+  const step = niceMax(span / count);
+  const yMin = Math.floor(Math.min(min, 0) / step) * step;
+  const yMax = Math.ceil(Math.max(max, step) / step) * step;
+  const ticks: number[] = [];
+  for (let v = yMin; v <= yMax + step * 0.001; v += step) {
+    ticks.push(Math.round(v));
+  }
+  return ticks;
+}
+
 export function buildSignedTicks(min: number, max: number, count = 4): number[] {
   const absMax = Math.max(Math.abs(min), Math.abs(max), 1);
   const ceiling = niceMax(absMax);

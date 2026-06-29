@@ -14,3 +14,9 @@ export function fiscalYearLabel(year: number): string {
 
 /** 標準部門リスト */
 export const DEFAULT_DEPARTMENTS = ["一般住宅", "新築", "公共工事", "リフォーム"] as const;
+
+/** 選択可能な会計年度（当年度から過去5年） */
+export function listFiscalYears(count = 5): number[] {
+  const current = getCurrentFiscalYear();
+  return Array.from({ length: count }, (_, i) => current - i);
+}

@@ -207,6 +207,7 @@ export type BiChartPoint = {
   revenue: number;
   grossProfit: number;
   grossProfitTotal: number;
+  operatingProfit: number;
 };
 
 export type BiBudgetChangeEntry = {
@@ -239,16 +240,26 @@ export function fiscalMonthEndDate(fiscalYear: number, monthIndex: number): stri
   return `${calendarYear}-${String(calendarMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 }
 
+/** 年額予算を月次均等按分（期中変更を月ごとに遡及適用） */
+export function buildMonthlyBudgetAllocations(
+  fiscalYear: number,
+  fieldName: BiBudgetChangeEntry["field_name"],
+  baselineMan: number,
+  changes: BiBudgetChangeEntry[]
+): number[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const monthEnd = fiscalMonthEndDate(fiscalYear, i);
+    const annual = effectiveBudgetAtDate(baselineMan, changes, fieldName, monthEnd);
+    return Math.round(annual / 12);
+  });
+}
+
 export function buildMonthlyOverheadAllocations(
   fiscalYear: number,
   baselineOverheadMan: number,
   changes: BiBudgetChangeEntry[]
 ): number[] {
-  return Array.from({ length: 12 }, (_, i) => {
-    const monthEnd = fiscalMonthEndDate(fiscalYear, i);
-    const annual = effectiveBudgetAtDate(baselineOverheadMan, changes, "overhead_budget", monthEnd);
-    return Math.round(annual / 12);
-  });
+  return buildMonthlyBudgetAllocations(fiscalYear, "overhead_budget", baselineOverheadMan, changes);
 }
 
 /** 均等按分の合計を保ちつつ、月次売上構成比で再配分 */
@@ -267,15 +278,36 @@ export function applyRevenueShareOverhead(
 export function aggregateChartPeriods(
   monthly: Array<{ month: string; revenue: number; grossProfit: number }>,
   granularity: PeriodGranularity,
-  monthlyOverheadAllocations: number[]
+  monthlyOverheadAllocations: number[],
+  monthlySgaAllocations: number[] = []
 ): BiChartPoint[] {
+  const buildPoint = (
+    label: string,
+    revenue: number,
+    grossProfit: number,
+    overhead: number,
+    sga: number
+  ): BiChartPoint => {
+    const grossProfitTotal = grossProfit - overhead;
+    return {
+      label,
+      revenue,
+      grossProfit,
+      grossProfitTotal,
+      operatingProfit: grossProfitTotal - sga,
+    };
+  };
+
   if (granularity === "month") {
-    return monthly.map((m, i) => ({
-      label: m.month,
-      revenue: m.revenue,
-      grossProfit: m.grossProfit,
-      grossProfitTotal: m.grossProfit - (monthlyOverheadAllocations[i] ?? 0),
-    }));
+    return monthly.map((m, i) =>
+      buildPoint(
+        m.month,
+        m.revenue,
+        m.grossProfit,
+        monthlyOverheadAllocations[i] ?? 0,
+        monthlySgaAllocations[i] ?? 0
+      )
+    );
   }
 
   if (granularity === "quarter") {
@@ -283,17 +315,20 @@ export function aggregateChartPeriods(
     return quarters.map((label, qi) => {
       const slice = monthly.slice(qi * 3, qi * 3 + 3);
       const overheadSlice = monthlyOverheadAllocations.slice(qi * 3, qi * 3 + 3);
+      const sgaSlice = monthlySgaAllocations.slice(qi * 3, qi * 3 + 3);
       const revenue = slice.reduce((s, m) => s + m.revenue, 0);
       const grossProfit = slice.reduce((s, m) => s + m.grossProfit, 0);
       const overhead = overheadSlice.reduce((s, v) => s + v, 0);
-      return { label, revenue, grossProfit, grossProfitTotal: grossProfit - overhead };
+      const sga = sgaSlice.reduce((s, v) => s + v, 0);
+      return buildPoint(label, revenue, grossProfit, overhead, sga);
     });
   }
 
   const revenue = monthly.reduce((s, m) => s + m.revenue, 0);
   const grossProfit = monthly.reduce((s, m) => s + m.grossProfit, 0);
   const overhead = monthlyOverheadAllocations.reduce((s, v) => s + v, 0);
-  return [{ label: "通期", revenue, grossProfit, grossProfitTotal: grossProfit - overhead }];
+  const sga = monthlySgaAllocations.reduce((s, v) => s + v, 0);
+  return [buildPoint("通期", revenue, grossProfit, overhead, sga)];
 }
 
 export type BiDeptMonthlyPoint = {

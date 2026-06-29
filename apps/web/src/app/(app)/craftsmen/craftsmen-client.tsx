@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
@@ -44,17 +45,21 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="職人管理" description="協力業者・職人の一覧"><Link href="/craftsmen/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規登録</Button></Link></PageHeader>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="名前・会社名で検索..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex flex-wrap gap-1">
-          {["all","carpenter","electrical","interior","plumbing","general"].map(s => (
-            <Button key={s} size="sm" variant={specFilter===s?"default":"outline"} onClick={()=>setSpecFilter(s)}>
-              {s === "all" ? "すべて" : SPEC_LABELS[s]}
-            </Button>
-          ))}
-        </div>
+        <Select value={specFilter} onValueChange={setSpecFilter}>
+          <SelectTrigger className="w-[140px] shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">すべて</SelectItem>
+            {(["carpenter", "electrical", "interior", "plumbing", "general"] as const).map((s) => (
+              <SelectItem key={s} value={s}>{SPEC_LABELS[s]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="segmented-control shrink-0 text-xs ml-auto">
           {([
             { key: "list", label: "一覧", Icon: List },

@@ -13,11 +13,12 @@ import { getCurrentFiscalYear, fiscalYearLabel } from "@/lib/bi-utils";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  fiscalYear?: number;
   onSaved?: () => void;
 }
 
-export function BiSettingsDialog({ open, onOpenChange, onSaved }: Props) {
-  const fiscalYear = getCurrentFiscalYear();
+export function BiSettingsDialog({ open, onOpenChange, fiscalYear: fiscalYearProp, onSaved }: Props) {
+  const fiscalYear = fiscalYearProp ?? getCurrentFiscalYear();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -32,6 +33,7 @@ export function BiSettingsDialog({ open, onOpenChange, onSaved }: Props) {
           <BiSettingsPanel
             variant="dialog"
             active={open}
+            fiscalYear={fiscalYear}
             onSaved={() => {
               onSaved?.();
               onOpenChange(false);

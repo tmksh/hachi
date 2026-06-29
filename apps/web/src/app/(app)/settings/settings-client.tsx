@@ -107,6 +107,39 @@ import { FontSizeSelector } from "@/components/settings/font-size-selector";
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 
+const SETTINGS_TAB_TRIGGER =
+  "flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all shadow-none border-0";
+
+const MAIN_DEFAULT_SUB: Record<string, string> = {
+  personal: "profile",
+  organization: "members",
+  master: "crm_master",
+  integrations_group: "app_integrations",
+};
+
+function SettingsSubSelect({
+  value,
+  onChange,
+  items,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  items: { value: string; label: string }[];
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-[160px] shrink-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 const ROLE_COLOR: Record<Role, string> = {
   hq_admin: "bg-blue-100 text-blue-800 border-blue-200",
   contractor_admin: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -160,6 +193,14 @@ export function SettingsClient({
   const { profile, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const initInnerTab = searchParams.get("tab") ?? "profile";
+  const personalTabs = new Set(["profile", "security", "notifications", "mail_signature", "pdf_builder"]);
+  const [mainTab, setMainTab] = useState("personal");
+  const [subTab, setSubTab] = useState(personalTabs.has(initInnerTab) ? initInnerTab : "profile");
+
+  const handleMainTabChange = (next: string) => {
+    setMainTab(next);
+    setSubTab(MAIN_DEFAULT_SUB[next] ?? "profile");
+  };
   const formDefaults = companyFormState(initialCompany);
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(initialCompany);
@@ -545,51 +586,80 @@ export function SettingsClient({
       </div>
 
       {/* ── 大項目タブ（上部ナビ） ─── */}
-      <Tabs defaultValue="personal" className="w-full">
-        <TabsList className="w-fit mb-1 gap-0.5 h-auto">
-          <TabsTrigger value="personal" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-            <User className="h-3.5 w-3.5" />概要
-          </TabsTrigger>
-          {canManageMembers && (
-            <>
-              <TabsTrigger value="organization" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <Users className="h-3.5 w-3.5" />組織
-              </TabsTrigger>
-              <TabsTrigger value="master" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <BookOpen className="h-3.5 w-3.5" />マスタ
-              </TabsTrigger>
-              <TabsTrigger value="integrations_group" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <Link2 className="h-3.5 w-3.5" />連携
-              </TabsTrigger>
-            </>
+      <Tabs value={mainTab} onValueChange={handleMainTabChange} className="w-full">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <TabsList className="w-fit mb-0 gap-0.5 h-auto shrink-0">
+            <TabsTrigger value="personal" className={SETTINGS_TAB_TRIGGER}>
+              <User className="h-3.5 w-3.5" />概要
+            </TabsTrigger>
+            {canManageMembers && (
+              <>
+                <TabsTrigger value="organization" className={SETTINGS_TAB_TRIGGER}>
+                  <Users className="h-3.5 w-3.5" />組織
+                </TabsTrigger>
+                <TabsTrigger value="master" className={SETTINGS_TAB_TRIGGER}>
+                  <BookOpen className="h-3.5 w-3.5" />マスタ
+                </TabsTrigger>
+                <TabsTrigger value="integrations_group" className={SETTINGS_TAB_TRIGGER}>
+                  <Link2 className="h-3.5 w-3.5" />連携
+                </TabsTrigger>
+              </>
+            )}
+          </TabsList>
+
+          {mainTab === "personal" && (
+            <SettingsSubSelect
+              value={subTab}
+              onChange={setSubTab}
+              items={[
+                { value: "profile", label: "プロフィール" },
+                { value: "security", label: "セキュリティ" },
+                { value: "notifications", label: "通知設定" },
+                { value: "mail_signature", label: "メール署名" },
+                ...(canManageMembers ? [{ value: "pdf_builder", label: "PDF編集" }] : []),
+              ]}
+            />
           )}
-        </TabsList>
+
+          {mainTab === "organization" && canManageMembers && (
+            <SettingsSubSelect
+              value={subTab}
+              onChange={setSubTab}
+              items={[
+                { value: "members", label: "メンバー管理" },
+                { value: "attendance_settings", label: "勤怠設定" },
+                { value: "workflow_types", label: "ワークフロー" },
+              ]}
+            />
+          )}
+
+          {mainTab === "master" && canManageMembers && (
+            <SettingsSubSelect
+              value={subTab}
+              onChange={setSubTab}
+              items={[
+                { value: "crm_master", label: "CRMマスタ" },
+                { value: "craftsmen_master", label: "職人マスタ" },
+              ]}
+            />
+          )}
+
+          {mainTab === "integrations_group" && canManageMembers && (
+            <SettingsSubSelect
+              value={subTab}
+              onChange={setSubTab}
+              items={[
+                { value: "app_integrations", label: "アプリ連携" },
+                { value: "integrations", label: "API / Webhook" },
+              ]}
+            />
+          )}
+        </div>
 
         {/* ── 個人グループ ─── */}
-        <TabsContent value="personal" className="mt-4">
-          <Tabs defaultValue={initInnerTab} className="w-full">
-            <TabsList className="w-fit mb-4 gap-0.5 h-auto">
-              <TabsTrigger value="profile" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <User className="h-3.5 w-3.5" />プロフィール
-              </TabsTrigger>
-              <TabsTrigger value="security" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <ShieldCheck className="h-3.5 w-3.5" />セキュリティ
-              </TabsTrigger>
-              <TabsTrigger value="notifications" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <Bell className="h-3.5 w-3.5" />通知設定
-              </TabsTrigger>
-              <TabsTrigger value="mail_signature" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                <Mail className="h-3.5 w-3.5" />メール署名
-              </TabsTrigger>
-              {canManageMembers && (
-                <TabsTrigger value="pdf_builder" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-                  <FileText className="h-3.5 w-3.5" />PDF編集
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-        {/* ── アカウント（プロフィール + 会社情報） ─── */}
-        <TabsContent value="profile" className="mt-3 space-y-4">
+        <TabsContent value="personal" className="mt-0">
+        {subTab === "profile" && (
+        <div className="space-y-4">
           {/* 個人プロフィール */}
           <Card className="gap-2 py-3">
             <CardHeader className="min-h-8 border-b border-border/60 px-5 py-2">
@@ -758,59 +828,62 @@ export function SettingsClient({
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+        )}
 
         {/* ── セキュリティ（パスワード変更） ─── */}
-        <TabsContent value="security" className="mt-3">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Lock className="h-4 w-4 text-primary" />
+        {subTab === "security" && (
+          <Card className="gap-2 py-3">
+            <CardHeader className="min-h-8 border-b border-border/60 px-5 py-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Lock className="h-3.5 w-3.5 text-primary" />
                 パスワード変更
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
+            <CardContent className="space-y-3 px-5 pb-3 pt-3">
+              <p className="text-xs text-muted-foreground">
                 Google ログインを使用している場合、パスワード変更は不要です。
               </p>
-              <div className="space-y-4 max-w-sm">
-                <div className="space-y-2">
-                  <Label>新しいパスワード</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end max-w-3xl">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">新しいパスワード</Label>
                   <Input
+                    className="h-8"
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="6文字以上"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>新しいパスワード（確認）</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">新しいパスワード（確認）</Label>
                   <Input
+                    className="h-8"
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="もう一度入力"
                   />
                 </div>
-                {newPassword && confirmPassword && newPassword !== confirmPassword && (
-                  <p className="text-xs text-destructive">パスワードが一致しません</p>
-                )}
-              </div>
-              <div className="flex justify-end max-w-sm">
                 <Button
+                  size="sm"
+                  className="h-8 shrink-0"
                   onClick={handleChangePassword}
                   disabled={savingPassword || !newPassword || newPassword !== confirmPassword}
                 >
-                  <Lock className="size-4 mr-1" />
+                  <Lock className="size-3.5 mr-1" />
                   {savingPassword ? "変更中..." : "パスワードを変更"}
                 </Button>
               </div>
+              {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-destructive">パスワードが一致しません</p>
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* ── 通知 ─── */}
-        <TabsContent value="notifications" className="mt-3">
+        {subTab === "notifications" && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">通知設定</CardTitle>
@@ -842,10 +915,10 @@ export function SettingsClient({
               ))}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* ── メール署名 ─── */}
-        <TabsContent value="mail_signature" className="mt-3">
+        {subTab === "mail_signature" && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -875,36 +948,20 @@ export function SettingsClient({
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* ── PDF編集 ─── */}
-        {canManageMembers && (
-          <TabsContent value="pdf_builder" className="mt-3">
-            <PdfBuilderTab />
-          </TabsContent>
         )}
 
-      </Tabs> {/* ── 個人 inner Tabs ── */}
+        {/* ── PDF編集 ─── */}
+        {canManageMembers && subTab === "pdf_builder" && (
+            <PdfBuilderTab />
+        )}
+
     </TabsContent> {/* ── personal outer group ── */}
 
     {/* ── 組織グループ ─── */}
     {canManageMembers && (
-      <TabsContent value="organization" className="mt-4">
-        <Tabs defaultValue="members">
-          <TabsList className="w-fit mb-4 gap-0.5 h-auto">
-            <TabsTrigger value="members" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <Users className="h-3.5 w-3.5" />メンバー管理
-            </TabsTrigger>
-            <TabsTrigger value="attendance_settings" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <Clock className="h-3.5 w-3.5" />勤怠設定
-            </TabsTrigger>
-            <TabsTrigger value="workflow_types" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <GitBranch className="h-3.5 w-3.5" />ワークフロー
-            </TabsTrigger>
-          </TabsList>
-
-          {/* メンバー管理 */}
-          <TabsContent value="members" className="space-y-4">
+      <TabsContent value="organization" className="mt-0">
+          {subTab === "members" && (
+          <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -1167,10 +1224,12 @@ export function SettingsClient({
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </TabsContent>
+          </div>
+          )}
 
           {/* 勤怠設定 */}
-          <TabsContent value="attendance_settings" className="mt-3 space-y-4">
+          {subTab === "attendance_settings" && (
+          <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">就業時間</CardTitle>
@@ -1228,13 +1287,13 @@ export function SettingsClient({
                 {savingAttendance ? "保存中..." : "保存"}
               </Button>
             </div>
-          </TabsContent>
+          </div>
+          )}
 
           {/* ワークフロー */}
-          <TabsContent value="workflow_types" className="mt-3">
+          {subTab === "workflow_types" && (
             <WorkflowTypesTab />
-          </TabsContent>
-        </Tabs>
+          )}
 
         {/* メンバー招待ダイアログ */}
         <Dialog open={addOpen} onOpenChange={(open) => { if (!open) { setAddOpen(false); setInviteSent(false); } }}>
@@ -1334,37 +1393,17 @@ export function SettingsClient({
 
     {/* ── マスタグループ ─── */}
     {canManageMembers && (
-      <TabsContent value="master" className="mt-4">
-        <Tabs defaultValue="crm_master">
-          <TabsList className="w-fit mb-4 gap-0.5 h-auto">
-            <TabsTrigger value="crm_master" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <BookOpen className="h-3.5 w-3.5" />CRMマスタ
-            </TabsTrigger>
-            <TabsTrigger value="craftsmen_master" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <Wrench className="h-3.5 w-3.5" />職人マスタ
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="crm_master" className="mt-3"><CrmMasterTab /></TabsContent>
-          <TabsContent value="craftsmen_master" className="mt-3"><CraftsmenMasterTab /></TabsContent>
-        </Tabs>
+      <TabsContent value="master" className="mt-0">
+          {subTab === "crm_master" && <CrmMasterTab />}
+          {subTab === "craftsmen_master" && <CraftsmenMasterTab />}
       </TabsContent>
     )}
 
     {/* ── 連携グループ ─── */}
     {canManageMembers && (
-      <TabsContent value="integrations_group" className="mt-4">
-        <Tabs defaultValue="app_integrations">
-          <TabsList className="w-fit mb-4 gap-0.5 h-auto">
-            <TabsTrigger value="app_integrations" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <Puzzle className="h-3.5 w-3.5" />アプリ連携
-            </TabsTrigger>
-            <TabsTrigger value="integrations" className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-[var(--brand-accent)] data-[state=active]:text-[var(--brand-dark)] data-[state=active]:shadow-none shadow-none border-0">
-              <Code2 className="h-3.5 w-3.5" />API / Webhook
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="app_integrations" className="mt-3"><AppIntegrationsTab /></TabsContent>
-          <TabsContent value="integrations" className="mt-3"><IntegrationsTab /></TabsContent>
-        </Tabs>
+      <TabsContent value="integrations_group" className="mt-0">
+          {subTab === "app_integrations" && <AppIntegrationsTab />}
+          {subTab === "integrations" && <IntegrationsTab />}
       </TabsContent>
     )}
 

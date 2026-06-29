@@ -17,6 +17,7 @@ import {
   aggregateForecastTiers,
   buildDeptMonthlySeries,
   buildMonthlyOverheadAllocations,
+  buildMonthlyBudgetAllocations,
   applyRevenueShareOverhead,
   DEFAULT_BI_COMPANY_CONFIG,
   fiscalMonthIndex,
@@ -540,7 +541,10 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
 
   const baselineOverhead = budgetChanges.find((c) => c.field_name === "overhead_budget")?.old_value
     ?? Number(settings?.overhead_budget ?? 0);
+  const baselineSga = budgetChanges.find((c) => c.field_name === "sga_budget")?.old_value
+    ?? Number(settings?.sga_budget ?? 0);
   let monthlyOverheadAllocations = buildMonthlyOverheadAllocations(year, baselineOverhead, budgetChanges);
+  const monthlySgaAllocations = buildMonthlyBudgetAllocations(year, "sga_budget", baselineSga, budgetChanges);
 
   const actualRecords = collectRecords(
     companyConfig.actual_sources,
@@ -590,9 +594,6 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
     );
   }
 
-  const overheadBudget = Number(settings?.overhead_budget ?? 0);
-  const sgaBudget = Number(settings?.sga_budget ?? 0);
-  const monthlySga = Math.round(sgaBudget / 12);
   const companyMonthlyRevenue = monthly.map((m) => m.revenue);
 
   const monthlyByDept = Array.from(deptMap.values())
@@ -613,7 +614,7 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
     revenue: monthly.map((m) => m.revenue),
     grossProfitRate: monthly.map((m) => (m.revenue > 0 ? Math.round((m.grossProfit / m.revenue) * 1000) / 10 : 0)),
     grossProfitTotal: monthly.map((m, i) => m.grossProfit - monthlyOverheadAllocations[i]),
-    operatingProfit: monthly.map((m, i) => m.grossProfit - monthlyOverheadAllocations[i] - monthlySga),
+    operatingProfit: monthly.map((m, i) => m.grossProfit - monthlyOverheadAllocations[i] - monthlySgaAllocations[i]),
   };
 
   const last = monthly[monthly.length - 1];
@@ -628,6 +629,7 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
     monthly,
     monthlyByDept,
     monthlyOverheadAllocations,
+    monthlySgaAllocations,
     forecastTiers,
     hasData,
     sparklines,

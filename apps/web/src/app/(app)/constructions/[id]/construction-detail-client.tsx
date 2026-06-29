@@ -1193,13 +1193,6 @@ function ConstructionDetailPageContent({
         </TabsContent>
 
         <TabsContent value="schedule" className="mt-4">
-          <div className="flex justify-end mb-2">
-            <Link href={`/constructions/${id}/reports/new`}>
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-                <Plus className="h-3.5 w-3.5" />日報を追加
-              </Button>
-            </Link>
-          </div>
           <GanttTab
             constructionId={id as string}
             initialTasks={(data.tasks ?? []) as { id: string; name: string; start_date: string | null; end_date: string | null; progress: number; status: string }[]}

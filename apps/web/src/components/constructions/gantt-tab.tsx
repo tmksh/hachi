@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -209,20 +210,27 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
         <Button size="sm" onClick={openAdd} className="gap-1.5 h-8 text-xs">
           <Plus className="h-3.5 w-3.5" />工程追加
         </Button>
-        <div className="segmented-control">
-          {(["day", "week", "month"] as ViewMode[]).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setViewMode(m)}
-              className={cn(
-                "segmented-control-btn text-xs",
-                viewMode === m && "segmented-control-btn-active",
-              )}
-            >
-              {m === "day" ? "日" : m === "week" ? "週" : "月"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <Link href={`/constructions/${constructionId}/reports/new`}>
+            <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs">
+              <Plus className="h-3.5 w-3.5" />日報を追加
+            </Button>
+          </Link>
+          <div className="segmented-control h-8 p-0.5 gap-0.5">
+            {(["day", "week", "month"] as ViewMode[]).map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setViewMode(m)}
+                className={cn(
+                  "segmented-control-btn text-xs h-7 px-2.5 min-w-8",
+                  viewMode === m && "segmented-control-btn-active !translate-y-0",
+                )}
+              >
+                {m === "day" ? "日" : m === "week" ? "週" : "月"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

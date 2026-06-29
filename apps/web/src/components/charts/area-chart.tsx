@@ -1,3 +1,6 @@
+"use client";
+
+import { useRef, useState, useEffect } from "react";
 import { areaPath, buildTicks, linePath, niceMax } from "./chart-utils";
 
 export type AreaChartSeries = {
@@ -31,10 +34,27 @@ export function AreaChart({
   unit = "",
   formatValue = (v) => String(v),
 }: AreaChartProps) {
-  const width = 480;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 480, height });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0) setSize({ width: w, height: h > 0 ? h : height });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [height]);
+
+  const { width, height: chartHeight } = size;
   const pad = { top: 28, right: 12, bottom: 28, left: 50 };
   const chartW = width - pad.left - pad.right;
-  const chartH = height - pad.top - pad.bottom;
+  const chartH = chartHeight - pad.top - pad.bottom;
 
   const maxValue = Math.max(
     1,
@@ -48,7 +68,8 @@ export function AreaChart({
   const toY = (value: number) => pad.top + chartH - (value / yMax) * chartH;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="エリアグラフ">
+    <div ref={containerRef} className="h-full w-full">
+    <svg viewBox={`0 0 ${width} ${chartHeight}`} width={width} height={chartHeight} preserveAspectRatio="none" className="h-full w-full" role="img" aria-label="エリアグラフ">
       {yTicks.map((tick) => {
         const y = toY(tick);
         return (
@@ -66,7 +87,7 @@ export function AreaChart({
         <text
           key={`${row[labelKey]}-${index}`}
           x={toX(index)}
-          y={height - 6}
+          y={chartHeight - 6}
           textAnchor="middle"
           fontSize={11}
           fill={labelColor}
@@ -111,5 +132,6 @@ export function AreaChart({
         ))}
       </g>
     </svg>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Plus, Phone, Mail, MapPin, LayoutGrid, List, Kanban, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -139,10 +139,25 @@ export function CrmClient({
       </PageHeader>
       <div className="flex flex-wrap items-center gap-3">
         {!isPipeline && (
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="名前・会社名・メールで検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-          </div>
+          <>
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="名前・会社名・メールで検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={tab} onValueChange={setTab}>
+              <SelectTrigger className="w-[200px] shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">すべて ({counts?.total ?? total})</SelectItem>
+                <SelectItem value="corporation">法人 ({counts?.corporation ?? 0})</SelectItem>
+                <SelectItem value="individual">個人 ({counts?.individual ?? 0})</SelectItem>
+                <SelectItem value="unfollowed">
+                  未フォローアップ{unfollowedCount > 0 ? ` (${unfollowedCount})` : ""}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </>
         )}
         <div className="segmented-control shrink-0 text-xs ml-auto">
           {([
@@ -168,21 +183,8 @@ export function CrmClient({
       {isPipeline ? (
         <DealsPipelineView addOpen={addDealOpen} onAddOpenChange={setAddDealOpen} />
       ) : (
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="all">すべて ({counts?.total ?? total})</TabsTrigger>
-            <TabsTrigger value="corporation">法人</TabsTrigger>
-            <TabsTrigger value="individual">個人</TabsTrigger>
-            <TabsTrigger value="unfollowed" className="gap-1">
-              <AlertCircle className="h-3 w-3 text-amber-500" />
-              未フォローアップ
-              {unfollowedCount > 0 && (
-                <span className="ml-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full px-1.5 py-0.5">{unfollowedCount}</span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value={tab} className="mt-4">
-            {loading ? (
+        <div className="space-y-4">
+          {loading ? (
               view === "grid" ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{Array.from({length:6}).map((_,i)=><Card key={i}><CardContent className="p-5 space-y-3"><Skeleton className="h-5 w-32" /><Skeleton className="h-4 w-48" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}</div>
               ) : (
@@ -313,8 +315,7 @@ export function CrmClient({
                 </Button>
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+        </div>
       )}
     </div>
   );

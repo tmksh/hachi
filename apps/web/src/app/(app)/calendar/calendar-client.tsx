@@ -33,7 +33,6 @@ import { Input } from "@/components/ui/input";
 import { TimeSelect } from "@/components/ui/time-select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -81,8 +80,6 @@ import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/google-calendar";
-import { useAuth } from "@/hooks/use-auth";
-
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
 type AnyEv = (Ev | MappedGoogleEvent) & { _isGoogle?: true; _htmlLink?: string; _memberId?: string; _memberColor?: string };
 type View = "day" | "week" | "month";
@@ -158,7 +155,6 @@ export function CalendarClient({
   initialEvents: Ev[];
   initialMembers: Awaited<ReturnType<typeof getCompanyMembersWithCalendar>>;
 }) {
-  const { profile } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState<View>("week");
@@ -458,26 +454,11 @@ export function CalendarClient({
   return (
     <div className="md:h-screen md:flex md:flex-col p-4 md:p-8 md:gap-3 space-y-4 md:space-y-0 md:overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between md:shrink-0">
+      <div className="md:shrink-0">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">カレンダー</h1>
           <p className="text-sm text-muted-foreground mt-1">スケジュール管理</p>
         </div>
-
-        {/* ログイン中のユーザー表示 */}
-        {profile && (
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/50 border border-white/60 backdrop-blur-sm shadow-sm">
-            <Avatar className="h-7 w-7 shrink-0">
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                {profile.display_name?.charAt(0) ?? "U"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col leading-tight">
-              <span className="text-xs font-medium text-foreground">{profile.display_name}</span>
-              <span className="text-[10px] text-muted-foreground">{profile.email}</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Toolbar */}

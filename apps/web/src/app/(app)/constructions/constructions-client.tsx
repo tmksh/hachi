@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
@@ -124,64 +123,67 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
         ]}
       />
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
-          <TabsList className="shrink-0">
-            <TabsTrigger value="all">すべて</TabsTrigger>
-            <TabsTrigger value="in_progress">施工中</TabsTrigger>
-            <TabsTrigger value="preparing">着工前</TabsTrigger>
-            <TabsTrigger value="completed">完了</TabsTrigger>
-          </TabsList>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">担当者</span>
-            <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="すべて" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">すべて</SelectItem>
-                <SelectItem value="_unassigned">未割り当て</SelectItem>
-                {profiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-              <SelectTrigger className="min-w-[12.5rem] w-auto [&_[data-slot=select-value]]:line-clamp-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                  <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {(assigneeFilter !== "_all" || sortKey !== "created_at" || search) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="shrink-0 text-xs text-muted-foreground h-9"
-              onClick={() => { setAssigneeFilter("_all"); setSortKey("created_at"); setSearch(""); }}
-            >
-              リセット
-            </Button>
-          )}
-          <div className="relative w-full min-w-[200px] sm:w-auto sm:flex-1 sm:max-w-sm sm:ml-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="工事名・顧客名で検索..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="工事名・顧客名で検索..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
-        <TabsContent value={tab} className="mt-4">
-          <Card variant="inset">
+        <Select value={tab} onValueChange={setTab}>
+          <SelectTrigger className="w-[140px] shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">すべて</SelectItem>
+            <SelectItem value="in_progress">施工中</SelectItem>
+            <SelectItem value="preparing">着工前</SelectItem>
+            <SelectItem value="completed">完了</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-sm text-muted-foreground whitespace-nowrap">担当者</span>
+          <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="すべて" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">すべて</SelectItem>
+              <SelectItem value="_unassigned">未割り当て</SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+            <SelectTrigger className="min-w-[12.5rem] w-auto [&_[data-slot=select-value]]:line-clamp-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {(assigneeFilter !== "_all" || sortKey !== "created_at" || search || tab !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-xs text-muted-foreground h-9"
+            onClick={() => { setTab("all"); setAssigneeFilter("_all"); setSortKey("created_at"); setSearch(""); }}
+          >
+            リセット
+          </Button>
+        )}
+      </div>
+      <Card variant="inset">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -275,8 +277,6 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
               </Table>
             </div>
           </Card>
-        </TabsContent>
-      </Tabs>
       <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>

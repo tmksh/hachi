@@ -23,6 +23,7 @@ import {
 } from "@/lib/bi-types";
 import {
   CONSTRUCTION_STATUSES,
+  CONTRACT_STATUSES,
   DEAL_STAGES,
   INVOICE_STATUSES,
   DEFAULT_BI_COMPANY_CONFIG,
@@ -69,7 +70,11 @@ function AmountInput({
         className="pl-7 text-right tabular-nums"
         value={raw}
         placeholder={placeholder}
-        onChange={(e) => setRaw(e.target.value)}
+        onChange={(e) => {
+          setRaw(e.target.value);
+          // 入力中も親stateへ即反映（保存直前のブラー漏れによる値落ちを防ぐ）
+          onChange(parseAmount(e.target.value));
+        }}
         onBlur={() => {
           const v = parseAmount(raw);
           onChange(v);
@@ -84,6 +89,7 @@ function AmountInput({
 export type BiSettingsPanelProps = {
   variant?: "page" | "dialog";
   active?: boolean;
+  fiscalYear?: number;
   onSaved?: () => void;
   onCancel?: () => void;
 };
@@ -91,11 +97,12 @@ export type BiSettingsPanelProps = {
 export function BiSettingsPanel({
   variant = "page",
   active = true,
+  fiscalYear: fiscalYearProp,
   onSaved,
   onCancel,
 }: BiSettingsPanelProps) {
   const router = useRouter();
-  const fiscalYear = getCurrentFiscalYear();
+  const fiscalYear = fiscalYearProp ?? getCurrentFiscalYear();
 
   // ── 全社設定 ──
   const [targetRevenue, setTargetRevenue] = useState(0);
@@ -244,9 +251,35 @@ export function BiSettingsPanel({
     }));
   };
 
+  const addForecastTier = () => {
+    const id = `tier-${Date.now()}`;
+    setCompanyConfig((prev) => ({
+      ...prev,
+      forecast_tiers: [
+        ...prev.forecast_tiers,
+        {
+          id,
+          label: `着地 ${prev.forecast_tiers.length + 1}`,
+          enabled: true,
+          cumulative: false,
+          sources: [],
+        },
+      ],
+    }));
+  };
+
+  const removeForecastTier = (id: string) => {
+    setCompanyConfig((prev) => ({
+      ...prev,
+      forecast_tiers: prev.forecast_tiers.filter((t) => t.id !== id),
+    }));
+  };
+
+  type TierSourceType = "constructions" | "deals" | "contracts";
+
   const toggleTierSourceStatus = (
     tierId: string,
-    sourceType: "constructions" | "deals",
+    sourceType: TierSourceType,
     value: string,
     checked: boolean
   ) => {
@@ -256,7 +289,7 @@ export function BiSettingsPanel({
         if (tier.id !== tierId) return tier;
         const sources = [...tier.sources];
         const idx = sources.findIndex((s) => s.type === sourceType);
-        const field = sourceType === "constructions" ? "statuses" : "stages";
+        const field = sourceType === "deals" ? "stages" : "statuses";
         if (idx === -1) {
           sources.push({ type: sourceType, [field]: checked ? [value] : [] });
           return { ...tier, sources };
@@ -272,11 +305,11 @@ export function BiSettingsPanel({
 
   const tierHasSourceValue = (
     tier: BiForecastTierConfig,
-    sourceType: "constructions" | "deals",
+    sourceType: TierSourceType,
     value: string
   ) => {
     const source = tier.sources.find((s) => s.type === sourceType);
-    const list = sourceType === "constructions" ? source?.statuses : source?.stages;
+    const list = sourceType === "deals" ? source?.stages : source?.statuses;
     return list?.includes(value) ?? false;
   };
 
@@ -647,7 +680,7 @@ export function BiSettingsPanel({
             <p className="text-sm font-medium">実績データソース</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">工事（完工等）</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">工事</p>
                 <div className="flex flex-wrap gap-2">
                   {CONSTRUCTION_STATUSES.map((s) => (
                     <label key={s.value} className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
@@ -670,6 +703,36 @@ export function BiSettingsPanel({
                         type="checkbox"
                         checked={actualHasSourceValue("invoices", s.value)}
                         onChange={(e) => toggleActualSource("invoices", s.value, e.target.checked)}
+                      />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">契約</p>
+                <div className="flex flex-wrap gap-2">
+                  {CONTRACT_STATUSES.map((s) => (
+                    <label key={s.value} className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={actualHasSourceValue("contracts", s.value)}
+                        onChange={(e) => toggleActualSource("contracts", s.value, e.target.checked)}
+                      />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">商談</p>
+                <div className="flex flex-wrap gap-2">
+                  {DEAL_STAGES.map((s) => (
+                    <label key={s.value} className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={actualHasSourceValue("deals", s.value)}
+                        onChange={(e) => toggleActualSource("deals", s.value, e.target.checked)}
                       />
                       {s.label}
                     </label>
@@ -716,17 +779,30 @@ export function BiSettingsPanel({
                     className="h-8 max-w-xs text-sm font-medium"
                   />
                 </div>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Switch
-                    checked={tier.cumulative}
-                    onCheckedChange={(v) => updateForecastTier(tier.id, { cumulative: v })}
-                  />
-                  前段階を加算（例: A見込含）
-                </label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Switch
+                      checked={tier.cumulative}
+                      onCheckedChange={(v) => updateForecastTier(tier.id, { cumulative: v })}
+                    />
+                    前段階を加算（例: A見込含）
+                  </label>
+                  {companyConfig.forecast_tiers.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeForecastTier(tier.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {tier.enabled && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-2">工事ステータス</p>
                     <div className="flex flex-wrap gap-2">
@@ -736,6 +812,21 @@ export function BiSettingsPanel({
                             type="checkbox"
                             checked={tierHasSourceValue(tier, "constructions", s.value)}
                             onChange={(e) => toggleTierSourceStatus(tier.id, "constructions", s.value, e.target.checked)}
+                          />
+                          {s.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">契約ステータス</p>
+                    <div className="flex flex-wrap gap-2">
+                      {CONTRACT_STATUSES.map((s) => (
+                        <label key={s.value} className="inline-flex items-center gap-1.5 text-xs border rounded-md px-2 py-1">
+                          <input
+                            type="checkbox"
+                            checked={tierHasSourceValue(tier, "contracts", s.value)}
+                            onChange={(e) => toggleTierSourceStatus(tier.id, "contracts", s.value, e.target.checked)}
                           />
                           {s.label}
                         </label>
@@ -761,6 +852,11 @@ export function BiSettingsPanel({
               )}
             </div>
           ))}
+
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={addForecastTier}>
+            <Plus className="h-3.5 w-3.5" />
+            着地予測パターンを追加
+          </Button>
 
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded-lg p-2.5">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />

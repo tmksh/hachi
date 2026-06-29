@@ -1,4 +1,7 @@
-import { buildSignedTicks, buildTicks, niceMax } from "./chart-utils";
+"use client";
+
+import { useRef, useState, useEffect } from "react";
+import { buildAsymmetricTicks, buildTicks, niceMax } from "./chart-utils";
 
 export type BarChartRow = {
   label: string;
@@ -31,27 +34,44 @@ export function BarChart({
   allowNegative = false,
   showValueLabels = false,
 }: BarChartProps) {
-  const width = 480;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 480, height });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0) setSize({ width: w, height: h > 0 ? h : height });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [height]);
+
+  const { width, height: chartHeight } = size;
   const pad = { top: showValueLabels ? 24 : 8, right: 8, bottom: 28, left: 44 };
   const chartW = width - pad.left - pad.right;
-  const chartH = height - pad.top - pad.bottom;
+  const chartH = chartHeight - pad.top - pad.bottom;
 
   const values = data.map((d) => d.value);
   const minValue = allowNegative ? Math.min(0, ...values) : 0;
   const maxValue = Math.max(1, ...values);
-  const yMax = allowNegative
-    ? niceMax(Math.max(Math.abs(minValue), maxValue))
-    : niceMax(maxValue);
-  const yMin = allowNegative ? -yMax : 0;
-  const range = yMax - yMin;
+  // 上下で必要な分だけ軸を確保（参考UIの非対称軸に準拠）
   const yTicks = allowNegative
-    ? buildSignedTicks(yMin, yMax, 4)
-    : buildTicks(yMax, 4);
+    ? buildAsymmetricTicks(minValue, maxValue, 4)
+    : buildTicks(maxValue, 4);
+  const yMin = yTicks[0];
+  const yMax = yTicks[yTicks.length - 1];
+  const range = yMax - yMin;
   const zeroY = pad.top + chartH - ((0 - yMin) / range) * chartH;
   const barWidth = Math.min(44, (chartW / Math.max(data.length, 1)) * 0.55);
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label="棒グラフ">
+    <div ref={containerRef} className="h-full w-full">
+    <svg viewBox={`0 0 ${width} ${chartHeight}`} width={width} height={chartHeight} preserveAspectRatio="none" className="h-full w-full" role="img" aria-label="棒グラフ">
       {yTicks.map((tick) => {
         const y = pad.top + chartH - ((tick - yMin) / range) * chartH;
         return (
@@ -109,7 +129,7 @@ export function BarChart({
             )}
             <text
               x={groupX}
-              y={height - 6}
+              y={chartHeight - 6}
               textAnchor="middle"
               fontSize={11}
               fill={labelColor}
@@ -120,5 +140,6 @@ export function BarChart({
         );
       })}
     </svg>
+    </div>
   );
 }

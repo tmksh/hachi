@@ -8,6 +8,7 @@ import { KpiRow } from "@/components/shared/kpi-row";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +28,29 @@ type Row = Awaited<ReturnType<typeof getEstimates>>[number];
 type CustomerRow = Awaited<ReturnType<typeof getCustomers>>["customers"][number];
 
 function fmt(v: number) { return `¥${Math.round(v / 10000).toLocaleString()}万`; }
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "すべて" },
+  { value: "draft", label: "下書き" },
+  { value: "sent", label: "送付済" },
+  { value: "accepted", label: "受理" },
+  { value: "rejected", label: "却下" },
+] as const;
+
+function StatusFilterSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-[140px] shrink-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {STATUS_FILTER_OPTIONS.map((o) => (
+          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 type QuotesClientProps = {
   initialRows: Row[];
@@ -146,14 +170,19 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
                 <List className="h-3.5 w-3.5" />全見積
               </TabsTrigger>
             </TabsList>
-            <div className="relative flex-1 min-w-[180px] max-w-md ml-auto">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={viewMode === "customers" ? "顧客名で検索..." : "見積番号・件名・顧客名で検索..."}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex items-center gap-2 ml-auto min-w-0">
+              <div className="relative flex-1 min-w-[180px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={viewMode === "customers" ? "顧客名で検索..." : "見積番号・件名・顧客名で検索..."}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {viewMode === "all" && (
+                <StatusFilterSelect value={tab} onChange={setTab} />
+              )}
             </div>
           </div>
 
@@ -191,90 +220,79 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
                 { label: "下書き", value: rows.filter((r) => r.status === "draft").length, sub: "件", icon: FileText },
               ]}
             />
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsList>
-                <TabsTrigger value="all">すべて</TabsTrigger>
-                <TabsTrigger value="draft">下書き</TabsTrigger>
-                <TabsTrigger value="sent">送付済</TabsTrigger>
-                <TabsTrigger value="accepted">受理</TabsTrigger>
-                <TabsTrigger value="rejected">却下</TabsTrigger>
-              </TabsList>
-              <TabsContent value={tab} className="mt-4">
-                <Card variant="inset">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>見積番号</TableHead>
-                          <TableHead>顧客</TableHead>
-                          <TableHead>件名</TableHead>
-                          <TableHead>区分</TableHead>
-                          <TableHead className="text-right">金額</TableHead>
-                          <TableHead>ステータス</TableHead>
-                          <TableHead className="w-10"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {allFiltered.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                              該当なし
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          allFiltered.map((r) => (
-                            <TableRow
-                              key={r.id}
-                              className="cursor-pointer glass-row group"
-                              onClick={() => router.push(`/quotes/${r.id}`)}
+            <Card variant="inset">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>見積番号</TableHead>
+                      <TableHead>顧客</TableHead>
+                      <TableHead>件名</TableHead>
+                      <TableHead>区分</TableHead>
+                      <TableHead className="text-right">金額</TableHead>
+                      <TableHead>ステータス</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allFiltered.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          該当なし
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      allFiltered.map((r) => (
+                        <TableRow
+                          key={r.id}
+                          className="cursor-pointer glass-row group"
+                          onClick={() => router.push(`/quotes/${r.id}`)}
+                        >
+                          <TableCell>
+                            <Link
+                              href={`/quotes/${r.id}`}
+                              className="font-medium text-primary hover:underline"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <TableCell>
-                                <Link
-                                  href={`/quotes/${r.id}`}
-                                  className="font-medium text-primary hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {r.estimate_no}
-                                </Link>
-                              </TableCell>
-                              <TableCell>{r.customer?.name ?? "—"}</TableCell>
-                              <TableCell>{r.title ?? "-"}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-[10px] font-normal">
-                                  {r.construction_id ? "工事" : "営業"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums font-medium">
-                                {fmt(r.total ?? 0)}
-                              </TableCell>
-                              <TableCell>
-                                <StatusSelect
-                                  entity="estimate"
-                                  value={r.status}
-                                  disabled={updating === r.id}
-                                  onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <button
-                                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeleteTarget(r);
-                                  }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                              {r.estimate_no}
+                            </Link>
+                          </TableCell>
+                          <TableCell>{r.customer?.name ?? "—"}</TableCell>
+                          <TableCell>{r.title ?? "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              {r.construction_id ? "工事" : "営業"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">
+                            {fmt(r.total ?? 0)}
+                          </TableCell>
+                          <TableCell>
+                            <StatusSelect
+                              entity="estimate"
+                              value={r.status}
+                              disabled={updating === r.id}
+                              onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget(r);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
 
@@ -323,22 +341,16 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
           { label: "下書き", value: customerRows.filter((r) => r.status === "draft").length, sub: "件", icon: FileText },
         ]}
       />
-      <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex flex-wrap items-center gap-3">
-          <TabsList>
-            <TabsTrigger value="all">すべて</TabsTrigger>
-            <TabsTrigger value="draft">下書き</TabsTrigger>
-            <TabsTrigger value="sent">送付済</TabsTrigger>
-            <TabsTrigger value="accepted">受理</TabsTrigger>
-            <TabsTrigger value="rejected">却下</TabsTrigger>
-          </TabsList>
-          <div className="relative flex-1 min-w-[180px] max-w-md ml-auto">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 ml-auto min-w-0">
+          <div className="relative flex-1 min-w-[180px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="検索..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
+          <StatusFilterSelect value={tab} onChange={setTab} />
         </div>
-        <TabsContent value={tab} className="mt-4">
-          <Card variant="inset"><div className="overflow-x-auto">
+      </div>
+      <Card variant="inset"><div className="overflow-x-auto">
             <Table><TableHeader><TableRow><TableHead>見積番号</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
               <TableBody>
                 {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
@@ -357,8 +369,6 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
               </TableBody>
             </Table>
           </div></Card>
-        </TabsContent>
-      </Tabs>
       <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>見積を削除しますか？</AlertDialogTitle><AlertDialogDescription>「{deleteTarget?.estimate_no}」を削除します。</AlertDialogDescription></AlertDialogHeader>

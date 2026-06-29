@@ -70,6 +70,7 @@ export type BiActuals = {
   monthly: BiMonthlyActual[];
   monthlyByDept: BiDeptMonthlySeries[];
   monthlyOverheadAllocations: number[];
+  monthlySgaAllocations: number[];
   forecastTiers: BiForecastTierActual[];
   hasData: boolean;
   sparklines: {

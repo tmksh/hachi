@@ -148,11 +148,7 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
                 <CardContent className="px-6 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0 space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        {a.pinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                        {a.is_urgent && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-                        <h3 className="font-semibold text-[15px] leading-snug truncate">{a.title}</h3>
-                      </div>
+                      <h3 className="font-semibold text-[15px] leading-snug truncate">{a.title}</h3>
                       <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">{a.body}</p>
                       <div className="flex items-center flex-wrap gap-x-2 gap-y-1 pt-0.5 text-xs text-muted-foreground">
                         <span>{a.author?.display_name ?? "-"}</span>
