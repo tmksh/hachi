@@ -429,74 +429,67 @@ export function DashboardClient({
           </div>
         );
 
-      case "deals":
-        return !isVisible("deals") ? null : (
-          <ListWidgetCard
-            items={dealsTab === "deals" ? (data?.recentDeals ?? []) : unfollowedLeads}
-            itemHeightPx={dealsTab === "deals" ? 50 : 52}
-            loading={dealsTab === "deals" ? loading : unfollowedLoading}
-            loadingSkeleton={
-              <div className="flex flex-col gap-1">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="py-2 space-y-1.5">
-                    <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
-                  </div>
-                ))}
-              </div>
-            }
-            empty={
-              dealsTab === "unfollowed" ? (
-                <div className="flex flex-col items-center justify-center gap-1.5 py-4">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                  <p className="text-[11px] text-slate-400">全員フォローアップ済みです</p>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>
-              )
-            }
-            header={(
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-800">
-                    {dealsTab === "deals" ? "商談パイプライン" : "未フォローアップ"}
-                  </span>
-                  {dealsTab === "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
-                    <span
-                      className="text-[10px] font-bold rounded-full px-1.5 py-0.5 border"
-                      style={{ color: brandColors.dark, background: brandColors.accent + "40", borderColor: brandColors.mid }}
-                    >{unfollowedLeads.length}件</span>
+      case "deals": {
+        if (!isVisible("deals")) return null;
+        const dealsHeader = (
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800">
+                {dealsTab === "deals" ? "商談パイプライン" : "未フォローアップ"}
+              </span>
+              {dealsTab === "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
+                <span
+                  className="text-[10px] font-bold rounded-full px-1.5 py-0.5 border"
+                  style={{ color: brandColors.dark, background: brandColors.accent + "40", borderColor: brandColors.mid }}
+                >{unfollowedLeads.length}件</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
+                <button
+                  type="button"
+                  onClick={() => setDealsTab("deals")}
+                  className={cn("px-2 py-1 transition-colors rounded-l-lg", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                  style={dealsTab === "deals" ? { background: "var(--brand-gradient)" } : undefined}
+                >商談</button>
+                <button
+                  type="button"
+                  onClick={() => setDealsTab("unfollowed")}
+                  className={cn("px-2 py-1 transition-colors relative rounded-r-lg", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
+                  style={dealsTab === "unfollowed" ? { background: "var(--brand-gradient)" } : undefined}
+                >
+                  未フォロー
+                  {dealsTab !== "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
                   )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex rounded-lg border border-slate-100 text-[10px] font-medium">
-                    <button
-                      type="button"
-                      onClick={() => setDealsTab("deals")}
-                      className={cn("px-2 py-1 transition-colors rounded-l-lg", dealsTab === "deals" ? "text-white" : "text-slate-400 hover:text-slate-600")}
-                      style={dealsTab === "deals" ? { background: "var(--brand-gradient)" } : undefined}
-                    >商談</button>
-                    <button
-                      type="button"
-                      onClick={() => setDealsTab("unfollowed")}
-                      className={cn("px-2 py-1 transition-colors relative rounded-r-lg", dealsTab === "unfollowed" ? "text-white" : "text-slate-400 hover:text-slate-600")}
-                      style={dealsTab === "unfollowed" ? { background: "var(--brand-gradient)" } : undefined}
-                    >
-                      未フォロー
-                      {dealsTab !== "unfollowed" && !unfollowedLoading && unfollowedLeads.length > 0 && (
-                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
-                      )}
-                    </button>
-                  </div>
-                  <Link href={dealsTab === "deals" ? "/deals" : "/crm?tab=unfollowed"}>
-                    <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" />
-                  </Link>
-                </div>
+                </button>
               </div>
-            )}
-          >
-            {(item) => {
-              if (dealsTab === "deals") {
-                const deal = item as NonNullable<typeof data>["recentDeals"][number];
+              <Link href={dealsTab === "deals" ? "/deals" : "/crm?tab=unfollowed"}>
+                <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" />
+              </Link>
+            </div>
+          </div>
+        );
+
+        if (dealsTab === "deals") {
+          return (
+            <ListWidgetCard
+              items={data?.recentDeals ?? []}
+              itemHeightPx={50}
+              loading={loading}
+              loadingSkeleton={
+                <div className="flex flex-col gap-1">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="py-2 space-y-1.5">
+                      <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
+                    </div>
+                  ))}
+                </div>
+              }
+              empty={<p className="text-xs text-slate-400 py-4">進行中の商談はありません</p>}
+              header={dealsHeader}
+            >
+              {(deal) => {
                 const colorSeed = deal.customerId ?? deal.customerName;
                 const avatar = getCustomerAvatarColor(colorSeed);
                 const initial = deal.customerName !== "—" ? deal.customerName.charAt(0) : deal.title.charAt(0);
@@ -526,8 +519,34 @@ export function DashboardClient({
                     </div>
                   </Link>
                 );
-              }
-              const lead = item as typeof unfollowedLeads[number];
+              }}
+            </ListWidgetCard>
+          );
+        }
+
+        return (
+          <ListWidgetCard
+            items={unfollowedLeads}
+            itemHeightPx={52}
+            loading={unfollowedLoading}
+            loadingSkeleton={
+              <div className="flex flex-col gap-1">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="py-2 space-y-1.5">
+                    <Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-20" />
+                  </div>
+                ))}
+              </div>
+            }
+            empty={
+              <div className="flex flex-col items-center justify-center gap-1.5 py-4">
+                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                <p className="text-[11px] text-slate-400">全員フォローアップ済みです</p>
+              </div>
+            }
+            header={dealsHeader}
+          >
+            {(lead) => {
               const avatar = getCustomerAvatarColor(lead.id);
               return (
                 <div key={lead.id} className="flex items-center gap-2 py-1.5 px-1 rounded-xl shrink-0">
@@ -563,6 +582,7 @@ export function DashboardClient({
             }}
           </ListWidgetCard>
         );
+      }
 
       case "quotes":
         return !isVisible("quotes") ? null : (
