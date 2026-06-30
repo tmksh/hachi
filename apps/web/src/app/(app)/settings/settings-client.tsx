@@ -166,6 +166,8 @@ function companyFormState(c: Company | null) {
     companyRepresentative: str.representative ?? "",
     companyInvoiceNumber: str.invoice_number ?? "",
     invoiceClosingDay: (str.invoice_closing_day === "20" ? "20" : "end_of_month") as "20" | "end_of_month",
+    fiscalMonthStart: typeof s.fiscal_month_start === "number" && s.fiscal_month_start >= 1 && s.fiscal_month_start <= 12
+      ? s.fiscal_month_start : 4,
     cloudsignEnabled: Boolean(cloudsign?.enabled),
     cloudsignApiKey: cloudsign?.api_key ?? "",
     attStartTime: (att?.start_time as string) ?? "09:00",
@@ -218,6 +220,7 @@ export function SettingsClient({
   const [companyRepresentative, setCompanyRepresentative] = useState(formDefaults.companyRepresentative);
   const [companyInvoiceNumber, setCompanyInvoiceNumber] = useState(formDefaults.companyInvoiceNumber);
   const [invoiceClosingDay, setInvoiceClosingDay] = useState<"20" | "end_of_month">(formDefaults.invoiceClosingDay);
+  const [fiscalMonthStart, setFiscalMonthStart] = useState<number>(formDefaults.fiscalMonthStart);
   const [cloudsignEnabled, setCloudsignEnabled] = useState(formDefaults.cloudsignEnabled);
   const [cloudsignApiKey, setCloudsignApiKey] = useState(formDefaults.cloudsignApiKey);
   const [savingCompany, setSavingCompany] = useState(false);
@@ -337,6 +340,7 @@ export function SettingsClient({
         representative: companyRepresentative,
         invoice_number: companyInvoiceNumber,
         invoice_closing_day: invoiceClosingDay,
+        fiscal_month_start: fiscalMonthStart,
         cloudsign: {
           enabled: cloudsignEnabled,
           api_key: cloudsignApiKey || undefined,
@@ -768,6 +772,18 @@ export function SettingsClient({
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground">工事管理の月次請求自動生成に使用します</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>会計年度の始まり月</Label>
+                          <Select value={String(fiscalMonthStart)} onValueChange={(v) => setFiscalMonthStart(Number(v))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                                <SelectItem key={m} value={String(m)}>{m}月始まり</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">BIダッシュボードの年度計算・月別グラフに反映されます</p>
                         </div>
                         <div className="space-y-2 sm:col-span-3">
                           <Label>住所</Label>

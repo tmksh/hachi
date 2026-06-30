@@ -133,9 +133,15 @@ export type BiMetricRecord = {
   date: string | null;
 };
 
-export function fiscalMonthIndex(dateStr: string): number {
+/**
+ * 日付文字列から年度内の月インデックス（0始まり）を返す。
+ * @param dateStr 日付文字列
+ * @param startMonth 年度始まり月（1=1月〜12=12月, デフォルト 4=4月）
+ */
+export function fiscalMonthIndex(dateStr: string, startMonth = 4): number {
   const d = new Date(dateStr);
-  return d.getMonth() >= 3 ? d.getMonth() - 3 : d.getMonth() + 9;
+  const calendarMonth = d.getMonth() + 1; // 1〜12
+  return ((calendarMonth - startMonth + 12) % 12);
 }
 
 export function matchesFilter(
@@ -233,9 +239,16 @@ export function effectiveBudgetAtDate(
   return value;
 }
 
-export function fiscalMonthEndDate(fiscalYear: number, monthIndex: number): string {
-  const calendarMonth = monthIndex < 9 ? monthIndex + 4 : monthIndex - 8;
-  const calendarYear = monthIndex < 9 ? fiscalYear : fiscalYear + 1;
+/**
+ * 年度内月インデックス（0始まり）から期末日付文字列（YYYY-MM-DD）を返す。
+ * @param fiscalYear 会計年度（西暦）
+ * @param monthIndex 年度内月インデックス 0〜11
+ * @param startMonth 年度始まり月（1=1月〜12=12月, デフォルト 4=4月）
+ */
+export function fiscalMonthEndDate(fiscalYear: number, monthIndex: number, startMonth = 4): string {
+  const calendarMonth = ((startMonth - 1 + monthIndex) % 12) + 1; // 1〜12
+  const yearOffset = (startMonth - 1 + monthIndex) >= 12 ? 1 : 0;
+  const calendarYear = fiscalYear + yearOffset;
   const lastDay = new Date(calendarYear, calendarMonth, 0).getDate();
   return `${calendarYear}-${String(calendarMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 }
@@ -245,10 +258,11 @@ export function buildMonthlyBudgetAllocations(
   fiscalYear: number,
   fieldName: BiBudgetChangeEntry["field_name"],
   baselineMan: number,
-  changes: BiBudgetChangeEntry[]
+  changes: BiBudgetChangeEntry[],
+  startMonth = 4,
 ): number[] {
   return Array.from({ length: 12 }, (_, i) => {
-    const monthEnd = fiscalMonthEndDate(fiscalYear, i);
+    const monthEnd = fiscalMonthEndDate(fiscalYear, i, startMonth);
     const annual = effectiveBudgetAtDate(baselineMan, changes, fieldName, monthEnd);
     return Math.round(annual / 12);
   });
@@ -257,9 +271,10 @@ export function buildMonthlyBudgetAllocations(
 export function buildMonthlyOverheadAllocations(
   fiscalYear: number,
   baselineOverheadMan: number,
-  changes: BiBudgetChangeEntry[]
+  changes: BiBudgetChangeEntry[],
+  startMonth = 4,
 ): number[] {
-  return buildMonthlyBudgetAllocations(fiscalYear, "overhead_budget", baselineOverheadMan, changes);
+  return buildMonthlyBudgetAllocations(fiscalYear, "overhead_budget", baselineOverheadMan, changes, startMonth);
 }
 
 /** 均等按分の合計を保ちつつ、月次売上構成比で再配分 */

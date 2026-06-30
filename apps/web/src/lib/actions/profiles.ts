@@ -57,6 +57,17 @@ export async function getCompany() {
   return data as Company;
 }
 
+/**
+ * 会社の会計年度始まり月を settings から読み取る（1〜12, デフォルト 4=4月）
+ */
+export async function getCompanyFiscalMonthStart(): Promise<number> {
+  const company = await getCompany();
+  const s = company.settings as Record<string, unknown> | null;
+  const v = s?.fiscal_month_start;
+  if (typeof v === "number" && v >= 1 && v <= 12) return v;
+  return 4;
+}
+
 export async function updateCompany(input: {
   name?: string;
   phone?: string;
@@ -70,6 +81,8 @@ export async function updateCompany(input: {
   role_permissions?: Record<string, string[]>;
   custom_roles?: Array<{ id: string; name: string; base_role: string; color: string }>;
   pdf_templates?: Record<string, unknown>;
+  /** 会計年度始まり月 1〜12 (例: 4=4月始まり) */
+  fiscal_month_start?: number;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -99,6 +112,7 @@ export async function updateCompany(input: {
     ...(input.role_permissions !== undefined ? { role_permissions: input.role_permissions } : {}),
     ...(input.custom_roles !== undefined ? { custom_roles: input.custom_roles } : {}),
     ...(input.pdf_templates !== undefined ? { pdf_templates: input.pdf_templates } : {}),
+    ...(input.fiscal_month_start !== undefined ? { fiscal_month_start: input.fiscal_month_start } : {}),
   };
 
   const updatePayload: Record<string, unknown> = { settings: newSettings };

@@ -73,6 +73,8 @@ export type BiActuals = {
   monthlySgaAllocations: number[];
   forecastTiers: BiForecastTierActual[];
   hasData: boolean;
+  /** 会計年度始まり月（1〜12） */
+  fiscalMonthStart: number;
   sparklines: {
     revenue: number[];
     grossProfitRate: number[];

@@ -20,8 +20,14 @@ import {
 import { ComboChart } from "@/components/charts/combo-chart";
 import { getBiSettings, getBiActuals } from "@/lib/actions/bi";
 import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
-import { getCurrentFiscalYear, fiscalYearLabel, listFiscalYears } from "@/lib/bi-utils";
-import { aggregateChartPeriods, type PeriodGranularity } from "@/lib/bi-config";
+import {
+  getCurrentFiscalYear,
+  fiscalYearLabel,
+  listFiscalYears,
+  buildFiscalMonthLabels,
+  getForecastStartIndex,
+  DEFAULT_FISCAL_MONTH_START,
+} from "@/lib/bi-utils";
 import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { cn } from "@/lib/utils";
@@ -37,9 +43,9 @@ const FALLBACK_DEPT_ACTUALS = [
   { name: "リフォーム", label: "D部門", revenue: 0, grossProfit: 0 },
 ];
 
-const FALLBACK_MONTHLY = [
-  "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月",
-].map((month) => ({ month, revenue: 0, grossProfit: 0 }));
+function makeFallbackMonthly(startMonth = DEFAULT_FISCAL_MONTH_START) {
+  return buildFiscalMonthLabels(startMonth).map((month) => ({ month, revenue: 0, grossProfit: 0 }));
+}
 
 const FALLBACK_FORECAST_TIERS = [
   { id: "contracted", label: "着地（契約済）", revenue: 0, grossProfit: 0 },
@@ -59,6 +65,97 @@ function deltaLabel(pt: number | null | undefined, unit = "pt") {
   if (pt == null) return undefined;
   const sign = pt > 0 ? "+" : "";
   return `前月比 ${sign}${pt}${unit}`;
+}
+
+type MonthlyDetailRow =
+  | {
+      kind: "actual";
+      label: string;
+      hasActivity: boolean;
+      revenue: number;
+      grossProfit: number;
+      allocation: number;
+      grossProfitTotal: number;
+      cumulative: number;
+    }
+  | { kind: "forecast"; label: string };
+
+/** 月次明細（前半：実績期間を個別行、後半：着地予測1行） */
+function buildMonthlyDetailRows(
+  monthly: Array<{ month: string; revenue: number; grossProfit: number }>,
+  allocations: number[],
+  settingsConfigured: boolean,
+  overheadForCalc: number,
+  forecastStartIdx: number,
+): MonthlyDetailRow[] {
+  const uniformAlloc =
+    settingsConfigured && overheadForCalc > 0 ? Math.round(overheadForCalc / 12) : 0;
+
+  const resolveAlloc = (i: number) => {
+    const v = allocations[i] > 0 ? allocations[i] : uniformAlloc;
+    return v > 0 ? v : 0;
+  };
+
+  const rows: MonthlyDetailRow[] = [];
+  let cumulative = 0;
+
+  for (let i = 0; i < forecastStartIdx; i++) {
+    const m = monthly[i];
+    const hasActivity = m.revenue !== 0 || m.grossProfit !== 0;
+    const alloc = resolveAlloc(i);
+
+    if (hasActivity) {
+      const grossProfitTotal = m.grossProfit - alloc;
+      cumulative += grossProfitTotal;
+      rows.push({
+        kind: "actual",
+        label: m.month,
+        hasActivity: true,
+        revenue: m.revenue,
+        grossProfit: m.grossProfit,
+        allocation: alloc,
+        grossProfitTotal,
+        cumulative,
+      });
+    } else {
+      rows.push({
+        kind: "actual",
+        label: m.month,
+        hasActivity: false,
+        revenue: 0,
+        grossProfit: 0,
+        allocation: alloc,
+        grossProfitTotal: 0,
+        cumulative,
+      });
+    }
+  }
+
+  const forecastStart = monthly[forecastStartIdx]?.month ?? monthly[forecastStartIdx]?.month ?? "予測";
+  const forecastEnd = monthly[monthly.length - 1]?.month ?? "3月";
+  rows.push({
+    kind: "forecast",
+    label: `${forecastStart}〜${forecastEnd}（着地予測）`,
+  });
+
+  return rows;
+}
+
+function resolveMonthlyAllocation(
+  index: number,
+  allocations: number[],
+  settingsConfigured: boolean,
+  overheadForCalc: number,
+): number {
+  const uniformAlloc =
+    settingsConfigured && overheadForCalc > 0 ? Math.round(overheadForCalc / 12) : 0;
+  const v = allocations[index] > 0 ? allocations[index] : uniformAlloc;
+  return v > 0 ? v : 0;
+}
+
+function fmtMonthlyAlloc(allocation: number, settingsConfigured: boolean) {
+  if (!settingsConfigured || allocation <= 0) return "—";
+  return `▲¥${allocation.toLocaleString()}万`;
 }
 
 // ── セクションヘッダー ───────────────────────────────────────────────
@@ -150,7 +247,6 @@ export function BiClient({
   const [actuals, setActuals] = useState<BiActuals | null>(initialActuals);
   const [settingsLoaded, setSettingsLoaded] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chartPeriod, setChartPeriod] = useState<PeriodGranularity>("month");
   const [fiscalYear, setFiscalYear] = useState(getCurrentFiscalYear());
   const fiscalYearOptions = listFiscalYears(5);
 
@@ -202,8 +298,11 @@ export function BiClient({
   const targetRevenueForCalc = targetRevenue ?? 0;
   const targetGpForCalc      = targetGp ?? 0;
 
+  const fiscalMonthStart          = actuals?.fiscalMonthStart          ?? DEFAULT_FISCAL_MONTH_START;
+  const forecastStartIndex        = getForecastStartIndex(fiscalMonthStart);
+
   const deptActuals               = actuals?.deptActuals               ?? FALLBACK_DEPT_ACTUALS;
-  const monthlyActuals            = actuals?.monthly                   ?? FALLBACK_MONTHLY;
+  const monthlyActuals            = actuals?.monthly                   ?? makeFallbackMonthly(fiscalMonthStart);
   const monthlyOverheadAllocations = actuals?.monthlyOverheadAllocations ?? Array(12).fill(0);
   const monthlySgaAllocations     = actuals?.monthlySgaAllocations     ?? Array(12).fill(0);
   const forecastTiers             = actuals?.forecastTiers             ?? FALLBACK_FORECAST_TIERS;
@@ -228,11 +327,32 @@ export function BiClient({
   const operatingProfit  = grossProfitTotal - sgaForCalc;
   const opRate           = pct(operatingProfit, totalRevenue);
 
-  const chartData = aggregateChartPeriods(
+  const monthlyComboData = (() => {
+    let cum = 0;
+    return monthlyActuals.map((m, i) => {
+      const alloc = resolveMonthlyAllocation(
+        i,
+        monthlyOverheadAllocations,
+        settingsConfigured,
+        overheadForCalc,
+      );
+      const grossProfitTotal = m.grossProfit - alloc;
+      cum += grossProfitTotal;
+      return {
+        month: m.month,
+        粗利額: m.grossProfit,
+        月次予定配賦: alloc > 0 ? -alloc : 0,
+        累計: cum,
+      };
+    });
+  })();
+
+  const monthlyDetailRows = buildMonthlyDetailRows(
     monthlyActuals,
-    chartPeriod,
     monthlyOverheadAllocations,
-    monthlySgaAllocations,
+    settingsConfigured,
+    overheadForCalc,
+    forecastStartIndex,
   );
 
   return (
@@ -494,46 +614,31 @@ export function BiClient({
         title="月別推移（全社）"
         description="粗利額・月次予定配賦（控除）と売上総利益（累計）の推移"
         headerRight={
-          <div className="segmented-control shrink-0 text-[11px]">
-            {(["month", "quarter", "year"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setChartPeriod(p)}
-                className={cn(
-                  "segmented-control-btn",
-                  chartPeriod === p && "segmented-control-btn-active",
-                )}
-              >
-                {p === "month" ? "月次" : p === "quarter" ? "四半期" : "年次"}
-              </button>
-            ))}
-          </div>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+            表示対象: <span className="font-medium text-foreground">全社</span>
+          </span>
         }
       >
-        <div className="h-[220px] sm:h-[280px]">
+        <div className="h-[220px] sm:h-[280px] overflow-visible">
           <ComboChart
-            data={(() => {
-              let cum = 0;
-              return chartData.map((m) => {
-                cum += m.grossProfitTotal;
-                return {
-                  month: m.label,
-                  粗利額: m.grossProfit,
-                  月次予定配賦: -(m.grossProfit - m.grossProfitTotal),
-                  累計: cum,
-                };
-              });
-            })()}
+            data={monthlyComboData}
             labelKey="month"
             height={240}
             unit="万"
+            centered
+            lineArea
+            forecastFromIndex={forecastStartIndex}
             gridColor={CHART_ACCENT}
             labelColor={CHART_PRIMARY}
             tickColor={CHART_PRIMARY}
             bars={[
-              { key: "粗利額", label: "粗利額", fill: CHART_DARK },
-              { key: "月次予定配賦", label: "月次予定配賦", fill: "#d9853b" },
+              { key: "粗利額", label: "粗利額（積上）", fill: CHART_DARK },
+              {
+                key: "月次予定配賦",
+                label: "月次予定配賦",
+                fill: "#b45309",
+                forecastFill: "rgba(180, 83, 9, 0.35)",
+              },
             ]}
             line={{ key: "累計", label: "売上総利益（累計）", color: CHART_PRIMARY }}
             formatValue={(v) => `${v < 0 ? "▲" : ""}¥${Math.abs(v).toLocaleString()}万`}
@@ -555,41 +660,59 @@ export function BiClient({
               </tr>
             </thead>
             <tbody>
-              {(() => {
-                let cumulative = 0;
-                let lastDataIdx = -1;
-                chartData.forEach((m, i) => {
-                  if (m.revenue !== 0 || m.grossProfit !== 0) lastDataIdx = i;
-                });
-                return chartData.map((m, i) => {
-                  const isFuture = i > lastDataIdx;
-                  cumulative += m.grossProfitTotal;
+              {monthlyDetailRows.map((row, i) => {
+                if (row.kind === "forecast") {
                   return (
                     <tr
-                      key={i}
-                      className={cn("border-b last:border-0 transition-colors", isFuture && "opacity-40")}
-                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "")}
+                      key={`forecast-${i}`}
+                      className="border-b last:border-0 opacity-50"
+                      style={{ background: "rgba(var(--brand-accent-rgb), 0.15)" }}
                     >
-                      <td className="px-5 py-2.5 font-medium text-foreground whitespace-nowrap">
-                        {m.label}
-                        {isFuture && <span className="ml-1.5 text-[10px] text-muted-foreground">進捗予測</span>}
+                      <td className="px-5 py-2.5 font-medium text-muted-foreground whitespace-nowrap italic">
+                        {row.label}
                       </td>
-                      <td className="text-right px-4 py-2.5 tabular-nums">{isFuture ? "—" : fmtMan(m.revenue)}</td>
-                      <td className="text-right px-4 py-2.5 tabular-nums">{isFuture ? "—" : fmtMan(m.grossProfit)}</td>
-                      <td className="text-right px-4 py-2.5 tabular-nums text-rose-500">
-                        {monthlyOverheadAllocations[i] > 0 ? `▲¥${monthlyOverheadAllocations[i].toLocaleString()}万` : "—"}
-                      </td>
-                      <td className={cn("text-right px-5 py-2.5 tabular-nums font-semibold", m.grossProfitTotal < 0 ? "text-rose-500" : "text-[var(--brand-dark)]")}>
-                        {isFuture ? "—" : fmtSigned(m.grossProfitTotal)}
-                      </td>
-                      <td className={cn("text-right px-5 py-2.5 tabular-nums font-semibold", cumulative < 0 ? "text-rose-500" : "text-[var(--brand-dark)]")}>
-                        {isFuture ? "—" : fmtSigned(cumulative)}
-                      </td>
+                      <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
+                      <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
+                      <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
+                      <td className="text-right px-5 py-2.5 tabular-nums text-muted-foreground">—</td>
+                      <td className="text-right px-5 py-2.5 tabular-nums text-muted-foreground">—</td>
                     </tr>
                   );
-                });
-              })()}
+                }
+
+                const { allocation, grossProfitTotal, cumulative, hasActivity } = row;
+                return (
+                  <tr
+                    key={`${row.label}-${i}`}
+                    className="border-b last:border-0 transition-colors"
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "")}
+                  >
+                    <td className="px-5 py-2.5 font-medium text-foreground whitespace-nowrap">{row.label}</td>
+                    <td className="text-right px-4 py-2.5 tabular-nums">
+                      {hasActivity ? fmtMan(row.revenue) : "—"}
+                    </td>
+                    <td className="text-right px-4 py-2.5 tabular-nums">
+                      {hasActivity ? fmtMan(row.grossProfit) : "—"}
+                    </td>
+                    <td className="text-right px-4 py-2.5 tabular-nums text-rose-500">
+                      {fmtMonthlyAlloc(allocation, settingsConfigured)}
+                    </td>
+                    <td className={cn(
+                      "text-right px-5 py-2.5 tabular-nums font-semibold",
+                      hasActivity && grossProfitTotal < 0 ? "text-rose-500" : hasActivity ? "text-[var(--brand-dark)]" : "text-muted-foreground",
+                    )}>
+                      {hasActivity ? fmtSigned(grossProfitTotal) : "—"}
+                    </td>
+                    <td className={cn(
+                      "text-right px-5 py-2.5 tabular-nums font-semibold",
+                      hasActivity && cumulative < 0 ? "text-rose-500" : hasActivity ? "text-[var(--brand-dark)]" : "text-muted-foreground",
+                    )}>
+                      {hasActivity ? fmtSigned(cumulative) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

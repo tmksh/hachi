@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
+import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS, buildFiscalMonthLabels } from "@/lib/bi-utils";
+import { getCompanyFiscalMonthStart } from "@/lib/actions/profiles";
 import type {
   BiAnnualSettings,
   BiBudgetChangeLog,
@@ -32,10 +33,16 @@ import {
   type BiMetricRecord,
 } from "@/lib/bi-config";
 
-const MONTH_LABELS = ["4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "1月", "2月", "3月"];
-
-function fiscalYearRange(year: number) {
-  return { start: `${year}-04-01`, end: `${year + 1}-03-31` };
+function fiscalYearRange(year: number, startMonth = 4) {
+  const sm = String(startMonth).padStart(2, "0");
+  const endMonth = startMonth === 1 ? 12 : startMonth - 1;
+  const endYear = startMonth === 1 ? year : year + 1;
+  const endDay = new Date(endYear, endMonth, 0).getDate();
+  const em = String(endMonth).padStart(2, "0");
+  return {
+    start: `${year}-${sm}-01`,
+    end: `${endYear}-${em}-${String(endDay).padStart(2, "0")}`,
+  };
 }
 
 function toManYen(v: number) {
@@ -92,7 +99,8 @@ export async function getBiSettings(fiscalYear?: number): Promise<BiAnnualSettin
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const year = fiscalYear ?? getCurrentFiscalYear();
+  const fiscalMonthStart = await getCompanyFiscalMonthStart();
+  const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
 
   const { data, error } = await supabase
     .from("bi_annual_settings")
@@ -453,8 +461,11 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const year = fiscalYear ?? getCurrentFiscalYear();
-  const { start, end } = fiscalYearRange(year);
+  const fiscalMonthStart = await getCompanyFiscalMonthStart();
+  const MONTH_LABELS = buildFiscalMonthLabels(fiscalMonthStart);
+
+  const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
+  const { start, end } = fiscalYearRange(year, fiscalMonthStart);
   const companyConfig = await getBiCompanyConfig();
 
   const [{ data: constructions }, { data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }] = await Promise.all([
@@ -543,8 +554,8 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
     ?? Number(settings?.overhead_budget ?? 0);
   const baselineSga = budgetChanges.find((c) => c.field_name === "sga_budget")?.old_value
     ?? Number(settings?.sga_budget ?? 0);
-  let monthlyOverheadAllocations = buildMonthlyOverheadAllocations(year, baselineOverhead, budgetChanges);
-  const monthlySgaAllocations = buildMonthlyBudgetAllocations(year, "sga_budget", baselineSga, budgetChanges);
+  let monthlyOverheadAllocations = buildMonthlyOverheadAllocations(year, baselineOverhead, budgetChanges, fiscalMonthStart);
+  const monthlySgaAllocations = buildMonthlyBudgetAllocations(year, "sga_budget", baselineSga, budgetChanges, fiscalMonthStart);
 
   const actualRecords = collectRecords(
     companyConfig.actual_sources,
@@ -562,7 +573,7 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
     dept.grossProfit += toManYen(record.grossProfit);
 
     if (record.date) {
-      const monthIndex = fiscalMonthIndex(record.date);
+      const monthIndex = fiscalMonthIndex(record.date, fiscalMonthStart);
       const m = monthlyMap.get(monthIndex)!;
       const rev = toManYen(record.revenue);
       const gp = toManYen(record.grossProfit);
@@ -632,6 +643,7 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
     monthlySgaAllocations,
     forecastTiers,
     hasData,
+    fiscalMonthStart,
     sparklines,
     deltas: {
       grossProfitRatePt: hasData && prev.revenue > 0 ? Math.round((lastRate - prevRate) * 10) / 10 : null,
