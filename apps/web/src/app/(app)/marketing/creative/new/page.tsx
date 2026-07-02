@@ -11,9 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Save } from "lucide-react";
 import { createDocument } from "@/lib/actions/documents";
-import { createClient } from "@/lib/supabase/client";
-
-const STORAGE_BUCKET = "documents";
+import { uploadToStorage } from "@/lib/storage-browser";
 
 export default function MarketingCreativeNewPage() {
   const router = useRouter();
@@ -32,10 +30,8 @@ export default function MarketingCreativeNewPage() {
       let size = 0;
 
       if (file) {
-        const supabase = createClient();
         const path = `creative/${Date.now()}_${file.name}`;
-        const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file);
-        if (storageError) throw storageError;
+        await uploadToStorage("documents", path, file);
         storagePath = path;
         fileName = file.name;
         mimeType = file.type;

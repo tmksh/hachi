@@ -24,10 +24,9 @@ import {
   updateDocumentCategory, deleteDocumentCategory,
   type DocCategory,
 } from "@/lib/actions/documents";
-import { createClient } from "@/lib/supabase/client";
+import { uploadToStorage, getSignedStorageUrl } from "@/lib/storage-browser";
 
 type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
-const STORAGE_BUCKET = "documents";
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes}B`;
@@ -96,12 +95,10 @@ export function DocumentsClient({
     if (!uploadName.trim() || !uploadFile) { toast.error("名前とファイルを入力してください"); return; }
     setUploading(true);
     try {
-      const supabase = createClient();
       const ext = uploadFile.name.split(".").pop() ?? "bin";
       const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "");
       const path = `documents/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
-      const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, uploadFile);
-      if (storageError) throw storageError;
+      await uploadToStorage("documents", path, uploadFile);
 
       await createDocument({
         name: uploadName.trim(),
@@ -126,11 +123,9 @@ export function DocumentsClient({
 
   const handleDownload = async (storagePath: string, fileName: string) => {
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 3600);
-      if (error) throw error;
+      const signedUrl = await getSignedStorageUrl("documents", storagePath);
       const a = document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = signedUrl;
       a.download = fileName;
       a.click();
     } catch {

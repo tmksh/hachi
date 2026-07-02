@@ -39,7 +39,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
+import { uploadToStorage } from "@/lib/storage-browser";
 import { savePdfFormTemplate } from "@/lib/actions/pdf-form-templates";
 import {
   loadPdfDocument,
@@ -58,7 +58,6 @@ import {
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
 
-const STORAGE_BUCKET = "documents";
 
 type PaletteItem = {
   label: string;
@@ -173,10 +172,8 @@ export function PdfBuilderEditClient({
         sizes.push({ width: vp.width, height: vp.height });
       }
       // アップロード
-      const supabase = createClient();
       const path = `pdf-form-templates/${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`;
-      const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file);
-      if (error) throw error;
+      await uploadToStorage("documents", path, file);
 
       setDoc(d);
       setPageSizes(sizes);

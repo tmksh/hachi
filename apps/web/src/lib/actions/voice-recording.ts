@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadToStorageAsAdmin } from "@/lib/storage-server";
 import { resolveLinqAiConfig } from "@/lib/integrations/linq-ai/platform-config";
 import { processRecordingComplete } from "@/lib/actions/sales-flow";
 
@@ -39,13 +39,10 @@ export async function uploadVoiceRecording(formData: FormData): Promise<{
   const filename = `${Date.now()}.${ext}`;
   const storagePath = `${profile.company_id}/${customerId ?? "anonymous"}/${filename}`;
 
-  // Supabase Storage にアップロード
-  const admin = createAdminClient();
-  const { error: uploadError } = await admin.storage
-    .from("voice-recordings")
-    .upload(storagePath, audioBlob, { contentType: audioBlob.type, upsert: false });
-
-  if (uploadError) throw new Error(`アップロード失敗: ${uploadError.message}`);
+  await uploadToStorageAsAdmin("voice-recordings", storagePath, audioBlob, {
+    contentType: audioBlob.type,
+    upsert: false,
+  });
 
   const isAsync = audioBlob.size > ASYNC_THRESHOLD_BYTES || durationSec > ASYNC_THRESHOLD_SEC;
 

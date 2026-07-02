@@ -457,7 +457,7 @@ export function BiClient({
         {/* 2段目 */}
         <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/60">
           <Metric
-            label="予想粗利益（製造間接費）"
+            label="予算配賦（製造間接費）"
             value={settingsConfigured ? fmtSigned(grossProfitTotal) : "未設定"}
             sub={settingsConfigured ? `製造間接費 ▲¥${overheadForCalc.toLocaleString()}万` : "期首設定が必要"}
             negative={settingsConfigured && grossProfitTotal < 0}

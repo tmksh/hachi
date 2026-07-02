@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { uploadToStorage } from "@/lib/storage-server";
 import type { Document } from "@/lib/database.types";
 
 // ── ドキュメントカテゴリ ─────────────────────────────────────────────
@@ -164,8 +165,6 @@ export async function deleteDocument(id: string) {
   if (error) throw error;
 }
 
-const STORAGE_BUCKET = "documents";
-
 /** 確定した契約書 HTML をストレージ + documents テーブルへ保存 */
 export async function archiveContractDocumentHtml(input: {
   html: string;
@@ -184,10 +183,7 @@ export async function archiveContractDocumentHtml(input: {
   const path = `customers/${input.customer_id}/contracts/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}.html`;
   const bytes = Buffer.from(input.html, "utf-8");
 
-  const { error: storageError } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(path, bytes, { contentType: "text/html; charset=utf-8", upsert: false });
-  if (storageError) throw storageError;
+  await uploadToStorage("documents", path, bytes, { contentType: "text/html; charset=utf-8", upsert: false });
 
   const description = input.contract_id ? `source:contract:${input.contract_id}` : undefined;
   const fileName = `${input.name}.html`;

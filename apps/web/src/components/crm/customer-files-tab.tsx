@@ -29,12 +29,11 @@ import {
   getCustomerDocumentsAll, createDocument, deleteDocument,
   getDocumentCategories, type DocCategory,
 } from "@/lib/actions/documents";
-import { createClient } from "@/lib/supabase/client";
+import { uploadToStorage, getSignedStorageUrl } from "@/lib/storage-browser";
 
 type Doc = Awaited<ReturnType<typeof getCustomerDocumentsAll>>[number] & {
   construction?: { id: string; title: string } | null;
 };
-const STORAGE_BUCKET = "documents";
 
 export const CUSTOMER_DOCUMENTS_DESCRIPTION =
   "CRM・契約・工事からアップロードされた顧客関連ドキュメントを横断表示します。";
@@ -120,12 +119,10 @@ export function CustomerFilesTab({ customerId, constructionId, contractId, descr
     }
     setUploading(true);
     try {
-      const supabase = createClient();
       const ext = uploadFile.name.split(".").pop() ?? "bin";
       const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "");
       const path = `customers/${customerId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
-      const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, uploadFile);
-      if (storageError) throw storageError;
+      await uploadToStorage("documents", path, uploadFile);
 
       await createDocument({
         name: uploadName.trim(),
@@ -153,11 +150,9 @@ export function CustomerFilesTab({ customerId, constructionId, contractId, descr
 
   const handleDownload = async (storagePath: string, fileName: string) => {
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 3600);
-      if (error) throw error;
+      const signedUrl = await getSignedStorageUrl("documents", storagePath);
       const a = document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = signedUrl;
       a.download = fileName;
       a.click();
     } catch {

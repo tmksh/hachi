@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSignedStorageUrl } from "@/lib/storage-server";
 import {
   PDF_FORM_TEMPLATES_KEY,
   resolvePdfFormTemplates,
@@ -136,11 +137,9 @@ export async function deactivatePdfFormTemplate(id: string): Promise<void> {
 
 /** Storage 上の PDF への署名付きURLを返す（表示・差し込み用） */
 export async function getPdfFormTemplateUrl(storagePath: string): Promise<string | null> {
-  const { supabase } = await getCompanyContext();
-  const { data, error } = await supabase
-    .storage
-    .from("documents")
-    .createSignedUrl(storagePath, 3600);
-  if (error || !data) return null;
-  return data.signedUrl;
+  try {
+    return await getSignedStorageUrl("documents", storagePath);
+  } catch {
+    return null;
+  }
 }
