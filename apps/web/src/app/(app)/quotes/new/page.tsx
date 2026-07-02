@@ -15,8 +15,9 @@ import { getCustomers } from "@/lib/actions/customers";
 import { generateEstimateDraftForCustomer } from "@/lib/actions/sales-flow";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { EstimatePdfPreviewDialog, type EstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
+import { useBridgeChat } from "@/contexts/chat-panel-context";
 
-type DetailItem = { id: string; name: string; quantity: number; unit: string; selling_price: number };
+type DetailItem = { id: string; name: string; quantity: number; unit: string; cost_price: number; selling_price: number };
 type CategoryGroup = { id: string; name: string; items: DetailItem[]; collapsed: boolean };
 
 function uid() {
@@ -24,7 +25,7 @@ function uid() {
 }
 
 function newDetailItem(): DetailItem {
-  return { id: uid(), name: "", quantity: 1, unit: "式", selling_price: 0 };
+  return { id: uid(), name: "", quantity: 1, unit: "式", cost_price: 0, selling_price: 0 };
 }
 
 function newCategory(name = "本体工事"): CategoryGroup {
@@ -47,6 +48,7 @@ function mapEstimateToCategories(estimate: Awaited<ReturnType<typeof getEstimate
           name: item.name,
           quantity: Number(item.quantity) || 1,
           unit: item.unit ?? "式",
+          cost_price: Number(item.cost_price) || 0,
           selling_price: Number(item.selling_price) || 0,
         })),
     })).map((cat) => ({ ...cat, items: cat.items.length > 0 ? cat.items : [newDetailItem()] }));
@@ -62,6 +64,7 @@ function mapEstimateToCategories(estimate: Awaited<ReturnType<typeof getEstimate
         name: item.name,
         quantity: Number(item.quantity) || 1,
         unit: item.unit ?? "式",
+        cost_price: Number(item.cost_price) || 0,
         selling_price: Number(item.selling_price) || 0,
       })),
     }];
@@ -73,6 +76,7 @@ function mapEstimateToCategories(estimate: Awaited<ReturnType<typeof getEstimate
 function QuoteNewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { openBridgeChat } = useBridgeChat();
   const preCustomerId = searchParams.get("customer_id") ?? "";
   const copyFromId = searchParams.get("copy_from") ?? "";
   const dealTitle = searchParams.get("title");
@@ -100,6 +104,7 @@ function QuoteNewPageContent() {
           name: `${dealTitle} 一式`,
           quantity: 1,
           unit: "式",
+          cost_price: 0,
           selling_price: dealValue ? Number(dealValue) : 0,
         }],
       }];
@@ -142,6 +147,12 @@ function QuoteNewPageContent() {
     (sum, cat) => sum + cat.items.reduce((s, item) => s + item.quantity * item.selling_price, 0),
     0,
   );
+  const costTotal = categories.reduce(
+    (sum, cat) => sum + cat.items.reduce((s, item) => s + item.quantity * item.cost_price, 0),
+    0,
+  );
+  const grossProfit = subtotal - costTotal;
+  const grossProfitRate = subtotal > 0 ? Math.round((grossProfit / subtotal) * 1000) / 10 : 0;
   const tax = Math.floor(subtotal * 0.1);
   const total = subtotal + tax;
 
@@ -209,6 +220,7 @@ function QuoteNewPageContent() {
 
   const handleAiDraft = async () => {
     if (!customerId) return;
+    openBridgeChat();
     setAiLoading(true);
     try {
       const draft = await generateEstimateDraftForCustomer(customerId);
@@ -233,6 +245,7 @@ function QuoteNewPageContent() {
             name: item.name,
             quantity: item.quantity,
             unit: item.unit,
+            cost_price: item.costPrice ?? 0,
             selling_price: item.sellingPrice,
           })),
         })));
@@ -261,6 +274,7 @@ function QuoteNewPageContent() {
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
+        cost_price: item.cost_price,
         selling_price: item.selling_price,
       })),
     }));
@@ -331,7 +345,13 @@ function QuoteNewPageContent() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {copyFromId ? "見積書をコピー" : "新規見積作成"}
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5 truncate">顧客: {customerName}</p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <p className="text-sm text-muted-foreground truncate">顧客: {customerName}</p>
+              <span className="text-xs text-muted-foreground">見積番号: <span className="font-medium text-foreground">保存後に自動採番</span></span>
+              <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[11px] font-medium">
+                下書き
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 ml-auto">
@@ -425,6 +445,7 @@ function QuoteNewPageContent() {
                               <th className="text-left px-3 py-2 font-medium">詳細項目</th>
                               <th className="text-right px-3 py-2 font-medium w-24">数量</th>
                               <th className="text-center px-3 py-2 font-medium w-20">単位</th>
+                              <th className="text-right px-3 py-2 font-medium w-32">原価</th>
                               <th className="text-right px-3 py-2 font-medium w-32">単価</th>
                               <th className="text-right px-3 py-2 font-medium w-32">金額</th>
                               <th className="w-10" />
@@ -455,6 +476,15 @@ function QuoteNewPageContent() {
                                     value={item.unit}
                                     onChange={(e) => updateItem(cat.id, item.id, { unit: e.target.value })}
                                     className="h-8 text-center"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={item.cost_price}
+                                    onChange={(e) => updateItem(cat.id, item.id, { cost_price: Number(e.target.value) || 0 })}
+                                    className="h-8 text-right tabular-nums"
                                   />
                                 </td>
                                 <td className="px-3 py-2">
@@ -498,6 +528,14 @@ function QuoteNewPageContent() {
                 <p className="text-sm text-muted-foreground">
                   小計: <span className="font-semibold text-foreground tabular-nums">¥{subtotal.toLocaleString()}</span>
                 </p>
+                {costTotal > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    原価: <span className="tabular-nums">¥{costTotal.toLocaleString()}</span>
+                    <span className="mx-1.5">/</span>
+                    粗利: <span className="font-medium text-foreground tabular-nums">¥{grossProfit.toLocaleString()}</span>
+                    <span className="text-muted-foreground">（{grossProfitRate}%）</span>
+                  </p>
+                )}
                 <p className="text-lg font-bold tabular-nums">
                   合計（税込）: ¥{total.toLocaleString()}
                 </p>

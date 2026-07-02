@@ -6,6 +6,7 @@ type ChatPanelContextValue = {
   bridgeChatOpen: boolean;
   internalChatOpen: boolean;
   internalChatRefreshKey: number;
+  openBridgeChat: () => void;
   openInternalChat: () => void;
   refreshInternalChat: () => void;
 };
@@ -14,6 +15,7 @@ const ChatPanelContext = createContext<ChatPanelContextValue>({
   bridgeChatOpen: false,
   internalChatOpen: false,
   internalChatRefreshKey: 0,
+  openBridgeChat: () => {},
   openInternalChat: () => {},
   refreshInternalChat: () => {},
 });
@@ -21,11 +23,13 @@ const ChatPanelContext = createContext<ChatPanelContextValue>({
 export function ChatPanelProvider({
   open,
   internalChatOpen,
+  openBridgeChat,
   openInternalChat,
   children,
 }: {
   open: boolean;
   internalChatOpen: boolean;
+  openBridgeChat: () => void;
   openInternalChat: () => void;
   children: React.ReactNode;
 }) {
@@ -39,10 +43,11 @@ export function ChatPanelProvider({
       bridgeChatOpen: open,
       internalChatOpen,
       internalChatRefreshKey,
+      openBridgeChat,
       openInternalChat,
       refreshInternalChat,
     }),
-    [open, internalChatOpen, internalChatRefreshKey, openInternalChat, refreshInternalChat],
+    [open, internalChatOpen, internalChatRefreshKey, openBridgeChat, openInternalChat, refreshInternalChat],
   );
 
   return (
@@ -54,6 +59,11 @@ export function ChatPanelProvider({
 
 export function useChatPanelOpen() {
   return useContext(ChatPanelContext).bridgeChatOpen;
+}
+
+export function useBridgeChat() {
+  const { bridgeChatOpen, openBridgeChat } = useContext(ChatPanelContext);
+  return { bridgeChatOpen, openBridgeChat };
 }
 
 export function useInternalChat() {

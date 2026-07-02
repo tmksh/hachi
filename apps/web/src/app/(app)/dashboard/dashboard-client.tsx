@@ -47,6 +47,7 @@ import { useWidgets } from "@/hooks/use-widgets";
 import { useWidgetGridLayout } from "@/hooks/use-widget-grid-layout";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { useInternalChat } from "@/contexts/chat-panel-context";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDashboardData, useTodayAttendance } from "@/hooks/use-dashboard-data";
 import type { DashboardData } from "@/lib/queries/dashboard";
 import type { AttendanceEntry } from "@/lib/database.types";
@@ -104,6 +105,8 @@ export function DashboardClient({
   const [showBombPreview, setShowBombPreview] = useState(false);
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
+  const [clockOutTime, setClockOutTime] = useState<Date | null>(null);
+  const queryClient = useQueryClient();
   const { data, isLoading: loading } = useDashboardData(initialData);
   const { data: attendanceEntry } = useTodayAttendance(initialAttendance);
   const { data: unfollowedData, isLoading: unfollowedLoading } = useUnfollowedLeads(7, initialUnfollowedLeads);
@@ -129,22 +132,29 @@ export function DashboardClient({
     if (attendanceEntry?.clock_in_at) {
       setClockedIn(!attendanceEntry.clock_out_at);
       setClockInTime(new Date(attendanceEntry.clock_in_at));
+      setClockOutTime(attendanceEntry.clock_out_at ? new Date(attendanceEntry.clock_out_at) : null);
     }
   }, [attendanceEntry]);
 
   const handleClockIn = async () => {
     try {
       await clockInAction();
+      const now = new Date();
       setClockedIn(true);
-      setClockInTime(new Date());
-      toast.success("出勤しました", { description: format(new Date(), "HH:mm", { locale: ja }) });
+      setClockInTime(now);
+      setClockOutTime(null);
+      await queryClient.invalidateQueries({ queryKey: ["today-attendance"] });
+      toast.success("出勤しました", { description: format(now, "HH:mm", { locale: ja }) });
     } catch { toast.error("出勤打刻に失敗しました"); }
   };
   const handleClockOut = async () => {
     try {
       await clockOutAction();
+      const now = new Date();
       setClockedIn(false);
-      toast.success("退勤しました", { description: format(new Date(), "HH:mm", { locale: ja }) });
+      setClockOutTime(now);
+      await queryClient.invalidateQueries({ queryKey: ["today-attendance"] });
+      toast.success("退勤しました", { description: format(now, "HH:mm", { locale: ja }) });
     } catch { toast.error("退勤打刻に失敗しました"); }
   };
 
@@ -209,20 +219,24 @@ export function DashboardClient({
               <div className="flex flex-col items-center gap-1 shrink-0">
                 <p className="text-xl font-black tabular-nums leading-none text-white">{format(now, "HH:mm")}</p>
                 <div className="flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 transition-all ${clockedIn ? "bg-white" : "bg-white/50"}`} />
-                  <span className="text-[11px] text-white/90">{clockedIn ? "勤務中" : "未出勤"}</span>
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 transition-all ${clockedIn ? "bg-white" : clockOutTime ? "bg-white/70" : "bg-white/50"}`} />
+                  <span className="text-[11px] text-white/90">{clockedIn ? "勤務中" : clockOutTime ? "退勤済" : "未出勤"}</span>
                 </div>
                 <p className="text-[11px] text-white/70">
-                  {clockInTime ? `出勤 ${format(clockInTime, "HH:mm")}〜` : format(now, "M月d日（EEE）", { locale: ja })}
+                  {clockInTime && clockOutTime
+                    ? `出勤 ${format(clockInTime, "HH:mm")}〜退勤 ${format(clockOutTime, "HH:mm")}`
+                    : clockInTime
+                    ? `出勤 ${format(clockInTime, "HH:mm")}〜`
+                    : format(now, "M月d日（EEE）", { locale: ja })}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 shrink-0">
               <button
                 onClick={handleClockIn}
-                disabled={clockedIn}
+                disabled={clockedIn || !!clockOutTime}
                 className={`h-9 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:cursor-not-allowed ${
-                  clockedIn
+                  clockedIn || clockOutTime
                     ? "bg-white/15 text-white/50"
                     : "bg-white text-[#0F5132] shadow-sm hover:bg-white/95"
                 }`}

@@ -45,6 +45,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const pageBg = pathname?.startsWith("/dashboard2") ? BLUE_PAGE_BG : TEAL_PAGE_BG;
 
   const openInternalChat = useCallback(() => setInternalChatOpen(true), []);
+  const openBridgeChat = useCallback(() => setChatOpen(true), []);
 
   const mainStyle = useMemo(
     () =>
@@ -75,7 +76,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   }
 
   return (
-    <ChatPanelProvider open={chatOpen} internalChatOpen={internalChatOpen} openInternalChat={openInternalChat}>
+    <ChatPanelProvider open={chatOpen} internalChatOpen={internalChatOpen} openBridgeChat={openBridgeChat} openInternalChat={openInternalChat}>
       <div className="min-h-screen" style={{ backgroundColor: pageBg, ...mainStyle }}>
         <Sidebar
           profile={profile}
@@ -85,7 +86,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           onInternalChatOpen={openInternalChat}
         />
         <MobileNav profile={profile} />
-        <main className="mx-auto max-w-[1600px] min-w-0 pb-32 md:pb-0 md:pl-[var(--main-pl)] md:pr-[var(--main-pr)] transition-[padding] duration-300 ease-out">
+        <main className="w-full min-w-0 pb-32 md:pb-0 md:pl-[var(--main-pl)] md:pr-[var(--main-pr)] transition-[padding] duration-300 ease-out">
           {children}
         </main>
         <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />

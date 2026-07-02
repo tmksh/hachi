@@ -58,6 +58,7 @@ export type CreateEstimateCategoryInput = {
     name: string;
     quantity: number;
     unit: string;
+    cost_price?: number;
     selling_price: number;
   }>;
 };
@@ -78,19 +79,22 @@ export async function createEstimate(
   const flatItems: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">> = [];
   for (const category of normalizedCategories) {
     for (const item of category.items.filter((row) => row.name.trim())) {
+      const costPrice = item.cost_price ?? 0;
       const sellingAmount = Math.round(item.quantity * item.selling_price);
+      const costAmount = Math.round(item.quantity * costPrice);
+      const grossProfit = sellingAmount - costAmount;
       flatItems.push({
         name: item.name.trim(),
         description: null,
         specification: null,
         quantity: item.quantity,
         unit: item.unit,
-        cost_price: 0,
-        cost_amount: 0,
+        cost_price: costPrice,
+        cost_amount: costAmount,
         selling_price: item.selling_price,
         selling_amount: sellingAmount,
-        gross_profit: sellingAmount,
-        gross_profit_rate: 100,
+        gross_profit: grossProfit,
+        gross_profit_rate: sellingAmount > 0 ? Math.round((grossProfit / sellingAmount) * 1000) / 10 : 0,
         sort_order: flatItems.length,
         notes: null,
         category_id: null,
@@ -154,7 +158,10 @@ export async function createEstimate(
       return category.items
         .filter((row) => row.name.trim())
         .map((item) => {
+          const costPrice = item.cost_price ?? 0;
           const sellingAmount = Math.round(item.quantity * item.selling_price);
+          const costAmount = Math.round(item.quantity * costPrice);
+          const grossProfit = sellingAmount - costAmount;
           const row = {
             company_id: profile.company_id,
             estimate_id: estimate.id,
@@ -164,12 +171,12 @@ export async function createEstimate(
             specification: null,
             quantity: item.quantity,
             unit: item.unit,
-            cost_price: 0,
-            cost_amount: 0,
+            cost_price: costPrice,
+            cost_amount: costAmount,
             selling_price: item.selling_price,
             selling_amount: sellingAmount,
-            gross_profit: sellingAmount,
-            gross_profit_rate: 100,
+            gross_profit: grossProfit,
+            gross_profit_rate: sellingAmount > 0 ? Math.round((grossProfit / sellingAmount) * 1000) / 10 : 0,
             sort_order: sortOrder++,
             notes: null,
           };
