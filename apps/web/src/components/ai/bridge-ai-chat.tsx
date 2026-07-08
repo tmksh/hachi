@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Send, X, Loader2 } from "lucide-react";
 import { sendBridgeAiMessage } from "@/lib/actions/bridge-ai";
 
@@ -168,12 +168,19 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
             <div ref={bottomRef} />
           </div>
         )}
-        <div className="p-3 border-t flex gap-2">
-          <Input
+        <div className="p-3 border-t flex gap-2 items-end">
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="メッセージを入力..."
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+            placeholder="メッセージを入力...（Enterで改行、⌘/Ctrl+Enterで送信）"
+            rows={2}
+            className="min-h-[40px] max-h-32 resize-none [field-sizing:fixed]"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void send();
+              }
+            }}
             disabled={sending}
           />
           <Button size="icon" onClick={() => void send()} disabled={sending || !input.trim()}>
