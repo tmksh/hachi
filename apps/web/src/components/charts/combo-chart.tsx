@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { buildSignedTicks, linePath, areaPath } from "./chart-utils";
+import { buildSignedTicks, buildAsymmetricTicks, linePath, areaPath } from "./chart-utils";
 
 export type ComboBarSeries = {
   key: string;
@@ -82,7 +82,10 @@ export function ComboChart({
   const dataMin = Math.min(...allValues);
   const dataMax = Math.max(...allValues);
 
-  const ticks = buildSignedTicks(dataMin, dataMax, 2);
+  // 負値がないデータでは 0 起点の目盛りにする（昨対比較など正値のみのグラフ用）
+  const ticks = dataMin < 0
+    ? buildSignedTicks(dataMin, dataMax, 2)
+    : buildAsymmetricTicks(dataMin, dataMax, 4);
   const yMin = ticks[0];
   const yMax = ticks[ticks.length - 1];
 
