@@ -12,8 +12,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { DealActivity } from "@/lib/database.types";
-import { getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo } from "@/lib/actions/crm-features";
-import { Briefcase, Clock, Inbox, Plus, Save, ListTodo, Copy } from "lucide-react";
+import {
+  getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo,
+  assessDealConfidence, applyAssessedPriority,
+  type DealConfidenceAssessment,
+} from "@/lib/actions/crm-features";
+import { Briefcase, Clock, Inbox, Plus, Save, ListTodo, Copy, Sparkles, AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -24,6 +28,14 @@ const STAGE_LABELS: Record<string, string> = {
 
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   call: "電話", meeting: "面談", email: "メール", note: "メモ", visit: "訪問", stage_change: "ステージ変更",
+};
+
+const PRIORITY_LABELS: Record<string, string> = { high: "高", medium: "中", low: "低" };
+
+const VERDICT_META: Record<DealConfidenceAssessment["verdict"], { label: string; className: string }> = {
+  appropriate: { label: "妥当", className: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+  too_optimistic: { label: "甘い見込みの可能性", className: "text-amber-700 bg-amber-50 border-amber-300" },
+  too_pessimistic: { label: "慎重すぎる可能性", className: "text-sky-700 bg-sky-50 border-sky-200" },
 };
 
 type DealWithActivities = Awaited<ReturnType<typeof getCustomerDealsWithActivities>>[number];
@@ -53,6 +65,9 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const [summaryDraft, setSummaryDraft] = useState("");
   const [selection, setSelection] = useState("");
   const [saving, setSaving] = useState(false);
+  const [assessing, setAssessing] = useState(false);
+  const [assessment, setAssessment] = useState<DealConfidenceAssessment | null>(null);
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     getCustomerDealsWithActivities(customerId)
@@ -73,6 +88,40 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const selectDeal = (deal: DealWithActivities) => {
     setSelectedId(deal.id);
     setSummaryDraft(deal.summary ?? "");
+    setAssessment(null);
+  };
+
+  const runAssessment = async () => {
+    if (!selectedId) return;
+    setAssessing(true);
+    setAssessment(null);
+    try {
+      const result = await assessDealConfidence(selectedId);
+      if (result.ok) {
+        setAssessment(result.assessment);
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("確度判定に失敗しました");
+    } finally {
+      setAssessing(false);
+    }
+  };
+
+  const applySuggestion = async () => {
+    if (!selectedId || !assessment) return;
+    setApplying(true);
+    try {
+      await applyAssessedPriority(selectedId, assessment.suggestedPriority, assessment.reasons.join(" / "));
+      setDeals((prev) => prev.map((d) => d.id === selectedId ? { ...d, priority: assessment.suggestedPriority } : d));
+      setAssessment({ ...assessment, currentPriority: assessment.suggestedPriority, verdict: "appropriate" });
+      toast.success(`確度を「${PRIORITY_LABELS[assessment.suggestedPriority]}」に修正しました`);
+    } catch {
+      toast.error("確度の修正に失敗しました");
+    } finally {
+      setApplying(false);
+    }
   };
 
   const saveSummary = async () => {
@@ -173,6 +222,9 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               <Badge variant="outline" className="text-[10px] h-5 shrink-0">
                 {STAGE_LABELS[selected.stage ?? ""] ?? selected.stage}
               </Badge>
+              <Badge variant="secondary" className="text-[10px] h-5 shrink-0">
+                確度 {PRIORITY_LABELS[selected.priority ?? ""] ?? selected.priority}
+              </Badge>
               {selected.value != null && (
                 <span className="text-sm font-semibold tabular-nums">¥{selected.value.toLocaleString()}</span>
               )}
@@ -233,6 +285,65 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               {saving ? "保存中..." : "要約を保存"}
             </Button>
           </div>
+        </div>
+
+        <div className="pt-2 border-t border-border/40 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-[#0F5132]" />
+                AI確度判定
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ステージ・経過日数・活動履歴から入力確度の妥当性をAIが判定します
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => void runAssessment()} disabled={assessing} className="gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              {assessing ? "判定中..." : "AIで確度を判定"}
+            </Button>
+          </div>
+
+          {assessment && (
+            <div className={cn("rounded-lg border p-3 space-y-2.5", VERDICT_META[assessment.verdict].className)}>
+              <div className="flex flex-wrap items-center gap-2">
+                {assessment.verdict === "appropriate"
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : assessment.verdict === "too_optimistic"
+                    ? <AlertTriangle className="h-4 w-4 shrink-0" />
+                    : <TrendingUp className="h-4 w-4 shrink-0" />}
+                <span className="text-sm font-semibold">{VERDICT_META[assessment.verdict].label}</span>
+                <span className="text-xs">
+                  入力確度「{PRIORITY_LABELS[assessment.currentPriority] ?? assessment.currentPriority}」
+                  {assessment.suggestedPriority !== assessment.currentPriority &&
+                    ` → AI提案「${PRIORITY_LABELS[assessment.suggestedPriority]}」`}
+                </span>
+                <span className="text-[11px] ml-auto">判定確信度 {assessment.confidence}%</span>
+              </div>
+              {assessment.reasons.length > 0 && (
+                <ul className="text-xs space-y-1">
+                  {assessment.reasons.map((r, i) => (
+                    <li key={i} className="flex gap-1.5">
+                      <span className="shrink-0">・</span>
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {assessment.advice && (
+                <p className="text-xs border-t border-current/15 pt-2">
+                  <span className="font-semibold">提案: </span>{assessment.advice}
+                </p>
+              )}
+              {assessment.suggestedPriority !== assessment.currentPriority && (
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={() => void applySuggestion()} disabled={applying} className="gap-1.5 h-7 text-xs">
+                    {applying ? "反映中..." : `確度を「${PRIORITY_LABELS[assessment.suggestedPriority]}」に修正`}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="pt-2 border-t border-border/40 space-y-3">

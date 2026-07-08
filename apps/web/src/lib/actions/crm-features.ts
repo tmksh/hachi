@@ -516,6 +516,160 @@ export async function updateDealSummary(dealId: string, summary: string) {
   return data;
 }
 
+// ── AI確度判定 ─────────────────────────────────────────────
+
+export type DealConfidenceVerdict = "appropriate" | "too_optimistic" | "too_pessimistic";
+
+export type DealConfidenceAssessment = {
+  verdict: DealConfidenceVerdict;
+  suggestedPriority: "high" | "medium" | "low";
+  currentPriority: string;
+  confidence: number;
+  reasons: string[];
+  advice: string;
+};
+
+const DEAL_STAGE_LABELS: Record<string, string> = {
+  inquiry: "問い合わせ", first_meeting: "初回面談", materials_sent: "資料送付",
+  quote_submitted: "見積提出", negotiation: "商談中", closing: "クロージング",
+  won: "受注", lost: "失注", lead: "リード", proposal: "提案中",
+};
+
+const PRIORITY_JA: Record<string, string> = { high: "高", medium: "中", low: "低" };
+
+function daysBetween(from: string | Date, to: Date = new Date()): number {
+  return Math.floor((to.getTime() - new Date(from).getTime()) / 86_400_000);
+}
+
+/**
+ * 営業が入力した見込み確度（priority: 高/中/低）の妥当性を、
+ * 商談データ（ステージ・経過日数・活動履歴・録音要約・ToDo）からAIが判定する。
+ */
+export async function assessDealConfidence(dealId: string): Promise<
+  | { ok: true; assessment: DealConfidenceAssessment }
+  | { ok: false; message: string }
+> {
+  const { supabase } = await getCompanyContext();
+
+  const config = await resolveLinqAiConfig();
+  if (!config.enabled || !config.apiKey) {
+    return { ok: false, message: "AI機能が設定されていません。管理者にお問い合わせください。" };
+  }
+
+  const { data: deal, error } = await supabase.from("deals").select("*").eq("id", dealId).single();
+  if (error || !deal) return { ok: false, message: "商談が見つかりませんでした。" };
+
+  const [{ data: activities }, { data: recordings }, { data: todos }] = await Promise.all([
+    supabase.from("deal_activities").select("type, title, description, performed_at")
+      .eq("deal_id", dealId).order("performed_at", { ascending: false }).limit(15),
+    supabase.from("customer_recordings").select("summary, recorded_at")
+      .eq("deal_id", dealId).order("recorded_at", { ascending: false }).limit(3),
+    supabase.from("todos").select("title, status, due_date")
+      .eq("deal_id", dealId).limit(10),
+  ]);
+
+  const now = new Date();
+  const daysSinceCreated = daysBetween(deal.created_at, now);
+  const lastActivityAt = activities?.[0]?.performed_at ?? deal.updated_at;
+  const daysSinceLastActivity = daysBetween(lastActivityAt, now);
+  const daysToClose = deal.expected_close_date ? -daysBetween(now, new Date(deal.expected_close_date)) : null;
+
+  const activityLines = (activities ?? []).map((a) =>
+    `- ${format(new Date(a.performed_at), "MM/dd", { locale: ja })} [${a.type}] ${a.title}${a.description ? `: ${String(a.description).slice(0, 80)}` : ""}`
+  );
+  const recordingLines = (recordings ?? [])
+    .filter((r) => r.summary?.trim())
+    .map((r) => `- ${format(new Date(r.recorded_at), "MM/dd", { locale: ja })} ${String(r.summary).slice(0, 200)}`);
+  const openTodos = (todos ?? []).filter((t) => t.status !== "completed");
+
+  const prompt = `以下の商談について、営業担当が入力した見込み確度「${PRIORITY_JA[deal.priority] ?? deal.priority}」が妥当かを判定してください。
+
+【商談情報】
+- 商談名: ${deal.title}
+- ステージ: ${DEAL_STAGE_LABELS[deal.stage] ?? deal.stage}
+- 金額: ${deal.value != null ? `¥${Number(deal.value).toLocaleString()}` : "未設定"}
+- 入力された確度: ${PRIORITY_JA[deal.priority] ?? deal.priority}
+- 商談開始からの経過日数: ${daysSinceCreated}日
+- 最終活動からの経過日数: ${daysSinceLastActivity}日
+- クロージング予定: ${deal.expected_close_date ?? "未設定"}${daysToClose != null ? `（${daysToClose >= 0 ? `あと${daysToClose}日` : `${-daysToClose}日超過`}）` : ""}
+- 次アクション: ${deal.next_action ?? "未設定"}
+- 商談要約: ${deal.summary?.trim() ? String(deal.summary).slice(0, 300) : "なし"}
+
+【活動履歴（新しい順）】
+${activityLines.length > 0 ? activityLines.join("\n") : "活動記録なし"}
+
+【商談録音の要約】
+${recordingLines.length > 0 ? recordingLines.join("\n") : "録音なし"}
+
+【未完了ToDo】
+${openTodos.length > 0 ? openTodos.map((t) => `- ${t.title}${t.due_date ? `（期限 ${t.due_date}）` : ""}`).join("\n") : "なし"}
+
+【判定基準】
+- 活動が長期間止まっている・クロージング予定超過・次アクション未設定なのに確度「高」→ 甘い見込みの可能性
+- ステージが浅い（問い合わせ・初回面談）のに確度「高」→ 根拠を確認
+- ステージが深く（クロージング等）活動も活発なのに確度「低」→ 慎重すぎる可能性
+- 録音要約・活動内容にある顧客の温度感（前向き発言・懸念・競合など）を重視
+
+JSONのみ返してください（説明文不要）:
+{"verdict":"appropriate|too_optimistic|too_pessimistic","suggestedPriority":"high|medium|low","confidence":85,"reasons":["40文字以内の根拠を最大3つ"],"advice":"営業担当への次アクション提案を60文字以内で"}`;
+
+  const raw = await callLlm(
+    prompt,
+    config,
+    "あなたは工務店・リフォーム会社の営業マネージャーです。商談の見込み確度を客観的なデータに基づいて厳しくレビューします。",
+  );
+  if (!raw) return { ok: false, message: "AIからの応答を取得できませんでした。" };
+
+  try {
+    const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+    const parsed = JSON.parse((match?.[1] ?? raw).trim()) as {
+      verdict?: string;
+      suggestedPriority?: string;
+      confidence?: number;
+      reasons?: string[];
+      advice?: string;
+    };
+    const verdict = (["appropriate", "too_optimistic", "too_pessimistic"] as const)
+      .find((v) => v === parsed.verdict) ?? "appropriate";
+    const suggestedPriority = (["high", "medium", "low"] as const)
+      .find((p) => p === parsed.suggestedPriority) ?? (deal.priority as "high" | "medium" | "low");
+    return {
+      ok: true,
+      assessment: {
+        verdict,
+        suggestedPriority,
+        currentPriority: deal.priority,
+        confidence: Math.min(100, Math.max(0, Math.round(parsed.confidence ?? 50))),
+        reasons: (parsed.reasons ?? []).slice(0, 3).map((r) => String(r)),
+        advice: String(parsed.advice ?? ""),
+      },
+    };
+  } catch {
+    return { ok: false, message: "AIの判定結果を解析できませんでした。もう一度お試しください。" };
+  }
+}
+
+/** AI判定の修正提案を反映し、タイムラインに記録を残す */
+export async function applyAssessedPriority(dealId: string, priority: "high" | "medium" | "low", reason: string) {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const { data: before } = await supabase.from("deals").select("priority").eq("id", dealId).single();
+  const { data, error } = await supabase.from("deals")
+    .update({ priority, updated_at: new Date().toISOString() })
+    .eq("id", dealId).select().single();
+  if (error) throw error;
+
+  await supabase.from("deal_activities").insert({
+    company_id,
+    deal_id: dealId,
+    type: "note",
+    title: `AI確度判定により確度を「${PRIORITY_JA[before?.priority ?? ""] ?? before?.priority}」→「${PRIORITY_JA[priority]}」に修正`,
+    description: reason || null,
+    performed_by: user_id,
+  });
+
+  return data;
+}
+
 export async function generateEightId(companyId: string): Promise<string> {
   const supabase = await createClient();
   const { count } = await supabase
