@@ -245,6 +245,8 @@ export function BiClient({
   const [showTheoretical, setShowTheoretical] = useState(true);
   const [settings, setSettings] = useState<BiAnnualSettings | null>(initialSettings);
   const [actuals, setActuals] = useState<BiActuals | null>(initialActuals);
+  const [prevActuals, setPrevActuals] = useState<BiActuals | null>(null);
+  const [yoyMode, setYoyMode] = useState<"cumulative" | "monthly">("cumulative");
   const [settingsLoaded, setSettingsLoaded] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(getCurrentFiscalYear());
@@ -267,8 +269,12 @@ export function BiClient({
 
   const loadBiData = useCallback((silent = false) => {
     if (!silent) setSettingsLoaded(false);
-    return Promise.all([getBiSettings(fiscalYear), getBiActuals(fiscalYear)])
-      .then(([s, a]) => { setSettings(s); setActuals(a); })
+    return Promise.all([
+      getBiSettings(fiscalYear),
+      getBiActuals(fiscalYear),
+      getBiActuals(fiscalYear - 1),
+    ])
+      .then(([s, a, p]) => { setSettings(s); setActuals(a); setPrevActuals(p); })
       .finally(() => setSettingsLoaded(true));
   }, [fiscalYear]);
 
@@ -354,6 +360,48 @@ export function BiClient({
     overheadForCalc,
     forecastStartIndex,
   );
+
+  // ── 昨対比較（売上・月次/累計） ──────────────────────────────────
+  const prevMonthly = prevActuals?.monthly ?? makeFallbackMonthly(fiscalMonthStart);
+  const hasPrevData = prevActuals?.hasData ?? false;
+  // 過去年度を選択中は全月が実績。当年度のみ未到来月を除外
+  const isCurrentFY = fiscalYear === getCurrentFiscalYear(fiscalMonthStart);
+  const yoyActualEndIdx = isCurrentFY ? forecastStartIndex : 12;
+
+  const yoyRows = (() => {
+    let curCum = 0;
+    let prevCum = 0;
+    return monthlyActuals.map((m, i) => {
+      const prevRev = prevMonthly[i]?.revenue ?? 0;
+      const isFuture = i >= yoyActualEndIdx;
+      if (!isFuture) curCum += m.revenue;
+      prevCum += prevRev;
+      return {
+        month: m.month,
+        isFuture,
+        current: m.revenue,
+        prev: prevRev,
+        currentCum: curCum,
+        prevCum,
+        monthlyRatio: !isFuture && prevRev > 0 ? r1((m.revenue / prevRev) * 100) : null,
+        cumulativeRatio: !isFuture && prevCum > 0 ? r1((curCum / prevCum) * 100) : null,
+      };
+    });
+  })();
+
+  const curAnnualRevenue = yoyRows.length > 0 ? yoyRows[yoyActualEndIdx - 1]?.currentCum ?? 0 : 0;
+  const prevAnnualRevenue = prevMonthly.reduce((s, m) => s + m.revenue, 0);
+  const annualYoYRatio = prevAnnualRevenue > 0 ? r1((curAnnualRevenue / prevAnnualRevenue) * 100) : null;
+
+  const yoyChartData = yoyRows.map((row) => ({
+    month: row.month,
+    当期: yoyMode === "cumulative" ? (row.isFuture ? 0 : row.currentCum) : (row.isFuture ? 0 : row.current),
+    前期: yoyMode === "cumulative" ? row.prevCum : row.prev,
+  }));
+
+  const yoyRatioClass = (ratio: number | null) =>
+    ratio == null ? "text-muted-foreground" : ratio >= 100 ? "text-[var(--brand-dark)]" : "text-rose-500";
+  const fmtRatio = (ratio: number | null) => (ratio == null ? "—" : `${ratio}%`);
 
   return (
     <div className="p-4 md:p-6 space-y-4 min-h-screen">
@@ -719,6 +767,123 @@ export function BiClient({
         <p className="px-5 pb-4 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
           <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
           全社の月次予定配賦は年額 ÷ 12 で均等配賦しています。部門ビューの配賦は当月の売上構成比による按分です。
+        </p>
+      </BiPanel>
+
+      {/* ─────────────────────────────────────────────────────── */}
+      {/* 昨対比較                                                */}
+      {/* ─────────────────────────────────────────────────────── */}
+      <SectionHeader
+        icon={TrendingUp}
+        title="昨対比較"
+        right={
+          <span className="text-[11px] text-muted-foreground">
+            {fiscalYearLabel(fiscalYear)} vs {fiscalYearLabel(fiscalYear - 1)}
+          </span>
+        }
+      />
+
+      <BiPanel
+        title={`売上昨対比（${yoyMode === "cumulative" ? "累計" : "月次"}）`}
+        description={hasPrevData
+          ? `${fiscalYearLabel(fiscalYear - 1)}実績との比較（売上ベース）`
+          : `${fiscalYearLabel(fiscalYear - 1)}の実績データがないため比較できません`}
+        headerRight={
+          <div className="flex items-center rounded-md border border-border/60 p-0.5 gap-0.5">
+            {([["cumulative", "累計"], ["monthly", "月次"]] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setYoyMode(mode)}
+                className={cn(
+                  "px-2.5 py-1 text-[11px] rounded transition-colors",
+                  yoyMode === mode
+                    ? "bg-[var(--brand-dark)] text-white font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <div className="h-[200px] sm:h-[240px] overflow-visible">
+          <ComboChart
+            data={yoyChartData}
+            labelKey="month"
+            height={220}
+            unit="万"
+            centered
+            forecastFromIndex={isCurrentFY ? forecastStartIndex : undefined}
+            gridColor={CHART_ACCENT}
+            labelColor={CHART_PRIMARY}
+            tickColor={CHART_PRIMARY}
+            bars={[
+              { key: "当期", label: `当期（${fiscalYearLabel(fiscalYear)}）`, fill: CHART_DARK },
+              { key: "前期", label: `前期（${fiscalYearLabel(fiscalYear - 1)}）`, fill: CHART_MID },
+            ]}
+            formatValue={(v) => `¥${Math.abs(v).toLocaleString()}万`}
+          />
+        </div>
+      </BiPanel>
+
+      <BiPanel title="昨対比 月次明細" description="月別売上と累計の昨対比。年度合計は最下行" flush>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-xs" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
+                <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">月</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">当期売上</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">前期売上</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">昨対比（月次）</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">当期累計</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">前期累計</th>
+                <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">累計昨対比</th>
+              </tr>
+            </thead>
+            <tbody>
+              {yoyRows.map((row, i) => (
+                <tr
+                  key={`${row.month}-${i}`}
+                  className={cn("border-b last:border-0 transition-colors", row.isFuture && "opacity-45")}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "")}
+                >
+                  <td className="px-5 py-2.5 font-medium text-foreground whitespace-nowrap">{row.month}</td>
+                  <td className="text-right px-4 py-2.5 tabular-nums">
+                    {row.isFuture ? "—" : fmtMan(row.current)}
+                  </td>
+                  <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">{fmtMan(row.prev)}</td>
+                  <td className={cn("text-right px-4 py-2.5 tabular-nums font-semibold", yoyRatioClass(row.monthlyRatio))}>
+                    {row.isFuture ? "—" : fmtRatio(row.monthlyRatio)}
+                  </td>
+                  <td className="text-right px-4 py-2.5 tabular-nums">
+                    {row.isFuture ? "—" : fmtMan(row.currentCum)}
+                  </td>
+                  <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">{fmtMan(row.prevCum)}</td>
+                  <td className={cn("text-right px-5 py-2.5 tabular-nums font-semibold", yoyRatioClass(row.cumulativeRatio))}>
+                    {row.isFuture ? "—" : fmtRatio(row.cumulativeRatio)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t-2 font-semibold" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
+                <td className="px-5 py-3">年度合計</td>
+                <td className="text-right px-4 py-3 tabular-nums">{fmtMan(curAnnualRevenue)}</td>
+                <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{fmtMan(prevAnnualRevenue)}</td>
+                <td className="text-right px-4 py-3 text-muted-foreground text-xs">—</td>
+                <td className="text-right px-4 py-3 tabular-nums">{fmtMan(curAnnualRevenue)}</td>
+                <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{fmtMan(prevAnnualRevenue)}</td>
+                <td className={cn("text-right px-5 py-3 tabular-nums font-bold", yoyRatioClass(annualYoYRatio))}>
+                  {fmtRatio(annualYoYRatio)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="px-5 pb-4 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
+          <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
+          累計昨対比＝当期の月次累計 ÷ 前期の同月までの累計。当年度の未到来月は「—」表示。前期実績が0の月は比較不能のため「—」となります。
         </p>
       </BiPanel>
 
