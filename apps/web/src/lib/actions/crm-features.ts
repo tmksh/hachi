@@ -3,6 +3,7 @@
 import { addDays, format, isSunday, setHours, setMinutes, startOfDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/server";
+import { callLlm, resolveLinqAiConfig } from "@/lib/integrations/linq-ai";
 
 async function getCompanyContext() {
   const supabase = await createClient();
@@ -76,6 +77,91 @@ function buildNote(
   if (meetingType === "in_person" && score < 75) return "移動時間を考慮した候補";
   if (score >= 85) return "空き時間が多い日";
   return "カレンダー空きを基準に選定";
+}
+
+const MEETING_TYPE_LABEL: Record<"in_person" | "online" | "phone", string> = {
+  in_person: "対面",
+  online: "オンライン",
+  phone: "電話",
+};
+
+/** その日の既存予定の状況（AIプロンプト用のコンテキスト） */
+function dayStats(dateKey: string, blocks: BusyBlock[]) {
+  const target = startOfDay(new Date(dateKey)).getTime();
+  const dayBlocks = blocks.filter((b) => startOfDay(b.start).getTime() === target);
+  return { events: dayBlocks.length, offsite: dayBlocks.some((b) => !!b.location?.trim()) };
+}
+
+/**
+ * 空き候補（重複なしが保証済み）をLLMで営業効率順にランク付け・理由付けする。
+ * AI未設定・失敗時は null を返し、呼び出し側でルールベースにフォールバックする。
+ */
+async function rankCandidatesWithAi(
+  options: SchedulingCandidate[],
+  blocks: BusyBlock[],
+  meetingType: "in_person" | "online" | "phone",
+  durationMinutes: number,
+): Promise<SchedulingCandidate[] | null> {
+  if (options.length === 0) return null;
+
+  const config = await resolveLinqAiConfig();
+  if (!config.enabled || !config.apiKey) return null;
+
+  // トークン・コスト抑制のため直近20件までをAIに渡す
+  const subset = options.slice(0, 20);
+  const lines = subset.map((o, i) => {
+    const { events, offsite } = dayStats(o.date, blocks);
+    return `${i}: ${o.displayLabel} / その日の既存予定 ${events}件${offsite ? "（外出あり）" : ""}`;
+  });
+
+  const prompt = `あなたは工務店・リフォーム会社の営業スケジュール最適化アシスタントです。
+以下は既存予定と重複しない「空いている」商談候補日時のリストです。
+面談区分: ${MEETING_TYPE_LABEL[meetingType]}
+所要時間: ${durationMinutes}分
+
+候補一覧（index: 日時 / その日の状況）:
+${lines.join("\n")}
+
+営業効率の観点で最適な候補を最大5件、良い順に選び、JSONのみ返してください（説明文不要）:
+{"ranking":[{"index":0,"score":95,"reason":"20文字以内の理由"}]}
+
+評価基準:
+- 対面はその日に外出予定がある日にまとめると移動効率が良い
+- 予定が少ない日は準備・対応に余裕がある
+- 電話・オンラインは予定の隙間でも設定しやすい
+- 直近すぎず、かつ早めに実施できる日程を優先
+- scoreは0〜100の整数`;
+
+  const raw = await callLlm(prompt, config, "あなたは営業効率を最大化するスケジュール調整のプロです。");
+  if (!raw) return null;
+
+  try {
+    const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+    const parsed = JSON.parse((match?.[1] ?? raw).trim()) as {
+      ranking?: Array<{ index?: number; score?: number; reason?: string }>;
+    };
+    const ranking = parsed.ranking;
+    if (!Array.isArray(ranking) || ranking.length === 0) return null;
+
+    const seen = new Set<number>();
+    const ranked: SchedulingCandidate[] = [];
+    for (const r of ranking) {
+      const idx = typeof r.index === "number" ? r.index : Number(r.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= subset.length || seen.has(idx)) continue;
+      seen.add(idx);
+      const base = subset[idx];
+      const score = Math.min(100, Math.max(0, Math.round(Number(r.score ?? 0))));
+      ranked.push({
+        ...base,
+        aiScore: Number.isFinite(score) && score > 0 ? score : 60,
+        note: r.reason?.trim() ? r.reason.trim().slice(0, 40) : "AIが営業効率を考慮して選定",
+      });
+      if (ranked.length >= 5) break;
+    }
+    return ranked.length > 0 ? ranked : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchBusyBlocks(
@@ -183,10 +269,21 @@ export async function proposeSchedulingCandidates(input: {
     }
   }
 
-  const candidates = (input.ai_optimized
-    ? [...options].sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
-    : options
-  ).slice(0, 5);
+  let aiPowered = false;
+  let candidates: SchedulingCandidate[];
+
+  if (input.ai_optimized) {
+    // まずLLMで営業効率順にランク付け。失敗時はルールベーススコアにフォールバック
+    const aiRanked = await rankCandidatesWithAi(options, blocks, input.meeting_type, input.duration_minutes);
+    if (aiRanked && aiRanked.length > 0) {
+      candidates = aiRanked;
+      aiPowered = true;
+    } else {
+      candidates = [...options].sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0)).slice(0, 5);
+    }
+  } else {
+    candidates = options.slice(0, 5);
+  }
 
   if (candidates.length === 0) {
     const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
@@ -203,6 +300,7 @@ export async function proposeSchedulingCandidates(input: {
     candidates,
     calendarLinked,
     usedAi: !!input.ai_optimized,
+    aiPowered,
     exhausted: candidates.length === 0,
   };
 }

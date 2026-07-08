@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, Calendar, Loader2, Sparkles } from "lucide-react";
+import { Calendar, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   proposeSchedulingCandidates,
@@ -22,6 +22,7 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
   const [duration, setDuration] = useState("60");
   const [candidates, setCandidates] = useState<SchedulingCandidate[]>([]);
   const [aiOptimized, setAiOptimized] = useState(false);
+  const [aiPowered, setAiPowered] = useState(false);
   const [calendarLinked, setCalendarLinked] = useState(false);
   const [loadingMode, setLoadingMode] = useState<"basic" | "ai" | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,15 +40,18 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
       });
       setCandidates(result.candidates);
       setAiOptimized(result.usedAi);
+      setAiPowered(result.aiPowered ?? false);
       setCalendarLinked(result.calendarLinked);
       if (result.candidates.length === 0) {
         toast.error("空きのある候補日が見つかりませんでした（ToDo・お知らせに通知しました）");
         return;
       }
       toast.success(
-        optimized
-          ? "カレンダー空きを基準に候補日を最適化しました"
-          : "候補日を提案しました",
+        !optimized
+          ? "候補日を提案しました"
+          : result.aiPowered
+            ? "AIがカレンダーの空きと営業効率を考慮して最適化しました"
+            : "カレンダー空きを基準に候補日を最適化しました（AI未設定のためルールベース）",
       );
     } catch {
       toast.error("候補日の提案に失敗しました");
@@ -170,11 +174,11 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
                 ? "Googleカレンダーとアプリ内予定を参照して空き時間から提案します。"
                 : "アプリ内カレンダーの予定を参照します。Google連携はカレンダー画面から設定できます。"}
             </p>
-            <div className="rounded-md border border-amber-200/80 bg-amber-50/70 px-2.5 py-2 text-[11px] text-amber-950 leading-relaxed">
+            <div className="rounded-md border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-2 text-[11px] text-emerald-950 leading-relaxed">
               <div className="flex gap-2">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <Sparkles className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                 <p>
-                  AI最適化は現時点ではルールベースです。本格的な AI 判断は外部 API 連携後に対応予定です。
+                  「AIで最適化」は、カレンダーの空きと当日の予定状況をAIが分析し、営業効率の高い順に候補日を提案します（AI未設定時はルールベースで動作）。
                 </p>
               </div>
             </div>
@@ -187,7 +191,7 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
           <CardTitle className="text-sm font-semibold">提案候補日</CardTitle>
           <CardDescription className="text-xs mt-1">
             {candidates.length > 0
-              ? `${candidates.length}件${aiOptimized ? "（最適化済み）" : ""}`
+              ? `${candidates.length}件${aiPowered ? "（AI最適化済み）" : aiOptimized ? "（最適化済み）" : ""}`
               : "左の条件で候補日を生成"}
           </CardDescription>
         </CardHeader>

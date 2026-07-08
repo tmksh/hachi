@@ -128,7 +128,7 @@ async function callGemini(prompt: string, config: LinqAiConfig): Promise<string 
 }
 
 /** プラットフォーム共通 LLM 呼び出し（OpenAI / Anthropic / Google 対応） */
-async function callLlm(prompt: string, config: LinqAiConfig, systemPrompt?: string): Promise<string | null> {
+export async function callLlm(prompt: string, config: LinqAiConfig, systemPrompt?: string): Promise<string | null> {
   if (!config.enabled || !config.apiKey) return null;
   switch (config.provider) {
     case "openai":
