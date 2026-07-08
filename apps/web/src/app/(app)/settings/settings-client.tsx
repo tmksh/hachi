@@ -90,6 +90,8 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { updateProfile, getCompany, updateCompany } from "@/lib/actions/profiles";
+import { getBiCompanyConfig, saveBiCompanyConfig } from "@/lib/actions/bi";
+import type { BiCompanyConfig } from "@/lib/bi-config";
 import { getMailSignature, saveMailSignature } from "@/lib/actions/mail";
 import {
   listTeamMembers,
@@ -225,6 +227,9 @@ export function SettingsClient({
   const [cloudsignApiKey, setCloudsignApiKey] = useState(formDefaults.cloudsignApiKey);
   const [savingCompany, setSavingCompany] = useState(false);
 
+  // 見込度 A/B/C の確度%（bi_company_config に保存）
+  const [biConfig, setBiConfig] = useState<BiCompanyConfig | null>(null);
+
   // 署名
   const [signature, setSignature] = useState(initialSignature);
   const [savingSignature, setSavingSignature] = useState(false);
@@ -312,6 +317,11 @@ export function SettingsClient({
     }
   }, [profile]);
 
+  useEffect(() => {
+    if (!canEditCompany) return;
+    getBiCompanyConfig().then(setBiConfig).catch(() => {});
+  }, [canEditCompany]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -346,6 +356,7 @@ export function SettingsClient({
           api_key: cloudsignApiKey || undefined,
         },
       });
+      if (biConfig) await saveBiCompanyConfig(biConfig);
       setCompany(updated);
       toast.success("会社情報を更新しました");
     } catch {
@@ -788,6 +799,43 @@ export function SettingsClient({
                         <div className="space-y-2 sm:col-span-3">
                           <Label>住所</Label>
                           <Input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} placeholder="東京都〇〇区〇〇 1-2-3" />
+                        </div>
+                        <div className="space-y-2 sm:col-span-3 pt-2 border-t border-border">
+                          <Label>見込度（A/B/C）の確度%</Label>
+                          <p className="text-xs text-muted-foreground">
+                            顧客の見込度をBIダッシュボードの見込み売上に反映する際の掛け率です
+                          </p>
+                          {biConfig ? (
+                            <div className="grid grid-cols-3 gap-4 max-w-md">
+                              {(["A", "B", "C"] as const).map((grade) => (
+                                <div key={grade} className="space-y-1">
+                                  <span className="text-xs text-muted-foreground">見込 {grade}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      className="tabular-nums"
+                                      value={biConfig.prospect_grade_rates[grade]}
+                                      onChange={(e) =>
+                                        setBiConfig((prev) => prev && ({
+                                          ...prev,
+                                          prospect_grade_rates: {
+                                            ...prev.prospect_grade_rates,
+                                            [grade]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <span className="text-sm text-muted-foreground">%</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <Skeleton className="h-9 w-full max-w-md" />
+                          )}
                         </div>
                         <div className="space-y-2 sm:col-span-3 pt-2 border-t border-border">
                           <Label>クラウドサイン連携（B案: 顧客別契約）</Label>
