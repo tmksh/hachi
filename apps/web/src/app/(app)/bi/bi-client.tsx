@@ -403,6 +403,20 @@ export function BiClient({
     ratio == null ? "text-muted-foreground" : ratio >= 100 ? "text-[var(--brand-dark)]" : "text-rose-500";
   const fmtRatio = (ratio: number | null) => (ratio == null ? "—" : `${ratio}%`);
 
+  // 部門別昨対比: 前年度の部門実績を部門名でマッチング
+  const prevDeptMap = new Map(
+    (prevActuals?.deptActuals ?? []).map((d) => [d.name, d]),
+  );
+  const deptYoY = (name: string, currentRevenue: number) => {
+    const prevRev = prevDeptMap.get(name)?.revenue ?? 0;
+    return {
+      prevRevenue: prevRev,
+      ratio: prevRev > 0 ? r1((currentRevenue / prevRev) * 100) : null,
+    };
+  };
+  const prevDeptTotalRevenue = (prevActuals?.deptActuals ?? []).reduce((s, d) => s + d.revenue, 0);
+  const deptTotalYoYRatio = prevDeptTotalRevenue > 0 ? r1((totalRevenue / prevDeptTotalRevenue) * 100) : null;
+
   return (
     <div className="p-4 md:p-6 space-y-4 min-h-screen">
 
@@ -562,6 +576,7 @@ export function BiClient({
                 <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">部門</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">売上 / 目標</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">達成率</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">昨対比</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利率</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利額</th>
                 {showTheoretical && <>
@@ -605,6 +620,17 @@ export function BiClient({
                         </div>
                       </div>
                     </td>
+                    {(() => {
+                      const yoy = deptYoY(d.name, d.revenue);
+                      return (
+                        <td className="text-right px-4 py-3.5 tabular-nums">
+                          <span className={cn("font-semibold", yoyRatioClass(yoy.ratio))}>{fmtRatio(yoy.ratio)}</span>
+                          <div className="text-[10px] text-muted-foreground font-normal">
+                            前期 ¥{yoy.prevRevenue.toLocaleString()}万
+                          </div>
+                        </td>
+                      );
+                    })()}
                     <td className="text-right px-4 py-3.5 tabular-nums text-muted-foreground">{gpRate}%</td>
                     <td className="text-right px-4 py-3.5 tabular-nums font-semibold">
                       ¥{d.grossProfit.toLocaleString()}万
@@ -630,6 +656,12 @@ export function BiClient({
                   <span className="text-muted-foreground font-normal text-xs"> / {fmtTargetMan(targetRevenue)}</span>
                 </td>
                 <td className="text-right px-4 py-3 text-[var(--brand-dark)]">{achieveRateTotal}%</td>
+                <td className="text-right px-4 py-3 tabular-nums">
+                  <span className={cn("font-bold", yoyRatioClass(deptTotalYoYRatio))}>{fmtRatio(deptTotalYoYRatio)}</span>
+                  <div className="text-[10px] text-muted-foreground font-normal">
+                    前期 ¥{prevDeptTotalRevenue.toLocaleString()}万
+                  </div>
+                </td>
                 <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{grossProfitRate}%</td>
                 <td className="text-right px-4 py-3 tabular-nums">
                   ¥{totalGrossProfit.toLocaleString()}万
