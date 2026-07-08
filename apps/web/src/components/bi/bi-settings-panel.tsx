@@ -677,6 +677,44 @@ export function BiSettingsPanel({
           <Separator />
 
           <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">見込度（A/B/C）の確度%</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                顧客に設定した見込度を、BIの見込み売上に反映する際の掛け率です
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {(["A", "B", "C"] as const).map((grade) => (
+                <div key={grade} className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">見込 {grade}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="max-w-[120px] tabular-nums"
+                      value={companyConfig.prospect_grade_rates[grade]}
+                      onChange={(e) =>
+                        setCompanyConfig((prev) => ({
+                          ...prev,
+                          prospect_grade_rates: {
+                            ...prev.prospect_grade_rates,
+                            [grade]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                          },
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
             <p className="text-sm font-medium">実績データソース</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

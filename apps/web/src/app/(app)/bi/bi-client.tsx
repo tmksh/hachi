@@ -18,7 +18,7 @@ import {
   Target,
 } from "lucide-react";
 import { ComboChart } from "@/components/charts/combo-chart";
-import { getBiSettings, getBiActuals } from "@/lib/actions/bi";
+import { getBiSettings, getBiActuals, getBiProspectSummary, type BiProspectSummary } from "@/lib/actions/bi";
 import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
 import {
   getCurrentFiscalYear,
@@ -246,6 +246,7 @@ export function BiClient({
   const [settings, setSettings] = useState<BiAnnualSettings | null>(initialSettings);
   const [actuals, setActuals] = useState<BiActuals | null>(initialActuals);
   const [prevActuals, setPrevActuals] = useState<BiActuals | null>(null);
+  const [prospectSummary, setProspectSummary] = useState<BiProspectSummary | null>(null);
   const [yoyMode, setYoyMode] = useState<"cumulative" | "monthly">("cumulative");
   const [settingsLoaded, setSettingsLoaded] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -273,8 +274,9 @@ export function BiClient({
       getBiSettings(fiscalYear),
       getBiActuals(fiscalYear),
       getBiActuals(fiscalYear - 1),
+      getBiProspectSummary(),
     ])
-      .then(([s, a, p]) => { setSettings(s); setActuals(a); setPrevActuals(p); })
+      .then(([s, a, p, ps]) => { setSettings(s); setActuals(a); setPrevActuals(p); setProspectSummary(ps); })
       .finally(() => setSettingsLoaded(true));
   }, [fiscalYear]);
 
@@ -846,8 +848,8 @@ export function BiClient({
             labelKey="month"
             height={220}
             unit="万"
-            centered
             forecastFromIndex={isCurrentFY ? forecastStartIndex : undefined}
+            forecastZoneLabel="未到来月"
             gridColor={CHART_ACCENT}
             labelColor={CHART_PRIMARY}
             tickColor={CHART_PRIMARY}
@@ -991,6 +993,55 @@ export function BiClient({
             </tbody>
           </table>
         </div>
+      </BiPanel>
+
+      {/* ── 見込度別 見込み売上 ── */}
+      <BiPanel
+        title="見込み売上（見込度別）"
+        description="顧客の見込度（A/B/C）に会社設定の確度%を掛けた期待値。確度%は期首設定で変更できます"
+        flush
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/20 text-xs">
+                <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">見込度</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">顧客数</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">見込み金額</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">確度</th>
+                <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">期待値（確度加重）</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(prospectSummary?.rows ?? []).map((row) => (
+                <tr key={row.grade} className="border-b transition-colors"
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "")}>
+                  <td className="px-5 py-3 font-medium">見込 {row.grade}</td>
+                  <td className="text-right px-4 py-3 tabular-nums">{row.customerCount}件</td>
+                  <td className="text-right px-4 py-3 tabular-nums">¥{row.baseRevenue.toLocaleString()}万</td>
+                  <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{row.rate}%</td>
+                  <td className="text-right px-5 py-3 tabular-nums font-semibold">¥{row.weightedRevenue.toLocaleString()}万</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 font-semibold" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
+                <td className="px-5 py-3">合計</td>
+                <td className="text-right px-4 py-3 tabular-nums">
+                  {(prospectSummary?.rows ?? []).reduce((s, r) => s + r.customerCount, 0)}件
+                </td>
+                <td className="text-right px-4 py-3 tabular-nums">¥{(prospectSummary?.totalBase ?? 0).toLocaleString()}万</td>
+                <td className="text-right px-4 py-3" />
+                <td className="text-right px-5 py-3 tabular-nums text-[var(--brand-dark)]">
+                  ¥{(prospectSummary?.totalWeighted ?? 0).toLocaleString()}万
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="px-5 pb-4 pt-3 text-[11px] text-muted-foreground flex items-start gap-1.5">
+          <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
+          見込み金額は進行中商談（受注・失注を除く）の合計、商談がない顧客は予算上限を使用します。見込度はCRMの記入画面・概要から設定できます。
+        </p>
       </BiPanel>
 
       <div className="flex items-start gap-2 text-xs text-muted-foreground rounded-lg p-3.5" style={{ background: "rgba(var(--brand-accent-rgb),0.25)", border: "1px solid rgba(var(--brand-accent-rgb),0.8)" }}>

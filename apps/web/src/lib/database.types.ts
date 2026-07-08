@@ -50,6 +50,7 @@ export type Customer = {
   custom_fields: Record<string, string>;
   line_user_id: string | null;
   slack_channel_id: string | null;
+  prospect_grade: 'A' | 'B' | 'C' | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

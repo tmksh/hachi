@@ -17,6 +17,11 @@ export type BiForecastTierConfig = {
   sources: BiDataSourceFilter[];
 };
 
+export type ProspectGrade = "A" | "B" | "C";
+
+/** 見込度 A/B/C の確度%（0〜100）。各社で自由に設定 */
+export type ProspectGradeRates = Record<ProspectGrade, number>;
+
 export type BiCompanyConfig = {
   forecast_tiers: BiForecastTierConfig[];
   actual_sources: BiDataSourceFilter[];
@@ -27,6 +32,8 @@ export type BiCompanyConfig = {
   unassigned_department_label: string;
   /** 全社月次の製造間接費按分（部門別は常に売上構成比） */
   monthly_overhead_mode: "equal" | "revenue_share";
+  /** 顧客の見込度 A/B/C → 確度%（各社バラバラに設定可能） */
+  prospect_grade_rates: ProspectGradeRates;
 };
 
 export const CONSTRUCTION_STATUSES = [
@@ -93,6 +100,7 @@ export const DEFAULT_BI_COMPANY_CONFIG: BiCompanyConfig = {
   deal_gross_profit_rate: 0.29,
   unassigned_department_label: "未分類",
   monthly_overhead_mode: "equal",
+  prospect_grade_rates: { A: 80, B: 50, C: 20 },
 };
 
 export function mergeBiCompanyConfig(raw: unknown): BiCompanyConfig {
@@ -122,7 +130,18 @@ export function mergeBiCompanyConfig(raw: unknown): BiCompanyConfig {
       partial.unassigned_department_label || DEFAULT_BI_COMPANY_CONFIG.unassigned_department_label,
     monthly_overhead_mode:
       partial.monthly_overhead_mode === "revenue_share" ? "revenue_share" : "equal",
+    prospect_grade_rates: {
+      A: clampRate(partial.prospect_grade_rates?.A, DEFAULT_BI_COMPANY_CONFIG.prospect_grade_rates.A),
+      B: clampRate(partial.prospect_grade_rates?.B, DEFAULT_BI_COMPANY_CONFIG.prospect_grade_rates.B),
+      C: clampRate(partial.prospect_grade_rates?.C, DEFAULT_BI_COMPANY_CONFIG.prospect_grade_rates.C),
+    },
   };
+}
+
+function clampRate(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(100, Math.max(0, value))
+    : fallback;
 }
 
 export type BiMetricRecord = {

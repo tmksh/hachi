@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { KpiRow } from "@/components/shared/kpi-row";
@@ -25,7 +26,7 @@ import {
   ChevronRight, Inbox, Mic, ListTodo, Calendar, FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getCustomer, deleteCustomer, getCustomerRelated } from "@/lib/actions/customers";
+import { getCustomer, deleteCustomer, getCustomerRelated, updateCustomer } from "@/lib/actions/customers";
 import type { Customer } from "@/lib/database.types";
 
 type CustomerDetail = Customer & { assigned_to_profile: { id: string; display_name: string } | null };
@@ -45,6 +46,12 @@ const STATUS_LABELS_CONS: Record<string, string> = {
 };
 const CUSTOMER_STATUS: Record<string, string> = {
   active: "アクティブ", inactive: "非アクティブ", pending: "保留",
+};
+
+const PROSPECT_GRADE_STYLE: Record<string, string> = {
+  A: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+  B: "bg-sky-100 text-sky-700 hover:bg-sky-100",
+  C: "bg-slate-100 text-slate-600 hover:bg-slate-100",
 };
 
 function EmptyRelated({ message, action }: { message: string; action: ReactNode }) {
@@ -157,6 +164,11 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
                       )}>
                         {CUSTOMER_STATUS[data.status] ?? data.status}
                       </Badge>
+                      {data.prospect_grade && (
+                        <Badge className={cn("text-xs shrink-0", PROSPECT_GRADE_STYLE[data.prospect_grade])}>
+                          見込 {data.prospect_grade}
+                        </Badge>
+                      )}
                     </div>
                     {data.company_name && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1.5 min-w-0">
@@ -260,6 +272,42 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
         </TabsContent>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
+          <Card variant="inset" className="py-0">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold">見込度</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  A/B/Cの確度%は各社ごとにBIダッシュボードの期首設定で設定します
+                </p>
+              </div>
+              <Select
+                value={data.prospect_grade ?? "_none"}
+                onValueChange={async (v) => {
+                  const grade = (v === "_none" ? null : v) as "A" | "B" | "C" | null;
+                  const prev = data.prospect_grade;
+                  setData({ ...data, prospect_grade: grade });
+                  try {
+                    await updateCustomer(id as string, { prospect_grade: grade });
+                    toast.success(grade ? `見込度を「${grade}」に設定しました` : "見込度を未設定にしました");
+                  } catch {
+                    setData({ ...data, prospect_grade: prev });
+                    toast.error("見込度の更新に失敗しました");
+                  }
+                }}
+              >
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="未設定" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">未設定</SelectItem>
+                  <SelectItem value="A">A（見込度：高）</SelectItem>
+                  <SelectItem value="B">B（見込度：中）</SelectItem>
+                  <SelectItem value="C">C（見込度：低）</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
           <KpiRow
             items={[
               { label: "商談", value: related?.deals.length ?? 0, sub: `¥${(totalDeal / 10000).toFixed(0)}万`, icon: Briefcase },

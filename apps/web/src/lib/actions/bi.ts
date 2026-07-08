@@ -659,3 +659,88 @@ export async function getBiDepartmentNames(fiscalYear?: number): Promise<string[
   }
   return [...DEFAULT_DEPARTMENTS];
 }
+
+// ── 見込度（A/B/C）別の見込み売上 ────────────────────────────────────
+export type BiProspectGradeSummary = {
+  grade: "A" | "B" | "C";
+  /** 会社設定の確度%（0〜100） */
+  rate: number;
+  customerCount: number;
+  /** 見込み金額の合計（万円）。進行中商談の金額、なければ顧客の予算上限 */
+  baseRevenue: number;
+  /** 確度%を掛けた期待値（万円） */
+  weightedRevenue: number;
+};
+
+export type BiProspectSummary = {
+  rows: BiProspectGradeSummary[];
+  totalBase: number;
+  totalWeighted: number;
+  hasData: boolean;
+};
+
+export async function getBiProspectSummary(): Promise<BiProspectSummary> {
+  const { supabase, companyId } = await getCompanyId();
+  const config = await getBiCompanyConfig();
+  const rates = config.prospect_grade_rates;
+
+  const empty: BiProspectSummary = {
+    rows: (["A", "B", "C"] as const).map((grade) => ({
+      grade, rate: rates[grade], customerCount: 0, baseRevenue: 0, weightedRevenue: 0,
+    })),
+    totalBase: 0,
+    totalWeighted: 0,
+    hasData: false,
+  };
+  if (!companyId) return empty;
+
+  const { data: customers } = await supabase
+    .from("customers")
+    .select("id, prospect_grade, budget_max")
+    .eq("company_id", companyId)
+    .in("prospect_grade", ["A", "B", "C"])
+    .is("deleted_at", null);
+
+  if (!customers?.length) return empty;
+
+  const customerIds = customers.map((c) => c.id);
+  const { data: deals } = await supabase
+    .from("deals")
+    .select("customer_id, stage, value")
+    .in("customer_id", customerIds)
+    .not("stage", "in", "(won,lost)");
+
+  const dealSumByCustomer = new Map<string, number>();
+  for (const d of deals ?? []) {
+    dealSumByCustomer.set(d.customer_id, (dealSumByCustomer.get(d.customer_id) ?? 0) + Number(d.value ?? 0));
+  }
+
+  const byGrade = new Map<"A" | "B" | "C", { count: number; base: number }>();
+  for (const c of customers) {
+    const grade = c.prospect_grade as "A" | "B" | "C";
+    const base = dealSumByCustomer.get(c.id) ?? Number(c.budget_max ?? 0);
+    const entry = byGrade.get(grade) ?? { count: 0, base: 0 };
+    entry.count += 1;
+    entry.base += base;
+    byGrade.set(grade, entry);
+  }
+
+  const rows: BiProspectGradeSummary[] = (["A", "B", "C"] as const).map((grade) => {
+    const entry = byGrade.get(grade) ?? { count: 0, base: 0 };
+    const baseRevenue = toManYen(entry.base);
+    return {
+      grade,
+      rate: rates[grade],
+      customerCount: entry.count,
+      baseRevenue,
+      weightedRevenue: Math.round(baseRevenue * rates[grade] / 100),
+    };
+  });
+
+  return {
+    rows,
+    totalBase: rows.reduce((s, r) => s + r.baseRevenue, 0),
+    totalWeighted: rows.reduce((s, r) => s + r.weightedRevenue, 0),
+    hasData: rows.some((r) => r.customerCount > 0),
+  };
+}

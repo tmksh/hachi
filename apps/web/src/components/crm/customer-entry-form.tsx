@@ -55,6 +55,7 @@ type FormState = {
   assigned_to: string;
   budget_min: string;
   budget_max: string;
+  prospect_grade: string;
   status: string;
   tags: string[];
   notes: string;
@@ -82,6 +83,7 @@ function customerToForm(c: Customer): FormState {
     assigned_to: c.assigned_to ?? "",
     budget_min: c.budget_min != null ? String(c.budget_min) : "",
     budget_max: c.budget_max != null ? String(c.budget_max) : "",
+    prospect_grade: c.prospect_grade ?? "",
     status: c.status,
     tags: c.tags ?? [],
     notes: c.notes ?? "",
@@ -112,6 +114,7 @@ function formToPayload(form: FormState) {
     assigned_to: form.assigned_to || null,
     budget_min: form.budget_min ? Number(form.budget_min) : null,
     budget_max: form.budget_max ? Number(form.budget_max) : null,
+    prospect_grade: (form.prospect_grade || null) as "A" | "B" | "C" | null,
     status: form.status,
     tags: form.tags,
     notes: form.notes || null,
@@ -148,6 +151,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
     assigned_to: "",
     budget_min: "",
     budget_max: "",
+    prospect_grade: "",
     status: "active",
     tags: [],
     notes: "",
@@ -384,6 +388,19 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
         <div className="space-y-2 sm:col-span-2">
           <Label>問い合わせ内容</Label>
           <Textarea rows={4} value={form.inquiry_content} onChange={e => set("inquiry_content", e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>見込度</Label>
+          <Select value={form.prospect_grade || "_none"} onValueChange={v => set("prospect_grade", v === "_none" ? "" : v)}>
+            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">未設定</SelectItem>
+              <SelectItem value="A">A（見込度：高）</SelectItem>
+              <SelectItem value="B">B（見込度：中）</SelectItem>
+              <SelectItem value="C">C（見込度：低）</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">A/B/Cの確度%はBIダッシュボードの期首設定で変更できます</p>
         </div>
         <div className="space-y-2">
           <Label>ステータス</Label>
