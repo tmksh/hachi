@@ -13,8 +13,12 @@ const SYSTEM_PROMPT = `あなたは「BRIDGE AI」— 工務店・リフォー�
 - データの見方・分析の解説
 - 現在のページのリアルタイムデータを参照した回答（KPI・件数・金額・予定など）
 
-回答は簡潔・丁寧に。箇条書きを積極活用。不明な場合は正直に伝える。
-リアルタイムデータは「現在のページコンテキスト」として提供される。数値は万円単位で読みやすく表示すること。`;
+回答ルール:
+- 簡潔・丁寧に。基本は2〜3文以内で端的に答える
+- Markdown記法（**太字**、# 見出し、\`コード\` など）は絶対に使わない。プレーンテキストのみ
+- 箇条書きが必要な場合は「・」を使う
+- 不明な場合は正直に伝える
+- リアルタイムデータは「現在のページコンテキスト」として提供される。数値は万円単位で読みやすく表示すること`;
 
 // ---------------------------------------------------------------------------
 // ページ別リアルタイムコンテキスト取得
@@ -293,6 +297,17 @@ async function fetchInvoicesContext(): Promise<string> {
 
 type Message = { role: "user" | "assistant"; text: string };
 
+/** チャットUIはプレーンテキスト表示のため、モデルが出力したMarkdown記法を除去する */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")   // **太字**
+    .replace(/__(.+?)__/g, "$1")       // __太字__
+    .replace(/(?<![\w*])\*([^*\n]+)\*(?![\w*])/g, "$1") // *斜体*
+    .replace(/`([^`\n]+)`/g, "$1")     // `コード`
+    .replace(/^#{1,6}\s+/gm, "")       // # 見出し
+    .replace(/^\s*[-*]\s+/gm, "・");    // - 箇条書き → ・
+}
+
 async function callOpenAiChat(messages: Message[], config: { apiKey: string; model: string }): Promise<string | null> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -307,7 +322,7 @@ async function callOpenAiChat(messages: Message[], config: { apiKey: string; mod
         ...messages.map((m) => ({ role: m.role, content: m.text })),
       ],
       temperature: 0.5,
-      max_tokens: 1024,
+      max_tokens: 512,
     }),
   });
   if (!res.ok) return null;
@@ -328,7 +343,7 @@ async function callGeminiChat(messages: Message[], config: { apiKey: string; mod
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents,
-        generationConfig: { temperature: 0.5, maxOutputTokens: 1024 },
+        generationConfig: { temperature: 0.5, maxOutputTokens: 512 },
       }),
     },
   );
@@ -347,7 +362,7 @@ async function callAnthropicChat(messages: Message[], config: { apiKey: string; 
     },
     body: JSON.stringify({
       model: config.model,
-      max_tokens: 1024,
+      max_tokens: 512,
       system: SYSTEM_PROMPT,
       messages: messages.map((m) => ({ role: m.role, content: m.text })),
     }),
@@ -361,7 +376,11 @@ export async function sendBridgeAiMessage(
   history: Message[],
   pathname: string,
 ): Promise<{ text: string; ok: boolean }> {
-  const config = await resolveLinqAiConfig();
+  // 設定取得とページコンテキスト取得を並列実行（応答時間短縮）
+  const [config, pageContext] = await Promise.all([
+    resolveLinqAiConfig(),
+    fetchPageContext(pathname),
+  ]);
 
   if (!config.enabled || !config.apiKey) {
     return {
@@ -369,9 +388,6 @@ export async function sendBridgeAiMessage(
       text: "AI機能が設定されていません。管理者にお問い合わせください。",
     };
   }
-
-  // ページに応じたリアルタイムコンテキストを取得
-  const pageContext = await fetchPageContext(pathname);
 
   const messagesWithContext: Message[] = [
     ...history.slice(0, -1),
@@ -402,7 +418,7 @@ export async function sendBridgeAiMessage(
       return { ok: false, text: "AIからの応答を取得できませんでした。しばらくしてからもう一度お試しください。" };
     }
 
-    return { ok: true, text: reply };
+    return { ok: true, text: stripMarkdown(reply) };
   } catch {
     return { ok: false, text: "通信エラーが発生しました。しばらくしてからもう一度お試しください。" };
   }
