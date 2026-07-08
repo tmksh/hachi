@@ -534,13 +534,12 @@ export function Dashboard2Client({
                   <Skeleton className="h-14 w-full max-w-[160px] rounded-t-full" />
                   <Skeleton className="h-3 w-16" />
                 </div>
-              )) : data?.constructions.length ? data.constructions.map((c, idx) => {
+              )) : data?.constructions.length ? data.constructions.map((c) => {
                 const customer = c.customer as { id?: string; name?: string } | null;
                 const colorSeed = customer?.id ?? customer?.name ?? c.title;
                 const avatar = getCustomerAvatarColor(colorSeed);
-                const MOCK_PROGRESS = [72, 35, 18, 55, 91];
-                const rawProgress = c.progress > 0 ? c.progress : MOCK_PROGRESS[idx % MOCK_PROGRESS.length];
-                const progress = Math.min(100, Math.max(0, rawProgress));
+                const progress = Math.min(100, Math.max(0, c.progress ?? 0));
+                const isPreparing = c.status === "preparing";
                 const gradId = `gauge-grad-b-${c.id}`;
                 const radius = 38;
                 const circumference = Math.PI * radius;
@@ -576,18 +575,31 @@ export function Dashboard2Client({
                           strokeDashoffset={dashOffset}
                           style={{ transition: "stroke-dashoffset 0.6s ease-out" }}
                         />
-                        <text
-                          x="50"
-                          y="47"
-                          textAnchor="middle"
-                          fill={avatar.end}
-                          fontSize="18"
-                          fontWeight="700"
-                          className="tabular-nums"
-                        >
-                          {progress}
-                          <tspan fontSize="11" fontWeight="700">%</tspan>
-                        </text>
+                        {isPreparing && progress === 0 ? (
+                          <text
+                            x="50"
+                            y="47"
+                            textAnchor="middle"
+                            fill={avatar.end}
+                            fontSize="12"
+                            fontWeight="700"
+                          >
+                            準備中
+                          </text>
+                        ) : (
+                          <text
+                            x="50"
+                            y="47"
+                            textAnchor="middle"
+                            fill={avatar.end}
+                            fontSize="18"
+                            fontWeight="700"
+                            className="tabular-nums"
+                          >
+                            {progress}
+                            <tspan fontSize="11" fontWeight="700">%</tspan>
+                          </text>
+                        )}
                       </svg>
                     </div>
                     <span className="w-full text-center font-medium text-slate-600 truncate mt-1 px-0.5 text-[clamp(0.875rem,9cqi,1.25rem)] leading-snug">
