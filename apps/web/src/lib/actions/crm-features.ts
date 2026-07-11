@@ -488,6 +488,65 @@ export async function confirmSchedulingCandidate(input: {
   return event;
 }
 
+/**
+ * 候補日を顧客へ案内するメール文面を生成する（No.24 メール文面自動生成）。
+ * AI設定があればLLMで生成、未設定・失敗時はテンプレートで必ず文面を返す。
+ */
+export async function generateSchedulingEmail(input: {
+  customer_id: string;
+  meeting_type: "in_person" | "online" | "phone";
+  duration_minutes: number;
+  candidate_labels: string[];
+}): Promise<{ text: string; aiGenerated: boolean }> {
+  const { supabase } = await getCompanyContext();
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("name, company_name")
+    .eq("id", input.customer_id)
+    .single();
+
+  const customerName = customer?.company_name || customer?.name || "お客様";
+  const meetingLabel = MEETING_TYPE_LABEL[input.meeting_type];
+  const candidateLines = input.candidate_labels.map((label, i) => `（${i + 1}）${label}`).join("\n");
+
+  const fallback = `${customerName}様
+
+いつもお世話になっております。
+
+${meetingLabel}でのお打ち合わせ（約${input.duration_minutes}分）の候補日時をご案内いたします。
+下記の中からご都合のよろしい日時をお知らせいただけますでしょうか。
+
+${candidateLines}
+
+上記でご都合が合わない場合は、ご希望の日時をお知らせください。
+お忙しいところ恐れ入りますが、よろしくお願いいたします。`;
+
+  const config = await resolveLinqAiConfig();
+  if (!config.enabled || !config.apiKey) {
+    return { text: fallback, aiGenerated: false };
+  }
+
+  const prompt = `工務店・リフォーム会社の営業担当として、顧客に商談の候補日時を案内するメール本文を作成してください。
+
+【条件】
+- 宛名: ${customerName}様
+- 面談区分: ${meetingLabel}
+- 所要時間: 約${input.duration_minutes}分
+- 候補日時:
+${candidateLines}
+
+【ルール】
+- 丁寧なビジネスメール（日本語）
+- 候補日時は番号付きでそのまま列挙する
+- 都合が合わない場合の代替案の依頼も入れる
+- 件名や署名は不要、本文のみ
+- 300文字程度`;
+
+  const raw = await callLlm(prompt, config, "あなたは工務店・リフォーム会社の営業アシスタントです。");
+  if (!raw?.trim()) return { text: fallback, aiGenerated: false };
+  return { text: raw.trim(), aiGenerated: true };
+}
+
 export async function getCustomerDealsWithActivities(customerId: string) {
   const { supabase } = await getCompanyContext();
   const { data: deals, error } = await supabase
@@ -646,6 +705,54 @@ JSONのみ返してください（説明文不要）:
     };
   } catch {
     return { ok: false, message: "AIの判定結果を解析できませんでした。もう一度お試しください。" };
+  }
+}
+
+/**
+ * 問い合わせ内容・備考から「その他項目」の候補をAIが抽出・提案する（記入画面のAI入力）。
+ */
+export async function suggestCustomFieldsFromInquiry(input: {
+  inquiry_content?: string;
+  notes?: string;
+  existing_keys?: string[];
+}): Promise<{ ok: true; fields: { key: string; value: string }[] } | { ok: false; message: string }> {
+  const source = [input.inquiry_content, input.notes].filter((t) => t?.trim()).join("\n");
+  if (!source.trim()) {
+    return { ok: false, message: "問い合わせ内容または備考を入力してからお試しください。" };
+  }
+
+  const config = await resolveLinqAiConfig();
+  if (!config.enabled || !config.apiKey) {
+    return { ok: false, message: "AI機能が設定されていません。管理者にお問い合わせください。" };
+  }
+
+  const prompt = `以下は工務店・リフォーム会社の顧客の問い合わせ内容・備考です。
+顧客管理に役立つ補足項目（key-value）を抽出・提案してください。
+
+【テキスト】
+${source.slice(0, 2000)}
+
+【ルール】
+- テキストに含まれる情報のみ抽出する（推測で作らない）
+- 例: 希望工事内容 / 築年数 / 家族構成 / 希望時期 / 現在の悩み / 競合検討状況 など
+- 既にある項目キーは除外: ${(input.existing_keys ?? []).join("、") || "なし"}
+- 最大5件
+- JSONのみ返す: {"fields":[{"key":"項目名（10文字以内）","value":"値（40文字以内）"}]}`;
+
+  const raw = await callLlm(prompt, config, "あなたは工務店・リフォーム会社のCRM入力アシスタントです。");
+  if (!raw) return { ok: false, message: "AIからの応答を取得できませんでした。" };
+
+  try {
+    const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+    const parsed = JSON.parse((match?.[1] ?? raw).trim()) as { fields?: { key?: string; value?: string }[] };
+    const fields = (parsed.fields ?? [])
+      .filter((f) => f.key?.trim() && f.value?.trim())
+      .slice(0, 5)
+      .map((f) => ({ key: String(f.key).trim(), value: String(f.value).trim() }));
+    if (fields.length === 0) return { ok: false, message: "抽出できる項目が見つかりませんでした。" };
+    return { ok: true, fields };
+  } catch {
+    return { ok: false, message: "AIの応答を解析できませんでした。もう一度お試しください。" };
   }
 }
 

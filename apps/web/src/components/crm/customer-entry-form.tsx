@@ -16,6 +16,7 @@ import { getProfiles } from "@/lib/actions/profiles";
 import { getCustomerTagMasters, getLeadSources } from "@/lib/actions/deals";
 import { getBiDepartmentNames } from "@/lib/actions/bi";
 import { suggestLeadAssignee } from "@/lib/actions/sales-flow";
+import { suggestCustomFieldsFromInquiry } from "@/lib/actions/crm-features";
 import type { Customer } from "@/lib/database.types";
 
 const FIELD_SELECT_TRIGGER = "w-full min-w-0";
@@ -133,6 +134,7 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
   const [leadSources, setLeadSources] = useState<{ id: string; label: string }[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [assignSuggesting, setAssignSuggesting] = useState(false);
+  const [aiFieldSuggesting, setAiFieldSuggesting] = useState(false);
   const [form, setForm] = useState<FormState>(() =>
     initialCustomer ? customerToForm(initialCustomer) : {
     name: "",
@@ -185,6 +187,27 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
       toast.error("担当者提案に失敗しました");
     } finally {
       setAssignSuggesting(false);
+    }
+  };
+
+  const suggestFieldsWithAi = async () => {
+    setAiFieldSuggesting(true);
+    try {
+      const result = await suggestCustomFieldsFromInquiry({
+        inquiry_content: form.inquiry_content,
+        notes: form.notes,
+        existing_keys: form.custom_fields.map(f => f.key).filter(Boolean),
+      });
+      if (result.ok) {
+        setForm(prev => ({ ...prev, custom_fields: [...prev.custom_fields, ...result.fields] }));
+        toast.success(`AIが${result.fields.length}件の項目を提案しました。内容を確認して保存してください`);
+      } else {
+        toast.error(result.message);
+      }
+    } catch {
+      toast.error("AI入力に失敗しました");
+    } finally {
+      setAiFieldSuggesting(false);
     }
   };
 
@@ -353,19 +376,17 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <Label>担当者</Label>
-            {mode === "create" && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1"
-                disabled={assignSuggesting}
-                onClick={() => void suggestAssignee()}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                {assignSuggesting ? "提案中..." : "AI担当提案"}
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              disabled={assignSuggesting}
+              onClick={() => void suggestAssignee()}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {assignSuggesting ? "提案中..." : "AI担当提案"}
+            </Button>
           </div>
           <Select value={form.assigned_to || "_none"} onValueChange={v => set("assigned_to", v === "_none" ? "" : v)}>
             <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
@@ -464,8 +485,8 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
         <div className="flex items-center justify-between gap-2">
           <Label className="text-sm font-semibold">その他項目</Label>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => toast.info("AI連携は準備中です")}>
-              <Sparkles className="h-3.5 w-3.5" />AI入力
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1" disabled={aiFieldSuggesting} onClick={() => void suggestFieldsWithAi()}>
+              <Sparkles className="h-3.5 w-3.5" />{aiFieldSuggesting ? "抽出中..." : "AI入力"}
             </Button>
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={addCustomField}>
               <Plus className="h-3.5 w-3.5" />項目を追加

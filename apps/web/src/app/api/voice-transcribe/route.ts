@@ -89,13 +89,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function transcribeAudio(blob: Blob, apiKey: string, model: string): Promise<string | null> {
+const JA_TRANSCRIBE_PROMPT = "これは日本の工務店・リフォーム会社における商談の録音です。日本語で正確に書き起こしてください。";
+
+/** ハングル等、日本語以外の言語として誤認識された可能性が高いか判定 */
+function looksMisrecognized(text: string): boolean {
+  if (!text.trim()) return false;
+  const hangul = (text.match(/[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g) ?? []).length;
+  return hangul >= 5 && hangul / text.length > 0.05;
+}
+
+async function requestTranscription(blob: Blob, apiKey: string, model: string): Promise<string | null> {
   const formData = new FormData();
-  // gpt-4o-mini-transcribe が利用可能なら使用、なければ whisper-1 にフォールバック
-  const transcribeModel = model.includes("gpt-4o") ? "gpt-4o-mini-transcribe" : "whisper-1";
   formData.append("file", blob, "recording.webm");
-  formData.append("model", transcribeModel);
+  formData.append("model", model);
   formData.append("language", "ja");
+  formData.append("prompt", JA_TRANSCRIBE_PROMPT);
   formData.append("response_format", "text");
 
   const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -103,22 +111,22 @@ async function transcribeAudio(blob: Blob, apiKey: string, model: string): Promi
     headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
   });
-
-  if (!res.ok) {
-    // フォールバック: whisper-1 で再試行
-    if (transcribeModel !== "whisper-1") {
-      formData.set("model", "whisper-1");
-      const res2 = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: formData,
-      });
-      if (!res2.ok) return null;
-      return await res2.text();
-    }
-    return null;
-  }
+  if (!res.ok) return null;
   return await res.text();
+}
+
+async function transcribeAudio(blob: Blob, apiKey: string, model: string): Promise<string | null> {
+  // gpt-4o-mini-transcribe が利用可能なら使用、なければ whisper-1 にフォールバック
+  const transcribeModel = model.includes("gpt-4o") ? "gpt-4o-mini-transcribe" : "whisper-1";
+  const text = await requestTranscription(blob, apiKey, transcribeModel);
+
+  // API失敗、またはハングル等への言語誤認識を検出したら whisper-1 で再試行
+  if ((text == null || looksMisrecognized(text)) && transcribeModel !== "whisper-1") {
+    const retry = await requestTranscription(blob, apiKey, "whisper-1");
+    if (retry != null && !looksMisrecognized(retry)) return retry;
+    return retry ?? text;
+  }
+  return text;
 }
 
 export async function generateMeetingResult(transcript: string, apiKey: string, model: string) {

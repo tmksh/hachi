@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Loader2, Sparkles } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar, Copy, Loader2, Mail, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   proposeSchedulingCandidates,
   saveSchedulingRequest,
   confirmSchedulingCandidate,
+  generateSchedulingEmail,
   type SchedulingCandidate,
 } from "@/lib/actions/crm-features";
 
@@ -27,6 +29,27 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
   const [loadingMode, setLoadingMode] = useState<"basic" | "ai" | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailGenerating, setEmailGenerating] = useState(false);
+
+  const generateEmail = async (targets: SchedulingCandidate[]) => {
+    if (targets.length === 0) return;
+    setEmailGenerating(true);
+    try {
+      const { text, aiGenerated } = await generateSchedulingEmail({
+        customer_id: customerId,
+        meeting_type: meetingType,
+        duration_minutes: Number(duration),
+        candidate_labels: targets.map((c) => c.displayLabel),
+      });
+      setEmailDraft(text);
+      toast.success(aiGenerated ? "AIがメール文面を生成しました" : "メール文面を生成しました（テンプレート）");
+    } catch {
+      toast.error("メール文面の生成に失敗しました");
+    } finally {
+      setEmailGenerating(false);
+    }
+  };
 
   const proposeDates = async (optimized: boolean) => {
     setLoadingMode(optimized ? "ai" : "basic");
@@ -91,7 +114,8 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
       });
       toast.success("カレンダーに登録しました");
     } catch {
-      toast.error("カレンダー登録に失敗しました");
+      toast.error("カレンダー登録に失敗しました。候補日を案内するメール文面を生成します");
+      void generateEmail([candidate]);
     } finally {
       setConfirmingId(null);
     }
@@ -229,9 +253,45 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
             </ul>
           )}
           {candidates.length > 0 && (
-            <Button className="mt-4 w-full h-9 shrink-0" disabled={saving} onClick={save}>
-              {saving ? "保存中..." : "この内容で保存"}
-            </Button>
+            <div className="mt-4 shrink-0 space-y-2">
+              <Button className="w-full h-9" disabled={saving} onClick={save}>
+                {saving ? "保存中..." : "この内容で保存"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-9 gap-1.5"
+                disabled={emailGenerating}
+                onClick={() => void generateEmail(candidates)}
+              >
+                {emailGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                候補日の案内メール文面を生成
+              </Button>
+            </div>
+          )}
+
+          {emailDraft && (
+            <div className="mt-4 shrink-0 space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-[#0F5132]" />
+                  メール文面（編集可）
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => { navigator.clipboard.writeText(emailDraft); toast.success("コピーしました"); }}
+                >
+                  <Copy className="h-3.5 w-3.5" />コピー
+                </Button>
+              </div>
+              <Textarea
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                rows={8}
+                className="text-xs"
+              />
+            </div>
           )}
         </CardContent>
       </Card>
