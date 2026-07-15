@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,17 +11,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
 import { CustomerFilesTab, CUSTOMER_DOCUMENTS_DESCRIPTION } from "@/components/crm/customer-files-tab";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { ContractMessagingTab } from "@/components/contracts/contract-messaging-tab";
 import { ContractWorkflowTab } from "@/components/contracts/contract-workflow-tab";
 import {
-  getContractEstimates, sendContractCloudSign,
+  getContractEstimates, sendContractCloudSign, generateContractEsignMessage,
   createEmptyEstimateForContract, copyEstimateForContract,
+  getContractWorkflowRequests, submitContractWorkflow,
 } from "@/lib/actions/contract-features";
 import { getEstimate } from "@/lib/actions/estimates";
-import { Calendar, FileText, RefreshCw, Download, Loader2, RotateCcw, FolderOpen, CheckCircle2 } from "lucide-react";
+import { Calendar, FileText, RefreshCw, Download, Loader2, RotateCcw, FolderOpen, CheckCircle2, Sparkles, Lock } from "lucide-react";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
@@ -33,17 +39,15 @@ import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, mergeDefaults, syncFr
 import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
 import { getCompany } from "@/lib/actions/profiles";
 import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
-import { buildContractPrintHtml } from "@/lib/contract-pdf";
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
 import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
 import type { FillContext, PdfFormTemplate } from "@/lib/pdf-form-template";
 import { PdfFormFillerPanel } from "@/components/settings/pdf-form-filler";
 import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
-import { archiveContractDocumentHtml } from "@/lib/actions/documents";
-import {
-  buildContractArchiveHtml,
-  contractArchiveDocumentName,
-} from "@/lib/contract-document-archive";
+import { cn } from "@/lib/utils";
+import { buildContractPrintHtml } from "@/lib/contract-pdf";
+
+const VALID_TABS = ["customer", "messaging", "documents", "workflow", "esign", "files", "estimates"] as const;
 
 export function ContractDetailTabs({
   data,
@@ -54,14 +58,45 @@ export function ContractDetailTabs({
   contractId: string;
   onRefresh?: () => void;
 }) {
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const defaultTab = VALID_TABS.includes(initialTab as typeof VALID_TABS[number])
+    ? (initialTab as typeof VALID_TABS[number])
+    : "customer";
+
+  const [activeTab, setActiveTab] = useState<string>(defaultTab);
+  const [esignEnabled, setEsignEnabled] = useState(false);
+
+  useEffect(() => {
+    if (initialTab && VALID_TABS.includes(initialTab as typeof VALID_TABS[number])) {
+      setActiveTab(initialTab as typeof VALID_TABS[number]);
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    getContractWorkflowRequests(contractId)
+      .then((rows) => {
+        const approved = rows.some((r) => r.status === "approved");
+        setEsignEnabled(approved);
+      })
+      .catch(() => setEsignEnabled(false));
+  }, [contractId, data.updated_at]);
+
   return (
-    <Tabs defaultValue="customer">
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
         <TabsTrigger value="customer" className="text-xs">顧客情報</TabsTrigger>
         <TabsTrigger value="messaging" className="text-xs">やり取り管理</TabsTrigger>
         <TabsTrigger value="documents" className="text-xs">書類作成</TabsTrigger>
         <TabsTrigger value="workflow" className="text-xs">承認WF</TabsTrigger>
-        <TabsTrigger value="esign" className="text-xs">電子契約</TabsTrigger>
+        <TabsTrigger
+          value="esign"
+          className={cn("text-xs gap-1", !esignEnabled && "opacity-60")}
+          disabled={!esignEnabled}
+        >
+          {!esignEnabled && <Lock className="h-3 w-3" />}
+          電子契約
+        </TabsTrigger>
         <TabsTrigger value="files" className="text-xs gap-1.5"><FolderOpen className="h-3.5 w-3.5" />ドキュメント一覧</TabsTrigger>
         <TabsTrigger value="estimates" className="text-xs">見積もり</TabsTrigger>
       </TabsList>
@@ -75,9 +110,20 @@ export function ContractDetailTabs({
         <DocumentsTab contractId={contractId} data={data} onRefresh={onRefresh} />
       </TabsContent>
       <TabsContent value="workflow" className="mt-4">
-        <ContractWorkflowTab contractId={contractId} data={data} onRefresh={onRefresh} />
+        <ContractWorkflowTab contractId={contractId} data={data} onRefresh={onRefresh} onEsignEnabled={() => setEsignEnabled(true)} />
       </TabsContent>
-      <TabsContent value="esign" className="mt-4"><EsignTab contractId={contractId} customerEmail={data.customer?.email} /></TabsContent>
+      <TabsContent value="esign" className="mt-4">
+        {esignEnabled
+          ? <EsignTab contractId={contractId} customerEmail={data.customer?.email} customerName={data.customer?.name} contractTitle={data.title} />
+          : (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+                <Lock className="h-4 w-4 shrink-0" />
+                社内承認ワークフローが完了すると、電子契約タブが利用できるようになります。
+              </CardContent>
+            </Card>
+          )}
+      </TabsContent>
       <TabsContent value="files" className="mt-4"><FilesTab contractId={contractId} customerId={data.customer_id} /></TabsContent>
       <TabsContent value="estimates" className="mt-4">
         <EstimatesTab
@@ -312,6 +358,7 @@ function DocumentsTab({
   data: ContractDetail;
   onRefresh?: () => void;
 }) {
+  const router = useRouter();
   const draft = parseContractDraft(data.notes);
   const [templateId, setTemplateId] = useState(draft?.template_id ?? CONTRACT_TEMPLATES[0]?.id ?? "");
   const tpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId);
@@ -342,6 +389,8 @@ function DocumentsTab({
   const [fillerTpl, setFillerTpl] = useState<PdfFormTemplate | null>(null);
   const [companyReady, setCompanyReady] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submittingWorkflow, setSubmittingWorkflow] = useState(false);
 
   const fillCtx: FillContext = useMemo(() => ({
     constructionTitle: data.title ?? null,
@@ -439,20 +488,40 @@ function DocumentsTab({
     setConfirming(true);
     try {
       await persistDraft(form);
-      const pdf = pdfTemplate ?? resolvePdfTemplates(null).contract;
-      const html = buildContractArchiveHtml(tpl, form, renderCtx, pdf);
-      await archiveContractDocumentHtml({
-        html,
-        name: contractArchiveDocumentName(tpl.name),
-        customer_id: data.customer_id,
-        contract_id: contractId,
-      });
-      toast.success("契約書を確定し、ドキュメント一覧に保存しました");
-      onRefresh?.();
+      setConfirmOpen(true);
     } catch {
-      toast.error("確定・保存に失敗しました");
+      toast.error("保存に失敗しました");
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const handleSubmitWorkflow = async () => {
+    setSubmittingWorkflow(true);
+    try {
+      const req = await submitContractWorkflow(contractId, data.title);
+      toast.success("承認ワークフローに申請しました");
+      setConfirmOpen(false);
+      onRefresh?.();
+      router.push(`/workflow/${req.id}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "申請に失敗しました");
+    } finally {
+      setSubmittingWorkflow(false);
+    }
+  };
+
+  const handleDefer = async () => {
+    setSubmittingWorkflow(true);
+    try {
+      await persistDraft(form);
+      toast.success("下書きを保存しました");
+      setConfirmOpen(false);
+      router.push("/contracts");
+    } catch {
+      toast.error("保存に失敗しました");
+    } finally {
+      setSubmittingWorkflow(false);
     }
   };
 
@@ -464,8 +533,24 @@ function DocumentsTab({
 
   return (
     <div className="-mt-2 space-y-3">
+      <div className="rounded-xl border border-border bg-slate-50/60 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <FileText className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-muted-foreground">契約書テンプレート</p>
+            <p className="text-sm font-semibold truncate">{tpl.name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tpl.description}</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => setPickerOpen(true)}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          テンプレートを変更
+        </Button>
+      </div>
+
       <div className="sticky top-0 z-20 bg-white border border-border rounded-xl px-4 py-2.5 flex items-center gap-2">
-        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
         <h2 className="text-sm font-semibold truncate">{tpl.name}</h2>
         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">下書き</span>
         {saving
@@ -473,11 +558,8 @@ function DocumentsTab({
           : savedAt && <span className="text-[10px] text-muted-foreground shrink-0">保存済み {savedAt}</span>}
 
         <div className="ml-auto flex items-center gap-1 shrink-0 flex-wrap justify-end">
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="テンプレート変更" onClick={() => setPickerOpen(true)}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="工程表と同期" onClick={handleSyncSchedule}>
-            <RotateCcw className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5 gap-1.5" title="工程表と同期" onClick={handleSyncSchedule}>
+            <RotateCcw className="h-3.5 w-3.5" />同期
           </Button>
           {formTemplates.length > 0 && (
             <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5" title="アップロードPDF" onClick={() => setPdfFormPicker(true)}>
@@ -528,26 +610,167 @@ function DocumentsTab({
         onSelectForm={(t) => { setPdfFormPicker(false); setFillerTpl(t); }}
         formTemplates={formTemplates}
       />
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>社内承認を取りますか？</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>契約書の内容を確定し、社内承認ワークフローに申請できます。後で対応する場合は下書きのまま一覧に戻れます。</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>テンプレート: {tpl.name}</li>
+                  <li>工事名称: {String(form.work_name ?? data.title)}</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel disabled={submittingWorkflow}>キャンセル</AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={submittingWorkflow}
+              onClick={() => void handleDefer()}
+            >
+              後で対応する
+            </Button>
+            <AlertDialogAction
+              disabled={submittingWorkflow}
+              onClick={(e) => { e.preventDefault(); void handleSubmitWorkflow(); }}
+            >
+              {submittingWorkflow ? "申請中..." : "承認ワークフローに申請"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function EsignTab({ contractId, customerEmail }: { contractId: string; customerEmail?: string | null }) {
+const ESIGN_TEMPLATE_MESSAGE = {
+  subject: "契約書のご確認",
+  body: "お世話になっております。契約書を送付いたします。内容をご確認のうえ、署名をお願いいたします。",
+};
+
+type MessageGenMethod = "template" | "linq" | "manual";
+
+function EsignTab({
+  contractId,
+  customerEmail,
+  customerName,
+  contractTitle,
+}: {
+  contractId: string;
+  customerEmail?: string | null;
+  customerName?: string | null;
+  contractTitle?: string;
+}) {
   const [email, setEmail] = useState(customerEmail ?? "");
-  const [subject, setSubject] = useState("契約書のご確認");
-  const [message, setMessage] = useState("お世話になっております。契約書を送付いたします。");
+  const [subject, setSubject] = useState(ESIGN_TEMPLATE_MESSAGE.subject);
+  const [message, setMessage] = useState(ESIGN_TEMPLATE_MESSAGE.body);
+  const [genMethod, setGenMethod] = useState<MessageGenMethod>("template");
+  const [generating, setGenerating] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const applyTemplate = () => {
+    setSubject(ESIGN_TEMPLATE_MESSAGE.subject);
+    setMessage(ESIGN_TEMPLATE_MESSAGE.body);
+  };
+
+  const handleMethodChange = async (method: MessageGenMethod) => {
+    setGenMethod(method);
+    if (method === "template") {
+      applyTemplate();
+      return;
+    }
+    if (method === "linq") {
+      setGenerating(true);
+      try {
+        const result = await generateContractEsignMessage(contractId);
+        setSubject(result.subject);
+        setMessage(result.body);
+        toast.success(result.source === "linq" ? "Linq AIでメッセージを生成しました" : "メッセージを生成しました");
+      } catch {
+        toast.error("メッセージ生成に失敗しました");
+        applyTemplate();
+      } finally {
+        setGenerating(false);
+      }
+    }
+  };
 
   return (
-    <Card><CardContent className="p-4 space-y-3">
-      <p className="text-sm text-muted-foreground">クラウドサイン連携（ワークフロー承認後に送信）</p>
-      <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="メールアドレス" />
-      <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="件名" />
-      <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} />
-      <Button size="sm" onClick={async () => {
-        const res = await sendContractCloudSign(contractId, email, subject, message);
-        toast.success(res.message);
-      }}>クラウドサインで送信</Button>
-    </CardContent></Card>
+    <Card>
+      <CardContent className="p-4 space-y-4">
+        <p className="text-sm text-muted-foreground">クラウドサイン連携（ワークフロー承認後に送信）</p>
+
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">送信メッセージの生成方法</Label>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { value: "template", label: "テンプレ" },
+              { value: "linq", label: "Linq自動生成" },
+              { value: "manual", label: "手動入力" },
+            ] as const).map((opt) => (
+              <Button
+                key={opt.value}
+                type="button"
+                size="sm"
+                variant={genMethod === opt.value ? "default" : "outline"}
+                className="text-xs"
+                disabled={generating && opt.value === "linq"}
+                onClick={() => void handleMethodChange(opt.value)}
+              >
+                {opt.value === "linq" && generating
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  : opt.value === "linq" ? <Sparkles className="h-3.5 w-3.5 mr-1" /> : null}
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="メールアドレス" />
+        <Input
+          value={subject}
+          onChange={(e) => { setSubject(e.target.value); setGenMethod("manual"); }}
+          placeholder="件名"
+          readOnly={genMethod !== "manual"}
+          className={genMethod !== "manual" ? "bg-muted/40" : undefined}
+        />
+        <Textarea
+          value={message}
+          onChange={(e) => { setMessage(e.target.value); setGenMethod("manual"); }}
+          rows={5}
+          placeholder="本文"
+          readOnly={genMethod !== "manual"}
+          className={genMethod !== "manual" ? "bg-muted/40" : undefined}
+        />
+        {customerName && contractTitle && (
+          <p className="text-xs text-muted-foreground">
+            宛先: {customerName} ／ 契約: {contractTitle}
+          </p>
+        )}
+        <Button
+          size="sm"
+          disabled={sending || !email.trim()}
+          onClick={async () => {
+            setSending(true);
+            try {
+              const res = await sendContractCloudSign(contractId, email, subject, message);
+              toast.success(res.message);
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "送信に失敗しました");
+            } finally {
+              setSending(false);
+            }
+          }}
+        >
+          {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+          電子契約を送信
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -13,6 +13,7 @@ import {
   saveSchedulingRequest,
   confirmSchedulingCandidate,
   generateSchedulingEmail,
+  sendSchedulingEmail,
   type SchedulingCandidate,
 } from "@/lib/actions/crm-features";
 
@@ -31,6 +32,7 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailGenerating, setEmailGenerating] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
 
   const generateEmail = async (targets: SchedulingCandidate[]) => {
     if (targets.length === 0) return;
@@ -291,6 +293,27 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
                 rows={8}
                 className="text-xs"
               />
+              <Button
+                className="w-full h-9 gap-1.5"
+                disabled={emailSending || !emailDraft.trim()}
+                onClick={async () => {
+                  setEmailSending(true);
+                  try {
+                    const { sentTo } = await sendSchedulingEmail({
+                      customer_id: customerId,
+                      body: emailDraft,
+                    });
+                    toast.success(`${sentTo} へ送信しました`);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "メール送信に失敗しました");
+                  } finally {
+                    setEmailSending(false);
+                  }
+                }}
+              >
+                {emailSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                {emailSending ? "送信中..." : "顧客にメール送信"}
+              </Button>
             </div>
           )}
         </CardContent>

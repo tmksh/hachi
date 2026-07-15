@@ -54,6 +54,20 @@ export default async function ConstructionNewPage({
       initialStartDate={get("start_date")}
       initialEndDate={get("end_date")}
       initialAssignedTo={get("assigned_to")}
+      initialAssigneeCandidates={(() => {
+        try {
+          const raw = get("assignee_candidates");
+          if (!raw) return [];
+          const parsed = JSON.parse(decodeURIComponent(raw)) as Array<{
+            profileId: string;
+            displayName: string;
+            score: number;
+          }>;
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })()}
     />
   );
 }

@@ -20,8 +20,11 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   suspended: "bg-amber-50 text-amber-700 border-amber-200/80",
   delayed: "bg-rose-50 text-rose-600 border-rose-200/80",
   rejected: "bg-rose-50 text-rose-600 border-rose-200/80",
+  returned: "bg-amber-50 text-amber-700 border-amber-200/80",
   cancelled: "bg-gray-100 text-gray-500 border-gray-200/80",
   active: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+  none: "bg-slate-100 text-slate-600 border-slate-200/80",
+  conditional: "bg-violet-50 text-violet-700 border-violet-200/80",
 };
 
 interface StatusBadgeProps {

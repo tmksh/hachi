@@ -85,6 +85,60 @@ export async function createCustomer(input: Omit<Customer, "id" | "company_id" |
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
+  // 既存顧客への自動紐付け（No.12）
+  const linked = await findExistingCustomer(supabase, profile.company_id, {
+    email: input.email,
+    phone: input.phone,
+    name: input.name,
+    company_name: input.company_name,
+  });
+  if (linked) {
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (input.inquiry_content?.trim()) {
+      const prev = linked.inquiry_content ? `${linked.inquiry_content}\n\n---\n` : "";
+      patch.inquiry_content = `${prev}${input.inquiry_content.trim()}`;
+    }
+    if (input.inquiry_category) patch.inquiry_category = input.inquiry_category;
+    if (input.inquiry_date) patch.inquiry_date = input.inquiry_date;
+    if (input.source) patch.source = input.source;
+    if (input.assigned_to) patch.assigned_to = input.assigned_to;
+    if (input.email && !linked.email) patch.email = input.email;
+    if (input.phone && !linked.phone) patch.phone = input.phone;
+
+    const { data: updated, error: updErr } = await supabase
+      .from("customers")
+      .update(patch)
+      .eq("id", linked.id)
+      .select()
+      .single();
+    if (updErr) throw updErr;
+
+    if (input.inquiry_content?.trim() || input.inquiry_category?.trim()) {
+      const { data: deal } = await supabase.from("deals").insert({
+        company_id: profile.company_id,
+        customer_id: linked.id,
+        title: `${updated.name} 様 問い合わせ`,
+        stage: "inquiry",
+        assigned_to: input.assigned_to ?? user.id,
+      }).select().single();
+      if (deal) {
+        void dispatchWebhook(profile.company_id, "deal.created", {
+          id: deal.id,
+          customer_id: linked.id,
+          title: deal.title,
+          linked_existing_customer: true,
+        });
+      }
+    }
+
+    void dispatchWebhook(profile.company_id, "customer.updated", {
+      id: updated.id,
+      name: updated.name,
+      linked_from_inquiry: true,
+    });
+    return { ...updated, _linkedExisting: true } as Customer & { _linkedExisting?: boolean };
+  }
+
   let eightId = input.eight_id;
   if (!eightId) {
     const { count } = await supabase
@@ -126,6 +180,57 @@ export async function createCustomer(input: Omit<Customer, "id" | "company_id" |
   }
 
   return data as Customer;
+}
+
+/** email / phone / 氏名(+会社名) で既存顧客を照合（No.12） */
+export async function findExistingCustomer(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  input: { email?: string | null; phone?: string | null; name?: string | null; company_name?: string | null },
+) {
+  const email = input.email?.trim().toLowerCase();
+  if (email) {
+    const { data } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .ilike("email", email)
+      .limit(1)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const phoneDigits = (input.phone ?? "").replace(/\D/g, "");
+  if (phoneDigits.length >= 10) {
+    const { data: candidates } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .not("phone", "is", null)
+      .limit(200);
+    const match = (candidates ?? []).find(
+      (c) => (c.phone ?? "").replace(/\D/g, "") === phoneDigits,
+    );
+    if (match) return match;
+  }
+
+  const name = input.name?.trim();
+  if (name && name.length >= 2) {
+    let query = supabase
+      .from("customers")
+      .select("*")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .eq("name", name);
+    const companyName = input.company_name?.trim();
+    if (companyName) query = query.eq("company_name", companyName);
+    const { data } = await query.limit(1).maybeSingle();
+    if (data) return data;
+  }
+
+  return null;
 }
 
 export async function updateCustomer(id: string, input: Partial<Omit<Customer, "id" | "company_id" | "created_at" | "updated_at">>) {

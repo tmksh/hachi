@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -175,8 +176,13 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     const lastCheck = localStorage.getItem("hachi_bomb_check");
     if (lastCheck === today) return;
     fetchNotifications().then((notifs) => {
-      setNotifications(notifs);
-      const urgentCount = notifs.filter((n) => n.is_urgent).length;
+      let dismissed: string[] = [];
+      try {
+        dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
+      } catch { /* ignore */ }
+      const filtered = notifs.filter((n) => !dismissed.includes(n.id));
+      setNotifications(filtered);
+      const urgentCount = filtered.filter((n) => n.is_urgent).length;
       if (urgentCount >= BOMB_THRESHOLD) {
         localStorage.setItem("hachi_bomb_check", today);
         setBombUrgentCount(urgentCount);
@@ -187,7 +193,16 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
   useEffect(() => {
     if (!notifOpen) return;
-    const fetchNotifs = () => fetchNotifications().then(setNotifications).catch(() => {});
+    const fetchNotifs = () =>
+      fetchNotifications()
+        .then((notifs) => {
+          let dismissed: string[] = [];
+          try {
+            dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
+          } catch { /* ignore */ }
+          setNotifications(notifs.filter((n) => !dismissed.includes(n.id)));
+        })
+        .catch(() => {});
     void fetchNotifs();
     const timer = setInterval(fetchNotifs, 60_000);
     return () => clearInterval(timer);
@@ -621,10 +636,29 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       <Sheet open={notifOpen} onOpenChange={setNotifOpen}>
         <SheetContent side="right" className="w-80">
           <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              通知
-              {unreadCount > 0 && (
-                <Badge className="bg-destructive text-destructive-foreground text-xs h-5 px-1.5">{unreadCount}</Badge>
+            <SheetTitle className="flex items-center justify-between gap-2 pr-8">
+              <span className="flex items-center gap-2">
+                通知
+                {unreadCount > 0 && (
+                  <Badge className="bg-destructive text-destructive-foreground text-xs h-5 px-1.5">{unreadCount}</Badge>
+                )}
+              </span>
+              {notifications.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => {
+                    try {
+                      const dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
+                      const next = [...new Set([...dismissed, ...notifications.map((n) => n.id)])];
+                      localStorage.setItem("hachi_dismissed_notifs", JSON.stringify(next.slice(-200)));
+                    } catch { /* ignore */ }
+                    setNotifications([]);
+                  }}
+                >
+                  すべて既読
+                </Button>
               )}
             </SheetTitle>
           </SheetHeader>
@@ -636,47 +670,57 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
               </div>
             ) : (
               notifications.map((n) => (
-                <Link
-                  key={n.id}
-                  href={n.href}
-                  onClick={() => {
-                    if (n.type === "announcement") {
-                      const annId = n.id.replace("ann_", "");
-                      markAnnouncementAsRead(annId).then(() => {
+                <div key={n.id} className="relative group">
+                  <Link
+                    href={n.href}
+                    onClick={() => {
+                      try {
+                        const dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
+                        localStorage.setItem(
+                          "hachi_dismissed_notifs",
+                          JSON.stringify([...new Set([...dismissed, n.id])].slice(-200)),
+                        );
+                      } catch { /* ignore */ }
+                      if (n.type === "announcement") {
+                        const annId = n.id.replace("ann_", "");
+                        markAnnouncementAsRead(annId).then(() => {
+                          setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                        }).catch(() => {});
+                      } else {
                         setNotifications((prev) => prev.filter((x) => x.id !== n.id));
-                      }).catch(() => {});
-                    }
-                    setNotifOpen(false);
-                  }}
-                  className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
-                >
-                  <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : ""}`}
-                    style={(!n.type || (n.type !== "workflow" && n.type !== "calendar" && !n.is_urgent)) ? { backgroundColor: hexAlpha(kpiColor, 0.12) } : undefined}
+                      }
+                      setNotifOpen(false);
+                    }}
+                    className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
                   >
-                    {n.type === "workflow" ? (
-                      <FileText className={`h-4 w-4 text-amber-600`} />
-                    ) : n.type === "calendar" ? (
-                      <CalendarDays className="h-4 w-4 text-sky-600" />
-                    ) : (
-                      <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : ""}`}
-                        style={!n.is_urgent ? { color: kpiColor } : undefined}
-                      />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium leading-snug line-clamp-2">{n.title}</p>
-                    {n.body && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{n.body}</p>}
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      {format(new Date(n.created_at), "M/d HH:mm", { locale: ja })}
-                    </p>
-                  </div>
-                  {n.is_urgent && (
+                    <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : ""}`}
+                      style={(!n.type || (n.type !== "workflow" && n.type !== "calendar" && !n.is_urgent)) ? { backgroundColor: hexAlpha(kpiColor, 0.12) } : undefined}
+                    >
+                      {n.type === "workflow" ? (
+                        <FileText className={`h-4 w-4 text-amber-600`} />
+                      ) : n.type === "calendar" ? (
+                        <CalendarDays className="h-4 w-4 text-sky-600" />
+                      ) : (
+                        <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : ""}`}
+                          style={!n.is_urgent ? { color: kpiColor } : undefined}
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium leading-snug line-clamp-2">{n.title}</p>
+                      {n.body && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{n.body}</p>}
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {format(new Date(n.created_at), "M/d HH:mm", { locale: ja })}
+                      </p>
+                    </div>
+                    {n.is_urgent && (
                       <Badge className="shrink-0 text-[9px] h-4 px-1 bg-rose-100 text-rose-600 hover:bg-rose-100">急</Badge>
                     )}
-                  {n.type === "calendar" && (
-                    <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1 border-sky-200 text-sky-600">予定</Badge>
-                  )}
-                </Link>
+                    {n.type === "calendar" && (
+                      <Badge variant="outline" className="shrink-0 text-[9px] h-4 px-1 border-sky-200 text-sky-600">予定</Badge>
+                    )}
+                  </Link>
+                </div>
               ))
             )}
           </div>

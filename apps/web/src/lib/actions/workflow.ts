@@ -123,10 +123,15 @@ async function syncWorkflowPayloadSideEffects(
   } as const;
 
   if (estimateId) {
-    await supabase.from("estimates").update({
+    const estimatePatch: Record<string, unknown> = {
       approval_status: statusMap[outcome],
       updated_at: new Date().toISOString(),
-    }).eq("id", estimateId);
+    };
+    // 承認完了時は見積を「発行済み」に自動確定（No.51）
+    if (outcome === "approved") {
+      estimatePatch.status = "issued";
+    }
+    await supabase.from("estimates").update(estimatePatch).eq("id", estimateId);
   }
 
   if (contractId) {
@@ -138,6 +143,11 @@ async function syncWorkflowPayloadSideEffects(
 
       const { archiveContractDocumentFromRecord } = await import("@/lib/actions/contract-document-archive");
       void archiveContractDocumentFromRecord(contractId).catch(() => {});
+    } else if (outcome === "returned") {
+      await supabase.from("contracts").update({
+        status: "preparing",
+        updated_at: new Date().toISOString(),
+      }).eq("id", contractId);
     }
   }
 }
@@ -149,15 +159,37 @@ export async function approveWorkflowStep(stepId: string, comment?: string) {
 export async function approveWorkflowStepConditional(stepId: string, condition: string) {
   const trimmed = condition.trim();
   if (!trimmed) throw new Error("条件付き承認には条件コメントが必要です");
-  return approveWorkflowStepInternal(stepId, "approved", `【条件付き承認】${trimmed}`);
+  return approveWorkflowStepInternal(stepId, "approved", `【条件付き承認】${trimmed}`, true);
 }
 
 async function approveWorkflowStepInternal(
   stepId: string,
   status: "approved",
   comment?: string,
+  conditional = false,
 ) {
   const supabase = await createClient();
+
+  // 順次承認: 前ステップが未完了なら拒否（No.85）
+  const { data: currentStep } = await supabase
+    .from("workflow_steps")
+    .select("id, request_id, step_order, status")
+    .eq("id", stepId)
+    .single();
+  if (!currentStep) throw new Error("承認ステップが見つかりません");
+  if (currentStep.status !== "pending") throw new Error("このステップは既に処理済みです");
+
+  const { data: earlierPending } = await supabase
+    .from("workflow_steps")
+    .select("id, step_order")
+    .eq("request_id", currentStep.request_id)
+    .eq("status", "pending")
+    .lt("step_order", currentStep.step_order)
+    .limit(1);
+  if (earlierPending && earlierPending.length > 0) {
+    throw new Error("前の承認ステップが完了していません。順番に承認してください");
+  }
+
   const { error } = await supabase
     .from("workflow_steps")
     .update({ status, comment: comment || null, decided_at: new Date().toISOString() })
@@ -165,13 +197,14 @@ async function approveWorkflowStepInternal(
   if (error) throw error;
 
   // Check if all steps are approved
-  const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
+  const { data: step } = await supabase.from("workflow_steps").select("request_id, step_order").eq("id", stepId).single();
   if (step) {
     const { data: pendingSteps } = await supabase
       .from("workflow_steps")
-      .select("id")
+      .select("id, approver_id, step_order")
       .eq("request_id", step.request_id)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .order("step_order", { ascending: true });
 
     if (!pendingSteps || pendingSteps.length === 0) {
       await supabase
@@ -181,7 +214,7 @@ async function approveWorkflowStepInternal(
 
       const { data: request } = await supabase
         .from("workflow_requests")
-        .select("company_id, title")
+        .select("company_id, title, requester_id, payload")
         .eq("id", step.request_id)
         .single();
       if (request) {
@@ -190,6 +223,74 @@ async function approveWorkflowStepInternal(
           title: request.title,
         });
         await syncWorkflowPayloadSideEffects(supabase, step.request_id, "approved");
+
+        // 条件付き承認の場合は見積 approval_status を上書き（No.46/52）
+        if (conditional) {
+          const estimateId = (request.payload as Record<string, unknown> | undefined)?.estimate_id as string | undefined;
+          if (estimateId) {
+            await supabase.from("estimates").update({
+              approval_status: "conditional",
+              updated_at: new Date().toISOString(),
+            }).eq("id", estimateId);
+          }
+        }
+
+        const contractId = (request.payload as Record<string, unknown> | undefined)?.contract_id as string | undefined;
+        if (contractId) {
+          const { data: contract } = await supabase
+            .from("contracts")
+            .select("assigned_to, title")
+            .eq("id", contractId)
+            .single();
+
+          const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+          const notifyIds = new Set<string>();
+          if (request.requester_id) notifyIds.add(request.requester_id);
+          if (contract?.assigned_to) notifyIds.add(contract.assigned_to);
+
+          for (const userId of notifyIds) {
+            await notifySalesFlowUser(supabase, request.company_id, userId, {
+              title: `契約承認完了: ${contract?.title ?? request.title}`,
+              description: "電子契約タブからクラウドサインで送信できます",
+              href: `/contracts/${contractId}?tab=esign`,
+            }, request.requester_id);
+          }
+        }
+
+        // 見積承認完了時も申請者へ通知
+        const estimateId = (request.payload as Record<string, unknown> | undefined)?.estimate_id as string | undefined;
+        if (estimateId && request.requester_id) {
+          const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+          await notifySalesFlowUser(supabase, request.company_id, request.requester_id, {
+            title: conditional
+              ? `見積が条件付き承認されました: ${request.title}`
+              : `見積が承認されました: ${request.title}`,
+            description: conditional
+              ? "条件を確認のうえ、顧客へ提示してください"
+              : "見積が発行済みになりました。顧客へ提示できます",
+            href: `/quotes/${estimateId}`,
+            urgent: conditional,
+          });
+        }
+      }
+    } else {
+      // 次の承認者へ順次通知（No.85）
+      const next = pendingSteps[0];
+      if (next?.approver_id) {
+        const { data: request } = await supabase
+          .from("workflow_requests")
+          .select("company_id, title, requester_id")
+          .eq("id", step.request_id)
+          .single();
+        if (request) {
+          const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+          await notifySalesFlowUser(supabase, request.company_id, next.approver_id, {
+            title: `契約承認依頼（次ステップ）: ${request.title}`,
+            description: `Step ${next.step_order} の承認をお願いします`,
+            href: `/workflow/${step.request_id}`,
+            urgent: true,
+          }, request.requester_id);
+        }
       }
     }
   }
@@ -227,6 +328,9 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
 
 export async function remandWorkflowStep(stepId: string, comment?: string) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
   const { error } = await supabase
     .from("workflow_steps")
     .update({ status: "rejected", comment: comment || null, decided_at: new Date().toISOString() })
@@ -235,19 +339,55 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
 
   const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
   if (step) {
+    const { data: existing } = await supabase
+      .from("workflow_requests")
+      .select("payload")
+      .eq("id", step.request_id)
+      .single();
+
+    const payload = {
+      ...((existing?.payload ?? {}) as Record<string, unknown>),
+      remand: true,
+      remand_comment: comment ?? null,
+      remanded_at: new Date().toISOString(),
+    };
+
     await supabase
       .from("workflow_requests")
-      .update({ status: "submitted", decided_at: null })
+      .update({
+        status: "rejected",
+        decided_at: new Date().toISOString(),
+        payload,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", step.request_id);
+
     await syncWorkflowPayloadSideEffects(supabase, step.request_id, "returned");
-    // 後続ステップをリセット
-    await supabase
-      .from("workflow_steps")
-      .update({ status: "pending", decided_at: null, comment: null })
-      .eq("request_id", step.request_id)
-      .gt("step_order",
-        (await supabase.from("workflow_steps").select("step_order").eq("id", stepId).single()).data?.step_order ?? 0
-      );
+
+    const { data: request } = await supabase
+      .from("workflow_requests")
+      .select("company_id, requester_id, title, payload")
+      .eq("id", step.request_id)
+      .single();
+
+    if (request) {
+      const payload = (request.payload ?? {}) as Record<string, unknown>;
+      const contractId = payload.contract_id as string | undefined;
+      const estimateId = payload.estimate_id as string | undefined;
+      const href = estimateId
+        ? `/quotes/${estimateId}`
+        : contractId
+          ? `/contracts/${contractId}?tab=documents`
+          : `/workflow/${step.request_id}`;
+
+      const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+      await notifySalesFlowUser(supabase, request.company_id, request.requester_id, {
+        title: `差戻しされました: ${request.title}`,
+        description: comment?.trim() || "内容を修正のうえ再申請してください",
+        href,
+        urgent: true,
+      }, user.id);
+    }
   }
 }
 
@@ -294,6 +434,46 @@ export async function addWorkflowComment(requestId: string, body: string) {
     message: body,
   });
   if (error) throw error;
+
+  // コメント着信通知（No.43/44）
+  const { data: request } = await supabase
+    .from("workflow_requests")
+    .select("title, requester_id, payload")
+    .eq("id", requestId)
+    .single();
+  const { data: steps } = await supabase
+    .from("workflow_steps")
+    .select("approver_id")
+    .eq("request_id", requestId);
+
+  const notifyIds = new Set<string>();
+  if (request?.requester_id && request.requester_id !== user.id) {
+    notifyIds.add(request.requester_id);
+  }
+  for (const s of steps ?? []) {
+    if (s.approver_id && s.approver_id !== user.id) notifyIds.add(s.approver_id);
+  }
+
+  if (notifyIds.size > 0) {
+    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+    const estimateId = (request?.payload as Record<string, unknown> | undefined)?.estimate_id as string | undefined;
+    const contractId = (request?.payload as Record<string, unknown> | undefined)?.contract_id as string | undefined;
+    const href = estimateId
+      ? `/quotes/${estimateId}`
+      : contractId
+        ? `/contracts/${contractId}`
+        : `/workflow/${requestId}`;
+
+    for (const uid of notifyIds) {
+      await notifySalesFlowUser(supabase, profile.company_id, uid, {
+        title: `承認スレッドにコメント: ${request?.title ?? ""}`,
+        description: body.slice(0, 200),
+        href: `/workflow/${requestId}`,
+        urgent: false,
+      }, user.id);
+      void href;
+    }
+  }
 }
 
 export async function getWorkflowApprovalSupport(requestId: string) {

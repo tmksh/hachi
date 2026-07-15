@@ -2,7 +2,8 @@ export const STATUS_LABELS: Record<string, string> = {
   draft: "下書き",
   pending: "承認待ち",
   approved: "承認済み",
-  rejected: "差戻し",
+  rejected: "却下",
+  returned: "差戻し",
   submitted: "提出済み",
   cancelled: "キャンセル",
   active: "有効",
@@ -17,6 +18,8 @@ export const STATUS_LABELS: Record<string, string> = {
   sent: "送付済み",
   accepted: "受理",
   paid: "入金済み",
+  none: "未申請",
+  conditional: "条件付き承認",
 };
 
 export type StatusEntity =
@@ -65,12 +68,29 @@ export const ENTITY_STATUS_OPTIONS: Record<StatusEntity, StatusOption[]> = {
     { value: "submitted", label: "申請中", color: "text-blue-600" },
     { value: "approved", label: "承認済み", color: "text-emerald-600" },
     { value: "rejected", label: "却下", color: "text-rose-500" },
+    { value: "returned", label: "差戻し", color: "text-amber-600" },
     { value: "cancelled", label: "キャンセル", color: "text-muted-foreground" },
   ],
 };
 
 export function getStatusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
+}
+
+/** ワークフロー申請の表示用ラベル（差戻しと却下を区別） */
+export function getWorkflowStatusLabel(
+  status: string,
+  payload?: Record<string, unknown> | null,
+): string {
+  if (status === "rejected" && payload?.remand) return "差戻し";
+  return getStatusLabel(status);
+}
+
+export function isWorkflowRemanded(
+  status: string,
+  payload?: Record<string, unknown> | null,
+): boolean {
+  return status === "rejected" && Boolean(payload?.remand);
 }
 
 export function getStatusOption(

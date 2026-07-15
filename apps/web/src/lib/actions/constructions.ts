@@ -275,19 +275,16 @@ export async function createConstruction(input: {
     deal_id: input.deal_id,
   });
 
-  if (input.assigned_to && input.assigned_to !== user.id) {
-    await supabase.from("todos").insert({
-      company_id: profile.company_id,
-      assigned_to: input.assigned_to,
-      customer_id: input.customer_id ?? null,
-      deal_id: input.deal_id ?? null,
+  if (input.assigned_to) {
+    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+    await notifySalesFlowUser(supabase, profile.company_id, input.assigned_to, {
       title: `現場担当アサイン: ${data.title}`,
       description: `工事 ${data.construction_no} の現場担当に割り当てられました`,
-      status: "pending",
-      priority: "high",
-      tags: ["sales_flow", "construction"],
-      source: "deal_won",
-    });
+      href: `/constructions/${data.id}`,
+      customerId: input.customer_id,
+      dealId: input.deal_id,
+      urgent: true,
+    }, user.id);
   }
 
   return data as Construction;
@@ -1145,6 +1142,19 @@ export async function addEstimateCategory(estimateId: string, name: string) {
     .eq("id", estimateId);
 
   return category;
+}
+
+export async function updateEstimateCategoryReserve(categoryId: string, reserveFeeRate: number) {
+  const supabase = await createClient();
+  const rate = Math.max(0, Math.min(1, reserveFeeRate));
+  const { data, error } = await supabase
+    .from("estimate_categories")
+    .update({ reserve_fee_rate: rate })
+    .eq("id", categoryId)
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+  return data;
 }
 
 export async function addEstimateItem(estimateId: string, categoryId: string, name?: string) {

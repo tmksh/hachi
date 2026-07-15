@@ -161,6 +161,9 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
       case "warranty_include":
         v[f.name] = 1;
         break;
+      case "payment_terms":
+        v[f.name] = "着工時30%、上棟時30%、完成引渡時40%";
+        break;
       case "special_notes":
         v[f.name] = "";
         break;
@@ -171,14 +174,15 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
   return v;
 }
 
-/** 設定のPDF発行元情報から自社（乙）情報を解決 */
+/** 設定のPDF発行元情報・会社情報から自社（乙）情報を解決 */
 export function resolveCompanyContext(
-  company: { name: string } | null | undefined,
+  company: { name: string; settings?: Record<string, unknown> | null } | null | undefined,
   pdf: { issuerName?: string; issuerAddress?: string } | null | undefined,
 ): { name: string; address: string } {
+  const settings = (company?.settings ?? {}) as Record<string, string>;
   return {
     name: pdf?.issuerName?.trim() || company?.name || "",
-    address: pdf?.issuerAddress?.trim() || "",
+    address: pdf?.issuerAddress?.trim() || settings.address?.trim() || "",
   };
 }
 

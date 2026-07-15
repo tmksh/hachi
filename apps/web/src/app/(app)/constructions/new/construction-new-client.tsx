@@ -48,6 +48,7 @@ type ConstructionNewClientProps = {
   initialStartDate: string;
   initialEndDate: string;
   initialAssignedTo: string;
+  initialAssigneeCandidates?: Array<{ profileId: string; displayName: string; score: number }>;
 };
 
 function ConstructionNewPageContent({
@@ -63,6 +64,7 @@ function ConstructionNewPageContent({
   initialStartDate,
   initialEndDate,
   initialAssignedTo,
+  initialAssigneeCandidates = [],
 }: ConstructionNewClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -79,6 +81,7 @@ function ConstructionNewPageContent({
   const [orderAmount, setOrderAmount] = useState(initialOrderAmount);
   const [budgetCost, setBudgetCost] = useState("");
   const [departmentName, setDepartmentName] = useState("");
+  const [assigneeCandidates] = useState(initialAssigneeCandidates);
 
   useEffect(() => {
     setContracts(initialContracts);
@@ -89,14 +92,15 @@ function ConstructionNewPageContent({
   const applyContract = useCallback((contract: EligibleContract) => {
     setCustomerId(contract.customer_id ?? "");
     setOrderAmount(String(contract.amount ?? ""));
-    setStartDate(toDateInputValue(contract.start_date));
-    setEndDate(toDateInputValue(contract.end_date));
-    setAssignedTo(contract.assigned_to ?? "");
+    // AI推定工期は契約側が空のとき保持（No.64）
+    setStartDate((prev) => toDateInputValue(contract.start_date) || prev || initialStartDate);
+    setEndDate((prev) => toDateInputValue(contract.end_date) || prev || initialEndDate);
+    setAssignedTo((prev) => contract.assigned_to || prev || initialAssignedTo);
     setDepartmentName(contract.department_name ?? "");
     if (!titleTouched) {
       setTitle(contract.title);
     }
-  }, [titleTouched]);
+  }, [titleTouched, initialStartDate, initialEndDate, initialAssignedTo]);
 
   const clearContractFields = useCallback(() => {
     setCustomerId(initialCustomerId);
@@ -263,13 +267,34 @@ function ConstructionNewPageContent({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">未設定</SelectItem>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.display_name}
-                    </SelectItem>
-                  ))}
+                  {profiles.map((p) => {
+                    const scored = assigneeCandidates.find((c) => c.profileId === p.id);
+                    return (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.display_name}{scored ? `（適合度 ${scored.score}）` : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              {assigneeCandidates.length > 0 && (
+                <div className="rounded-md border border-border/50 bg-muted/20 p-2 space-y-1">
+                  <p className="text-[10px] text-muted-foreground">AI現場担当者推薦</p>
+                  {assigneeCandidates.slice(0, 5).map((c) => (
+                    <button
+                      key={c.profileId}
+                      type="button"
+                      className={`w-full text-left text-xs px-1.5 py-1 rounded hover:bg-background ${
+                        assignedTo === c.profileId ? "bg-background font-medium" : ""
+                      }`}
+                      onClick={() => setAssignedTo(c.profileId)}
+                    >
+                      {c.displayName}
+                      <span className="text-muted-foreground ml-1">適合度 {c.score}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -319,7 +344,7 @@ function ConstructionNewPageContent({
             </Link>
             <Button size="sm" onClick={handleSave} disabled={saving}>
               <Save className="size-3.5 mr-1" />
-              {saving ? "保存中..." : "保存"}
+              {saving ? "登録中..." : "工事登録"}
             </Button>
           </div>
         </CardContent>

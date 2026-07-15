@@ -188,6 +188,7 @@ export type EstimateCategory = {
   estimate_id: string;
   name: string;
   sort_order: number;
+  reserve_fee_rate?: number;
   created_at: string;
 };
 

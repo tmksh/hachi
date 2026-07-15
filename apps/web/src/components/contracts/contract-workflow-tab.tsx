@@ -18,6 +18,7 @@ import { Loader2, ExternalLink, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { getContractWorkflowRequests, submitContractWorkflow } from "@/lib/actions/contract-features";
 import { findTemplate, type FormValues } from "@/lib/contract-templates";
+import { getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
 import type { ContractDetail } from "./contract-detail-types";
 
 type WorkflowRow = Awaited<ReturnType<typeof getContractWorkflowRequests>>[number];
@@ -37,10 +38,12 @@ export function ContractWorkflowTab({
   contractId,
   data,
   onRefresh,
+  onEsignEnabled,
 }: {
   contractId: string;
   data: ContractDetail;
   onRefresh?: () => void;
+  onEsignEnabled?: () => void;
 }) {
   const router = useRouter();
   const draft = useMemo(() => parseContractDraft(data.notes), [data.notes]);
@@ -67,7 +70,22 @@ export function ContractWorkflowTab({
   useEffect(() => { loadHistory(); }, [contractId]);
 
   const pending = history.find((r) => r.status === "submitted");
-  const filtered = history.filter((r) => tab === "all" || r.status === tab);
+  const remanded = history.find((r) => isWorkflowRemanded(r.status, r.payload as Record<string, unknown> | null));
+  const approved = history.some((r) => r.status === "approved");
+  const filtered = history.filter((r) => {
+    if (tab === "all") return true;
+    if (tab === "rejected") {
+      return r.status === "rejected" && !isWorkflowRemanded(r.status, r.payload as Record<string, unknown> | null);
+    }
+    if (tab === "returned") {
+      return isWorkflowRemanded(r.status, r.payload as Record<string, unknown> | null);
+    }
+    return r.status === tab;
+  });
+
+  useEffect(() => {
+    if (approved) onEsignEnabled?.();
+  }, [approved, onEsignEnabled]);
 
   const submit = async () => {
     setSubmitting(true);
@@ -96,7 +114,12 @@ export function ContractWorkflowTab({
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">最新契約書の内容でワークフロー申請を行います</p>
               <p className="text-xs text-muted-foreground mt-1">
-                書類作成タブの下書き内容がそのまま申請データとしてポータルのワークフローに連携されます。
+                書類作成タブの下書き内容がそのまま申請データとして連携されます。
+                多段階承認（上長→総務など）は
+                <Link href="/settings?tab=organization&sub=workflow_types" className="text-primary underline mx-1">
+                  設定＞組織＞ワークフロー
+                </Link>
+                で承認ルートを並べて構成できます。
               </p>
             </div>
           </div>
@@ -118,10 +141,18 @@ export function ContractWorkflowTab({
             {pending ? (
               <Button size="sm" variant="outline" asChild>
                 <Link href={`/workflow/${pending.id}`}>
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   申請中 — 詳細を見る
                 </Link>
               </Button>
+            ) : remanded ? (
+              <>
+                <Button size="sm" variant="outline" className="text-amber-700 border-amber-200" asChild>
+                  <Link href={`/workflow/${remanded.id}`}>
+                    差戻し — 修正内容を確認
+                  </Link>
+                </Button>
+                <Button size="sm" onClick={() => setConfirmOpen(true)}>再申請する</Button>
+              </>
             ) : (
               <Button size="sm" onClick={() => setConfirmOpen(true)}>承認ワークフローに申請</Button>
             )}
@@ -141,6 +172,7 @@ export function ContractWorkflowTab({
             <TabsTrigger value="all">すべて</TabsTrigger>
             <TabsTrigger value="submitted">申請中</TabsTrigger>
             <TabsTrigger value="approved">承認済</TabsTrigger>
+            <TabsTrigger value="returned">差戻し</TabsTrigger>
             <TabsTrigger value="rejected">却下</TabsTrigger>
           </TabsList>
           <TabsContent value={tab} className="mt-3">
@@ -169,7 +201,12 @@ export function ContractWorkflowTab({
                         <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                           {format(new Date(r.created_at), "yyyy/M/d HH:mm", { locale: ja })}
                         </TableCell>
-                        <TableCell><StatusBadge status={r.status} /></TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            status={r.status}
+                            label={getWorkflowStatusLabel(r.status, r.payload as Record<string, unknown> | null)}
+                          />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

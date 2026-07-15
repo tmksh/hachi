@@ -75,7 +75,7 @@ async function resolveDefaultApprovalApprovers(
     .select("id, role")
     .eq("company_id", companyId);
 
-  const roleOrder = ["admin", "field_manager", "contractor_admin", "hq_admin", "executive"] as const;
+  const roleOrder = ["admin", "administration", "field_manager", "contractor_admin", "hq_admin", "executive"] as const;
   const ids: string[] = [];
   for (const role of roleOrder) {
     const match = profiles?.find((p) => p.role === role);
@@ -673,10 +673,14 @@ export async function submitContractWorkflow(contractId: string, title: string, 
   });
 
   const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
-  for (const approverId of approverIds) {
-    await notifySalesFlowUser(supabase, company_id, approverId, {
+  // 順次承認: 最初の承認者のみに通知（No.85）
+  const firstApprover = approverIds[0];
+  if (firstApprover) {
+    await notifySalesFlowUser(supabase, company_id, firstApprover, {
       title: `契約承認依頼: ${title}`,
-      description: "契約書の社内承認をお願いします",
+      description: approverIds.length > 1
+        ? `社内承認（Step 1 / ${approverIds.length}）をお願いします`
+        : "契約書の社内承認をお願いします",
       href: `/workflow/${request.id}`,
       urgent: true,
     }, user_id);
@@ -688,6 +692,85 @@ export async function submitContractWorkflow(contractId: string, title: string, 
   });
 
   return request;
+}
+
+/** 総務ロールが契約承認時に支払条件・口座等を追記（No.86） */
+export async function saveContractAdminSupplement(
+  requestId: string,
+  input: { payment_terms?: string; bank_account?: string; admin_notes?: string },
+) {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user_id)
+    .single();
+  if (profile?.role !== "administration" && profile?.role !== "admin" && profile?.role !== "hq_admin") {
+    throw new Error("総務（または管理者）のみ追記できます");
+  }
+
+  const { data: request } = await supabase
+    .from("workflow_requests")
+    .select("payload, company_id")
+    .eq("id", requestId)
+    .eq("company_id", company_id)
+    .single();
+  if (!request) throw new Error("申請が見つかりません");
+
+  const payload = { ...((request.payload as Record<string, unknown> | null) ?? {}) };
+  const contractId = payload.contract_id as string | undefined;
+  if (!contractId) throw new Error("契約申請ではありません");
+
+  payload.payment_terms = input.payment_terms?.trim() ?? payload.payment_terms ?? "";
+  payload.bank_account = input.bank_account?.trim() ?? payload.bank_account ?? "";
+  payload.admin_notes = input.admin_notes?.trim() ?? payload.admin_notes ?? "";
+  payload.admin_supplemented_at = new Date().toISOString();
+  payload.admin_supplemented_by = user_id;
+
+  await supabase.from("workflow_requests").update({
+    payload,
+    updated_at: new Date().toISOString(),
+  }).eq("id", requestId);
+
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("notes")
+    .eq("id", contractId)
+    .single();
+  if (contract) {
+    let notesObj: Record<string, unknown> = {};
+    try {
+      notesObj = contract.notes ? JSON.parse(contract.notes) as Record<string, unknown> : {};
+    } catch {
+      notesObj = {};
+    }
+    const draft = (notesObj.contract_draft as Record<string, unknown> | undefined) ?? {};
+    const form = { ...((draft.form as Record<string, unknown> | undefined) ?? {}) };
+    if (input.payment_terms?.trim()) form.payment_terms = input.payment_terms.trim();
+    if (input.bank_account?.trim()) form.bank_account = input.bank_account.trim();
+    notesObj.contract_draft = { ...draft, form };
+    if (input.admin_notes?.trim()) notesObj.admin_notes = input.admin_notes.trim();
+    await supabase.from("contracts").update({
+      notes: JSON.stringify(notesObj),
+      updated_at: new Date().toISOString(),
+    }).eq("id", contractId);
+  }
+
+  return { ok: true as const };
+}
+
+export async function generateContractEsignMessage(contractId: string) {
+  const { supabase } = await getCompanyContext();
+  const { data: contract } = await supabase
+    .from("contracts")
+    .select("title, customer:customers(name)")
+    .eq("id", contractId)
+    .single();
+  if (!contract) throw new Error("契約が見つかりません");
+
+  const customerName = (contract.customer as { name?: string } | null)?.name ?? "ご担当者";
+  const { generateEsignMessage } = await import("@/lib/integrations/linq-ai");
+  return generateEsignMessage(customerName, contract.title);
 }
 
 export async function sendContractCloudSign(contractId: string, email: string, subject: string, message: string) {

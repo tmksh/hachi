@@ -316,6 +316,11 @@ export function DashboardClient({
                     <span className={`text-sm flex-1 truncate ${isCompleted ? "line-through text-slate-300" : isUrgent ? "text-slate-800 font-semibold" : "text-slate-700"}`}>
                       {todo.title}
                     </span>
+                    {isUrgent && (
+                      <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1 py-0.5 shrink-0">
+                        優先
+                      </span>
+                    )}
                     {isUrgent && <span className="h-1.5 w-1.5 rounded-full bg-rose-400 shrink-0" />}
                   </div>
                 );
@@ -799,6 +804,21 @@ export function DashboardClient({
 
   return (
     <div className="@container p-3 md:p-4 xl:p-5 2xl:p-6 space-y-3 md:space-y-4 min-h-screen min-w-0">
+
+      {/* ToDo期限通知バナー（No.27） */}
+      {!loading && urgentCount > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+            <p className="text-sm text-rose-900 truncate">
+              優先度の高いToDoが <span className="font-bold">{urgentCount}件</span> あります。今日のフォーカスを確認してください。
+            </p>
+          </div>
+          <Link href="#ai-focus" className="text-xs font-medium text-rose-700 hover:underline shrink-0">
+            確認する
+          </Link>
+        </div>
+      )}
 
       {/* フォローアップ問い合わせダイアログ */}
       <Dialog open={!!inquiryTarget} onOpenChange={(o) => { if (!o) { setInquiryTarget(null); setInquiryContent(""); } }}>

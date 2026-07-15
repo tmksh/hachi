@@ -12,25 +12,29 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, FileCheck, Loader2 } from "lucide-react";
 import {
   getEstimateMarginThreshold,
   submitEstimateApproval,
+  confirmEstimateIssued,
 } from "@/lib/actions/sales-flow";
 import { getProfiles } from "@/lib/actions/profiles";
+import { updateEstimate } from "@/lib/actions/estimates";
 
 type Props = {
   estimateId: string;
   grossProfitRate: number;
+  onConfirmed?: () => void;
 };
 
-export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) {
+export function EstimateApprovalActions({ estimateId, grossProfitRate, onConfirmed }: Props) {
   const [marginInfo, setMarginInfo] = useState<Awaited<ReturnType<typeof getEstimateMarginThreshold>>>(null);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [approverId, setApproverId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     getEstimateMarginThreshold(estimateId).then(setMarginInfo).catch(() => {});
@@ -40,8 +44,27 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) 
   const threshold = marginInfo?.threshold ?? 50;
   const needsApproval = grossProfitRate < threshold;
   const approvalStatus = marginInfo?.approvalStatus ?? "none";
+  const canReapply = approvalStatus === "returned" || approvalStatus === "rejected";
 
-  if (!needsApproval) return null;
+  const handleConfirm = async () => {
+    setConfirming(true);
+    try {
+      await confirmEstimateIssued(estimateId);
+      toast.success("見積を確定（発行済み）にしました");
+      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "approved" } : prev);
+      onConfirmed?.();
+    } catch (e) {
+      try {
+        await updateEstimate(estimateId, { status: "issued" });
+        toast.success("見積を確定（発行済み）にしました");
+        onConfirmed?.();
+      } catch {
+        toast.error(e instanceof Error ? e.message : "確定に失敗しました");
+      }
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!comment.trim()) { toast.error("申請コメントを入力してください"); return; }
@@ -63,6 +86,30 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) 
     }
   };
 
+  // 粗利率が基準以上 → 確定ボタンを表示（No.38）
+  if (!needsApproval) {
+    if (approvalStatus === "approved" || marginInfo?.approvalStatus === "approved") {
+      return (
+        <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
+          <CheckCircle className="h-4 w-4 mr-1" />
+          確定済み
+        </Button>
+      );
+    }
+    return (
+      <Button
+        variant="default"
+        size="sm"
+        className="bg-emerald-600 hover:bg-emerald-700"
+        onClick={() => void handleConfirm()}
+        disabled={confirming}
+      >
+        {confirming ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileCheck className="h-4 w-4 mr-1" />}
+        確定する
+      </Button>
+    );
+  }
+
   return (
     <>
       <div className="flex items-center gap-2 flex-wrap">
@@ -73,10 +120,10 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) 
               承認待ち
             </Link>
           </Button>
-        ) : approvalStatus === "approved" ? (
+        ) : approvalStatus === "approved" || approvalStatus === "conditional" ? (
           <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
             <CheckCircle className="h-4 w-4 mr-1" />
-            承認済み
+            {approvalStatus === "conditional" ? "条件付き承認済み" : "承認済み"}
           </Button>
         ) : (
           <Button
@@ -86,7 +133,7 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) 
             onClick={() => setDialogOpen(true)}
           >
             <AlertTriangle className="h-4 w-4 mr-1" />
-            上司への承認申請
+            {canReapply ? "再申請する" : "上司への承認申請"}
           </Button>
         )}
       </div>
@@ -94,12 +141,12 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>見積の上長承認申請</DialogTitle>
+            <DialogTitle>{canReapply ? "見積の再承認申請" : "見積の上長承認申請"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
               粗利率 {grossProfitRate.toFixed(1)}% は基準 {threshold.toFixed(0)}% を下回っています。
-              申請理由を入力し、承認者を選択してください。
+              {canReapply ? "修正内容を踏まえ、申請理由を入力して再申請してください。" : "申請理由を入力し、承認者を選択してください。"}
             </p>
             <div className="space-y-2">
               <Label>申請コメント（粗利率低下の理由）</Label>
@@ -128,7 +175,7 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate }: Props) 
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
             <Button onClick={handleSubmit} disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              申請する
+              {canReapply ? "再申請する" : "申請する"}
             </Button>
           </DialogFooter>
         </DialogContent>

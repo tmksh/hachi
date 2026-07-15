@@ -56,7 +56,7 @@ export async function getNotifications(): Promise<Notification[]> {
       .limit(10),
     supabase
       .from("workflow_requests")
-      .select("id, title, status, decided_at")
+      .select("id, title, status, decided_at, payload")
       .eq("requester_id", user.id)
       .in("status", ["approved", "rejected"])
       .gte("decided_at", in7daysAgo.toISOString())
@@ -64,9 +64,9 @@ export async function getNotifications(): Promise<Notification[]> {
       .limit(10),
     supabase
       .from("workflow_steps")
-      .select("id, request_id, decided_at, comment, workflow_requests!inner(title, requester_id, status)")
+      .select("id, request_id, decided_at, comment, workflow_requests!inner(title, requester_id, status, payload)")
       .eq("workflow_requests.requester_id", user.id)
-      .eq("workflow_requests.status", "submitted")
+      .eq("workflow_requests.status", "rejected")
       .eq("status", "rejected")
       .gte("decided_at", in7daysAgo.toISOString())
       .order("decided_at", { ascending: false })
@@ -143,36 +143,50 @@ export async function getNotifications(): Promise<Notification[]> {
     };
   });
 
-  const decidedNotifs: Notification[] = (decidedRequests || []).map((r) => ({
-    id: `wf_decided_${r.id}`,
-    type: "workflow" as const,
-    title: r.status === "approved" ? `承認されました: ${r.title}` : `却下されました: ${r.title}`,
-    href: `/workflow/${r.id}`,
-    created_at: r.decided_at ?? r.id,
-    is_urgent: r.status === "rejected",
-  }));
+  const decidedNotifs: Notification[] = (decidedRequests || []).map((r) => {
+    const payload = (r as { payload?: Record<string, unknown> }).payload;
+    const isRemand = r.status === "rejected" && Boolean(payload?.remand);
+    return {
+      id: `wf_decided_${r.id}`,
+      type: "workflow" as const,
+      title: r.status === "approved"
+        ? `承認されました: ${r.title}`
+        : isRemand
+          ? `差戻しされました: ${r.title}`
+          : `却下されました: ${r.title}`,
+      href: `/workflow/${r.id}`,
+      created_at: r.decided_at ?? r.id,
+      is_urgent: r.status === "rejected",
+    };
+  });
 
   type RemandStep = {
     id: string;
     request_id: string;
     decided_at: string | null;
     comment: string | null;
-    workflow_requests: { title: string } | { title: string }[];
+    workflow_requests: { title: string; payload?: Record<string, unknown> } | { title: string; payload?: Record<string, unknown> }[];
   };
 
-  const remandNotifs: Notification[] = ((remandedSteps as RemandStep[] | null) ?? []).map((s) => {
-    const wfr = s.workflow_requests;
-    const req = Array.isArray(wfr) ? wfr[0] : wfr;
-    return {
-      id: `wf_remand_${s.id}`,
-      type: "workflow" as const,
-      title: `差戻しされました: ${req?.title ?? ""}`,
-      body: s.comment ?? undefined,
-      href: `/workflow/${s.request_id}`,
-      created_at: s.decided_at ?? s.id,
-      is_urgent: true,
-    };
-  });
+  const remandNotifs: Notification[] = ((remandedSteps as RemandStep[] | null) ?? [])
+    .filter((s) => {
+      const wfr = s.workflow_requests;
+      const req = Array.isArray(wfr) ? wfr[0] : wfr;
+      return Boolean(req?.payload?.remand);
+    })
+    .map((s) => {
+      const wfr = s.workflow_requests;
+      const req = Array.isArray(wfr) ? wfr[0] : wfr;
+      return {
+        id: `wf_remand_${s.id}`,
+        type: "workflow" as const,
+        title: `差戻しされました: ${req?.title ?? ""}`,
+        body: s.comment ?? undefined,
+        href: `/workflow/${s.request_id}`,
+        created_at: s.decided_at ?? s.id,
+        is_urgent: true,
+      };
+    });
 
   const salesFlowNotifs: Notification[] = (urgentSalesTodos ?? []).map((t) => ({
     id: `sf_${t.id}`,

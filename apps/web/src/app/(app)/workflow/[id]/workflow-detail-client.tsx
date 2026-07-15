@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { getWorkflowStatusLabel } from "@/lib/status-config";
 import { ArrowLeft, Check, X, CornerUpLeft, MessageSquare, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -28,8 +29,11 @@ import {
   addWorkflowComment,
   getWorkflowApprovalSupport,
 } from "@/lib/actions/workflow";
+import { saveContractAdminSupplement } from "@/lib/actions/contract-features";
 import type { ApprovalSupportResult } from "@/lib/integrations/linq-ai/types";
 import { useAuth } from "@/hooks/use-auth";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type Detail = Awaited<ReturnType<typeof getWorkflowRequest>>;
 type Step = {
@@ -59,7 +63,7 @@ export function WorkflowDetailClient({
   initialApprovalSupport,
 }: WorkflowDetailClientProps) {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [data, setData] = useState<Detail | null>(initialData);
   const [approvalSupport, setApprovalSupport] = useState<ApprovalSupportResult | null>(initialApprovalSupport);
 
@@ -71,9 +75,20 @@ export function WorkflowDetailClient({
   const [postingComment, setPostingComment] = useState(false);
   const commentRef = useRef<HTMLTextAreaElement>(null);
 
+  const [paymentTerms, setPaymentTerms] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [adminNotes, setAdminNotes] = useState("");
+  const [savingAdmin, setSavingAdmin] = useState(false);
+
   useEffect(() => {
     setData(initialData);
     setApprovalSupport(initialApprovalSupport);
+    const payload = (initialData as Detail & { payload?: Record<string, unknown> } | null)?.payload;
+    if (payload) {
+      setPaymentTerms(String(payload.payment_terms ?? ""));
+      setBankAccount(String(payload.bank_account ?? ""));
+      setAdminNotes(String(payload.admin_notes ?? ""));
+    }
   }, [initialData, initialApprovalSupport]);
 
   const reload = () => {
@@ -98,8 +113,8 @@ export function WorkflowDetailClient({
       await approveWorkflowStep(stepId);
       toast.success("承認しました");
       reload();
-    } catch {
-      toast.error("失敗しました");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "失敗しました");
     }
   };
 
@@ -126,8 +141,8 @@ export function WorkflowDetailClient({
       }
       setActionDialog(null);
       reload();
-    } catch {
-      toast.error("失敗しました");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "失敗しました");
     } finally {
       setActioning(false);
     }
@@ -162,8 +177,33 @@ export function WorkflowDetailClient({
   const comments = (data.comments ?? []) as Comment[];
   const fields = (data as Detail & { payload?: Record<string, unknown> }).payload ?? {};
   const contractId = fields.contract_id as string | undefined;
+  const activeStepOrder = Math.min(
+    ...steps.filter((s) => s.status === "pending").map((s) => s.step_order),
+    Number.POSITIVE_INFINITY,
+  );
+  const canEditAdminSupplement = Boolean(
+    contractId
+    && hasRole("administration", "admin", "hq_admin")
+    && data.status === "submitted",
+  );
+  const PAYLOAD_LABELS: Record<string, string> = {
+    estimate_id: "見積ID",
+    customer_name: "顧客名",
+    gross_profit_rate: "粗利率",
+    application_comment: "申請コメント",
+    contract_id: "契約ID",
+    template_id: "テンプレートID",
+    remand: "差戻し",
+    remand_comment: "差戻しコメント",
+    remanded_at: "差戻し日時",
+    payment_terms: "支払条件",
+    bank_account: "口座情報",
+    admin_notes: "総務メモ",
+    admin_supplemented_at: "総務追記日時",
+    admin_supplemented_by: "総務追記者",
+  };
   const displayFields = Object.entries(fields).filter(([k]) =>
-    !["contract_id", "template_id", "contract_draft"].includes(k),
+    !["contract_id", "template_id", "contract_draft", "remand", "admin_supplemented_by"].includes(k),
   );
 
   return (
@@ -174,7 +214,13 @@ export function WorkflowDetailClient({
 
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.title}</h1>
-        <StatusBadge status={data.status} />
+        <StatusBadge
+          status={data.status}
+          label={getWorkflowStatusLabel(
+            data.status,
+            (data as Detail & { payload?: Record<string, unknown> }).payload,
+          )}
+        />
         {(data as Detail & { is_urgent?: boolean }).is_urgent && (
           <Badge variant="destructive">緊急</Badge>
         )}
@@ -216,8 +262,12 @@ export function WorkflowDetailClient({
             )}
             {displayFields.map(([k, v]) => (
               <div key={k} className="flex justify-between gap-4">
-                <span className="text-muted-foreground shrink-0">{k}</span>
-                <span className="text-right break-all">{String(v)}</span>
+                <span className="text-muted-foreground shrink-0">{PAYLOAD_LABELS[k] ?? k}</span>
+                <span className="text-right break-all">
+                  {k === "gross_profit_rate" && typeof v === "number"
+                    ? `${v.toFixed(1)}%`
+                    : String(v)}
+                </span>
               </div>
             ))}
           </CardContent>
@@ -231,7 +281,10 @@ export function WorkflowDetailClient({
             )}
             {steps.map((step) => {
               const isMyStep = user?.id === step.approver?.id;
-              const canAct = isMyStep && step.status === "pending";
+              // 順次承認: いまの順番の pending のみ操作可（No.85）
+              const isCurrentStep = step.status === "pending" && step.step_order === activeStepOrder;
+              const canAct = isMyStep && isCurrentStep;
+              const waitingEarlier = step.status === "pending" && step.step_order > activeStepOrder;
               return (
                 <div key={step.id} className="flex items-start justify-between p-3 border rounded-lg gap-3">
                   <div className="space-y-1 flex-1 min-w-0">
@@ -239,6 +292,12 @@ export function WorkflowDetailClient({
                       Step {step.step_order}: {step.approver?.display_name ?? "-"}
                       {isMyStep && (
                         <Badge variant="secondary" className="ml-2 text-xs">あなた</Badge>
+                      )}
+                      {isCurrentStep && (
+                        <Badge className="ml-2 text-xs">承認待ち</Badge>
+                      )}
+                      {waitingEarlier && (
+                        <Badge variant="outline" className="ml-2 text-xs">前ステップ待ち</Badge>
                       )}
                     </p>
                     <StatusBadge status={step.status} />
@@ -258,11 +317,9 @@ export function WorkflowDetailClient({
                       <Button size="sm" onClick={() => handleApprove(step.id)} className="gap-1 h-8">
                         <Check className="h-3.5 w-3.5" />承認
                       </Button>
-                      {(approvalSupport?.recommendation === "conditional" || approvalSupport?.suggestedComment) && (
-                        <Button size="sm" variant="secondary" onClick={() => openActionDialog("conditional", step.id)} className="gap-1 h-8">
-                          <AlertTriangle className="h-3.5 w-3.5" />条件付き
-                        </Button>
-                      )}
+                      <Button size="sm" variant="secondary" onClick={() => openActionDialog("conditional", step.id)} className="gap-1 h-8">
+                        <AlertTriangle className="h-3.5 w-3.5" />条件付き承認
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => openActionDialog("remand", step.id)} className="gap-1 h-8">
                         <CornerUpLeft className="h-3.5 w-3.5" />差戻し
                       </Button>
@@ -277,6 +334,68 @@ export function WorkflowDetailClient({
           </CardContent>
         </Card>
       </div>
+
+      {canEditAdminSupplement && (
+        <Card className="border-teal-200 bg-teal-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">総務追記（支払条件・口座情報）</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              総務ロールの承認者が必要事項を追記してから承認できます。
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">支払条件</Label>
+              <Textarea
+                rows={2}
+                value={paymentTerms}
+                onChange={(e) => setPaymentTerms(e.target.value)}
+                placeholder="例: 着工時30% / 中間40% / 完工時30%"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">振込口座</Label>
+              <Input
+                value={bankAccount}
+                onChange={(e) => setBankAccount(e.target.value)}
+                placeholder="銀行名・支店・口座番号"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">総務メモ</Label>
+              <Textarea
+                rows={2}
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="社内向けメモ"
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={savingAdmin}
+              onClick={async () => {
+                if (!id) return;
+                setSavingAdmin(true);
+                try {
+                  await saveContractAdminSupplement(id as string, {
+                    payment_terms: paymentTerms,
+                    bank_account: bankAccount,
+                    admin_notes: adminNotes,
+                  });
+                  toast.success("総務追記を保存しました");
+                  reload();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "保存に失敗しました");
+                } finally {
+                  setSavingAdmin(false);
+                }
+              }}
+            >
+              {savingAdmin ? "保存中..." : "追記を保存"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {approvalSupport && (
         <Card className="border-primary/20 bg-primary/5">

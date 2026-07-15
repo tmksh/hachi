@@ -11,6 +11,7 @@ import {
   addEstimateCategory,
   addEstimateItem,
   updateEstimateItem,
+  updateEstimateCategoryReserve,
   importCategoryFromReference,
   bulkApplyMarginToEstimate,
   type EstimateItemUpdatePatch,
@@ -391,7 +392,18 @@ export function EstimateDetailView({
   const [savingReserve, setSavingReserve] = useState(false);
   const subtotal = estimate.subtotal ?? 0;
   const reserve1 = Math.round(subtotal * reserve1Rate);
-  const reserve2 = Math.round(subtotal * reserve2Rate);
+  const categories: EstimateCategory[] = estimate.categories ?? [];
+  const items: EstimateItem[] = estimate.items ?? [];
+  // 予備費②: 大項目ごとに reserve_fee_rate があれば行レベル積算、なければ見積全体率（No.36）
+  const hasCategoryReserve = categories.some((c) => (c.reserve_fee_rate ?? 0) > 0);
+  const reserve2 = hasCategoryReserve
+    ? categories.reduce((sum, cat) => {
+        const catCost = items
+          .filter((i) => i.category_id === cat.id)
+          .reduce((s, i) => s + (i.cost_amount ?? 0), 0);
+        return sum + Math.round(catCost * (cat.reserve_fee_rate ?? 0));
+      }, 0)
+    : Math.round(subtotal * reserve2Rate);
   const costTotal = estimate.cost_total ?? 0;
 
   const saveReserveRates = async (r1: number, r2: number) => {
@@ -406,8 +418,6 @@ export function EstimateDetailView({
     }
   };
 
-  const categories: EstimateCategory[] = estimate.categories ?? [];
-  const items: EstimateItem[] = estimate.items ?? [];
   const itemsByCategory = categories.map((cat) => ({
     category: cat,
     items: items.filter((item) => item.category_id === cat.id),
@@ -834,7 +844,7 @@ export function EstimateDetailView({
             </p>
             <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{(costTotal + reserve1 + reserve2).toLocaleString()}</p>
             <p className="text-[9px] leading-tight text-muted-foreground mt-px">
-              予備費① {(reserve1Rate * 100).toFixed(0)}% ¥{reserve1.toLocaleString()} ／ ② {(reserve2Rate * 100).toFixed(0)}% ¥{reserve2.toLocaleString()}
+              予備費① {(reserve1Rate * 100).toFixed(1)}% ¥{reserve1.toLocaleString()} ／ ② {hasCategoryReserve ? "行別" : `${(reserve2Rate * 100).toFixed(1)}%`} ¥{reserve2.toLocaleString()}
             </p>
           </div>
           <div className="px-3 py-2">
@@ -1040,6 +1050,46 @@ export function EstimateDetailView({
                       )}
                     </button>
                     <span className="text-[10px] text-muted-foreground ml-2 font-normal">{catItems.length}項目</span>
+                    <span
+                      className="inline-flex items-center gap-1 ml-3 text-[10px] font-normal text-amber-700"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      予備費②
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        className="inline-block w-16 h-6 text-[10px] text-center px-1"
+                        value={Math.round((category.reserve_fee_rate ?? 0) * 1000) / 10}
+                        onChange={(e) => {
+                          const pct = Number(e.target.value);
+                          if (Number.isNaN(pct)) return;
+                          const next = pct / 100;
+                          onEstimateChange({
+                            ...estimate,
+                            categories: categories.map((c) =>
+                              c.id === category.id ? { ...c, reserve_fee_rate: next } : c,
+                            ),
+                          });
+                        }}
+                        onBlur={(e) => {
+                          const pct = Number((e.target as HTMLInputElement).value);
+                          const next = Number.isNaN(pct) ? 0 : pct / 100;
+                          void updateEstimateCategoryReserve(category.id, next)
+                            .then(() => {
+                              onEstimateChange({
+                                ...estimate,
+                                categories: categories.map((c) =>
+                                  c.id === category.id ? { ...c, reserve_fee_rate: next } : c,
+                                ),
+                              });
+                            })
+                            .catch(() => toast.error("行予備費の保存に失敗しました"));
+                        }}
+                      />
+                      %
+                    </span>
                   </td>
                   <td className="px-2 py-2 text-right text-muted-foreground bg-amber-50/40 whitespace-nowrap text-xs">小計</td>
                   <td className="px-2 py-2 text-right tabular-nums font-semibold bg-amber-50/40 whitespace-nowrap text-xs">¥{catCost.toLocaleString()}</td>
@@ -1162,7 +1212,7 @@ export function EstimateDetailView({
                   min={0}
                   max={100}
                   step={0.5}
-                  className="inline-block w-14 h-7 mx-1 text-xs text-center"
+                  className="inline-block w-20 h-7 mx-1 text-xs text-center"
                   value={Math.round(reserve1Rate * 1000) / 10}
                   disabled={savingReserve}
                   onChange={(e) => {
@@ -1180,7 +1230,7 @@ export function EstimateDetailView({
                   min={0}
                   max={100}
                   step={0.5}
-                  className="inline-block w-14 h-7 mx-1 text-xs text-center"
+                  className="inline-block w-20 h-7 mx-1 text-xs text-center"
                   value={Math.round(reserve2Rate * 1000) / 10}
                   disabled={savingReserve}
                   onChange={(e) => {

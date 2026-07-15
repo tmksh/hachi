@@ -362,6 +362,23 @@ export async function saveCustomerRecording(input: {
   }
   const { data, error } = await supabase.from("customer_recordings").insert(row).select().single();
   if (error) throw error;
+
+  // 手動保存時も商談自動登録・要約後処理を実行（No.15）
+  if (data.summary || data.transcript) {
+    try {
+      const { processRecordingComplete } = await import("@/lib/actions/sales-flow");
+      await processRecordingComplete({
+        customerId: input.customer_id,
+        recordingId: data.id,
+        dealId: input.deal_id,
+        transcript: data.transcript || data.summary || "",
+        memo: data.memo || undefined,
+      });
+    } catch {
+      // 後処理失敗でも録音保存自体は成功扱い
+    }
+  }
+
   return data as CustomerRecording;
 }
 
@@ -385,6 +402,8 @@ export async function createCustomerTodo(input: {
   source?: string;
 }) {
   const { supabase, company_id, user_id } = await getCompanyContext();
+  const today = new Date().toISOString().slice(0, 10);
+  const isDueToday = input.due_date === today;
   const { data, error } = await supabase.from("todos").insert({
     company_id,
     customer_id: input.customer_id,
@@ -395,8 +414,24 @@ export async function createCustomerTodo(input: {
     due_date: input.due_date ?? null,
     source: input.source ?? "manual",
     status: "pending",
+    priority: isDueToday ? "high" : "medium",
+    tags: isDueToday ? ["urgent", "sales_flow", "due_today"] : ["sales_flow"],
   }).select().single();
   if (error) throw error;
+
+  // 期限が今日のToDoは3経路通知（No.27）
+  if (isDueToday) {
+    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+    await notifySalesFlowUser(supabase, company_id, user_id, {
+      title: `今日のToDo: ${input.title}`,
+      description: input.description ?? "期限が今日のToDoが登録されました",
+      href: `/crm/${input.customer_id}`,
+      customerId: input.customer_id,
+      dealId: input.deal_id,
+      urgent: true,
+    }, user_id);
+  }
+
   return data;
 }
 
@@ -462,10 +497,13 @@ export async function confirmSchedulingCandidate(input: {
   const startAt = new Date(`${input.candidate.date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
   const endAt = new Date(startAt.getTime() + input.duration_minutes * 60_000);
 
+  const title = input.title ?? `面談: ${input.candidate.displayLabel}`;
+  const description = `面談区分: ${input.meeting_type}`;
+
   const { data: event, error: eventErr } = await supabase.from("calendar_events").insert({
     company_id,
-    title: input.title ?? `面談: ${input.candidate.displayLabel}`,
-    description: `面談区分: ${input.meeting_type}`,
+    title,
+    description,
     start_at: startAt.toISOString(),
     end_at: endAt.toISOString(),
     customer_id: input.customer_id,
@@ -475,6 +513,80 @@ export async function confirmSchedulingCandidate(input: {
   }).select().single();
   if (eventErr) throw eventErr;
 
+  // Google Calendar 連携（トークンがあれば同期。失敗してもローカル登録は維持）
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("google_access_token, google_refresh_token, google_token_expires_at")
+    .eq("id", user_id)
+    .single();
+
+  let googleEventId: string | null = null;
+  if (profile?.google_access_token) {
+    try {
+      let accessToken = profile.google_access_token as string;
+      const expiresAt = profile.google_token_expires_at
+        ? new Date(profile.google_token_expires_at).getTime()
+        : 0;
+      if (expiresAt && expiresAt < Date.now() + 60_000 && profile.google_refresh_token) {
+        const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        if (clientId && clientSecret) {
+          const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              client_id: clientId,
+              client_secret: clientSecret,
+              refresh_token: profile.google_refresh_token,
+              grant_type: "refresh_token",
+            }),
+          });
+          if (refreshRes.ok) {
+            const tokenJson = await refreshRes.json() as { access_token?: string; expires_in?: number };
+            if (tokenJson.access_token) {
+              accessToken = tokenJson.access_token;
+              await supabase.from("profiles").update({
+                google_access_token: accessToken,
+                google_token_expires_at: tokenJson.expires_in
+                  ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
+                  : null,
+              }).eq("id", user_id);
+            }
+          }
+        }
+      }
+
+      const timeZone = "Asia/Tokyo";
+      const gRes = await fetch(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            summary: title,
+            description,
+            start: { dateTime: startAt.toISOString(), timeZone },
+            end: { dateTime: endAt.toISOString(), timeZone },
+          }),
+        },
+      );
+      if (gRes.ok) {
+        const gData = await gRes.json() as { id?: string };
+        googleEventId = gData.id ?? null;
+        if (googleEventId) {
+          await supabase.from("calendar_events").update({
+            google_event_id: googleEventId,
+          }).eq("id", event.id);
+        }
+      }
+    } catch {
+      // Google同期失敗時はローカルイベントのみで成功扱い
+    }
+  }
+
   await supabase.from("customer_scheduling_requests").insert({
     company_id,
     customer_id: input.customer_id,
@@ -483,9 +595,11 @@ export async function confirmSchedulingCandidate(input: {
     duration_minutes: input.duration_minutes,
     candidate_dates: [input.candidate.displayLabel],
     status: "confirmed",
+  }).then(({ error }) => {
+    if (error) console.warn("[confirmScheduling] scheduling_requests:", error.message);
   });
 
-  return event;
+  return { ...event, googleEventId };
 }
 
 /**
@@ -547,6 +661,81 @@ ${candidateLines}
   return { text: raw.trim(), aiGenerated: true };
 }
 
+/** 候補日案内メールを顧客へ送信（No.24） */
+export async function sendSchedulingEmail(input: {
+  customer_id: string;
+  subject?: string;
+  body: string;
+  deal_id?: string;
+}) {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const body = input.body.trim();
+  if (!body) throw new Error("メール本文が空です");
+
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("name, email, company_name")
+    .eq("id", input.customer_id)
+    .single();
+  if (!customer?.email?.trim()) {
+    throw new Error("顧客のメールアドレスが登録されていません");
+  }
+
+  const [{ data: company }, { data: sender }] = await Promise.all([
+    supabase.from("companies").select("name").eq("id", company_id).single(),
+    supabase.from("profiles").select("display_name").eq("id", user_id).single(),
+  ]);
+  const companyName = company?.name ?? "BRIDGE";
+  const subject = input.subject?.trim() || `【${companyName}】お打ち合わせ候補日時のご案内`;
+
+  const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
+  const html = body
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px;white-space:pre-wrap;">${line.replace(/</g, "&lt;").replace(/>/g, "&gt;") || "&nbsp;"}</p>`)
+    .join("");
+
+  const { error: mailError } = await getResend().emails.send({
+    from: CUSTOMER_FROM_EMAIL,
+    to: customer.email.trim(),
+    subject,
+    html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${html}</div>`,
+    text: body,
+  });
+  if (mailError) {
+    throw new Error(`メール送信に失敗しました: ${mailError.message}`);
+  }
+
+  // 活動履歴・ToDo通知用に記録
+  let dealId = input.deal_id ?? null;
+  if (!dealId) {
+    const { data: deal } = await supabase
+      .from("deals")
+      .select("id")
+      .eq("customer_id", input.customer_id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    dealId = deal?.id ?? null;
+  }
+  if (dealId) {
+    await supabase.from("deal_activities").insert({
+      company_id,
+      deal_id: dealId,
+      type: "email",
+      title: subject,
+      description: body.slice(0, 2000),
+      performed_by: user_id,
+      performed_at: new Date().toISOString(),
+    });
+  }
+
+  return {
+    sentTo: customer.email.trim(),
+    subject,
+    senderName: sender?.display_name ?? companyName,
+  };
+}
+
 export async function getCustomerDealsWithActivities(customerId: string) {
   const { supabase } = await getCompanyContext();
   const { data: deals, error } = await supabase
@@ -569,9 +758,26 @@ export async function getCustomerDealsWithActivities(customerId: string) {
 }
 
 export async function updateDealSummary(dealId: string, summary: string) {
-  const { supabase } = await getCompanyContext();
-  const { data, error } = await supabase.from("deals").update({ summary }).eq("id", dealId).select().single();
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const { data, error } = await supabase.from("deals").update({
+    summary,
+    updated_at: new Date().toISOString(),
+  }).eq("id", dealId).select().single();
   if (error) throw error;
+
+  // メモ保存を活動履歴にも残す（No.19）
+  if (summary.trim()) {
+    await supabase.from("deal_activities").insert({
+      company_id,
+      deal_id: dealId,
+      type: "note",
+      title: "商談メモを更新",
+      description: summary.slice(0, 2000),
+      performed_by: user_id,
+      performed_at: new Date().toISOString(),
+    });
+  }
+
   return data;
 }
 

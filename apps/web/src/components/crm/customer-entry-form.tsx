@@ -135,6 +135,12 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
   const [departments, setDepartments] = useState<string[]>([]);
   const [assignSuggesting, setAssignSuggesting] = useState(false);
   const [aiFieldSuggesting, setAiFieldSuggesting] = useState(false);
+  const [assignCandidates, setAssignCandidates] = useState<Array<{
+    profileId: string;
+    displayName: string;
+    score: number;
+    reasons: string[];
+  }>>([]);
   const [form, setForm] = useState<FormState>(() =>
     initialCustomer ? customerToForm(initialCustomer) : {
     name: "",
@@ -176,10 +182,11 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
     setAssignSuggesting(true);
     try {
       const result = await suggestLeadAssignee(form.inquiry_content);
+      setAssignCandidates(result.candidates ?? []);
       if (result.recommendedId) {
         set("assigned_to", result.recommendedId);
         const top = result.candidates[0];
-        toast.success(`担当者を提案: ${top?.displayName ?? ""}（適合度 ${top?.score ?? 0}）`);
+        toast.success(`担当者を提案: ${top?.displayName ?? ""}（適合度 ${top?.score ?? 0}）ほか ${Math.max(0, (result.candidates?.length ?? 1) - 1)}名`);
       } else {
         toast.info("担当者候補が見つかりませんでした");
       }
@@ -246,7 +253,8 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
         onSaved?.(customerId);
       } else {
         const created = await createCustomer(payload);
-        toast.success("登録しました");
+        const linked = Boolean((created as { _linkedExisting?: boolean })._linkedExisting);
+        toast.success(linked ? "既存顧客に紐付けて登録しました" : "登録しました");
         onSaved?.(created.id);
       }
     } catch {
@@ -397,6 +405,28 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
               ))}
             </SelectContent>
           </Select>
+          {assignCandidates.length > 0 && (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2 space-y-1.5">
+              <p className="text-[11px] font-medium text-muted-foreground">AI適合度スコア付き候補</p>
+              {assignCandidates.slice(0, 5).map((c, i) => (
+                <button
+                  key={c.profileId}
+                  type="button"
+                  onClick={() => set("assigned_to", c.profileId)}
+                  className={`w-full flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-background ${
+                    form.assigned_to === c.profileId ? "bg-background border border-primary/30" : ""
+                  }`}
+                >
+                  <span className="font-medium truncate">
+                    {i === 0 ? "★ " : ""}{c.displayName}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    適合度 {c.score}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <Label>予算感（下限）</Label>

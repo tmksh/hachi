@@ -40,6 +40,7 @@ async function notifyUser(
   input: { title: string; description?: string; href?: string; customerId?: string; dealId?: string; urgent?: boolean },
   fromUserId?: string,
 ) {
+  const today = new Date().toISOString().slice(0, 10);
   await supabase.from("todos").insert({
     company_id: companyId,
     assigned_to: userId,
@@ -49,7 +50,8 @@ async function notifyUser(
     description: input.description ?? null,
     status: "pending",
     priority: input.urgent ? "high" : "medium",
-    tags: input.urgent ? ["urgent", "sales_flow"] : ["sales_flow"],
+    due_date: input.urgent ? today : null,
+    tags: input.urgent ? ["urgent", "sales_flow", "notify_flag"] : ["sales_flow"],
     source: "sales_flow",
   });
 
@@ -183,6 +185,18 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
   if (duration.startDate) params.set("start_date", duration.startDate);
   if (duration.endDate) params.set("end_date", duration.endDate);
   if (assigneeRec.recommendedId) params.set("assigned_to", assigneeRec.recommendedId);
+  if (assigneeRec.candidates.length > 0) {
+    params.set(
+      "assignee_candidates",
+      encodeURIComponent(JSON.stringify(
+        assigneeRec.candidates.slice(0, 5).map((c) => ({
+          profileId: c.profileId,
+          displayName: c.displayName,
+          score: c.score,
+        })),
+      )),
+    );
+  }
 
   return {
     contractId: contract.id,
@@ -291,7 +305,7 @@ export async function submitEstimateApproval(input: {
     updated_at: new Date().toISOString(),
   }).eq("id", input.estimateId);
 
-  for (const approverId of approverIds) {
+  for (const approverId of approverIds.slice(0, 1)) {
     await notifyUser(supabase, company_id, approverId, {
       title: `見積承認依頼: ${estimate.estimate_no}`,
       description: input.comment,
@@ -314,7 +328,7 @@ export async function getEstimateMarginThreshold(estimateId: string) {
   const { supabase } = await getCompanyContext();
   const { data } = await supabase
     .from("estimates")
-    .select("gross_profit_rate, default_gross_profit_rate, approval_status, workflow_request_id")
+    .select("gross_profit_rate, default_gross_profit_rate, approval_status, workflow_request_id, status")
     .eq("id", estimateId)
     .single();
   if (!data) return null;
@@ -325,7 +339,33 @@ export async function getEstimateMarginThreshold(estimateId: string) {
     needsApproval: (data.gross_profit_rate ?? 0) < threshold,
     approvalStatus: data.approval_status ?? "none",
     workflowRequestId: data.workflow_request_id,
+    status: data.status as string | null,
   };
+}
+
+/** 粗利率が基準以上の見積を確定（発行済み）にする（No.38） */
+export async function confirmEstimateIssued(estimateId: string) {
+  const { supabase } = await getCompanyContext();
+  const { data: estimate, error } = await supabase
+    .from("estimates")
+    .select("gross_profit_rate, default_gross_profit_rate, status")
+    .eq("id", estimateId)
+    .single();
+  if (error || !estimate) throw new Error("見積が見つかりません");
+
+  const threshold = (estimate.default_gross_profit_rate ?? 0.5) * 100;
+  if ((estimate.gross_profit_rate ?? 0) < threshold) {
+    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%)未満のため、上長承認が必要です`);
+  }
+
+  const { error: updErr } = await supabase.from("estimates").update({
+    status: "issued",
+    approval_status: "approved",
+    updated_at: new Date().toISOString(),
+  }).eq("id", estimateId);
+  if (updErr) throw updErr;
+
+  return { status: "issued" as const };
 }
 
 // ---------------------------------------------------------------------------
@@ -373,18 +413,57 @@ export async function processRecordingComplete(input: {
     }).eq("id", input.customerId);
   }
 
-  if (input.dealId && summaryResult.summary) {
+  // 商談が未紐付けなら自動作成・紐付け（No.15）
+  let dealId = input.dealId ?? null;
+  if (!dealId) {
+    const { data: existingDeal } = await supabase
+      .from("deals")
+      .select("id")
+      .eq("customer_id", input.customerId)
+      .in("stage", ["inquiry", "first_meeting", "materials_sent", "quote_submitted", "negotiation", "closing"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingDeal) {
+      dealId = existingDeal.id;
+    } else {
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name, assigned_to")
+        .eq("id", input.customerId)
+        .single();
+      const { data: newDeal } = await supabase.from("deals").insert({
+        company_id,
+        customer_id: input.customerId,
+        title: summaryResult.title || `${customer?.name ?? "顧客"} 様 商談`,
+        stage: "first_meeting",
+        summary: summaryResult.summary,
+        assigned_to: customer?.assigned_to ?? user_id,
+      }).select("id").single();
+      dealId = newDeal?.id ?? null;
+    }
+
+    if (dealId) {
+      await supabase.from("customer_recordings").update({
+        deal_id: dealId,
+        updated_at: new Date().toISOString(),
+      }).eq("id", input.recordingId);
+    }
+  }
+
+  if (dealId && summaryResult.summary) {
     await supabase.from("deals").update({
       summary: summaryResult.summary,
       updated_at: new Date().toISOString(),
-    }).eq("id", input.dealId);
+    }).eq("id", dealId);
   }
 
   for (const todo of summaryResult.todos) {
     await supabase.from("todos").insert({
       company_id,
       customer_id: input.customerId,
-      deal_id: input.dealId ?? null,
+      deal_id: dealId,
       assigned_to: user_id,
       title: todo.title,
       due_date: todo.dueDate ?? null,
@@ -417,14 +496,14 @@ export async function processRecordingComplete(input: {
   }
 
   let stageProposalId: string | null = null;
-  if (input.dealId) {
-    const { data: deal } = await supabase.from("deals").select("stage").eq("id", input.dealId).single();
+  if (dealId) {
+    const { data: deal } = await supabase.from("deals").select("stage").eq("id", dealId).single();
     if (deal) {
       const proposal = await proposeStageTransition(deal.stage, summaryResult.summary, aiConfig);
       if (proposal.proposedStage !== deal.stage) {
         const { data: inserted } = await supabase.from("deal_stage_proposals").insert({
           company_id,
-          deal_id: input.dealId,
+          deal_id: dealId,
           customer_id: input.customerId,
           recording_id: input.recordingId,
           current_stage: deal.stage,
@@ -440,17 +519,17 @@ export async function processRecordingComplete(input: {
           description: proposal.reason,
           href: `/crm/${input.customerId}?tab=deals`,
           customerId: input.customerId,
-          dealId: input.dealId,
+          dealId,
           urgent: proposal.confidence >= 0.7,
         }, user_id);
       }
     }
   }
 
-  if (input.dealId) {
+  if (dealId) {
     await supabase.from("deal_activities").insert({
       company_id,
-      deal_id: input.dealId,
+      deal_id: dealId,
       type: "meeting",
       title: summaryResult.title,
       description: summaryResult.summary,
@@ -466,6 +545,7 @@ export async function processRecordingComplete(input: {
     stageProposalId,
     calendarEventId,
     customerFieldsUpdated: Object.keys(customerPatch).length,
+    dealId,
     source: summaryResult.source,
   };
 }
@@ -627,23 +707,53 @@ export async function importInboundLead(input: {
   const { supabase, company_id, user_id } = await getCompanyContext();
   const assign = await suggestLeadAssignee(input.inquiry_content);
 
-  const { data: customer, error: custErr } = await supabase.from("customers").insert({
-    company_id,
+  const { findExistingCustomer } = await import("@/lib/actions/customers");
+  const existing = await findExistingCustomer(supabase, company_id, {
+    email: input.email,
+    phone: input.phone,
     name: input.name,
-    email: input.email ?? null,
-    phone: input.phone ?? null,
-    source: input.source ?? "web_form",
-    inquiry_content: input.inquiry_content ?? null,
-    inquiry_category: input.inquiry_category ?? null,
-    inquiry_date: new Date().toISOString().slice(0, 10),
-    assigned_to: assign.recommendedId,
-    status: "active",
-  }).select().single();
-  if (custErr) throw custErr;
+  });
+
+  let customerId: string;
+  let linkedExisting = false;
+
+  if (existing) {
+    linkedExisting = true;
+    customerId = existing.id;
+    const patch: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+      assigned_to: assign.recommendedId ?? existing.assigned_to,
+    };
+    if (input.inquiry_content?.trim()) {
+      const prev = existing.inquiry_content ? `${existing.inquiry_content}\n\n---\n` : "";
+      patch.inquiry_content = `${prev}${input.inquiry_content.trim()}`;
+    }
+    if (input.inquiry_category) patch.inquiry_category = input.inquiry_category;
+    patch.inquiry_date = new Date().toISOString().slice(0, 10);
+    if (input.source) patch.source = input.source;
+    if (input.email && !existing.email) patch.email = input.email;
+    if (input.phone && !existing.phone) patch.phone = input.phone;
+    await supabase.from("customers").update(patch).eq("id", existing.id);
+  } else {
+    const { data: customer, error: custErr } = await supabase.from("customers").insert({
+      company_id,
+      name: input.name,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      source: input.source ?? "web_form",
+      inquiry_content: input.inquiry_content ?? null,
+      inquiry_category: input.inquiry_category ?? null,
+      inquiry_date: new Date().toISOString().slice(0, 10),
+      assigned_to: assign.recommendedId,
+      status: "active",
+    }).select().single();
+    if (custErr) throw custErr;
+    customerId = customer.id;
+  }
 
   const { data: deal, error: dealErr } = await supabase.from("deals").insert({
     company_id,
-    customer_id: customer.id,
+    customer_id: customerId,
     title: `${input.name} 様 問い合わせ`,
     stage: "inquiry",
     assigned_to: assign.recommendedId,
@@ -652,27 +762,43 @@ export async function importInboundLead(input: {
 
   if (assign.recommendedId) {
     await notifyUser(supabase, company_id, assign.recommendedId, {
-      title: `新規問い合わせ: ${input.name}`,
+      title: linkedExisting
+        ? `既存顧客への問い合わせ: ${input.name}`
+        : `新規問い合わせ: ${input.name}`,
       description: input.inquiry_content?.slice(0, 200) ?? "問い合わせが自動登録されました",
-      href: `/crm/${customer.id}`,
-      customerId: customer.id,
+      href: `/crm/${customerId}`,
+      customerId,
       dealId: deal.id,
       urgent: true,
     }, user_id);
   }
 
-  void dispatchWebhook(company_id, "customer.created", {
-    customer_id: customer.id,
-    deal_id: deal.id,
-    source: input.source ?? "web_form",
-  });
+  if (!linkedExisting) {
+    void dispatchWebhook(company_id, "customer.created", {
+      customer_id: customerId,
+      deal_id: deal.id,
+      source: input.source ?? "web_form",
+    });
+  } else {
+    void dispatchWebhook(company_id, "customer.updated", {
+      customer_id: customerId,
+      deal_id: deal.id,
+      linked_from_inquiry: true,
+      source: input.source ?? "web_form",
+    });
+  }
   void dispatchWebhook(company_id, "deal.created", {
     id: deal.id,
-    customer_id: customer.id,
+    customer_id: customerId,
     title: deal.title,
   });
 
-  return { customerId: customer.id, dealId: deal.id, assigneeId: assign.recommendedId };
+  return {
+    customerId,
+    dealId: deal.id,
+    assigneeId: assign.recommendedId,
+    linkedExisting,
+  };
 }
 
 export type StageProposal = {

@@ -163,6 +163,13 @@ export function WorkflowTypesTab() {
 
   return (
     <div className="space-y-3">
+      <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">契約書の多段階承認について</p>
+        <p>
+          「契約書承認」（key: contract_08）を開き、承認ルートに Step1（例: 上長）→ Step2（例: 総務）の順で並べてください。
+          承認は順番に進み、総務ロールは承認画面で支払条件・口座情報を追記できます。
+        </p>
+      </div>
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">申請種別・承認ルート・記入項目を自由に設定できます</p>
         <Button size="sm" onClick={openCreate} className="gap-1 h-7 text-xs px-2.5">

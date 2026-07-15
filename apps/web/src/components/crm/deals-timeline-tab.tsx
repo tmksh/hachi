@@ -139,9 +139,9 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   };
 
   const addTodoFromSelection = async () => {
-    const text = selection || summaryDraft;
-    if (!text.trim()) {
-      toast.error("テキストを選択するか要約を入力してください");
+    const text = selection.trim();
+    if (!text) {
+      toast.error("テキストを選択してからToDoに追加してください");
       return;
     }
     if (!selectedId) return;
@@ -154,6 +154,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
         source: "deal_timeline",
       });
       toast.success("ToDoに追加しました");
+      setSelection("");
     } catch {
       toast.error("ToDo追加に失敗しました");
     }
@@ -268,12 +269,12 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               rows={4}
               placeholder="商談の要点・次のアクションなどを記録..."
             />
-            {(selection || summaryDraft) && (
+            {(selection.trim()) && (
               <div className="absolute bottom-2 right-2 flex gap-1 rounded-lg border bg-background shadow-sm p-1">
                 <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
                   <ListTodo className="h-3.5 w-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection || summaryDraft); toast.success("コピーしました"); }}>
+                <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection); toast.success("コピーしました"); }}>
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
               </div>

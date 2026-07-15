@@ -416,6 +416,24 @@ function ContractEditor({
 
   return (
     <div className="-mt-2">
+      {/* ── テンプレート選択 ── */}
+      <div className="rounded-xl border border-border bg-slate-50/60 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <FileText className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-muted-foreground">契約書テンプレート</p>
+            <p className="text-sm font-semibold truncate">{tpl.name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tpl.description}</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => setPickerOpen(true)}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          テンプレートを変更
+        </Button>
+      </div>
+
       {/* ── ツールバー ── */}
       <div className="sticky top-0 z-20 bg-white border border-border rounded-xl px-4 py-2.5 flex items-center gap-2 mb-3">
         <button onClick={() => onClose()} className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 shrink-0">
@@ -427,15 +445,11 @@ function ContractEditor({
         {savedAt && <span className="text-[10px] text-muted-foreground shrink-0">保存済み {savedAt}</span>}
 
         <div className="ml-auto flex items-center gap-1 shrink-0">
-          {/* アイコンのみのサブアクション群 */}
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="テンプレート変更" onClick={() => setPickerOpen(true)}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5 gap-1.5" title="工程表と同期" onClick={handleSyncSchedule}>
+            <RotateCcw className="h-3.5 w-3.5" />同期
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="工程表と同期" onClick={handleSyncSchedule}>
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="PDF出力" onClick={handlePdfPrint}>
-            <Download className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5 gap-1.5" title="PDF出力" onClick={handlePdfPrint}>
+            <Download className="h-3.5 w-3.5" />PDF出力
           </Button>
           <div className="w-px h-5 bg-border mx-0.5" />
           {!isNew && (
