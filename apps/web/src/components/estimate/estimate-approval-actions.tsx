@@ -20,14 +20,24 @@ import {
 } from "@/lib/actions/sales-flow";
 import { getProfiles } from "@/lib/actions/profiles";
 import { updateEstimate } from "@/lib/actions/estimates";
+import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 
 type Props = {
   estimateId: string;
+  /** ライブ粗利率（%）。明細編集に追従させる */
   grossProfitRate: number;
+  defaultGrossProfitRate?: number | null;
+  estimateStatus?: string | null;
   onConfirmed?: () => void;
 };
 
-export function EstimateApprovalActions({ estimateId, grossProfitRate, onConfirmed }: Props) {
+export function EstimateApprovalActions({
+  estimateId,
+  grossProfitRate,
+  defaultGrossProfitRate,
+  estimateStatus,
+  onConfirmed,
+}: Props) {
   const [marginInfo, setMarginInfo] = useState<Awaited<ReturnType<typeof getEstimateMarginThreshold>>>(null);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -41,17 +51,23 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate, onConfirm
     getProfiles().then((p) => setProfiles(p.map((x) => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
   }, [estimateId]);
 
-  const threshold = marginInfo?.threshold ?? 50;
-  const needsApproval = grossProfitRate < threshold;
+  const threshold = marginInfo?.threshold
+    ?? toMarginThresholdPercent(defaultGrossProfitRate);
+  // 基準以上（>=）なら確定可能（No.38）
+  const needsApproval = grossProfitRate < threshold - 1e-9;
   const approvalStatus = marginInfo?.approvalStatus ?? "none";
   const canReapply = approvalStatus === "returned" || approvalStatus === "rejected";
+  const isIssued = estimateStatus === "issued"
+    || estimateStatus === "sent"
+    || estimateStatus === "accepted"
+    || approvalStatus === "approved";
 
   const handleConfirm = async () => {
     setConfirming(true);
     try {
       await confirmEstimateIssued(estimateId);
       toast.success("見積を確定（発行済み）にしました");
-      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "approved" } : prev);
+      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "approved", status: "issued" } : prev);
       onConfirmed?.();
     } catch (e) {
       try {
@@ -86,9 +102,9 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate, onConfirm
     }
   };
 
-  // 粗利率が基準以上 → 確定ボタンを表示（No.38）
+  // 粗利率が基準以上 → 確定ボタン（No.38）
   if (!needsApproval) {
-    if (approvalStatus === "approved" || marginInfo?.approvalStatus === "approved") {
+    if (isIssued) {
       return (
         <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
           <CheckCircle className="h-4 w-4 mr-1" />
@@ -136,6 +152,9 @@ export function EstimateApprovalActions({ estimateId, grossProfitRate, onConfirm
             {canReapply ? "再申請する" : "上司への承認申請"}
           </Button>
         )}
+        <span className="text-[10px] text-muted-foreground">
+          粗利 {grossProfitRate.toFixed(1)}% / 基準 {threshold.toFixed(0)}%
+        </span>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

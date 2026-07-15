@@ -17,9 +17,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Save, Plus, Trash2, Pencil, X, Printer } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, Save, Plus, Trash2, Pencil, X, Printer, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { getInvoice, updateInvoice, deleteInvoice, updateInvoiceStatus } from "@/lib/actions/invoices";
+import { getInvoice, updateInvoice, deleteInvoice, updateInvoiceStatus, sendInvoiceEmail } from "@/lib/actions/invoices";
 
 type Detail = Awaited<ReturnType<typeof getInvoice>>;
 type LineItem = { description: string; quantity: number; unit_price: number };
@@ -56,6 +59,11 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
   const [paymentTerms, setPaymentTerms] = useState(initialData?.payment_terms ?? "");
   const [notes, setNotes] = useState(initialData?.notes ?? "");
   const [items, setItems] = useState<LineItem[]>(() => initialData ? mapItems(initialData) : []);
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailTo, setMailTo] = useState("");
+  const [mailSubject, setMailSubject] = useState("");
+  const [mailBody, setMailBody] = useState("");
+  const [sending, setSending] = useState(false);
 
   const resetForm = useCallback((d: Detail) => {
     setRecipient(d.recipient ?? "");
@@ -120,6 +128,54 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
 
   const handlePrint = () => window.print();
 
+  const openMailDialog = () => {
+    if (!data) return;
+    const customerName = data.customer?.company_name?.trim() || data.customer?.name || "";
+    const invoiceNo = data.invoice_no ?? "";
+    setMailTo(data.customer?.email ?? "");
+    setMailSubject(`請求書のご送付（${invoiceNo}）`);
+    setMailBody([
+      `${customerName} 様`,
+      "",
+      "いつもお世話になっております。",
+      "下記の通り請求書をお送りいたします。",
+      "",
+      `■ 請求書番号: ${invoiceNo}`,
+      ...(data.construction?.title ? [`■ 件名: ${data.construction.title}`] : []),
+      `■ ご請求金額: ¥${data.total.toLocaleString()}（税込）`,
+      `■ お支払期限: ${data.due_date ? format(parseISO(data.due_date), "yyyy年M月d日", { locale: ja }) : "-"}`,
+      "",
+      "ご確認のほど、よろしくお願いいたします。",
+    ].join("\n"));
+    setMailOpen(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!mailTo.trim()) {
+      toast.error("宛先メールアドレスを入力してください");
+      return;
+    }
+    setSending(true);
+    try {
+      const result = await sendInvoiceEmail(id as string, {
+        to: mailTo,
+        subject: mailSubject,
+        body: mailBody,
+      });
+      if (result.sent) {
+        toast.success(`${result.sentTo} に請求書を送付しました`);
+      } else {
+        toast.info("メール設定が未構成のため送信をスキップしました。ステータスのみ更新します");
+      }
+      setMailOpen(false);
+      reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "メール送信に失敗しました");
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (!data) return (
     <div className="p-4 md:p-8">
       <Link href="/invoices" className="text-sm text-muted-foreground flex items-center gap-1">
@@ -158,6 +214,11 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {!editing && (
+            <Button variant="outline" size="sm" onClick={openMailDialog} className="gap-1.5">
+              <Mail className="h-4 w-4" />メールで送付
+            </Button>
           )}
           <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
             <Printer className="h-4 w-4" />印刷
@@ -272,6 +333,45 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={mailOpen} onOpenChange={setMailOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>請求書をメールで送付</DialogTitle>
+            <DialogDescription>
+              送信後、請求書のステータスは「送付済み」に更新されます。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="mail-to">宛先</Label>
+              <Input
+                id="mail-to"
+                type="email"
+                value={mailTo}
+                onChange={(e) => setMailTo(e.target.value)}
+                placeholder="customer@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mail-subject">件名</Label>
+              <Input id="mail-subject" value={mailSubject} onChange={(e) => setMailSubject(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mail-body">本文</Label>
+              <Textarea id="mail-body" rows={10} value={mailBody} onChange={(e) => setMailBody(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMailOpen(false)} disabled={sending}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSendEmail} disabled={sending} className="gap-1.5">
+              <Mail className="h-4 w-4" />{sending ? "送信中..." : "送信"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

@@ -12,7 +12,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   createConstructionTask,
@@ -28,7 +29,13 @@ type Task = {
   progress: number;
   status: string;
   assigned_to?: string | null;
+  contractor_name?: string | null;
+  depends_on_task_id?: string | null;
+  sort_order?: number;
 };
+
+type DragMode = "move" | "resize-start" | "resize-end";
+type DragState = { taskId: string; mode: DragMode; startX: number; deltaDays: number };
 
 type ViewMode = "day" | "week" | "month";
 
@@ -56,6 +63,12 @@ function fmtShort(d: Date): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}/${m}/${day}`;
 }
+function fmtISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function addDays(d: Date, n: number): Date {
   const r = new Date(d); r.setDate(r.getDate() + n); return r;
 }
@@ -78,7 +91,10 @@ const LEFT_W    = COL_NAME + COL_DATE * 2;
 const ROW_H     = 44;
 const HEADER_H  = 58; // 月ラベル行 + 日付行
 
-const EMPTY_FORM = { name: "", start_date: "", end_date: "", status: "not_started", description: "" };
+const EMPTY_FORM = {
+  name: "", start_date: "", end_date: "", status: "not_started", description: "",
+  contractor_name: "", depends_on_task_id: "none",
+};
 
 /* ステータス色 */
 const BAR_COLORS: Record<string, string> = {
@@ -96,6 +112,12 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
   const [form, setForm]         = useState(EMPTY_FORM);
   const [saving, setSaving]     = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [drag, setDrag]         = useState<DragState | null>(null);
+  const [dragRowIdx, setDragRowIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const dragRef  = useRef<DragState | null>(null);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
   const scrollWrap = useRef<HTMLDivElement>(null);
   const cw = CELL_W[viewMode];
 
@@ -139,16 +161,107 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ドラッグ中プレビューを反映した実効日付 */
+  function effectiveDates(task: Task): { s: Date | null; e: Date | null } {
+    let s = parseDate(task.start_date);
+    let e = parseDate(task.end_date);
+    if (drag && drag.taskId === task.id && s && e) {
+      const d = drag.deltaDays;
+      if (drag.mode === "move") {
+        s = addDays(s, d); e = addDays(e, d);
+      } else if (drag.mode === "resize-start") {
+        s = addDays(s, d); if (s > e) s = new Date(e);
+      } else {
+        e = addDays(e, d); if (e < s) e = new Date(s);
+      }
+    }
+    return { s, e };
+  }
+
   /* バー計算 */
-  function getBar(task: Task) {
-    const s = parseDate(task.start_date);
-    const e = parseDate(task.end_date);
+  function getBar(s: Date | null, e: Date | null, status: string) {
     if (!s || !e) return null;
     return {
       left:  Math.max(0, diffDays(timelineStart, s)) * cw,
       width: Math.max(cw, (diffDays(s, e) + 1) * cw),
-      color: BAR_COLORS[task.status] ?? BAR_COLORS.not_started,
+      color: BAR_COLORS[status] ?? BAR_COLORS.not_started,
     };
+  }
+
+  /* ── ガントバーのドラッグ（移動・リサイズ） ── */
+  function startBarDrag(e: React.PointerEvent, task: Task, mode: DragMode) {
+    if (!task.start_date || !task.end_date) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    dragRef.current = { taskId: task.id, mode, startX, deltaDays: 0 };
+    setDrag(dragRef.current);
+
+    const onMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return;
+      const delta = Math.round((ev.clientX - startX) / cw);
+      if (delta !== dragRef.current.deltaDays) {
+        dragRef.current = { ...dragRef.current, deltaDays: delta };
+        setDrag(dragRef.current);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      void commitBarDrag();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  async function commitBarDrag() {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    if (!d || d.deltaDays === 0) return;
+    const prev = tasksRef.current;
+    const task = prev.find(t => t.id === d.taskId);
+    const s0 = task ? parseDate(task.start_date) : null;
+    const e0 = task ? parseDate(task.end_date) : null;
+    if (!task || !s0 || !e0) return;
+    let ns = s0, ne = e0;
+    if (d.mode === "move") {
+      ns = addDays(s0, d.deltaDays); ne = addDays(e0, d.deltaDays);
+    } else if (d.mode === "resize-start") {
+      ns = addDays(s0, d.deltaDays); if (ns > ne) ns = new Date(ne);
+    } else {
+      ne = addDays(e0, d.deltaDays); if (ne < ns) ne = new Date(ns);
+    }
+    const nsStr = fmtISO(ns), neStr = fmtISO(ne);
+    if (nsStr === task.start_date && neStr === task.end_date) return;
+    setTasks(p => p.map(t => t.id === task.id ? { ...t, start_date: nsStr, end_date: neStr } : t));
+    try {
+      await updateConstructionTask(task.id, { start_date: nsStr, end_date: neStr });
+    } catch (err) {
+      console.error(err);
+      setTasks(prev);
+      toast.error("日程の更新に失敗しました");
+    }
+  }
+
+  /* ── 行の並び替え（HTML5 DnD） ── */
+  async function handleRowDrop(targetIdx: number) {
+    const from = dragRowIdx;
+    setDragRowIdx(null);
+    setDragOverIdx(null);
+    if (from === null || from === targetIdx) return;
+    const prev = tasksRef.current;
+    const next = [...prev];
+    const [moved] = next.splice(from, 1);
+    next.splice(targetIdx, 0, moved);
+    setTasks(next);
+    try {
+      await Promise.all(next.map((t, i) => updateConstructionTask(t.id, { sort_order: i })));
+    } catch (err) {
+      console.error(err);
+      setTasks(prev);
+      toast.error("並び替えの保存に失敗しました");
+    }
   }
 
   /* 日付セル表示判定（月ビューは5の倍数のみ） */
@@ -164,30 +277,45 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
   /* CRUD */
   function openAdd() { setForm(EMPTY_FORM); setEditTarget(null); setDialog("add"); }
   function openEdit(task: Task) {
-    setForm({ name: task.name, start_date: task.start_date ?? "", end_date: task.end_date ?? "", status: task.status, description: "" });
+    setForm({
+      name: task.name, start_date: task.start_date ?? "", end_date: task.end_date ?? "",
+      status: task.status, description: "",
+      contractor_name: task.contractor_name ?? "",
+      depends_on_task_id: task.depends_on_task_id ?? "none",
+    });
     setEditTarget(task); setDialog("edit");
   }
   async function handleSave() {
     if (!form.name.trim()) return;
     setSaving(true);
+    const contractorName = form.contractor_name.trim() || null;
+    const dependsOn = form.depends_on_task_id === "none" ? null : form.depends_on_task_id;
     try {
       if (dialog === "add") {
         const created = await createConstructionTask(constructionId, {
           name: form.name, start_date: form.start_date || undefined,
           end_date: form.end_date || undefined, description: form.description || undefined,
+          contractor_name: contractorName ?? undefined,
+          depends_on_task_id: dependsOn ?? undefined,
         });
         setTasks(p => [...p, { ...created, progress: created.progress ?? 0, status: created.status ?? "not_started" }]);
       } else if (dialog === "edit" && editTarget) {
         await updateConstructionTask(editTarget.id, {
           name: form.name, start_date: form.start_date || undefined,
           end_date: form.end_date || undefined, status: form.status,
+          // 変更があった場合のみ送信（カラム未適用環境で既存編集を壊さない）
+          ...(contractorName !== (editTarget.contractor_name ?? null) ? { contractor_name: contractorName } : {}),
+          ...(dependsOn !== (editTarget.depends_on_task_id ?? null) ? { depends_on_task_id: dependsOn } : {}),
         });
         setTasks(p => p.map(t => t.id === editTarget.id
-          ? { ...t, name: form.name, start_date: form.start_date || null, end_date: form.end_date || null, status: form.status }
+          ? { ...t, name: form.name, start_date: form.start_date || null, end_date: form.end_date || null, status: form.status, contractor_name: contractorName, depends_on_task_id: dependsOn }
           : t));
       }
       setDialog(null);
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+    } catch (e) {
+      console.error(e);
+      toast.error("工程の保存に失敗しました");
+    } finally { setSaving(false); }
   }
   async function handleDelete(id: string) {
     setDeletingId(id);
@@ -299,14 +427,25 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
               </div>
             ) : (
               tasks.map((task, idx) => {
-                const bar  = getBar(task);
+                const eff  = effectiveDates(task);
+                const bar  = getBar(eff.s, eff.e, task.status);
                 const done = task.status === "completed";
+                const dragging = drag?.taskId === task.id;
+                const depName = task.depends_on_task_id
+                  ? tasks.find(t => t.id === task.depends_on_task_id)?.name ?? null
+                  : null;
                 return (
                   <div key={task.id}
                     className={cn("flex group border-b border-border/40 transition-colors",
                       idx % 2 === 1 ? "bg-slate-50" : "bg-white"
                     )}
-                    style={{ height: ROW_H }}
+                    style={{
+                      height: ROW_H,
+                      boxShadow: dragOverIdx === idx && dragRowIdx !== null && dragRowIdx !== idx
+                        ? "inset 0 2px 0 0 #3b82f6" : undefined,
+                    }}
+                    onDragOver={e => { if (dragRowIdx !== null) { e.preventDefault(); setDragOverIdx(idx); } }}
+                    onDrop={e => { e.preventDefault(); void handleRowDrop(idx); }}
                     onMouseEnter={e => {
                       e.currentTarget.style.backgroundColor = "#EFF6FF";
                       const sticky = e.currentTarget.querySelector<HTMLElement>("[data-sticky-left]");
@@ -323,15 +462,31 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                     <div data-sticky-left className="sticky left-0 z-20 flex-shrink-0 flex border-r-2 border-border/60"
                       style={{ width: LEFT_W, backgroundColor: idx % 2 === 1 ? "#F8FAFC" : "#FFFFFF" }}>
                       {/* 工程名 */}
-                      <div className="flex-1 flex items-center gap-2 px-3 min-w-0 border-r border-border/40">
+                      <div className="flex-1 flex items-center gap-2 px-2 min-w-0 border-r border-border/40">
+                        <span
+                          draggable
+                          onDragStart={e => { setDragRowIdx(idx); e.dataTransfer.effectAllowed = "move"; }}
+                          onDragEnd={() => { setDragRowIdx(null); setDragOverIdx(null); }}
+                          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500"
+                          title="ドラッグで並び替え"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </span>
                         <Checkbox
                           checked={done}
                           onCheckedChange={() => handleToggle(task)}
                           className="flex-shrink-0 h-3.5 w-3.5"
                         />
-                        <span className={cn("text-xs font-medium truncate", done && "line-through text-slate-400")}>
-                          {task.name}
-                        </span>
+                        <div className="flex flex-col justify-center min-w-0">
+                          <span className={cn("text-xs font-medium truncate", done && "line-through text-slate-400")}>
+                            {task.name}
+                          </span>
+                          {task.contractor_name && (
+                            <span className="text-[10px] text-slate-400 truncate leading-tight">
+                              {task.contractor_name}
+                            </span>
+                          )}
+                        </div>
                         <div className="ml-auto flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                           <button
                             className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
@@ -348,13 +503,15 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                       </div>
                       {/* 開始日 */}
                       <div style={{ width: COL_DATE }}
-                        className="flex items-center justify-center text-[11px] text-slate-500 border-r border-border/40 tabular-nums">
-                        {task.start_date ? fmtShort(new Date(task.start_date + "T00:00:00")) : "—"}
+                        className={cn("flex items-center justify-center text-[11px] border-r border-border/40 tabular-nums",
+                          dragging ? "text-blue-600 font-semibold" : "text-slate-500")}>
+                        {eff.s ? fmtShort(eff.s) : "—"}
                       </div>
                       {/* 終了日 */}
                       <div style={{ width: COL_DATE }}
-                        className="flex items-center justify-center text-[11px] text-slate-500 tabular-nums">
-                        {task.end_date ? fmtShort(new Date(task.end_date + "T00:00:00")) : "—"}
+                        className={cn("flex items-center justify-center text-[11px] tabular-nums",
+                          dragging ? "text-blue-600 font-semibold" : "text-slate-500")}>
+                        {eff.e ? fmtShort(eff.e) : "—"}
                       </div>
                     </div>
 
@@ -374,13 +531,24 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                       {todayOff >= 0 && todayOff < timelineDays && (
                         <div className="absolute top-0 bottom-0 w-0.5 bg-blue-500/50 z-10" style={{ left: todayOff * cw }} />
                       )}
+                      {/* 依存関係インジケーター */}
+                      {bar && depName && (
+                        <div
+                          className="absolute flex items-center text-[10px] text-slate-400 select-none z-10"
+                          style={{ left: bar.left - 11, top: 10, height: ROW_H - 20 }}
+                          title={`先行: ${depName}`}
+                        >
+                          ◀
+                        </div>
+                      )}
                       {/* ガントバー */}
                       {bar && (
                         <div
                           className={cn(
-                            "absolute rounded-full flex items-center overflow-hidden transition-all",
+                            "absolute rounded-full flex items-center overflow-hidden select-none touch-none",
                             bar.color,
-                            done && "opacity-50"
+                            done && "opacity-50",
+                            dragging ? "ring-2 ring-blue-400 z-10 cursor-grabbing" : "transition-all cursor-grab",
                           )}
                           style={{
                             left: bar.left + 1,
@@ -388,13 +556,26 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                             top: 10,
                             height: ROW_H - 20,
                           }}
-                          title={`${task.name}  ${task.start_date ?? ""} → ${task.end_date ?? ""}`}
+                          title={`${task.name}  ${task.start_date ?? ""} → ${task.end_date ?? ""}${depName ? `\n先行: ${depName}` : ""}`}
+                          onPointerDown={e => startBarDrag(e, task, "move")}
                         >
+                          {/* 左リサイズハンドル */}
+                          <div
+                            className="absolute left-0 top-0 bottom-0 z-10 hover:bg-black/10"
+                            style={{ width: 6, cursor: "ew-resize" }}
+                            onPointerDown={e => startBarDrag(e, task, "resize-start")}
+                          />
                           {bar.width > 50 && (
-                            <span className="px-2.5 text-[11px] text-white/90 font-medium truncate drop-shadow-sm">
+                            <span className="px-2.5 text-[11px] text-white/90 font-medium truncate drop-shadow-sm pointer-events-none">
                               {task.name}
                             </span>
                           )}
+                          {/* 右リサイズハンドル */}
+                          <div
+                            className="absolute right-0 top-0 bottom-0 z-10 hover:bg-black/10"
+                            style={{ width: 6, cursor: "ew-resize" }}
+                            onPointerDown={e => startBarDrag(e, task, "resize-end")}
+                          />
                         </div>
                       )}
                     </div>
@@ -428,6 +609,24 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                 <Label htmlFor="g-end">終了日</Label>
                 <Input id="g-end" type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="g-contractor">担当業者</Label>
+              <Input id="g-contractor" value={form.contractor_name}
+                onChange={e => setForm(f => ({ ...f, contractor_name: e.target.value }))}
+                placeholder="例: ○○工務店" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>依存関係（先行工程）</Label>
+              <Select value={form.depends_on_task_id} onValueChange={v => setForm(f => ({ ...f, depends_on_task_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="なし" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">なし</SelectItem>
+                  {tasks
+                    .filter(t => t.id !== editTarget?.id)
+                    .map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             {dialog === "edit" && (
               <div className="space-y-1.5">

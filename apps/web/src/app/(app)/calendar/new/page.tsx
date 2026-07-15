@@ -14,6 +14,7 @@ import { TimeSelect } from "@/components/ui/time-select";
 import { ArrowLeft, Save } from "lucide-react";
 import { createCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
 import { createGoogleCalendarEvent } from "@/lib/google-calendar";
+import { MemberShareSelect } from "@/components/calendar/member-share-select";
 
 async function getGoogleToken(): Promise<string | null> {
   try {
@@ -52,6 +53,7 @@ function CalendarNewPageContent() {
   const [allDay, setAllDay] = useState(false);
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
+  const [sharedWith, setSharedWith] = useState<string[]>([]);
 
   const handleSave = async () => {
     if (!title.trim() || !startDate) {
@@ -72,6 +74,7 @@ function CalendarNewPageContent() {
         all_day: allDay,
         category: (category || undefined) as "sales" | "construction" | "task" | "facility" | "equipment" | undefined,
         location: location || undefined,
+        shared_with: sharedWith,
       });
 
       // Google Calendar にも保存（連携済みの場合）
@@ -168,6 +171,13 @@ function CalendarNewPageContent() {
             <div className="space-y-2">
               <Label>場所</Label>
               <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>メンバーに共有</Label>
+              <MemberShareSelect value={sharedWith} onChange={setSharedWith} />
+              <p className="text-[11px] text-muted-foreground">
+                共有したメンバーのカレンダーにも予定が表示され、お知らせで通知されます
+              </p>
             </div>
           </div>
           <div className="space-y-2">

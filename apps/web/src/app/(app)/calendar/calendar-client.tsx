@@ -62,6 +62,7 @@ import {
   CheckCircle2,
   RefreshCw,
   LogOut,
+  Users,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -75,7 +76,9 @@ import {
   deleteCalendarEvent,
   disconnectGoogleCalendar,
   getCompanyMembersWithCalendar,
+  getCompanyMembers,
 } from "@/lib/actions/calendar";
+import { MemberShareSelect } from "@/components/calendar/member-share-select";
 import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -1573,6 +1576,14 @@ function EventDialog({
   const [allDay, setAllDay] = useState(false);
   const [category, setCategory] = useState<string>("");
   const [location, setLocation] = useState("");
+  const [sharedWith, setSharedWith] = useState<string[]>([]);
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    getCompanyMembers()
+      .then((ms) => setMemberNames(Object.fromEntries(ms.map((m) => [m.id, m.display_name]))))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!event) return;
@@ -1588,6 +1599,7 @@ function EventDialog({
     setAllDay(!!event.all_day);
     setCategory(event.category ?? "");
     setLocation(event.location ?? "");
+    setSharedWith(((event as { shared_with?: string[] | null }).shared_with ?? []) as string[]);
   }, [event]);
 
   const open = !!event;
@@ -1611,6 +1623,7 @@ function EventDialog({
         all_day: allDay,
         category: (category || null) as CalendarEvent["category"],
         location: location || null,
+        shared_with: sharedWith,
       });
 
       // Google Calendar にも反映（ローカルイベントで google_event_id がある場合）
@@ -1719,6 +1732,18 @@ function EventDialog({
                   </Badge>
                 </div>
               )}
+              {sharedWith.length > 0 && (
+                <div className="flex items-start gap-2 text-muted-foreground">
+                  <Users className="h-3.5 w-3.5 mt-0.5" />
+                  <div className="flex flex-wrap gap-1">
+                    {sharedWith.map((id) => (
+                      <Badge key={id} variant="secondary" className="text-[10px]">
+                        {memberNames[id] ?? "メンバー"}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {event.description && (
                 <div className="flex items-start gap-2 text-muted-foreground">
                   <FileText className="h-3.5 w-3.5 mt-0.5" />
@@ -1809,6 +1834,13 @@ function EventDialog({
                   onChange={(e) => setLocation(e.target.value)}
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">メンバーに共有</Label>
+              <MemberShareSelect value={sharedWith} onChange={setSharedWith} />
+              <p className="text-[11px] text-muted-foreground">
+                共有したメンバーのカレンダーにも予定が表示され、お知らせで通知されます
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">説明</Label>

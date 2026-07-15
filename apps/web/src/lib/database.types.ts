@@ -276,6 +276,8 @@ export type ConstructionTask = {
   status: string;
   assigned_to: string | null;
   description: string | null;
+  contractor_name: string | null;
+  depends_on_task_id: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -476,6 +478,7 @@ export type CalendarEvent = {
   location: string | null;
   customer_id: string | null;
   assigned_to: string | null;
+  shared_with?: string[] | null;
   google_event_id: string | null;
   google_calendar_id: string | null;
   created_by: string | null;

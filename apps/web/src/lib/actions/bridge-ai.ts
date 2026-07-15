@@ -297,6 +297,214 @@ async function fetchInvoicesContext(): Promise<string> {
 
 type Message = { role: "user" | "assistant"; text: string };
 
+// ---------------------------------------------------------------------------
+// 工程表作成ウィザード（No.6）: 対話形式で質問 → 工程表を自動生成して登録
+// ---------------------------------------------------------------------------
+
+const SCHEDULE_TAG = "【工程表作成";
+
+/** 工事種別ごとの標準工程テンプレート（重み = 全工期に対する日数比率） */
+const SCHEDULE_TEMPLATES: { match: RegExp; label: string; phases: { name: string; w: number }[] }[] = [
+  {
+    match: /新築/,
+    label: "新築",
+    phases: [
+      { name: "地盤調査・準備工事", w: 6 }, { name: "基礎工事", w: 14 },
+      { name: "上棟・躯体工事", w: 20 }, { name: "屋根・外装工事", w: 14 },
+      { name: "電気・設備工事", w: 14 }, { name: "内装工事", w: 18 },
+      { name: "外構工事", w: 8 }, { name: "竣工検査・是正", w: 4 }, { name: "クリーニング・引渡し", w: 2 },
+    ],
+  },
+  {
+    match: /屋根|外壁|塗装/,
+    label: "屋根・外壁",
+    phases: [
+      { name: "足場設置", w: 8 }, { name: "高圧洗浄・下地処理", w: 15 },
+      { name: "下塗り", w: 15 }, { name: "中塗り・上塗り", w: 30 },
+      { name: "板金・雨樋工事", w: 15 }, { name: "検査・手直し", w: 9 }, { name: "足場解体・清掃", w: 8 },
+    ],
+  },
+  {
+    match: /水回り|水廻り|キッチン|浴室|風呂|トイレ|洗面/,
+    label: "水回りリフォーム",
+    phases: [
+      { name: "養生・解体工事", w: 15 }, { name: "給排水・電気配管工事", w: 20 },
+      { name: "下地・造作工事", w: 20 }, { name: "設備機器設置", w: 20 },
+      { name: "内装仕上げ", w: 15 }, { name: "検査・引渡し", w: 10 },
+    ],
+  },
+  {
+    match: /内装|クロス|フローリング/,
+    label: "内装リフォーム",
+    phases: [
+      { name: "養生・既存撤去", w: 15 }, { name: "下地補修", w: 20 },
+      { name: "床工事", w: 20 }, { name: "壁・天井仕上げ", w: 25 },
+      { name: "建具・造作調整", w: 10 }, { name: "クリーニング・引渡し", w: 10 },
+    ],
+  },
+  {
+    match: /.*/,
+    label: "フルリフォーム",
+    phases: [
+      { name: "養生・仮設工事", w: 6 }, { name: "解体工事", w: 12 },
+      { name: "下地・木工事", w: 22 }, { name: "電気・設備工事", w: 16 },
+      { name: "内装仕上げ工事", w: 22 }, { name: "設備機器設置", w: 10 },
+      { name: "検査・是正", w: 7 }, { name: "クリーニング・引渡し", w: 5 },
+    ],
+  },
+];
+
+function parseJaDate(text: string): Date | null {
+  const now = new Date();
+  let m = text.match(/(\d{4})[/\-年](\d{1,2})[/\-月](\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m = text.match(/(\d{1,2})[/月](\d{1,2})/);
+  if (m) {
+    const d = new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+    if (d.getTime() < now.getTime() - 86400000 * 30) d.setFullYear(d.getFullYear() + 1);
+    return d;
+  }
+  if (/来週/.test(text)) return addDays(now, 7);
+  if (/再来週/.test(text)) return addDays(now, 14);
+  if (/来月/.test(text)) return addDays(now, 30);
+  if (/明日/.test(text)) return addDays(now, 1);
+  if (/今日|すぐ/.test(text)) return now;
+  return null;
+}
+
+function parseDurationDays(text: string, startDate: Date): number | null {
+  let m = text.match(/(\d+(?:\.\d+)?)\s*(?:ヶ|か|カ|ケ)月/);
+  if (m) return Math.round(Number(m[1]) * 30);
+  m = text.match(/(\d+)\s*週/);
+  if (m) return Number(m[1]) * 7;
+  m = text.match(/(\d+)\s*日/);
+  if (m) return Number(m[1]);
+  const end = parseJaDate(text);
+  if (end && end.getTime() > startDate.getTime()) {
+    return Math.round((end.getTime() - startDate.getTime()) / 86400000);
+  }
+  return null;
+}
+
+function fmtDate(d: Date): string {
+  return format(d, "yyyy-MM-dd");
+}
+
+/**
+ * 工事詳細ページで「工程表を作って」と言われたときの対話フロー。
+ * AI設定の有無に依存せず動作する（質問3つ → construction_tasks へ自動登録）。
+ */
+async function handleScheduleWizard(history: Message[], pathname: string): Promise<{ text: string; ok: boolean } | null> {
+  const path = pathname.split("?")[0];
+  const m = path.match(/^\/constructions\/([0-9a-fA-F-]{36})/);
+  if (!m) return null;
+  const constructionId = m[1];
+
+  const lastUser = history.at(-1)?.text ?? "";
+  const lastAssistant = [...history].reverse().find(x => x.role === "assistant")?.text ?? "";
+  const step =
+    lastAssistant.startsWith(`${SCHEDULE_TAG} 1/3】`) ? 1 :
+    lastAssistant.startsWith(`${SCHEDULE_TAG} 2/3】`) ? 2 :
+    lastAssistant.startsWith(`${SCHEDULE_TAG} 3/3】`) ? 3 : 0;
+
+  // ウィザード外: 工程表作成の意図を検知したら開始
+  if (step === 0) {
+    const wantsSchedule = /工程表|工程を/.test(lastUser) && /(作って|作成|生成|組んで|引いて|お願い)/.test(lastUser);
+    if (!wantsSchedule) return null;
+    return {
+      ok: true,
+      text: `${SCHEDULE_TAG} 1/3】承知しました。最適な工程表を作成するため、順番にお伺いします。\n\nまず、どのような工事内容ですか？\n（例: 新築 / フルリフォーム / 内装リフォーム / 水回りリフォーム / 屋根・外壁塗装）`,
+    };
+  }
+
+  // 途中キャンセル
+  if (/キャンセル|やめる|中止/.test(lastUser)) {
+    return { ok: true, text: "工程表の作成を中止しました。また必要になったら「工程表を作って」と話しかけてください。" };
+  }
+
+  if (step === 1) {
+    return {
+      ok: true,
+      text: `${SCHEDULE_TAG} 2/3】ありがとうございます。\n\n次に、着工予定日を教えてください。\n（例: 2026/08/01、8月1日、来週 など）`,
+    };
+  }
+  if (step === 2) {
+    const start = parseJaDate(lastUser);
+    if (!start) {
+      return { ok: true, text: `${SCHEDULE_TAG} 2/3】すみません、日付を読み取れませんでした。着工予定日をもう一度教えてください。（例: 2026/08/01、8月1日）` };
+    }
+    return {
+      ok: true,
+      text: `${SCHEDULE_TAG} 3/3】着工日は ${format(start, "yyyy年M月d日")} ですね。\n\n最後に、全体の工期を教えてください。\n（例: 2ヶ月、8週間、60日、または完了希望日 10/15）`,
+    };
+  }
+
+  // step 3: 各質問への回答を収集して工程表を生成（再入力があれば最後の回答を採用）
+  const answersByStep: Record<number, string> = {};
+  for (let i = 0; i < history.length - 1; i++) {
+    const msg = history[i];
+    if (msg.role !== "assistant" || !msg.text.startsWith(SCHEDULE_TAG)) continue;
+    const sm = msg.text.match(/【工程表作成 (\d)\/3】/);
+    const next = history[i + 1];
+    if (sm && next?.role === "user") answersByStep[Number(sm[1])] = next.text;
+  }
+  const typeAnswer = answersByStep[1] ?? "";
+  const dateAnswer = answersByStep[2] ?? "";
+  const durationAnswer = lastUser;
+
+  const template = SCHEDULE_TEMPLATES.find(t => t.match.test(typeAnswer)) ?? SCHEDULE_TEMPLATES[SCHEDULE_TEMPLATES.length - 1];
+  const start = parseJaDate(dateAnswer) ?? parseJaDate(typeAnswer) ?? addDays(new Date(), 14);
+  const totalDays = parseDurationDays(durationAnswer, start);
+  if (!totalDays) {
+    return { ok: true, text: `${SCHEDULE_TAG} 3/3】すみません、工期を読み取れませんでした。もう一度教えてください。（例: 2ヶ月、8週間、60日）` };
+  }
+
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { ok: false, text: "ログイン情報を確認できませんでした。再ログイン後にお試しください。" };
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    if (!profile) return { ok: false, text: "プロフィール情報を取得できませんでした。" };
+
+    const totalW = template.phases.reduce((s, p) => s + p.w, 0);
+    let cursor = 0;
+    const rows = template.phases.map((p, i) => {
+      const days = Math.max(1, Math.round((p.w / totalW) * totalDays));
+      const s = addDays(start, cursor);
+      const e = addDays(start, Math.min(cursor + days - 1, totalDays - 1));
+      cursor += days;
+      return {
+        company_id: profile.company_id,
+        construction_id: constructionId,
+        name: p.name,
+        start_date: fmtDate(s),
+        end_date: fmtDate(e),
+        status: "not_started",
+        sort_order: i,
+      };
+    });
+
+    const { error } = await supabase.from("construction_tasks").insert(rows);
+    if (error) throw error;
+
+    const lines = rows.map(r => `・${r.name}: ${r.start_date.replace(/-/g, "/")} 〜 ${r.end_date.replace(/-/g, "/")}`);
+    return {
+      ok: true,
+      text: [
+        `工程表を作成しました！（${template.label} / 着工 ${format(start, "yyyy年M月d日")} / 工期 約${totalDays}日）`,
+        "",
+        ...lines,
+        "",
+        "「工程表」タブに反映済みです。ページを再読み込みすると表示されます。各工程はガントチャート上で編集・調整できます。",
+      ].join("\n"),
+    };
+  } catch (e) {
+    console.error("[handleScheduleWizard] task insert failed", e);
+    return { ok: false, text: "工程表の登録中にエラーが発生しました。もう一度お試しください。" };
+  }
+}
+
 /** チャットUIはプレーンテキスト表示のため、モデルが出力したMarkdown記法を除去する */
 function stripMarkdown(text: string): string {
   return text
@@ -376,6 +584,10 @@ export async function sendBridgeAiMessage(
   history: Message[],
   pathname: string,
 ): Promise<{ text: string; ok: boolean }> {
+  // 工程表作成ウィザード（No.6）: AI設定に依存せず対話→自動生成
+  const wizardReply = await handleScheduleWizard(history, pathname);
+  if (wizardReply) return wizardReply;
+
   // 設定取得とページコンテキスト取得を並列実行（応答時間短縮）
   const [config, pageContext] = await Promise.all([
     resolveLinqAiConfig(),

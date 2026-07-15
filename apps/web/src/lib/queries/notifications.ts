@@ -74,13 +74,12 @@ export async function fetchNotifications(): Promise<Notification[]> {
       .limit(10),
     supabase
       .from("todos")
-      .select("id, title, description, due_date, customer_id, deal_id, created_at")
+      .select("id, title, description, due_date, customer_id, deal_id, created_at, tags, priority")
       .eq("assigned_to", user.id)
-      .eq("priority", "high")
       .neq("status", "completed")
-      .contains("tags", ["sales_flow"])
+      .or("priority.eq.high,tags.cs.{due_today},tags.cs.{notify_flag}")
       .order("created_at", { ascending: false })
-      .limit(5),
+      .limit(8),
   ]);
 
   const selfRole: string | null = selfProfile?.role ?? null;

@@ -18,6 +18,7 @@ import { Search, Plus, TrendingUp, FileText, Trash2, CheckCircle2, ArrowLeft, Us
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { deleteEstimate, updateEstimate } from "@/lib/actions/estimates";
+import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { getStatusOption } from "@/lib/status-config";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -82,7 +83,7 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
     if (status !== "draft") {
       const row = rows.find((r) => r.id === id);
       if (row) {
-        const threshold = ((row as { default_gross_profit_rate?: number | null }).default_gross_profit_rate ?? 0.5) * 100;
+        const threshold = toMarginThresholdPercent((row as { default_gross_profit_rate?: number | null }).default_gross_profit_rate);
         const rate = (row as { gross_profit_rate?: number | null }).gross_profit_rate ?? 0;
         const approvalStatus = (row as { approval_status?: string | null }).approval_status ?? "none";
         if (rate < threshold && approvalStatus !== "approved") {

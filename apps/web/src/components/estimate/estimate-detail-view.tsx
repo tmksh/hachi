@@ -29,6 +29,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getEstimates } from "@/lib/actions/estimates";
 import { getEstimate } from "@/lib/actions/estimates";
+import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
+import { calcGrossProfitRatePercent, toMarginThresholdPercent } from "@/lib/estimate-margin";
 
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
@@ -384,8 +386,8 @@ export function EstimateDetailView({
   const [refSearch, setRefSearch] = useState("");
   const [bulkCostOpen, setBulkCostOpen] = useState(false);
   const [bulkSellOpen, setBulkSellOpen] = useState(false);
-  const [bulkRateCost, setBulkRateCost] = useState(String(Math.round((estimate.default_gross_profit_rate ?? 0.5) * 100)));
-  const [bulkRateSell, setBulkRateSell] = useState(String(Math.round((estimate.default_gross_profit_rate ?? 0.5) * 100)));
+  const [bulkRateCost, setBulkRateCost] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
+  const [bulkRateSell, setBulkRateSell] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkApplying, setBulkApplying] = useState(false);
   const [reserve1Rate, setReserve1Rate] = useState(estimate.reserve_fee_1_rate ?? 0.02);
   const [reserve2Rate, setReserve2Rate] = useState(estimate.reserve_fee_2_rate ?? 0.03);
@@ -721,8 +723,9 @@ export function EstimateDetailView({
   const sumCost = (list: EstimateItem[]) => list.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
   const sumSell = (list: EstimateItem[]) => list.reduce((s, i) => s + (i.selling_amount ?? 0), 0);
   const calcRate = (cost: number, sell: number) => sell > 0 ? ((sell - cost) / sell) * 100 : 0;
-  const grossRate = estimate.gross_profit_rate ?? 0;
-  const marginThreshold = (estimate.default_gross_profit_rate ?? 0.5) * 100;
+  // 明細からライブ算出（保存前の調整でもボタンが切り替わる）
+  const grossRate = calcGrossProfitRatePercent(items) || (estimate.gross_profit_rate ?? 0);
+  const marginThreshold = toMarginThresholdPercent(estimate.default_gross_profit_rate);
   const isLowMargin = grossRate < marginThreshold;
 
   return (
@@ -827,6 +830,19 @@ export function EstimateDetailView({
           <Button variant="outline" size="sm" onClick={() => setPdfOpen(true)}>
             <FileDown className="h-4 w-4 mr-1" />PDFプレビュー
           </Button>
+          <EstimateApprovalActions
+            estimateId={estimate.id}
+            grossProfitRate={grossRate}
+            defaultGrossProfitRate={estimate.default_gross_profit_rate}
+            estimateStatus={estimate.status}
+            onConfirmed={() => {
+              onEstimateChange({
+                ...estimate,
+                status: "issued",
+                gross_profit_rate: grossRate,
+              });
+            }}
+          />
           {headerExtra}
         </div>
       </div>
@@ -1051,17 +1067,18 @@ export function EstimateDetailView({
                     </button>
                     <span className="text-[10px] text-muted-foreground ml-2 font-normal">{catItems.length}項目</span>
                     <span
-                      className="inline-flex items-center gap-1 ml-3 text-[10px] font-normal text-amber-700"
+                      className="inline-flex items-center gap-1.5 ml-3 text-[10px] font-normal text-amber-800 bg-amber-50 border border-amber-200/80 rounded px-1.5 py-0.5"
                       onClick={(e) => e.stopPropagation()}
+                      title="この大項目（フロアー）の原価に対する予備費②"
                     >
-                      予備費②
+                      予備費②（行）
                       <Input
                         type="number"
                         min={0}
                         max={100}
                         step={0.5}
-                        className="inline-block w-16 h-6 text-[10px] text-center px-1"
-                        value={Math.round((category.reserve_fee_rate ?? 0) * 1000) / 10}
+                        className="inline-block w-[4.5rem] min-w-[4.5rem] h-6 text-[11px] text-center tabular-nums px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={Number(((category.reserve_fee_rate ?? 0) * 100).toFixed(1))}
                         onChange={(e) => {
                           const pct = Number(e.target.value);
                           if (Number.isNaN(pct)) return;
@@ -1085,10 +1102,15 @@ export function EstimateDetailView({
                                 ),
                               });
                             })
-                            .catch(() => toast.error("行予備費の保存に失敗しました"));
+                            .catch(() => toast.error("行予備費の保存に失敗しました（DBマイグレーション未適用の可能性）"));
                         }}
                       />
                       %
+                      {(category.reserve_fee_rate ?? 0) > 0 && (
+                        <span className="text-amber-700 tabular-nums">
+                          ¥{Math.round(catCost * (category.reserve_fee_rate ?? 0)).toLocaleString()}
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="px-2 py-2 text-right text-muted-foreground bg-amber-50/40 whitespace-nowrap text-xs">小計</td>
@@ -1206,44 +1228,53 @@ export function EstimateDetailView({
             ) : null}
             <tr className="bg-amber-50/30 border-t border-border/40">
               <td colSpan={6} className="px-3 py-2 text-right text-xs text-muted-foreground">
-                予備費①
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.5}
-                  className="inline-block w-20 h-7 mx-1 text-xs text-center"
-                  value={Math.round(reserve1Rate * 1000) / 10}
-                  disabled={savingReserve}
-                  onChange={(e) => {
-                    const pct = Number(e.target.value);
-                    if (Number.isNaN(pct)) return;
-                    const next = pct / 100;
-                    setReserve1Rate(next);
-                  }}
-                  onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
-                />
-                %
-                <span className="text-[10px] ml-1">／ ②</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.5}
-                  className="inline-block w-20 h-7 mx-1 text-xs text-center"
-                  value={Math.round(reserve2Rate * 1000) / 10}
-                  disabled={savingReserve}
-                  onChange={(e) => {
-                    const pct = Number(e.target.value);
-                    if (Number.isNaN(pct)) return;
-                    setReserve2Rate(pct / 100);
-                  }}
-                  onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
-                />
-                %
+                <div className="inline-flex flex-wrap items-center justify-end gap-x-1 gap-y-1">
+                  <span>予備費①</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    className="inline-block w-[4.5rem] min-w-[4.5rem] h-7 text-xs text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    value={Number((reserve1Rate * 100).toFixed(1))}
+                    disabled={savingReserve}
+                    onChange={(e) => {
+                      const pct = Number(e.target.value);
+                      if (Number.isNaN(pct)) return;
+                      setReserve1Rate(pct / 100);
+                    }}
+                    onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
+                  />
+                  <span>%</span>
+                  <span className="text-[10px] mx-1">／</span>
+                  <span title={hasCategoryReserve ? "大項目ごとの予備費②が設定済みのため、全体率は未使用です" : "大項目に未設定のときの全体既定率"}>
+                    予備費②{hasCategoryReserve ? "（行別適用中）" : "（全体既定）"}
+                  </span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    className="inline-block w-[4.5rem] min-w-[4.5rem] h-7 text-xs text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    value={Number((reserve2Rate * 100).toFixed(1))}
+                    disabled={savingReserve || hasCategoryReserve}
+                    onChange={(e) => {
+                      const pct = Number(e.target.value);
+                      if (Number.isNaN(pct)) return;
+                      setReserve2Rate(pct / 100);
+                    }}
+                    onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
+                  />
+                  <span>%</span>
+                </div>
+                <p className="text-[10px] text-amber-700/80 mt-1">
+                  予備費②は各大項目行の「予備費②（行）」でフロアー別に設定できます
+                </p>
               </td>
               <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-sm text-amber-700">¥{reserve1.toLocaleString()}</td>
-              <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">原価のみ</td>
+              <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
+                ② ¥{reserve2.toLocaleString()}
+              </td>
               <td colSpan={2}></td>
             </tr>
             <tr className="bg-slate-100/70 border-t border-border/40 font-bold">

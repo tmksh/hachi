@@ -165,7 +165,12 @@ export function RecordingSummaryTab({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ storagePath, customerId, dealId, durationSec, fileSizeBytes: audioBlob.size }),
         });
-        const data = await res.json() as { transcript?: string; result?: MeetingResult; error?: string };
+        const data = await res.json() as {
+          transcript?: string;
+          result?: MeetingResult;
+          recordingId?: string;
+          error?: string;
+        };
 
         if (!res.ok || data.error) throw new Error(data.error ?? "文字起こしに失敗しました");
 
@@ -176,6 +181,17 @@ export function RecordingSummaryTab({
         if (data.result?.summary) setMemo(data.result.summary);
         setRecordingState("done");
         toast.success("文字起こし完了！結果を確認してください");
+
+        // 同期API側で録音保存＋商談登録済み。recordingIdが無い場合のみフロントから後処理
+        if (!data.recordingId && finalTranscript && data.result) {
+          saveVoiceTranscriptResult({
+            customerId,
+            dealId,
+            storagePath,
+            transcript: finalTranscript,
+            result: data.result,
+          }).catch(() => {});
+        }
       } else {
         // 非同期処理（12分超）
         if (!newJobId) throw new Error("ジョブIDが取得できませんでした");

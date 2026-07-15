@@ -278,6 +278,12 @@ export function CustomerTodoTab({ customerId }: { customerId: string }) {
                     ) : (
                       <span className="text-[11px] text-muted-foreground">期限なし</span>
                     )}
+                    {(t.priority === "high" || (t.due_date && isToday(parseISO(t.due_date)))) && t.status !== "completed" && (
+                      <Badge variant="destructive" className="text-[9px] h-4 px-1.5">優先</Badge>
+                    )}
+                    {((t as { tags?: string[] | null }).tags ?? []).includes("notify_flag") && (
+                      <Badge className="text-[9px] h-4 px-1.5 bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-100">通知</Badge>
+                    )}
                     {t.source === "recording" && (
                       <Badge variant="secondary" className="text-[9px] h-4 px-1.5">録音</Badge>
                     )}

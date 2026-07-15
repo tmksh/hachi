@@ -12,15 +12,19 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FilePlus2, Plus, Loader2, Send, Trash2, ArrowRightLeft, RotateCcw } from "lucide-react";
+import { FilePlus2, Plus, Loader2, Send, Trash2, ArrowRightLeft, RotateCcw, CheckCircle2, Undo2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createChangeOrder,
   deleteChangeOrder,
   getChangeOrders,
   sendChangeOrderToCloudSign,
   approveChangeOrder,
+  submitChangeOrderApproval,
+  rejectChangeOrder,
 } from "@/lib/actions/change-orders";
 import { getEstimate } from "@/lib/actions/estimates";
+import { getProfiles } from "@/lib/actions/profiles";
 import type { ChangeOrder } from "@/lib/database.types";
 import type { EstimateListItem } from "@/components/estimate/estimate-list-view";
 
@@ -108,6 +112,20 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+
+  // 承認申請モーダル（No.14）
+  const [submitTarget, setSubmitTarget] = useState<ChangeOrderRow | null>(null);
+  const [approverId, setApproverId] = useState("");
+  const [submitComment, setSubmitComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
+
+  useEffect(() => {
+    getProfiles()
+      .then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name }))))
+      .catch(() => {});
+  }, []);
 
   // フォーム状態
   const [title, setTitle] = useState("");
@@ -203,6 +221,30 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
     }
   }
 
+  async function handleSubmitApproval() {
+    if (!submitTarget) return;
+    if (!approverId) { toast.error("承認者を選択してください"); return; }
+    if (!submitComment.trim()) { toast.error("申請コメントを入力してください"); return; }
+    setSubmitting(true);
+    try {
+      await submitChangeOrderApproval({
+        changeOrderId: submitTarget.id,
+        approverId,
+        comment: submitComment.trim(),
+      });
+      const refreshed = await getChangeOrders(constructionId);
+      setOrders(refreshed as ChangeOrderRow[]);
+      toast.success("承認申請を送信しました。承認者に通知されます");
+      setSubmitTarget(null);
+      setApproverId("");
+      setSubmitComment("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "申請に失敗しました");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleApprove(co: ChangeOrderRow) {
     setApprovingId(co.id);
     try {
@@ -215,6 +257,20 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
       toast.error("承認に失敗しました");
     } finally {
       setApprovingId(null);
+    }
+  }
+
+  async function handleReject(co: ChangeOrderRow) {
+    setRejectingId(co.id);
+    try {
+      await rejectChangeOrder(co.id);
+      const refreshed = await getChangeOrders(constructionId);
+      setOrders(refreshed as ChangeOrderRow[]);
+      toast.success("差戻しました。申請者に通知されます");
+    } catch {
+      toast.error("差戻しに失敗しました");
+    } finally {
+      setRejectingId(null);
     }
   }
 
@@ -317,12 +373,30 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setPreview(co)}>
                     プレビュー
                   </Button>
-                  {co.status === "draft" && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleApprove(co)} disabled={approvingId === co.id}>
-                      {approvingId === co.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "承認"}
+                  {(co.status === "draft" || co.status === "rejected") && (
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+                      onClick={() => { setSubmitTarget(co); setApproverId(""); setSubmitComment(""); }}>
+                      <Send className="h-3 w-3" />
+                      {co.status === "rejected" ? "再申請" : "承認申請"}
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => handleCloudSign(co)} disabled={sendingId === co.id}>
+                  {co.status === "pending" && (
+                    <>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => handleApprove(co)} disabled={approvingId === co.id}>
+                        {approvingId === co.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                        承認
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-rose-300 text-rose-700 hover:bg-rose-50"
+                        onClick={() => handleReject(co)} disabled={rejectingId === co.id}>
+                        {rejectingId === co.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
+                        差戻し
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => handleCloudSign(co)}
+                    disabled={sendingId === co.id || (co.status !== "approved" && co.status !== "sent")}
+                    title={co.status !== "approved" && co.status !== "sent" ? "承認後に送信できます" : undefined}>
                     {sendingId === co.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                     クラウドサイン送信
                   </Button>
@@ -462,6 +536,54 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
             <Button onClick={handleCreate} disabled={saving || !canCreate}>
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
               作成する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 承認申請ダイアログ（No.14） */}
+      <Dialog open={!!submitTarget} onOpenChange={o => { if (!o) setSubmitTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>追加変更工事の承認申請</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            {submitTarget && (
+              <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                <p className="font-medium">{submitTarget.title}</p>
+                <p className={`text-xs tabular-nums mt-0.5 ${submitTarget.diff_amount >= 0 ? "text-amber-700" : "text-green-700"}`}>
+                  差額 {submitTarget.diff_amount >= 0 ? "+" : ""}¥{submitTarget.diff_amount.toLocaleString()}
+                </p>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>承認者 <span className="text-destructive">*</span></Label>
+              <Select value={approverId} onValueChange={setApproverId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="承認者（上長）を選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>申請コメント <span className="text-destructive">*</span></Label>
+              <Textarea
+                value={submitComment}
+                onChange={e => setSubmitComment(e.target.value)}
+                rows={3}
+                placeholder="例: 施主要望による仕様変更。差額は追加請負で対応。"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubmitTarget(null)}>キャンセル</Button>
+            <Button onClick={handleSubmitApproval} disabled={submitting || !approverId || !submitComment.trim()}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              申請する
             </Button>
           </DialogFooter>
         </DialogContent>

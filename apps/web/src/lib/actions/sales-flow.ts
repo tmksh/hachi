@@ -10,8 +10,7 @@ import {
   resolveLinqAiConfig,
 } from "@/lib/integrations/linq-ai";
 import { createWorkflowRequest } from "@/lib/actions/workflow";
-
-const DEFAULT_MARGIN_THRESHOLD = 50;
+import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 
 async function getCompanyContext() {
   const supabase = await createClient();
@@ -27,7 +26,16 @@ export async function notifySalesFlowUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
   companyId: string,
   userId: string,
-  input: { title: string; description?: string; href?: string; customerId?: string; dealId?: string; urgent?: boolean },
+  input: {
+    title: string;
+    description?: string;
+    href?: string;
+    customerId?: string;
+    dealId?: string;
+    urgent?: boolean;
+    /** true のとき ToDo は作らずお知らせのみ（既存 ToDo の通知用） */
+    skipTodo?: boolean;
+  },
   fromUserId?: string,
 ) {
   await notifyUser(supabase, companyId, userId, input, fromUserId);
@@ -37,30 +45,43 @@ async function notifyUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
   companyId: string,
   userId: string,
-  input: { title: string; description?: string; href?: string; customerId?: string; dealId?: string; urgent?: boolean },
+  input: {
+    title: string;
+    description?: string;
+    href?: string;
+    customerId?: string;
+    dealId?: string;
+    urgent?: boolean;
+    skipTodo?: boolean;
+  },
   fromUserId?: string,
 ) {
-  const today = new Date().toISOString().slice(0, 10);
-  await supabase.from("todos").insert({
-    company_id: companyId,
-    assigned_to: userId,
-    customer_id: input.customerId ?? null,
-    deal_id: input.dealId ?? null,
-    title: input.title,
-    description: input.description ?? null,
-    status: "pending",
-    priority: input.urgent ? "high" : "medium",
-    due_date: input.urgent ? today : null,
-    tags: input.urgent ? ["urgent", "sales_flow", "notify_flag"] : ["sales_flow"],
-    source: "sales_flow",
-  });
+  const { tokyoDateString } = await import("@/lib/tokyo-date");
+  const today = tokyoDateString();
+
+  if (!input.skipTodo) {
+    const { error: todoErr } = await supabase.from("todos").insert({
+      company_id: companyId,
+      assigned_to: userId,
+      customer_id: input.customerId ?? null,
+      deal_id: input.dealId ?? null,
+      title: input.title,
+      description: input.description ?? null,
+      status: "pending",
+      priority: input.urgent ? "high" : "medium",
+      due_date: input.urgent ? today : null,
+      tags: input.urgent ? ["urgent", "sales_flow", "notify_flag"] : ["sales_flow"],
+      source: "sales_flow",
+    });
+    if (todoErr) console.error("[notifyUser] todo insert failed", todoErr);
+  }
 
   const body = [
     input.description,
     input.href ? `詳細: ${input.href}` : null,
   ].filter(Boolean).join("\n\n") || input.title;
 
-  await supabase.from("announcements").insert({
+  const { error: annErr } = await supabase.from("announcements").insert({
     company_id: companyId,
     author_id: fromUserId ?? userId,
     title: input.title,
@@ -70,6 +91,7 @@ async function notifyUser(
     target_user_ids: [userId],
     published_at: new Date().toISOString(),
   });
+  if (annErr) console.error("[notifyUser] announcement insert failed", annErr);
 
   void dispatchWebhook(companyId, "sales_flow.notification", {
     user_id: userId,
@@ -238,7 +260,7 @@ export async function submitEstimateApproval(input: {
     .single();
   if (error || !estimate) throw new Error("見積が見つかりません");
 
-  const threshold = (estimate.default_gross_profit_rate ?? 0.5) * 100;
+  const threshold = toMarginThresholdPercent(estimate.default_gross_profit_rate);
   if ((estimate.gross_profit_rate ?? 0) >= threshold) {
     throw new Error(`粗利率が基準(${threshold.toFixed(0)}%)以上のため承認申請は不要です`);
   }
@@ -332,7 +354,7 @@ export async function getEstimateMarginThreshold(estimateId: string) {
     .eq("id", estimateId)
     .single();
   if (!data) return null;
-  const threshold = (data.default_gross_profit_rate ?? 0.5) * 100;
+  const threshold = toMarginThresholdPercent(data.default_gross_profit_rate);
   return {
     grossProfitRate: data.gross_profit_rate ?? 0,
     threshold,
@@ -353,14 +375,24 @@ export async function confirmEstimateIssued(estimateId: string) {
     .single();
   if (error || !estimate) throw new Error("見積が見つかりません");
 
-  const threshold = (estimate.default_gross_profit_rate ?? 0.5) * 100;
-  if ((estimate.gross_profit_rate ?? 0) < threshold) {
+  // 明細から再計算して最新粗利率で判定（画面上の調整と一致させる）
+  const { data: items } = await supabase
+    .from("estimate_items")
+    .select("selling_amount, cost_amount")
+    .eq("estimate_id", estimateId);
+  const { calcGrossProfitRatePercent } = await import("@/lib/estimate-margin");
+  const liveRate = calcGrossProfitRatePercent(items ?? []);
+  const rate = liveRate > 0 ? liveRate : (estimate.gross_profit_rate ?? 0);
+
+  const threshold = toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  if (rate < threshold) {
     throw new Error(`粗利率が基準(${threshold.toFixed(0)}%)未満のため、上長承認が必要です`);
   }
 
   const { error: updErr } = await supabase.from("estimates").update({
     status: "issued",
     approval_status: "approved",
+    gross_profit_rate: rate,
     updated_at: new Date().toISOString(),
   }).eq("id", estimateId);
   if (updErr) throw updErr;

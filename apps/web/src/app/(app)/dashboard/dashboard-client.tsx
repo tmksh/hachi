@@ -187,7 +187,18 @@ export function DashboardClient({
 
   const todos = data?.todos ?? [];
   const visibleTodos = todos.slice(0, 5);
-  const urgentCount = todos.filter((t) => t.priority === "high" && t.status !== "completed").length;
+  const todayKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const isUrgentTodo = (t: (typeof todos)[number]) =>
+    t.status !== "completed" && (
+      t.priority === "high" ||
+      (typeof t.due_date === "string" && t.due_date.slice(0, 10) <= todayKey)
+    );
+  const urgentCount = todos.filter(isUrgentTodo).length;
 
   const kpis = [
     { id: "kpi-won",           label: "受注額",      value: formatYen(data?.kpis.wonValue ?? 0),                              sub: "今月",   icon: TrendingUp },
@@ -307,7 +318,7 @@ export function DashboardClient({
                 </div>
               )) : visibleTodos.length ? visibleTodos.map((todo) => {
                 const isCompleted = todo.status === "completed";
-                const isUrgent = todo.priority === "high" && !isCompleted;
+                const isUrgent = isUrgentTodo(todo);
                 return (
                   <div key={todo.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg group cursor-pointer transition-colors ${isUrgent ? "hover:bg-rose-50" : "hover:bg-[#D8EDE4]/50"}`}>
                     <div className={`h-3.5 w-3.5 rounded shrink-0 border flex items-center justify-center transition-colors ${isCompleted ? "border-slate-300 bg-slate-100" : "border-slate-200 group-hover:border-slate-300"}`}>
@@ -811,7 +822,7 @@ export function DashboardClient({
           <div className="flex items-center gap-2 min-w-0">
             <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
             <p className="text-sm text-rose-900 truncate">
-              優先度の高いToDoが <span className="font-bold">{urgentCount}件</span> あります。今日のフォーカスを確認してください。
+              期限が今日（または優先）のToDoが <span className="font-bold">{urgentCount}件</span> あります。今日のフォーカスを確認してください。
             </p>
           </div>
           <Link href="#ai-focus" className="text-xs font-medium text-rose-700 hover:underline shrink-0">

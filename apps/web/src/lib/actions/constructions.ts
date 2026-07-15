@@ -343,33 +343,38 @@ export async function deleteConstruction(id: string) {
   if (error) throw error;
 }
 
-export async function createConstructionTask(constructionId: string, input: { name: string; start_date?: string; end_date?: string; assigned_to?: string; description?: string }) {
+export async function createConstructionTask(constructionId: string, input: { name: string; start_date?: string; end_date?: string; assigned_to?: string; description?: string; contractor_name?: string; depends_on_task_id?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
+  const insertData: Record<string, unknown> = {
+    company_id: profile.company_id,
+    construction_id: constructionId,
+    name: input.name,
+    start_date: input.start_date || null,
+    end_date: input.end_date || null,
+    assigned_to: input.assigned_to || null,
+    description: input.description || null,
+  };
+  if (input.contractor_name !== undefined) insertData.contractor_name = input.contractor_name;
+  if (input.depends_on_task_id !== undefined) insertData.depends_on_task_id = input.depends_on_task_id;
+
   const { data, error } = await supabase
     .from("construction_tasks")
-    .insert({
-      company_id: profile.company_id,
-      construction_id: constructionId,
-      name: input.name,
-      start_date: input.start_date || null,
-      end_date: input.end_date || null,
-      assigned_to: input.assigned_to || null,
-      description: input.description || null,
-    })
+    .insert(insertData)
     .select()
     .single();
   if (error) throw error;
   return data as ConstructionTask;
 }
 
-export async function updateConstructionTask(id: string, input: Partial<Pick<ConstructionTask, "name" | "start_date" | "end_date" | "progress" | "status" | "assigned_to">>) {
+export async function updateConstructionTask(id: string, input: Partial<Pick<ConstructionTask, "name" | "start_date" | "end_date" | "progress" | "status" | "assigned_to" | "sort_order" | "contractor_name" | "depends_on_task_id">>) {
   const supabase = await createClient();
-  const { error } = await supabase.from("construction_tasks").update(input).eq("id", id);
+  const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+  const { error } = await supabase.from("construction_tasks").update(patch).eq("id", id);
   if (error) throw error;
 }
 

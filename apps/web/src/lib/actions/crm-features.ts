@@ -402,8 +402,9 @@ export async function createCustomerTodo(input: {
   source?: string;
 }) {
   const { supabase, company_id, user_id } = await getCompanyContext();
-  const today = new Date().toISOString().slice(0, 10);
-  const isDueToday = input.due_date === today;
+  const { tokyoDateString } = await import("@/lib/tokyo-date");
+  const today = tokyoDateString();
+  const isDueToday = Boolean(input.due_date && input.due_date.slice(0, 10) === today);
   const { data, error } = await supabase.from("todos").insert({
     company_id,
     customer_id: input.customer_id,
@@ -415,20 +416,21 @@ export async function createCustomerTodo(input: {
     source: input.source ?? "manual",
     status: "pending",
     priority: isDueToday ? "high" : "medium",
-    tags: isDueToday ? ["urgent", "sales_flow", "due_today"] : ["sales_flow"],
+    tags: isDueToday ? ["urgent", "sales_flow", "due_today", "notify_flag"] : ["sales_flow"],
   }).select().single();
   if (error) throw error;
 
-  // 期限が今日のToDoは3経路通知（No.27）
+  // 期限が今日のToDoは3経路通知（No.27）: バナー / ToDoフラグ / お知らせ
   if (isDueToday) {
     const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
     await notifySalesFlowUser(supabase, company_id, user_id, {
       title: `今日のToDo: ${input.title}`,
       description: input.description ?? "期限が今日のToDoが登録されました",
-      href: `/crm/${input.customer_id}`,
+      href: `/crm/${input.customer_id}?tab=todos`,
       customerId: input.customer_id,
       dealId: input.deal_id,
       urgent: true,
+      skipTodo: true,
     }, user_id);
   }
 
@@ -436,9 +438,33 @@ export async function createCustomerTodo(input: {
 }
 
 export async function updateCustomerTodo(id: string, input: { title?: string; description?: string; status?: string; due_date?: string | null }) {
-  const { supabase } = await getCompanyContext();
-  const { data, error } = await supabase.from("todos").update({ ...input, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const { tokyoDateString } = await import("@/lib/tokyo-date");
+  const today = tokyoDateString();
+  const dueToday = input.due_date != null && input.due_date.slice(0, 10) === today;
+
+  const patch: Record<string, unknown> = { ...input, updated_at: new Date().toISOString() };
+  if (dueToday) {
+    patch.priority = "high";
+    patch.tags = ["urgent", "sales_flow", "due_today", "notify_flag"];
+  }
+
+  const { data, error } = await supabase.from("todos").update(patch).eq("id", id).select().single();
   if (error) throw error;
+
+  if (dueToday && data) {
+    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+    await notifySalesFlowUser(supabase, company_id, user_id, {
+      title: `今日のToDo: ${data.title}`,
+      description: data.description ?? "期限が今日のToDoに更新されました",
+      href: data.customer_id ? `/crm/${data.customer_id}?tab=todos` : "/dashboard",
+      customerId: data.customer_id ?? undefined,
+      dealId: data.deal_id ?? undefined,
+      urgent: true,
+      skipTodo: true,
+    }, user_id);
+  }
+
   return data;
 }
 

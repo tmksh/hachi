@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     // GPT で要約・話者分割・ToDo生成
     const result = await generateMeetingResult(transcript, aiConfig.apiKey, aiConfig.model ?? "gpt-4o-mini");
 
-    // customer_recordings に保存
+    // customer_recordings に保存 → 商談自動登録（No.15）
     if (customerId) {
       const { data: saved } = await supabase
         .from("customer_recordings")
@@ -78,6 +78,20 @@ export async function POST(req: NextRequest) {
         })
         .select("id")
         .single();
+
+      if (saved?.id) {
+        try {
+          const { processRecordingComplete } = await import("@/lib/actions/sales-flow");
+          await processRecordingComplete({
+            customerId,
+            recordingId: saved.id,
+            dealId,
+            transcript,
+          });
+        } catch (err) {
+          console.error("[voice-transcribe] processRecordingComplete failed", err);
+        }
+      }
 
       return NextResponse.json({ transcript, result, recordingId: saved?.id });
     }

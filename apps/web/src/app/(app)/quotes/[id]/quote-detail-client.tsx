@@ -3,11 +3,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Copy } from "lucide-react";
 import { getEstimate } from "@/lib/actions/estimates";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
-import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Copy } from "lucide-react";
 
 type EstimateDetail = Awaited<ReturnType<typeof getEstimate>>;
 
@@ -57,20 +56,14 @@ export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
         onEstimateChange={(est) => setData((prev) => ({ ...(prev as EstimateDetail), ...(est as unknown as EstimateDetail) }))}
         pdfCustomer={data.customer ? { name: data.customer.name, company_name: data.customer.company_name } : null}
         headerExtra={
-          <>
-            <EstimateApprovalActions
-              estimateId={id as string}
-              grossProfitRate={data.gross_profit_rate ?? 0}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              title="開いている見積もりをもとに新規見積もりを作成"
-              onClick={() => router.push(`/quotes/new?copy_from=${id}`)}
-            >
-              <Copy className="h-4 w-4 mr-1" />見積書をコピー
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            title="開いている見積もりをもとに新規見積もりを作成"
+            onClick={() => router.push(`/quotes/new?copy_from=${id}`)}
+          >
+            <Copy className="h-4 w-4 mr-1" />見積書をコピー
+          </Button>
         }
       />
     </div>

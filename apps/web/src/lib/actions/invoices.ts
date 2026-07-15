@@ -29,7 +29,7 @@ export async function getInvoice(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("invoices")
-    .select("*, customer:customers(id, name, company_name, address), construction:constructions(id, title)")
+    .select("*, customer:customers(id, name, company_name, address, email), construction:constructions(id, title)")
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -360,4 +360,143 @@ export async function generateMonthlyInvoices(constructionId: string) {
   }
 
   return created;
+}
+
+function toLocalDateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** 指定月（YYYY-MM）の締日ベースで、対象工事の月次請求書を一括生成する */
+export async function generateMonthlyInvoicesForMonth(month: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) throw new Error("対象月の形式が不正です");
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", profile.company_id)
+    .single();
+  const closingDay = getClosingDay(company?.settings as Record<string, unknown>);
+  const period = getBillingPeriod(new Date(y, m - 1, 1), closingDay);
+
+  const invoiceDate = toLocalDateString(period.end);
+  // 支払期限は翌月末
+  const dueDate = toLocalDateString(new Date(period.end.getFullYear(), period.end.getMonth() + 2, 0));
+
+  const monthStart = toLocalDateString(new Date(y, m - 1, 1));
+  const monthEnd = toLocalDateString(new Date(y, m, 0));
+
+  const { data: constructions } = await supabase
+    .from("constructions")
+    .select("id, title, customer_id, order_amount")
+    .in("status", ["in_progress", "completed"])
+    .gt("order_amount", 0);
+
+  const { data: existingInvoices } = await supabase
+    .from("invoices")
+    .select("construction_id")
+    .gte("invoice_date", monthStart)
+    .lte("invoice_date", monthEnd)
+    .not("construction_id", "is", null);
+  const invoicedIds = new Set((existingInvoices ?? []).map((r) => r.construction_id as string));
+
+  const targets = (constructions ?? []).filter((c) => !invoicedIds.has(c.id));
+  const skipped = (constructions ?? []).length - targets.length;
+
+  const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true });
+  let seq = count || 0;
+  let created = 0;
+
+  for (const con of targets) {
+    const subtotal = con.order_amount as number;
+    const tax = Math.floor(subtotal * 0.1);
+    seq += 1;
+    const invoiceNo = `INV-${String(seq).padStart(4, "0")}`;
+
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .insert({
+        company_id: profile.company_id,
+        invoice_no: invoiceNo,
+        construction_id: con.id,
+        customer_id: con.customer_id,
+        invoice_date: invoiceDate,
+        due_date: dueDate,
+        payment_terms: closingDay === "20" ? "20日締め翌月末払い" : "月末締め翌月末払い",
+        subtotal,
+        tax,
+        total: subtotal + tax,
+        status: "draft",
+        notes: `${period.label} 分（月次一括生成）`,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    await supabase.from("invoice_items").insert({
+      company_id: profile.company_id,
+      invoice_id: invoice.id,
+      description: `${con.title}（${period.label}）`,
+      quantity: 1,
+      unit_price: subtotal,
+      amount: subtotal,
+      sort_order: 0,
+    });
+
+    created += 1;
+  }
+
+  return { created, skipped };
+}
+
+/** 請求書を顧客へメール送付し、送付済みステータスに更新する */
+export async function sendInvoiceEmail(
+  id: string,
+  input: { to: string; subject: string; body: string },
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const to = input.to.trim();
+  if (!to) throw new Error("宛先メールアドレスを入力してください");
+
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("id, company_id, invoice_no, status")
+    .eq("id", id)
+    .single();
+  if (!invoice) throw new Error("請求書が見つかりません");
+
+  if (!process.env.RESEND_API_KEY) {
+    await updateInvoiceStatus(id, "sent");
+    return { sent: false as const };
+  }
+
+  const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
+  const escaped = input.body
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px;white-space:pre-wrap;">${line.replace(/</g, "&lt;").replace(/>/g, "&gt;") || "&nbsp;"}</p>`)
+    .join("");
+
+  const { error: mailError } = await getResend().emails.send({
+    from: CUSTOMER_FROM_EMAIL,
+    to,
+    subject: input.subject.trim() || `請求書のご送付（${invoice.invoice_no ?? ""}）`,
+    html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${escaped}</div>`,
+    text: input.body,
+  });
+  if (mailError) {
+    throw new Error(`メール送信に失敗しました: ${mailError.message}`);
+  }
+
+  await updateInvoiceStatus(id, "sent");
+  return { sent: true as const, sentTo: to };
 }

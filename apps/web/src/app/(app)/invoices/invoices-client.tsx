@@ -7,14 +7,24 @@ import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
-import { Plus, Receipt, FileText } from "lucide-react";
+import { Plus, Receipt, FileText, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { getInvoices, updateInvoiceStatus } from "@/lib/actions/invoices";
+import { getInvoices, updateInvoiceStatus, generateMonthlyInvoicesForMonth } from "@/lib/actions/invoices";
 import { getStatusOption } from "@/lib/status-config";
+
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
 type Invoice = Awaited<ReturnType<typeof getInvoices>>[number];
 
@@ -26,10 +36,32 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMonth, setBulkMonth] = useState(currentMonth);
+  const [bulkGenerating, setBulkGenerating] = useState(false);
 
   useEffect(() => {
     setInvoices(initialInvoices);
   }, [initialInvoices]);
+
+  const handleBulkGenerate = async () => {
+    if (!bulkMonth) {
+      toast.error("対象月を選択してください");
+      return;
+    }
+    setBulkGenerating(true);
+    try {
+      const { created, skipped } = await generateMonthlyInvoicesForMonth(bulkMonth);
+      toast.success(`${created}件の請求書を生成しました（スキップ${skipped}件）`);
+      setBulkOpen(false);
+      setInvoices(await getInvoices());
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "月次一括生成に失敗しました");
+    } finally {
+      setBulkGenerating(false);
+    }
+  };
 
   const handleStatusChange = async (id: string, status: "draft" | "sent" | "paid" | "cancelled") => {
     const prev = invoices;
@@ -53,6 +85,9 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="請求管理" description="請求書の一覧と管理">
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setBulkOpen(true)}>
+          <CalendarClock className="h-4 w-4" />月次一括生成
+        </Button>
         <Link href="/invoices/new">
           <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規作成</Button>
         </Link>
@@ -129,6 +164,35 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
           </Table>
         </div>
       </Card>
+
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>月次請求書の一括生成</DialogTitle>
+            <DialogDescription>
+              施工中・完了の工事（契約金額あり）のうち、対象月の請求書が未生成のものについて、
+              締日を請求日・翌月末を支払期限とした下書き請求書を一括作成します。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="bulk-month">対象月</Label>
+            <Input
+              id="bulk-month"
+              type="month"
+              value={bulkMonth}
+              onChange={(e) => setBulkMonth(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulkGenerating}>
+              キャンセル
+            </Button>
+            <Button onClick={handleBulkGenerate} disabled={bulkGenerating}>
+              {bulkGenerating ? "生成中..." : "一括生成"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

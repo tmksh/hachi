@@ -3,10 +3,11 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { getCostBudget, saveCostBudget } from "@/lib/actions/cost-budgets";
 import { getConstructionEstimate } from "@/lib/actions/constructions";
+import { bulkCreateContractorOrders } from "@/lib/actions/contractor-orders";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Trash2, Plus, MessageSquare, Send, X, BookOpen, FileText, PencilLine, ChevronDown } from "lucide-react";
+import { Trash2, Plus, MessageSquare, Send, X, BookOpen, FileText, PencilLine, ChevronDown, PackageCheck, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -377,6 +378,7 @@ interface Props {
   }>;
   authorName?: string;
   onNavigateToOrders?: (row?: { name: string; work_type: string; budget: number }) => void;
+  onOrdersCreated?: () => void;
 }
 
 function mapEstimateToBudgetRows(
@@ -440,7 +442,7 @@ function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
   }));
 }
 
-export function CostBudgetTab({ constructionId, contractAmount: propAmount, periodStart, initialOrders, estimates = [], changeOrders = [], authorName = "ユーザー", onNavigateToOrders }: Props) {
+export function CostBudgetTab({ constructionId, contractAmount: propAmount, periodStart, initialOrders, estimates = [], changeOrders = [], authorName = "ユーザー", onNavigateToOrders, onOrdersCreated }: Props) {
   const mappedRows = useMemo(() => mapOrdersToRows(initialOrders), [initialOrders]);
   const initialRows = mappedRows.length > 0 ? mappedRows : [];
 
@@ -455,7 +457,10 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   const [loaded, setLoaded] = useState(false);
 
   const defaultPeriod = periodStart?.slice(0, 7) ?? "2025-01";
-  const resolvedContractAmount = propAmount && propAmount > 0 ? propAmount : 0;
+  // 台帳独自の契約金額（見積参照時に見積合計へ同期 / 保存済み値を復元）
+  const [ledgerContractAmount, setLedgerContractAmount] = useState<number | null>(null);
+  const resolvedContractAmount =
+    ledgerContractAmount ?? (propAmount && propAmount > 0 ? propAmount : 0);
 
   useEffect(() => {
     getCostBudget(constructionId).then((data) => {
@@ -467,6 +472,9 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
         setOrderColCount(oc);
         setRows(normalized.map((r) => padRow(r, cc, oc)));
         setComments(data.comments ?? []);
+      }
+      if (data && Number(data.contract_amount) > 0) {
+        setLedgerContractAmount(Number(data.contract_amount));
       }
       setLoaded(true);
     }).catch(() => setLoaded(true));
@@ -513,9 +521,17 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
 
   const applyEstimateRows = useCallback((newRows: ContractorRow[]) => {
     setRows(newRows.map((r) => padRow(r, contractColCount, orderColCount)));
+    // 契約金額が未設定・見積合計と乖離している場合は見積合計（売値）に同期（No.16: 粗利異常値の防止）
+    const estimateTotal = newRows.reduce((s, r) => s + Number(r.budget || 0), 0);
+    if (estimateTotal > 0) {
+      setLedgerContractAmount((prev) => {
+        const current = prev ?? (propAmount && propAmount > 0 ? propAmount : 0);
+        return current < estimateTotal ? estimateTotal : current;
+      });
+    }
     setSaved(false);
     toast.success("見積もりから工事台帳を作成しました");
-  }, [contractColCount, orderColCount]);
+  }, [contractColCount, orderColCount, propAmount]);
 
   const applyFromEstimate = useCallback(async (estimateId: string) => {
     const loadingId = toast.loading("見積もりを読み込み中...");
@@ -560,6 +576,67 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     setSaved(false);
     toast.success(`追加変更「${co.title}」の差分（¥${co.diff_amount.toLocaleString()}）を追加しました`);
   }, [contractColCount, orderColCount]);
+
+  /* ── 複数業者の一括発注 ── */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOrdering, setBulkOrdering] = useState(false);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectableRows = useMemo(
+    () => rows.filter(r => r.status === "未発注" && r.name.trim() !== ""),
+    [rows],
+  );
+  const allSelected = selectableRows.length > 0 && selectableRows.every(r => selectedIds.has(r.id));
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds(prev => {
+      if (selectableRows.every(r => prev.has(r.id)) && selectableRows.length > 0) return new Set();
+      return new Set(selectableRows.map(r => r.id));
+    });
+  }, [selectableRows]);
+
+  const handleBulkOrder = useCallback(async () => {
+    const targets = rows.filter(r => selectedIds.has(r.id));
+    if (targets.length === 0) return;
+    const unnamed = targets.filter(r => !r.name.trim());
+    if (unnamed.length > 0) {
+      toast.error("施工業者名が未入力の行が選択されています");
+      return;
+    }
+    setBulkOrdering(true);
+    try {
+      const created = await bulkCreateContractorOrders(
+        constructionId,
+        targets.map(r => ({
+          name: r.name,
+          workType: r.work_type,
+          amount: compute(r).budget_total,
+        })),
+      );
+      const targetIds = new Set(targets.map(r => r.id));
+      setRows(prev => prev.map(r => targetIds.has(r.id) ? { ...r, status: "発注済" as const } : r));
+      setSelectedIds(new Set());
+      setSaved(false);
+      onOrdersCreated?.();
+      toast.success(`${created.length}件の発注書ドラフトを作成しました`, {
+        description: "発注書・請書タブから「申請する」で承認申請できます",
+        action: onNavigateToOrders
+          ? { label: "発注書タブへ", onClick: () => onNavigateToOrders() }
+          : undefined,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "一括発注に失敗しました");
+    } finally {
+      setBulkOrdering(false);
+    }
+  }, [rows, selectedIds, constructionId, onNavigateToOrders, onOrdersCreated]);
 
   const [openPopover, setOpenPopover] = useState<{ cellKey: string; rect: DOMRect } | null>(null);
   const [commentMode, setCommentMode] = useState(false);
@@ -651,14 +728,23 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     setRows(prev => prev.map(r => ({ ...r, add_orders: [...r.add_orders, 0] })));
     setSaved(false);
   };
-  const deleteRow = (id: string) => { setRows(prev => prev.filter(r => r.id !== id)); setSaved(false); };
+  const deleteRow = (id: string) => {
+    setRows(prev => prev.filter(r => r.id !== id));
+    setSelectedIds(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setSaved(false);
+  };
   const toggleStatus = (id: string) =>
     setRows(prev => prev.map(r =>
       r.id === id ? { ...r, status: r.status === "発注済" ? "未発注" : "発注済" } : r
     ));
 
   /* ── totals ── */
-  const totalColSpan = 11 + contractColCount + orderColCount + months.length;
+  const totalColSpan = 12 + contractColCount + orderColCount + months.length;
 
   const totals = useMemo(() => {
     const t = {
@@ -719,6 +805,18 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 選択業者に一括発注 */}
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => void handleBulkOrder()}
+              disabled={bulkOrdering}
+            >
+              {bulkOrdering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />}
+              選択業者に一括発注（{selectedIds.size}件）
+            </Button>
+          )}
           {/* コメントモードトグル */}
           <button
             onClick={() => { setCommentMode(v => !v); setOpenPopover(null); }}
@@ -834,8 +932,9 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
       )}
         style={{ cursor: commentMode ? "crosshair" : undefined }}
       >
-        <table className="border-collapse text-sm" style={{ minWidth: `${1200 + contractColCount * 92 + orderColCount * 92 + months.length * 78}px` }} onClick={handleTableClick}>
+        <table className="border-collapse text-sm" style={{ minWidth: `${1230 + contractColCount * 92 + orderColCount * 92 + months.length * 78}px` }} onClick={handleTableClick}>
           <colgroup>
+            <col style={{ width: 30 }} />
             <col style={{ width: 32 }} /><col style={{ width: 62 }} />
             <col style={{ width: 130 }} /><col style={{ width: 115 }} />
             <col style={{ width: 92 }} />
@@ -851,7 +950,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
 
           <thead>
             <tr>
-              <th colSpan={4} className={cn(th, "bg-gray-100 text-left text-gray-600")}>基本情報</th>
+              <th colSpan={5} className={cn(th, "bg-gray-100 text-left text-gray-600")}>基本情報</th>
               <th colSpan={1 + contractColCount} className={cn(th, "bg-blue-100 text-blue-800 relative group/add-budget")}>
                 <span>実行予算・追加契約</span>
                 <button
@@ -883,6 +982,15 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
               <th className={cn(th, "bg-gray-100")} />
             </tr>
             <tr className="bg-gray-50">
+              <th className={cn(th, "bg-gray-100")} title="一括発注する業者を選択">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  disabled={selectableRows.length === 0}
+                  className="accent-blue-600 cursor-pointer"
+                />
+              </th>
               <th className={cn(th, "bg-gray-100")}>#</th>
               <th className={cn(th, "bg-gray-100")}>発注</th>
               <th className={cn(th, "bg-gray-100 text-left")}>施工業者名</th>
@@ -919,9 +1027,20 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
             {rows.map((row, idx) => {
               const c = compute(row);
               return (
-                <tr key={row.id} className={cn("hover:bg-gray-50/40 transition-colors group/row", commentMode && "hover:bg-blue-50/30")}
+                <tr key={row.id} className={cn("hover:bg-gray-50/40 transition-colors group/row", commentMode && "hover:bg-blue-50/30", selectedIds.has(row.id) && "bg-blue-50/50")}
                   onClick={commentMode ? undefined : undefined}
                 >
+                  {/* 一括発注の選択チェックボックス */}
+                  <td className={cn(tcc, "bg-gray-50")}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row.id)}
+                      onChange={() => toggleSelected(row.id)}
+                      disabled={!row.name.trim()}
+                      title={row.name.trim() ? "一括発注の対象に選択" : "施工業者名を入力すると選択できます"}
+                      className="accent-blue-600 cursor-pointer disabled:cursor-not-allowed"
+                    />
+                  </td>
                   <td className={cn(tcc, "bg-gray-50 text-gray-400 text-[11px]")}>{idx + 1}</td>
                   {/* 発注ステータス / 発注アクション */}
                   <td className={cn(tcc)}>
@@ -1047,7 +1166,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
 
             {/* 合計行 */}
             <tr className="bg-blue-50/20 font-semibold border-b-2 border-gray-300">
-              <td colSpan={2} className={cn(tcc, "bg-gray-100")} />
+              <td colSpan={3} className={cn(tcc, "bg-gray-100")} />
               <td colSpan={2} className={cn(tdl, "bg-gray-50 font-bold")}>合計</td>
               <td className={cn(tdc, "bg-blue-50 font-bold")}>{fmtAlways(totals.budget)}</td>
               {totals.add_contracts.map((v, i) => (
@@ -1076,7 +1195,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           {/* ── サマリーフッター ── */}
           <tfoot className="border-t-2 border-gray-400">
             <tr className="bg-gray-50 text-[11px] text-gray-500">
-              <td colSpan={4} className={cn(tdl, "bg-gray-100")} />
+              <td colSpan={5} className={cn(tdl, "bg-gray-100")} />
               <td colSpan={1 + contractColCount + 1} className={cn(tdc, "text-center bg-blue-50/60 font-semibold text-blue-700")}>実行予算（暫定）</td>
               <td className={cn(tdc, "bg-violet-50")} />
               <td colSpan={1 + orderColCount} className={cn(tdc, "text-center bg-amber-50 font-semibold text-amber-700")}>暫定合計</td>
@@ -1089,7 +1208,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
               { label: "工事粗利率", vBudget: grBudget,       vConfirmed: grConfirmed,   isRate: true  },
             ].map(({ label, vBudget, vConfirmed, isRate }) => (
               <tr key={label} className="bg-white border-b border-gray-200">
-                <td colSpan={4} className={cn(tdl, "bg-gray-100 font-semibold text-gray-700")}>{label}</td>
+                <td colSpan={5} className={cn(tdl, "bg-gray-100 font-semibold text-gray-700")}>{label}</td>
                 <td colSpan={1 + contractColCount + 1} className={cn(tdc, "bg-blue-50 font-bold",
                   !isRate && vBudget < 0 ? "text-red-600" : !isRate ? "text-gray-800" : vBudget < 0 ? "text-red-600" : "text-emerald-700"
                 )}>

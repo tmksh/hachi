@@ -18,6 +18,9 @@ import {
   Target,
 } from "lucide-react";
 import { ComboChart } from "@/components/charts/combo-chart";
+import { AchievementDonut } from "@/components/charts/achievement-donut";
+import { WaterfallChart, type WaterfallStep } from "@/components/charts/waterfall-chart";
+import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
 import { getBiSettings, getBiActuals, getBiProspectSummary, type BiProspectSummary } from "@/lib/actions/bi";
 import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
 import {
@@ -335,6 +338,21 @@ export function BiClient({
   const operatingProfit  = grossProfitTotal - sgaForCalc;
   const opRate           = pct(operatingProfit, totalRevenue);
 
+  // P&L ウォーターフォール: 売上 → 原価 → 粗利 →（設定済なら）予定配賦 → 販管費 → 営業利益
+  const totalCost = totalRevenue - totalGrossProfit;
+  const plWaterfallSteps: WaterfallStep[] = [
+    { label: "売上", value: totalRevenue, isTotal: true, color: CHART_DARK },
+    { label: "原価", value: -totalCost, color: BI_NEGATIVE },
+    { label: "粗利", value: totalGrossProfit, isTotal: true, color: CHART_PRIMARY },
+    ...(settingsConfigured
+      ? [
+          { label: "予定配賦", value: -overheadForCalc, color: "#b45309" },
+          { label: "販管費", value: -sgaForCalc, color: BI_NEGATIVE },
+          { label: "営業利益", value: operatingProfit, isTotal: true, color: operatingProfit < 0 ? BI_NEGATIVE : CHART_MID },
+        ]
+      : []),
+  ];
+
   const monthlyComboData = (() => {
     let cum = 0;
     return monthlyActuals.map((m, i) => {
@@ -549,6 +567,42 @@ export function BiClient({
         </div>
       </div>
 
+      {/* ── 目標達成状況 / P&L ウォーターフォール ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BiPanel
+          title="目標達成状況"
+          description="年間売上目標に対する実績の達成率"
+        >
+          <div className="flex items-center justify-center py-2">
+            <AchievementDonut
+              actual={totalRevenue}
+              target={targetRevenue}
+              rate={achieveRateTotal}
+              achievedColor={CHART_DARK}
+              formatValue={(v) => fmtMan(v)}
+            />
+          </div>
+        </BiPanel>
+        <BiPanel
+          title="P&L ウォーターフォール"
+          description={settingsConfigured
+            ? "売上から営業利益までの段階推移"
+            : "売上 → 原価 → 粗利の段階推移（期首設定で販管費・営業利益も表示）"}
+        >
+          <div className="h-[240px] overflow-visible">
+            <WaterfallChart
+              steps={plWaterfallSteps}
+              height={240}
+              unit="万"
+              gridColor={CHART_ACCENT}
+              labelColor={CHART_PRIMARY}
+              tickColor={CHART_PRIMARY}
+              formatValue={(v) => fmtSigned(v)}
+            />
+          </div>
+        </BiPanel>
+      </div>
+
       {/* ─────────────────────────────────────────────────────── */}
       {/* 部門別                                                  */}
       {/* ─────────────────────────────────────────────────────── */}
@@ -685,6 +739,21 @@ export function BiClient({
           <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
           販管費・営業利益は売上構成比による按分で算出した理論値です（§3.1）。製造間接費は全社レベルで一括控除します。
         </p>
+      </BiPanel>
+
+      {/* 部門別チャート（横棒） */}
+      <BiPanel title="部門別チャート" description="部門ごとの売上・粗利額の比較">
+        <div className="pt-1">
+          <HorizontalBarChart
+            data={deptActuals.map((d) => ({ label: `${d.name}（${d.label}）`, values: [d.revenue, d.grossProfit] }))}
+            series={[
+              { label: "売上", color: CHART_DARK },
+              { label: "粗利額", color: CHART_MID },
+            ]}
+            formatValue={(v) => fmtMan(v)}
+            labelColor={CHART_PRIMARY}
+          />
+        </div>
       </BiPanel>
 
       {/* ─────────────────────────────────────────────────────── */}
