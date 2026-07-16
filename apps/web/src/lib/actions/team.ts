@@ -56,17 +56,53 @@ export async function listTeamMembers(): Promise<Profile[]> {
   return (data ?? []) as Profile[];
 }
 
+export type InviteResult = {
+  ok: boolean;
+  /** ok=false のときのユーザー向けエラーメッセージ */
+  error?: string;
+  /** 招待メールを送信できたか */
+  emailSent?: boolean;
+  /** メール未送信時に管理者が手動共有するための招待リンク */
+  inviteUrl?: string;
+};
+
+/**
+ * メンバー招待。
+ * 本番ビルドではサーバーアクションの throw が汎用エラーに握りつぶされるため、
+ * 例外ではなく InviteResult でエラー内容を返す。
+ */
 export async function inviteTeamMember(input: {
   email: string;
   displayName: string;
   role: TeamRole;
   password?: string;
-}): Promise<void> {
+}): Promise<InviteResult> {
+  try {
+    return await inviteTeamMemberInner(input);
+  } catch (e) {
+    console.error("[inviteTeamMember] failed", e);
+    return { ok: false, error: e instanceof Error ? e.message : "メンバー追加に失敗しました" };
+  }
+}
+
+async function inviteTeamMemberInner(input: {
+  email: string;
+  displayName: string;
+  role: TeamRole;
+  password?: string;
+}): Promise<InviteResult> {
   const { companyId, actorRole, actorId } = await assertTenantAdmin();
   assertCanAssignRole(actorRole, input.role);
 
-  if (!input.email.trim()) throw new Error("メールアドレスは必須です");
-  if (!input.displayName.trim()) throw new Error("表示名は必須です");
+  if (!input.email.trim()) return { ok: false, error: "メールアドレスは必須です" };
+  if (!input.displayName.trim()) return { ok: false, error: "表示名は必須です" };
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      ok: false,
+      error: "サーバーに SUPABASE_SERVICE_ROLE_KEY が設定されていません。デプロイ環境の環境変数を確認してください。",
+    };
+  }
 
   const admin = createAdminClient();
 
@@ -92,9 +128,9 @@ export async function inviteTeamMember(input: {
     });
     if (error) {
       if ((error as { code?: string }).code === "email_exists") {
-        throw new Error("このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。");
+        return { ok: false, error: "このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。" };
       }
-      throw new Error(error.message);
+      return { ok: false, error: `アカウント作成に失敗しました: ${error.message}` };
     }
 
     const userId = data.user.id;
@@ -112,61 +148,82 @@ export async function inviteTeamMember(input: {
         email: input.email.trim(),
         role: input.role,
       });
-      if (profileError) throw profileError;
-    }
-  } else {
-    // Resend で招待メールを送信
-    const redirectTo = `${appUrl}/api/auth/accept-invite`;
-
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: "invite",
-      email: input.email.trim(),
-      options: {
-        redirectTo,
-        data: userMeta,
-      },
-    });
-    if (linkError) {
-      if ((linkError as { code?: string }).code === "email_exists") {
-        throw new Error("このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。");
+      if (profileError) {
+        return { ok: false, error: `プロフィール作成に失敗しました: ${profileError.message}` };
       }
-      throw new Error(linkError.message);
     }
-
-    // 招待者の表示名を取得
-    const { data: actorProfile } = await admin
-      .from("profiles")
-      .select("display_name")
-      .eq("id", actorId)
-      .single();
-
-    // 会社名を取得
-    const { data: company } = await admin
-      .from("companies")
-      .select("name")
-      .eq("id", companyId)
-      .single();
-
-    const inviteUrl = linkData.properties.action_link;
-    const companyName = company?.name ?? "業務管理システム";
-    const inviterName = actorProfile?.display_name ?? "管理者";
-
-    const { error: mailError } = await getResend().emails.send({
-      from: INVITE_FROM_EMAIL,
-      to: input.email.trim(),
-      subject: `【${companyName}】システムへのご招待`,
-      html: buildInviteEmailHtml({
-        inviteeName: input.displayName.trim(),
-        inviterName,
-        companyName,
-        inviteUrl,
-        appUrl,
-      }),
-    });
-    if (mailError) {
-      throw new Error(`招待メールの送信に失敗しました: ${mailError.message}`);
-    }
+    return { ok: true, emailSent: false };
   }
+
+  // Resend で招待メールを送信
+  const redirectTo = `${appUrl}/api/auth/accept-invite`;
+
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: input.email.trim(),
+    options: {
+      redirectTo,
+      data: userMeta,
+    },
+  });
+  if (linkError) {
+    if ((linkError as { code?: string }).code === "email_exists") {
+      return { ok: false, error: "このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。" };
+    }
+    return { ok: false, error: `招待リンクの生成に失敗しました: ${linkError.message}` };
+  }
+
+  // 招待者の表示名を取得
+  const { data: actorProfile } = await admin
+    .from("profiles")
+    .select("display_name")
+    .eq("id", actorId)
+    .single();
+
+  // 会社名を取得
+  const { data: company } = await admin
+    .from("companies")
+    .select("name")
+    .eq("id", companyId)
+    .single();
+
+  const inviteUrl = linkData.properties.action_link;
+  const companyName = company?.name ?? "業務管理システム";
+  const inviterName = actorProfile?.display_name ?? "管理者";
+
+  // メール送信に失敗してもアカウント（招待）自体は作成済みのため、
+  // 招待リンクを返して管理者が手動共有できるようにする
+  if (!process.env.RESEND_API_KEY) {
+    return {
+      ok: true,
+      emailSent: false,
+      inviteUrl,
+      error: "RESEND_API_KEY が未設定のため招待メールは送信されませんでした。招待リンクを直接共有してください。",
+    };
+  }
+
+  const { error: mailError } = await getResend().emails.send({
+    from: INVITE_FROM_EMAIL,
+    to: input.email.trim(),
+    subject: `【${companyName}】システムへのご招待`,
+    html: buildInviteEmailHtml({
+      inviteeName: input.displayName.trim(),
+      inviterName,
+      companyName,
+      inviteUrl,
+      appUrl,
+    }),
+  });
+  if (mailError) {
+    return {
+      ok: true,
+      emailSent: false,
+      inviteUrl,
+      error: `招待メールの送信に失敗しました（${mailError.message}）。招待リンクを直接共有してください。`,
+    };
+  }
+
+  return { ok: true, emailSent: true };
 }
 
 export async function updateTeamMemberRole(userId: string, role: TeamRole) {

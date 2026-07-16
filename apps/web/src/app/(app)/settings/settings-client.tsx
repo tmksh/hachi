@@ -280,6 +280,7 @@ export function SettingsClient({
   const [showInvitePassword, setShowInvitePassword] = useState(false);
   const [newRole, setNewRole] = useState<TeamRole>("employee");
   const [inviteSent, setInviteSent] = useState(false);
+  const [inviteLinkFallback, setInviteLinkFallback] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [resendTarget, setResendTarget] = useState<Profile | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
@@ -499,6 +500,7 @@ export function SettingsClient({
     setShowInvitePassword(false);
     setNewRole("employee");
     setInviteSent(false);
+    setInviteLinkFallback(null);
     setAddOpen(true);
   };
 
@@ -509,18 +511,25 @@ export function SettingsClient({
     }
     setAddSaving(true);
     try {
-      await inviteTeamMember({
+      const result = await inviteTeamMember({
         email: newEmail.trim(),
         displayName: newName.trim(),
         role: newRole,
         password: invitePassword.trim() || undefined,
       });
+      if (!result.ok) {
+        toast.error("メンバー追加に失敗しました", { description: result.error });
+        return;
+      }
       setInviteSent(true);
-      toast.success(
-        invitePassword.trim()
-          ? "アカウントを作成しました"
-          : "招待メールを送信しました",
-      );
+      setInviteLinkFallback(result.inviteUrl && !result.emailSent ? result.inviteUrl : null);
+      if (invitePassword.trim()) {
+        toast.success("アカウントを作成しました");
+      } else if (result.emailSent) {
+        toast.success("招待メールを送信しました");
+      } else {
+        toast.warning("招待を作成しました（メール未送信）", { description: result.error });
+      }
       await reloadMembers();
     } catch (e) {
       toast.error("メンバー追加に失敗しました", {
@@ -1371,9 +1380,25 @@ export function SettingsClient({
             {inviteSent ? (
               <div className="space-y-4">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 space-y-1">
-                  <div className="flex items-center gap-2 font-semibold"><Send className="h-4 w-4" />招待メールを送信しました</div>
-                  <p className="text-xs">{invitePassword ? <>アカウントを作成しました。メールアドレス（<span className="font-medium">{newEmail}</span>）と設定したパスワードをメンバーに共有してください。</> : <><span className="font-medium">{newEmail}</span> に招待リンクを送信しました。</>}</p>
+                  <div className="flex items-center gap-2 font-semibold"><Send className="h-4 w-4" />{inviteLinkFallback ? "招待を作成しました" : "招待メールを送信しました"}</div>
+                  <p className="text-xs">{invitePassword ? <>アカウントを作成しました。メールアドレス（<span className="font-medium">{newEmail}</span>）と設定したパスワードをメンバーに共有してください。</> : inviteLinkFallback ? <>メールは送信されていません。下記の招待リンクを <span className="font-medium">{newEmail}</span> へ直接共有してください。</> : <><span className="font-medium">{newEmail}</span> に招待リンクを送信しました。</>}</p>
                 </div>
+                {inviteLinkFallback && (
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground break-all">{inviteLinkFallback}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(inviteLinkFallback);
+                        toast.success("招待リンクをコピーしました");
+                      }}
+                    >
+                      招待リンクをコピー
+                    </Button>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={openAddDialog}>続けて招待する</Button>
                   <Button onClick={() => setAddOpen(false)}>閉じる</Button>
