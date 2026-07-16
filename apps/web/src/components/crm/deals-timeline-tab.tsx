@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +15,8 @@ import { cn } from "@/lib/utils";
 import type { DealActivity } from "@/lib/database.types";
 import {
   getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo,
-  assessDealConfidence, applyAssessedPriority,
-  type DealConfidenceAssessment,
+  assessDealConfidence, applyAssessedProspectGrade,
+  type DealConfidenceAssessment, type ProspectGrade,
 } from "@/lib/actions/crm-features";
 import { Briefcase, Clock, Inbox, Plus, Save, ListTodo, Copy, Sparkles, AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +32,12 @@ const ACTIVITY_TYPE_LABELS: Record<string, string> = {
 };
 
 const PRIORITY_LABELS: Record<string, string> = { high: "高", medium: "中", low: "低" };
+
+const GRADE_LABELS: Record<ProspectGrade, string> = {
+  A: "A（見込度：高）",
+  B: "B（見込度：中）",
+  C: "C（見込度：低）",
+};
 
 const VERDICT_META: Record<DealConfidenceAssessment["verdict"], { label: string; className: string }> = {
   appropriate: { label: "妥当", className: "text-emerald-700 bg-emerald-50 border-emerald-200" },
@@ -59,6 +66,7 @@ function EmptyTimeline() {
 }
 
 export function DealsTimelineTab({ customerId }: { customerId: string }) {
+  const router = useRouter();
   const [deals, setDeals] = useState<DealWithActivities[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -78,7 +86,6 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
           setSummaryDraft(d[0].summary ?? "");
         }
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
   }, [customerId]);
 
@@ -103,7 +110,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
         toast.error(result.message);
       }
     } catch {
-      toast.error("確度判定に失敗しました");
+      toast.error("見込度判定に失敗しました");
     } finally {
       setAssessing(false);
     }
@@ -113,12 +120,19 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
     if (!selectedId || !assessment) return;
     setApplying(true);
     try {
-      await applyAssessedPriority(selectedId, assessment.suggestedPriority, assessment.reasons.join(" / "));
-      setDeals((prev) => prev.map((d) => d.id === selectedId ? { ...d, priority: assessment.suggestedPriority } : d));
-      setAssessment({ ...assessment, currentPriority: assessment.suggestedPriority, verdict: "appropriate" });
-      toast.success(`確度を「${PRIORITY_LABELS[assessment.suggestedPriority]}」に修正しました`);
+      await applyAssessedProspectGrade(
+        assessment.customerId,
+        selectedId,
+        assessment.suggestedGrade,
+        assessment.reasons.join(" / "),
+      );
+      const refreshed = await getCustomerDealsWithActivities(customerId);
+      setDeals(refreshed);
+      setAssessment({ ...assessment, currentGrade: assessment.suggestedGrade, verdict: "appropriate" });
+      router.refresh();
+      toast.success(`見込度を「${assessment.suggestedGrade}」に修正しました`);
     } catch {
-      toast.error("確度の修正に失敗しました");
+      toast.error("見込度の修正に失敗しました");
     } finally {
       setApplying(false);
     }
@@ -181,6 +195,8 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   }
 
   if (!selected) return null;
+
+  const gradeChanged = assessment != null && assessment.suggestedGrade !== assessment.currentGrade;
 
   return (
     <Card variant="inset" className="py-0 overflow-hidden">
@@ -293,15 +309,15 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
             <div>
               <h4 className="text-sm font-semibold flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-[#0F5132]" />
-                AI確度判定
+                AI見込度判定
               </h4>
               <p className="text-xs text-muted-foreground mt-0.5">
-                ステージ・経過日数・活動履歴から入力確度の妥当性をAIが判定します
+                ステージ・経過日数・活動履歴から、顧客の見込度（A/B/C）の妥当性をAIが判定します
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={() => void runAssessment()} disabled={assessing} className="gap-1.5">
               <Sparkles className="h-3.5 w-3.5" />
-              {assessing ? "判定中..." : "AIで確度を判定"}
+              {assessing ? "判定中..." : "AIで見込度を判定"}
             </Button>
           </div>
 
@@ -315,9 +331,8 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
                     : <TrendingUp className="h-4 w-4 shrink-0" />}
                 <span className="text-sm font-semibold">{VERDICT_META[assessment.verdict].label}</span>
                 <span className="text-xs">
-                  入力確度「{PRIORITY_LABELS[assessment.currentPriority] ?? assessment.currentPriority}」
-                  {assessment.suggestedPriority !== assessment.currentPriority &&
-                    ` → AI提案「${PRIORITY_LABELS[assessment.suggestedPriority]}」`}
+                  入力見込度「{assessment.currentGrade ? GRADE_LABELS[assessment.currentGrade] : "未設定"}」
+                  {gradeChanged && ` → AI提案「${GRADE_LABELS[assessment.suggestedGrade]}」`}
                 </span>
                 <span className="text-[11px] ml-auto">判定確信度 {assessment.confidence}%</span>
               </div>
@@ -336,10 +351,10 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
                   <span className="font-semibold">提案: </span>{assessment.advice}
                 </p>
               )}
-              {assessment.suggestedPriority !== assessment.currentPriority && (
+              {gradeChanged && (
                 <div className="flex justify-end">
                   <Button size="sm" onClick={() => void applySuggestion()} disabled={applying} className="gap-1.5 h-7 text-xs">
-                    {applying ? "反映中..." : `確度を「${PRIORITY_LABELS[assessment.suggestedPriority]}」に修正`}
+                    {applying ? "反映中..." : `見込度を「${assessment.suggestedGrade}」に修正`}
                   </Button>
                 </div>
               )}

@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { KpiRow } from "@/components/shared/kpi-row";
@@ -164,11 +167,15 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
                       )}>
                         {CUSTOMER_STATUS[data.status] ?? data.status}
                       </Badge>
-                      {data.prospect_grade && (
+                      {data.is_special_demand ? (
+                        <Badge className="text-xs shrink-0 bg-amber-100 text-amber-800 hover:bg-amber-100">
+                          特需{data.special_probability != null ? ` ${data.special_probability}%` : ""}
+                        </Badge>
+                      ) : data.prospect_grade ? (
                         <Badge className={cn("text-xs shrink-0", PROSPECT_GRADE_STYLE[data.prospect_grade])}>
                           見込 {data.prospect_grade}
                         </Badge>
-                      )}
+                      ) : null}
                     </div>
                     {data.company_name && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1.5 min-w-0">
@@ -273,38 +280,118 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
 
         <TabsContent value="overview" className="mt-4 space-y-4">
           <Card variant="inset" className="py-0">
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold">見込度</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  A/B/Cの確度%は各社ごとにBIダッシュボードの期首設定で設定します
-                </p>
+            <CardContent className="px-4 py-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">見込度 / 特需</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    通常はA/B/C。大型案件は特需にして独自確度%を使います
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="special-demand" className="text-xs text-muted-foreground cursor-pointer">特需</Label>
+                  <Switch
+                    id="special-demand"
+                    checked={data.is_special_demand ?? false}
+                    onCheckedChange={async (v) => {
+                      const prev = {
+                        is_special_demand: data.is_special_demand,
+                        prospect_grade: data.prospect_grade,
+                        special_probability: data.special_probability,
+                      };
+                      setData({
+                        ...data,
+                        is_special_demand: v,
+                        prospect_grade: v ? null : data.prospect_grade,
+                        special_probability: v ? data.special_probability : null,
+                      });
+                      try {
+                        await updateCustomer(id as string, {
+                          is_special_demand: v,
+                          prospect_grade: v ? null : data.prospect_grade,
+                          special_probability: v ? data.special_probability : null,
+                        });
+                        toast.success(v ? "特需（大型案件）に設定しました" : "通常の見込度に戻しました");
+                      } catch {
+                        setData({ ...data, ...prev });
+                        toast.error("更新に失敗しました");
+                      }
+                    }}
+                  />
+                </div>
               </div>
-              <Select
-                value={data.prospect_grade ?? "_none"}
-                onValueChange={async (v) => {
-                  const grade = (v === "_none" ? null : v) as "A" | "B" | "C" | null;
-                  const prev = data.prospect_grade;
-                  setData({ ...data, prospect_grade: grade });
-                  try {
-                    await updateCustomer(id as string, { prospect_grade: grade });
-                    toast.success(grade ? `見込度を「${grade}」に設定しました` : "見込度を未設定にしました");
-                  } catch {
-                    setData({ ...data, prospect_grade: prev });
-                    toast.error("見込度の更新に失敗しました");
-                  }
-                }}
-              >
-                <SelectTrigger className="w-[180px] h-9">
-                  <SelectValue placeholder="未設定" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">未設定</SelectItem>
-                  <SelectItem value="A">A（見込度：高）</SelectItem>
-                  <SelectItem value="B">B（見込度：中）</SelectItem>
-                  <SelectItem value="C">C（見込度：低）</SelectItem>
-                </SelectContent>
-              </Select>
+
+              {data.is_special_demand ? (
+                <div className="flex flex-wrap items-end justify-between gap-3 pt-1 border-t border-border/50">
+                  <div>
+                    <p className="text-xs text-muted-foreground">独自確度%</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">会社一律のA/B/C確度は使いません</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="w-[100px] h-9 tabular-nums"
+                      value={data.special_probability ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setData({
+                          ...data,
+                          special_probability: raw === "" ? null : Math.min(100, Math.max(0, Number(raw))),
+                        });
+                      }}
+                      onBlur={async () => {
+                        try {
+                          await updateCustomer(id as string, {
+                            special_probability: data.special_probability,
+                          });
+                          toast.success(
+                            data.special_probability != null
+                              ? `独自確度を${data.special_probability}%に設定しました`
+                              : "独自確度を未設定にしました",
+                          );
+                        } catch {
+                          toast.error("確度の更新に失敗しました");
+                        }
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-border/50">
+                  <p className="text-xs text-muted-foreground">
+                    A/B/Cの確度%は各社ごとにBIダッシュボードの期首設定で設定します
+                  </p>
+                  <Select
+                    value={data.prospect_grade ?? "_none"}
+                    onValueChange={async (v) => {
+                      const grade = (v === "_none" ? null : v) as "A" | "B" | "C" | null;
+                      const prev = data.prospect_grade;
+                      setData({ ...data, prospect_grade: grade });
+                      try {
+                        await updateCustomer(id as string, { prospect_grade: grade });
+                        toast.success(grade ? `見込度を「${grade}」に設定しました` : "見込度を未設定にしました");
+                      } catch {
+                        setData({ ...data, prospect_grade: prev });
+                        toast.error("見込度の更新に失敗しました");
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] h-9">
+                      <SelectValue placeholder="未設定" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">未設定</SelectItem>
+                      <SelectItem value="A">A（見込度：高）</SelectItem>
+                      <SelectItem value="B">B（見込度：中）</SelectItem>
+                      <SelectItem value="C">C（見込度：低）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </CardContent>
           </Card>
 

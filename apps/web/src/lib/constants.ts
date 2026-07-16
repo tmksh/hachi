@@ -6,7 +6,6 @@ export const NAV_GROUPS = [
     items: [
       { key: "dashboard", label: "ダッシュボード", href: "/dashboard" },
       { key: "bi", label: "BIダッシュボード", href: "/bi" },
-      { key: "performance", label: "予実管理", href: "/performance" },
     ],
   },
   {
@@ -131,7 +130,6 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   constructions:      ["hq_admin", "contractor_admin", "admin", "sales", "field_manager"],
   invoices:           ["hq_admin", "contractor_admin", "admin", "administration"],
   budget:             ["hq_admin", "contractor_admin", "admin", "executive"],
-  performance:        ["hq_admin", "contractor_admin", "admin", "executive"],
   "marketing-email":  ["hq_admin"],
   "marketing-sns":    ["hq_admin"],
   "marketing-roi":    ["hq_admin"],

@@ -1203,6 +1203,7 @@ export function SettingsClient({
                     { key: "settings_attendance", label: "勤怠設定", group: null, groupStart: false, gi: 99 },
                     { key: "settings_workflow", label: "ワークフロー設定", group: null, groupStart: false, gi: 99 },
                     { key: "settings_crm", label: "CRM/職人マスタ", group: null, groupStart: false, gi: 99 },
+                    { key: "reserve_fee", label: "予備費設定", group: null, groupStart: false, gi: 99 },
                   ];
                   return (
                     <div className="overflow-x-auto rounded-lg border">

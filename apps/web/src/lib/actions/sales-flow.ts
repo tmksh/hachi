@@ -21,6 +21,47 @@ async function getCompanyContext() {
   return { supabase, company_id: profile.company_id, user_id: user.id, role: profile.role };
 }
 
+/**
+ * 会社指定の予備費率（%）を取得。BI期首設定(bi_annual_settings)の最新年度の
+ * reserve_fee_rate（0〜1）をパーセントに変換して返す。未設定なら 0。
+ * 見積・実行予算の承認判定では「会社指定粗利＋予備費」を満たす必要がある。
+ */
+async function getCompanyReservePercent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+): Promise<number> {
+  const { data } = await supabase
+    .from("bi_annual_settings")
+    .select("reserve_fee_rate")
+    .eq("company_id", companyId)
+    .order("fiscal_year", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const rate = Number(data?.reserve_fee_rate ?? 0);
+  return rate > 0 ? rate * 100 : 0;
+}
+
+/**
+ * 会社指定粗利率（%）を取得。BI期首設定(bi_annual_settings)の最新年度の
+ * base_gross_profit_rate（0〜1 または %）をパーセントに変換して返す。
+ * 未設定（行なし/0以下）なら null を返し、呼び出し側で個別のフォールバックを使う。
+ */
+async function getCompanyBaseMarginPercent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+): Promise<number | null> {
+  const { data } = await supabase
+    .from("bi_annual_settings")
+    .select("base_gross_profit_rate")
+    .eq("company_id", companyId)
+    .order("fiscal_year", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const raw = Number(data?.base_gross_profit_rate ?? NaN);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  return raw > 1 ? raw : raw * 100;
+}
+
 /** 3経路通知（他モジュールからも利用） */
 export async function notifySalesFlowUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -260,9 +301,13 @@ export async function submitEstimateApproval(input: {
     .single();
   if (error || !estimate) throw new Error("見積が見つかりません");
 
-  const threshold = toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
+    ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  const reservePercent = await getCompanyReservePercent(supabase, company_id);
+  // 会社指定粗利＋予備費を満たす必要がある
+  const threshold = baseThreshold + reservePercent;
   if ((estimate.gross_profit_rate ?? 0) >= threshold) {
-    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%)以上のため承認申請は不要です`);
+    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`);
   }
 
   let { data: wfType } = await supabase
@@ -347,17 +392,23 @@ export async function submitEstimateApproval(input: {
 }
 
 export async function getEstimateMarginThreshold(estimateId: string) {
-  const { supabase } = await getCompanyContext();
+  const { supabase, company_id } = await getCompanyContext();
   const { data } = await supabase
     .from("estimates")
     .select("gross_profit_rate, default_gross_profit_rate, approval_status, workflow_request_id, status")
     .eq("id", estimateId)
     .single();
   if (!data) return null;
-  const threshold = toMarginThresholdPercent(data.default_gross_profit_rate);
+  const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
+    ?? toMarginThresholdPercent(data.default_gross_profit_rate);
+  const reservePercent = await getCompanyReservePercent(supabase, company_id);
+  // 会社指定粗利＋予備費を満たす必要がある
+  const threshold = baseThreshold + reservePercent;
   return {
     grossProfitRate: data.gross_profit_rate ?? 0,
     threshold,
+    baseThreshold,
+    reservePercent,
     needsApproval: (data.gross_profit_rate ?? 0) < threshold,
     approvalStatus: data.approval_status ?? "none",
     workflowRequestId: data.workflow_request_id,
@@ -367,7 +418,7 @@ export async function getEstimateMarginThreshold(estimateId: string) {
 
 /** 粗利率が基準以上の見積を確定（発行済み）にする（No.38） */
 export async function confirmEstimateIssued(estimateId: string) {
-  const { supabase } = await getCompanyContext();
+  const { supabase, company_id } = await getCompanyContext();
   const { data: estimate, error } = await supabase
     .from("estimates")
     .select("gross_profit_rate, default_gross_profit_rate, status")
@@ -384,9 +435,12 @@ export async function confirmEstimateIssued(estimateId: string) {
   const liveRate = calcGrossProfitRatePercent(items ?? []);
   const rate = liveRate > 0 ? liveRate : (estimate.gross_profit_rate ?? 0);
 
-  const threshold = toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
+    ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  const reservePercent = await getCompanyReservePercent(supabase, company_id);
+  const threshold = baseThreshold + reservePercent;
   if (rate < threshold) {
-    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%)未満のため、上長承認が必要です`);
+    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`);
   }
 
   const { error: updErr } = await supabase.from("estimates").update({
@@ -398,6 +452,153 @@ export async function confirmEstimateIssued(estimateId: string) {
   if (updErr) throw updErr;
 
   return { status: "issued" as const };
+}
+
+// ---------------------------------------------------------------------------
+// 実行予算（工事台帳）粗利未達 → 上長承認
+// ---------------------------------------------------------------------------
+
+/**
+ * 工事の会社指定粗利率（%）を取得。優先順位:
+ * ① BI設定の会社指定粗利率 → ② 紐づく見積の基準率 → ③ 既定50%
+ */
+async function getConstructionBaseThreshold(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  constructionId: string,
+): Promise<number> {
+  const companyBase = await getCompanyBaseMarginPercent(supabase, companyId);
+  if (companyBase != null) return companyBase;
+  const { data: est } = await supabase
+    .from("estimates")
+    .select("default_gross_profit_rate")
+    .eq("construction_id", constructionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return toMarginThresholdPercent(est?.default_gross_profit_rate);
+}
+
+export async function getConstructionMarginThreshold(constructionId: string) {
+  const { supabase, company_id } = await getCompanyContext();
+  const baseThreshold = await getConstructionBaseThreshold(supabase, company_id, constructionId);
+  const reservePercent = await getCompanyReservePercent(supabase, company_id);
+  const threshold = baseThreshold + reservePercent;
+
+  const { data: budget } = await supabase
+    .from("construction_cost_budgets")
+    .select("approval_status, workflow_request_id")
+    .eq("construction_id", constructionId)
+    .maybeSingle();
+
+  return {
+    baseThreshold,
+    reservePercent,
+    threshold,
+    approvalStatus: (budget?.approval_status ?? "none") as string,
+    workflowRequestId: (budget?.workflow_request_id ?? null) as string | null,
+  };
+}
+
+export async function submitBudgetApproval(input: {
+  constructionId: string;
+  comment: string;
+  approverId: string;
+  /** 画面で計算した工事粗利率（暫定, %） */
+  grossProfitRate: number;
+}) {
+  const { supabase, company_id, user_id } = await getCompanyContext();
+
+  const baseThreshold = await getConstructionBaseThreshold(supabase, company_id, input.constructionId);
+  const reservePercent = await getCompanyReservePercent(supabase, company_id);
+  const threshold = baseThreshold + reservePercent;
+  if (input.grossProfitRate >= threshold) {
+    throw new Error(`工事粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`);
+  }
+
+  const { data: construction } = await supabase
+    .from("constructions")
+    .select("title, construction_no, customer_id")
+    .eq("id", input.constructionId)
+    .maybeSingle();
+
+  let { data: wfType } = await supabase
+    .from("workflow_types")
+    .select("id, approval_route")
+    .eq("company_id", company_id)
+    .eq("key", "budget_margin")
+    .maybeSingle();
+
+  if (!wfType) {
+    const { data: created } = await supabase
+      .from("workflow_types")
+      .insert({
+        company_id,
+        key: "budget_margin",
+        name: "規定粗利未達 実行予算承認",
+        description: "実行予算で会社指定粗利＋予備費に達しない場合の上長承認",
+        fields_schema: [],
+        approval_route: [],
+        sort_order: 0,
+      })
+      .select("id, approval_route")
+      .single();
+    if (!created) throw new Error("実行予算承認ワークフロー種別の自動作成に失敗しました");
+    wfType = created;
+  }
+
+  const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
+  const approverIds = approvalRoute.length > 0
+    ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
+    : [input.approverId];
+
+  const request = await createWorkflowRequest({
+    type_id: wfType.id,
+    title: `実行予算承認: ${construction?.construction_no ?? ""} ${construction?.title ?? ""}（工事粗利率 ${input.grossProfitRate.toFixed(1)}%）`,
+    is_urgent: true,
+    payload: {
+      construction_id: input.constructionId,
+      gross_profit_rate: input.grossProfitRate,
+      base_threshold: baseThreshold,
+      reserve_percent: reservePercent,
+      application_comment: input.comment,
+    },
+    approver_ids: approverIds,
+  });
+
+  await supabase.from("workflow_comments").insert({
+    company_id,
+    request_id: request.id,
+    user_id,
+    message: input.comment,
+  });
+
+  // 実行予算に承認状態を保存（行が無ければ既定値で作成）
+  await supabase.from("construction_cost_budgets").upsert({
+    company_id,
+    construction_id: input.constructionId,
+    approval_status: "pending",
+    workflow_request_id: request.id,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "construction_id" });
+
+  for (const approverId of approverIds.slice(0, 1)) {
+    await notifyUser(supabase, company_id, approverId, {
+      title: `実行予算承認依頼: ${construction?.construction_no ?? ""}`,
+      description: input.comment,
+      href: `/workflow/${request.id}`,
+      customerId: construction?.customer_id ?? undefined,
+      urgent: true,
+    }, user_id);
+  }
+
+  void dispatchWebhook(company_id, "budget.approval_requested", {
+    construction_id: input.constructionId,
+    workflow_request_id: request.id,
+    gross_profit_rate: input.grossProfitRate,
+  });
+
+  return { workflowRequestId: request.id };
 }
 
 // ---------------------------------------------------------------------------

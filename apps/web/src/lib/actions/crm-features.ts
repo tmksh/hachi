@@ -807,14 +807,16 @@ export async function updateDealSummary(dealId: string, summary: string) {
   return data;
 }
 
-// ── AI確度判定 ─────────────────────────────────────────────
+// ── AI見込度判定（顧客の prospect_grade: A/B/C）────────────────
 
+export type ProspectGrade = "A" | "B" | "C";
 export type DealConfidenceVerdict = "appropriate" | "too_optimistic" | "too_pessimistic";
 
 export type DealConfidenceAssessment = {
   verdict: DealConfidenceVerdict;
-  suggestedPriority: "high" | "medium" | "low";
-  currentPriority: string;
+  suggestedGrade: ProspectGrade;
+  currentGrade: ProspectGrade | null;
+  customerId: string;
   confidence: number;
   reasons: string[];
   advice: string;
@@ -826,14 +828,22 @@ const DEAL_STAGE_LABELS: Record<string, string> = {
   won: "受注", lost: "失注", lead: "リード", proposal: "提案中",
 };
 
-const PRIORITY_JA: Record<string, string> = { high: "高", medium: "中", low: "低" };
+const GRADE_JA: Record<ProspectGrade, string> = {
+  A: "A（見込度：高）",
+  B: "B（見込度：中）",
+  C: "C（見込度：低）",
+};
+
+function parseProspectGrade(value: unknown): ProspectGrade | null {
+  return value === "A" || value === "B" || value === "C" ? value : null;
+}
 
 function daysBetween(from: string | Date, to: Date = new Date()): number {
   return Math.floor((to.getTime() - new Date(from).getTime()) / 86_400_000);
 }
 
 /**
- * 営業が入力した見込み確度（priority: 高/中/低）の妥当性を、
+ * 営業が入力した見込度（A/B/C）の妥当性を、
  * 商談データ（ステージ・経過日数・活動履歴・録音要約・ToDo）からAIが判定する。
  */
 export async function assessDealConfidence(dealId: string): Promise<
@@ -849,8 +859,10 @@ export async function assessDealConfidence(dealId: string): Promise<
 
   const { data: deal, error } = await supabase.from("deals").select("*").eq("id", dealId).single();
   if (error || !deal) return { ok: false, message: "商談が見つかりませんでした。" };
+  if (!deal.customer_id) return { ok: false, message: "この商談に顧客が紐づいていません。" };
 
-  const [{ data: activities }, { data: recordings }, { data: todos }] = await Promise.all([
+  const [{ data: customer }, { data: activities }, { data: recordings }, { data: todos }] = await Promise.all([
+    supabase.from("customers").select("id, prospect_grade, name").eq("id", deal.customer_id).single(),
     supabase.from("deal_activities").select("type, title, description, performed_at")
       .eq("deal_id", dealId).order("performed_at", { ascending: false }).limit(15),
     supabase.from("customer_recordings").select("summary, recorded_at")
@@ -858,6 +870,11 @@ export async function assessDealConfidence(dealId: string): Promise<
     supabase.from("todos").select("title, status, due_date")
       .eq("deal_id", dealId).limit(10),
   ]);
+
+  if (!customer) return { ok: false, message: "顧客が見つかりませんでした。" };
+
+  const currentGrade = parseProspectGrade(customer.prospect_grade);
+  const currentGradeLabel = currentGrade ? GRADE_JA[currentGrade] : "未設定";
 
   const now = new Date();
   const daysSinceCreated = daysBetween(deal.created_at, now);
@@ -873,13 +890,17 @@ export async function assessDealConfidence(dealId: string): Promise<
     .map((r) => `- ${format(new Date(r.recorded_at), "MM/dd", { locale: ja })} ${String(r.summary).slice(0, 200)}`);
   const openTodos = (todos ?? []).filter((t) => t.status !== "completed");
 
-  const prompt = `以下の商談について、営業担当が入力した見込み確度「${PRIORITY_JA[deal.priority] ?? deal.priority}」が妥当かを判定してください。
+  const prompt = `以下の顧客・商談について、営業担当が入力した見込度「${currentGradeLabel}」が妥当かを判定してください。
+見込度は A（高）/ B（中）/ C（低）の3段階です。BIダッシュボードの見込み売上にも反映されます。
+
+【顧客】
+- 顧客名: ${customer.name ?? "未設定"}
+- 入力された見込度: ${currentGradeLabel}
 
 【商談情報】
 - 商談名: ${deal.title}
 - ステージ: ${DEAL_STAGE_LABELS[deal.stage] ?? deal.stage}
 - 金額: ${deal.value != null ? `¥${Number(deal.value).toLocaleString()}` : "未設定"}
-- 入力された確度: ${PRIORITY_JA[deal.priority] ?? deal.priority}
 - 商談開始からの経過日数: ${daysSinceCreated}日
 - 最終活動からの経過日数: ${daysSinceLastActivity}日
 - クロージング予定: ${deal.expected_close_date ?? "未設定"}${daysToClose != null ? `（${daysToClose >= 0 ? `あと${daysToClose}日` : `${-daysToClose}日超過`}）` : ""}
@@ -896,18 +917,19 @@ ${recordingLines.length > 0 ? recordingLines.join("\n") : "録音なし"}
 ${openTodos.length > 0 ? openTodos.map((t) => `- ${t.title}${t.due_date ? `（期限 ${t.due_date}）` : ""}`).join("\n") : "なし"}
 
 【判定基準】
-- 活動が長期間止まっている・クロージング予定超過・次アクション未設定なのに確度「高」→ 甘い見込みの可能性
-- ステージが浅い（問い合わせ・初回面談）のに確度「高」→ 根拠を確認
-- ステージが深く（クロージング等）活動も活発なのに確度「低」→ 慎重すぎる可能性
+- 活動が長期間止まっている・クロージング予定超過・次アクション未設定なのに見込度A → 甘い見込みの可能性
+- ステージが浅い（問い合わせ・初回面談）のに見込度A → 根拠を確認
+- ステージが深く（クロージング等）活動も活発なのに見込度C → 慎重すぎる可能性
+- 見込度が未設定の場合は、データから妥当な A/B/C を提案する
 - 録音要約・活動内容にある顧客の温度感（前向き発言・懸念・競合など）を重視
 
 JSONのみ返してください（説明文不要）:
-{"verdict":"appropriate|too_optimistic|too_pessimistic","suggestedPriority":"high|medium|low","confidence":85,"reasons":["40文字以内の根拠を最大3つ"],"advice":"営業担当への次アクション提案を60文字以内で"}`;
+{"verdict":"appropriate|too_optimistic|too_pessimistic","suggestedGrade":"A|B|C","confidence":85,"reasons":["40文字以内の根拠を最大3つ"],"advice":"営業担当への次アクション提案を60文字以内で"}`;
 
   const raw = await callLlm(
     prompt,
     config,
-    "あなたは工務店・リフォーム会社の営業マネージャーです。商談の見込み確度を客観的なデータに基づいて厳しくレビューします。",
+    "あなたは工務店・リフォーム会社の営業マネージャーです。顧客の見込度（A/B/C）を客観的な商談データに基づいて厳しくレビューします。",
   );
   if (!raw) return { ok: false, message: "AIからの応答を取得できませんでした。" };
 
@@ -915,21 +937,21 @@ JSONのみ返してください（説明文不要）:
     const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
     const parsed = JSON.parse((match?.[1] ?? raw).trim()) as {
       verdict?: string;
-      suggestedPriority?: string;
+      suggestedGrade?: string;
       confidence?: number;
       reasons?: string[];
       advice?: string;
     };
     const verdict = (["appropriate", "too_optimistic", "too_pessimistic"] as const)
       .find((v) => v === parsed.verdict) ?? "appropriate";
-    const suggestedPriority = (["high", "medium", "low"] as const)
-      .find((p) => p === parsed.suggestedPriority) ?? (deal.priority as "high" | "medium" | "low");
+    const suggestedGrade = parseProspectGrade(parsed.suggestedGrade) ?? currentGrade ?? "B";
     return {
       ok: true,
       assessment: {
         verdict,
-        suggestedPriority,
-        currentPriority: deal.priority,
+        suggestedGrade,
+        currentGrade,
+        customerId: customer.id,
         confidence: Math.min(100, Math.max(0, Math.round(parsed.confidence ?? 50))),
         reasons: (parsed.reasons ?? []).slice(0, 3).map((r) => String(r)),
         advice: String(parsed.advice ?? ""),
@@ -988,20 +1010,34 @@ ${source.slice(0, 2000)}
   }
 }
 
-/** AI判定の修正提案を反映し、タイムラインに記録を残す */
-export async function applyAssessedPriority(dealId: string, priority: "high" | "medium" | "low", reason: string) {
+/** AI判定の修正提案を顧客の見込度（A/B/C）に反映し、商談タイムラインに記録を残す */
+export async function applyAssessedProspectGrade(
+  customerId: string,
+  dealId: string,
+  grade: ProspectGrade,
+  reason: string,
+) {
   const { supabase, company_id, user_id } = await getCompanyContext();
-  const { data: before } = await supabase.from("deals").select("priority").eq("id", dealId).single();
-  const { data, error } = await supabase.from("deals")
-    .update({ priority, updated_at: new Date().toISOString() })
-    .eq("id", dealId).select().single();
+  const { data: before } = await supabase
+    .from("customers")
+    .select("prospect_grade")
+    .eq("id", customerId)
+    .single();
+  const beforeGrade = parseProspectGrade(before?.prospect_grade);
+  const { data, error } = await supabase
+    .from("customers")
+    .update({ prospect_grade: grade, updated_at: new Date().toISOString() })
+    .eq("id", customerId)
+    .select("id, prospect_grade")
+    .single();
   if (error) throw error;
 
+  const beforeLabel = beforeGrade ? GRADE_JA[beforeGrade] : "未設定";
   await supabase.from("deal_activities").insert({
     company_id,
     deal_id: dealId,
     type: "note",
-    title: `AI確度判定により確度を「${PRIORITY_JA[before?.priority ?? ""] ?? before?.priority}」→「${PRIORITY_JA[priority]}」に修正`,
+    title: `AI見込度判定により見込度を「${beforeLabel}」→「${GRADE_JA[grade]}」に修正`,
     description: reason || null,
     performed_by: user_id,
   });

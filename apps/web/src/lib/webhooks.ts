@@ -24,6 +24,7 @@ export type WebhookEvent =
   | "construction.created"
   | "construction.started"
   | "construction.completed"
+  | "budget.approval_requested"
   | "sales_flow.notification"
   | "invoice.issued"
   | "invoice.paid"

@@ -33,12 +33,25 @@ type ComboChartProps = {
   forecastZoneLabel?: string;
   /** 同一 x 中心に上下棒を重ねる（参考UI） */
   centered?: boolean;
+  /** 各グループ（x軸項目）のホバー詳細用注記（昨対比%など）。常時は出さずホバー時に表示 */
+  groupAnnotations?: (GroupAnnotation | null)[];
   height?: number;
   unit?: string;
   formatValue?: (value: number) => string;
   gridColor?: string;
   labelColor?: string;
   tickColor?: string;
+};
+
+export type GroupAnnotation = {
+  text: string;
+  color?: string;
+};
+
+type HoverTip = {
+  rowIndex: number;
+  x: number;
+  y: number;
 };
 
 export function ComboChart({
@@ -50,6 +63,7 @@ export function ComboChart({
   forecastFromIndex,
   forecastZoneLabel = "着地予測領域",
   centered = false,
+  groupAnnotations,
   height: heightProp = 240,
   unit = "",
   formatValue = (v) => String(v),
@@ -59,6 +73,7 @@ export function ComboChart({
 }: ComboChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 640, height: heightProp });
+  const [hover, setHover] = useState<HoverTip | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -135,8 +150,9 @@ export function ComboChart({
     <div className="flex h-full w-full flex-col">
       <div
         ref={containerRef}
-        className="flex-1 min-h-[180px] w-full pl-1"
+        className="relative flex-1 min-h-[180px] w-full pl-1"
         style={{ color: labelColor }}
+        onMouseLeave={() => setHover(null)}
       >
         <svg
           viewBox={`${-viewMargin.left} ${-viewMargin.top} ${vbW} ${vbH}`}
@@ -247,11 +263,37 @@ export function ComboChart({
                       rx={3}
                       fill={fill}
                       opacity={forecast && !b.forecastFill ? 0.45 : 1}
-                    >
-                      <title>{`${b.label}: ${formatValue(value)}`}</title>
-                    </rect>
+                      pointerEvents="none"
+                    />
                   );
                 })}
+                {/* ホバー用ヒット領域（月グループ全体） */}
+                <rect
+                  x={groupX}
+                  y={pad.top}
+                  width={groupWidth}
+                  height={chartH}
+                  fill="transparent"
+                  className="cursor-default"
+                  onMouseEnter={(e) => {
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    setHover({
+                      rowIndex,
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }}
+                  onMouseMove={(e) => {
+                    const rect = containerRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    setHover({
+                      rowIndex,
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }}
+                />
               </g>
             );
           })}
@@ -265,6 +307,7 @@ export function ComboChart({
                 strokeWidth={2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
+                pointerEvents="none"
               />
               {linePoints.map((p, i) => (
                 <circle
@@ -274,13 +317,47 @@ export function ComboChart({
                   r={3}
                   fill={line.color}
                   opacity={isForecast(i) ? 0.55 : 1}
-                >
-                  <title>{`${line.label}: ${formatValue(Number(data[i][line.key] ?? 0))}`}</title>
-                </circle>
+                  pointerEvents="none"
+                />
               ))}
             </>
           )}
         </svg>
+
+        {hover && (() => {
+          const row = data[hover.rowIndex];
+          if (!row) return null;
+          const label = String(row[labelKey] ?? "");
+          const annotation = groupAnnotations?.[hover.rowIndex];
+          const tipLeft = Math.min(Math.max(hover.x, 80), Math.max(width - 80, 80));
+          const tipTop = Math.max(hover.y - 12, 8);
+          return (
+            <div
+              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-border/70 bg-white/95 px-2.5 py-2 shadow-md backdrop-blur-sm dark:bg-[#1F2937]/95"
+              style={{ left: tipLeft, top: tipTop }}
+            >
+              <p className="text-[11px] font-semibold text-foreground mb-1">{label}</p>
+              <div className="space-y-0.5">
+                {bars.map((b) => (
+                  <p key={b.key} className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    <span className="inline-block h-1.5 w-1.5 rounded-sm mr-1.5 align-middle" style={{ background: b.fill }} />
+                    {b.label}: <span className="font-medium text-foreground tabular-nums">{formatValue(Number(row[b.key] ?? 0))}</span>
+                  </p>
+                ))}
+                {line && (
+                  <p className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    {line.label}: <span className="font-medium text-foreground tabular-nums">{formatValue(Number(row[line.key] ?? 0))}</span>
+                  </p>
+                )}
+                {annotation && (
+                  <p className="text-[11px] font-semibold pt-1 mt-1 border-t border-border/50 whitespace-nowrap" style={{ color: annotation.color ?? tickColor }}>
+                    昨対比 {annotation.text}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div

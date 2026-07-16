@@ -5,18 +5,16 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle } from "lucide-react";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   addEstimateCategory,
   addEstimateItem,
   updateEstimateItem,
-  updateEstimateCategoryReserve,
   importCategoryFromReference,
   bulkApplyMarginToEstimate,
   type EstimateItemUpdatePatch,
 } from "@/lib/actions/constructions";
-import { updateEstimate } from "@/lib/actions/estimates";
 import {
   EstimatePdfPreviewDialog,
   toEstimatePdfPreviewData,
@@ -30,7 +28,10 @@ import { Badge } from "@/components/ui/badge";
 import { getEstimates } from "@/lib/actions/estimates";
 import { getEstimate } from "@/lib/actions/estimates";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
+import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { calcGrossProfitRatePercent, toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { useAuth } from "@/components/providers/auth-provider";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
@@ -389,36 +390,14 @@ export function EstimateDetailView({
   const [bulkRateCost, setBulkRateCost] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkRateSell, setBulkRateSell] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkApplying, setBulkApplying] = useState(false);
-  const [reserve1Rate, setReserve1Rate] = useState(estimate.reserve_fee_1_rate ?? 0.02);
-  const [reserve2Rate, setReserve2Rate] = useState(estimate.reserve_fee_2_rate ?? 0.03);
-  const [savingReserve, setSavingReserve] = useState(false);
-  const subtotal = estimate.subtotal ?? 0;
-  const reserve1 = Math.round(subtotal * reserve1Rate);
+  const [marginInfo, setMarginInfo] = useState<{ threshold: number; baseThreshold: number; reservePercent: number } | null>(null);
+  const { role } = useAuth();
+  const { canAccess } = useCompanyPermissions();
+  // 予備費の内訳は「予備費設定」権限を持つ人だけに開示
+  const canSeeReserve = role ? canAccess("reserve_fee", [role]) : false;
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = estimate.items ?? [];
-  // 予備費②: 大項目ごとに reserve_fee_rate があれば行レベル積算、なければ見積全体率（No.36）
-  const hasCategoryReserve = categories.some((c) => (c.reserve_fee_rate ?? 0) > 0);
-  const reserve2 = hasCategoryReserve
-    ? categories.reduce((sum, cat) => {
-        const catCost = items
-          .filter((i) => i.category_id === cat.id)
-          .reduce((s, i) => s + (i.cost_amount ?? 0), 0);
-        return sum + Math.round(catCost * (cat.reserve_fee_rate ?? 0));
-      }, 0)
-    : Math.round(subtotal * reserve2Rate);
   const costTotal = estimate.cost_total ?? 0;
-
-  const saveReserveRates = async (r1: number, r2: number) => {
-    setSavingReserve(true);
-    try {
-      await updateEstimate(estimate.id, { reserve_fee_1_rate: r1, reserve_fee_2_rate: r2 });
-      onEstimateChange({ ...estimate, reserve_fee_1_rate: r1, reserve_fee_2_rate: r2 });
-    } catch {
-      toast.error("予備費率の保存に失敗しました");
-    } finally {
-      setSavingReserve(false);
-    }
-  };
 
   const itemsByCategory = categories.map((cat) => ({
     category: cat,
@@ -437,8 +416,18 @@ export function EstimateDetailView({
     setCollapsedIds(new Set());
     setInlineAdd(null);
     seededEstimateIdRef.current = null;
-    setReserve1Rate(estimate.reserve_fee_1_rate ?? 0.02);
-    setReserve2Rate(estimate.reserve_fee_2_rate ?? 0.03);
+  }, [estimate.id]);
+
+  useEffect(() => {
+    let active = true;
+    getEstimateMarginThreshold(estimate.id)
+      .then((r) => {
+        if (active && r) {
+          setMarginInfo({ threshold: r.threshold, baseThreshold: r.baseThreshold, reservePercent: r.reservePercent });
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
   }, [estimate.id]);
 
   useEffect(() => {
@@ -725,7 +714,10 @@ export function EstimateDetailView({
   const calcRate = (cost: number, sell: number) => sell > 0 ? ((sell - cost) / sell) * 100 : 0;
   // 明細からライブ算出（保存前の調整でもボタンが切り替わる）
   const grossRate = calcGrossProfitRatePercent(items) || (estimate.gross_profit_rate ?? 0);
-  const marginThreshold = toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  // 承認の基準は会社設定（会社指定粗利率＋予備費率）をサーバーから取得
+  const marginThreshold = marginInfo?.threshold ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+  const reservePercent = marginInfo?.reservePercent ?? 0;
+  const baseThreshold = marginInfo?.baseThreshold ?? marginThreshold;
   const isLowMargin = grossRate < marginThreshold;
 
   return (
@@ -855,13 +847,8 @@ export function EstimateDetailView({
             <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{(estimate.total ?? 0).toLocaleString()}</p>
           </div>
           <div className="px-3 py-2">
-            <p className="text-[10px] leading-tight text-muted-foreground">
-              原価<span className="text-amber-600 ml-1">(予備費込)</span>
-            </p>
-            <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{(costTotal + reserve1 + reserve2).toLocaleString()}</p>
-            <p className="text-[9px] leading-tight text-muted-foreground mt-px">
-              予備費① {(reserve1Rate * 100).toFixed(1)}% ¥{reserve1.toLocaleString()} ／ ② {hasCategoryReserve ? "行別" : `${(reserve2Rate * 100).toFixed(1)}%`} ¥{reserve2.toLocaleString()}
-            </p>
+            <p className="text-[10px] leading-tight text-muted-foreground">原価</p>
+            <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{costTotal.toLocaleString()}</p>
           </div>
           <div className="px-3 py-2">
             <p className="text-[10px] leading-tight text-muted-foreground">粗利</p>
@@ -869,16 +856,19 @@ export function EstimateDetailView({
               ¥{(estimate.gross_profit ?? 0).toLocaleString()}
             </p>
           </div>
-          <div className="px-3 py-2">
-            <p className="text-[10px] leading-tight text-muted-foreground">粗利率<span className="ml-1">(基準 {marginThreshold.toFixed(0)}%)</span></p>
-            <p className="text-base font-bold tabular-nums leading-tight mt-px">
+          <div className={cn("px-3 py-2", isLowMargin && "bg-amber-50/60")}>
+            <p className={cn("text-[10px] leading-tight", isLowMargin ? "text-amber-700" : "text-muted-foreground")}>
+              粗利率<span className="ml-1">(基準 {marginThreshold.toFixed(0)}%{canSeeReserve && reservePercent > 0 ? `＝指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%` : ""})</span>
+            </p>
+            <p className={cn("text-base font-bold tabular-nums leading-tight mt-px", isLowMargin ? "text-amber-600" : "text-emerald-700")}>
               {grossRate.toFixed(1)}%
             </p>
           </div>
         </div>
         {isLowMargin && (
-          <div className="border-t border-border/60 bg-muted/30 px-3 py-1.5 text-[11px] leading-tight text-muted-foreground">
-            ⚠ 粗利率が基準({marginThreshold.toFixed(0)}%)を下回っています。上司への承認申請が必要です。
+          <div className="flex items-center gap-1.5 border-t border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-tight text-amber-700">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            粗利率が基準({marginThreshold.toFixed(0)}%)を下回っています。上司への承認申請が必要です。
           </div>
         )}
       </div>
@@ -1066,52 +1056,6 @@ export function EstimateDetailView({
                       )}
                     </button>
                     <span className="text-[10px] text-muted-foreground ml-2 font-normal">{catItems.length}項目</span>
-                    <span
-                      className="inline-flex items-center gap-1.5 ml-3 text-[10px] font-normal text-amber-800 bg-amber-50 border border-amber-200/80 rounded px-1.5 py-0.5"
-                      onClick={(e) => e.stopPropagation()}
-                      title="この大項目（フロアー）の原価に対する予備費②"
-                    >
-                      予備費②（行）
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.5}
-                        className="inline-block w-[4.5rem] min-w-[4.5rem] h-6 text-[11px] text-center tabular-nums px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        value={Number(((category.reserve_fee_rate ?? 0) * 100).toFixed(1))}
-                        onChange={(e) => {
-                          const pct = Number(e.target.value);
-                          if (Number.isNaN(pct)) return;
-                          const next = pct / 100;
-                          onEstimateChange({
-                            ...estimate,
-                            categories: categories.map((c) =>
-                              c.id === category.id ? { ...c, reserve_fee_rate: next } : c,
-                            ),
-                          });
-                        }}
-                        onBlur={(e) => {
-                          const pct = Number((e.target as HTMLInputElement).value);
-                          const next = Number.isNaN(pct) ? 0 : pct / 100;
-                          void updateEstimateCategoryReserve(category.id, next)
-                            .then(() => {
-                              onEstimateChange({
-                                ...estimate,
-                                categories: categories.map((c) =>
-                                  c.id === category.id ? { ...c, reserve_fee_rate: next } : c,
-                                ),
-                              });
-                            })
-                            .catch(() => toast.error("行予備費の保存に失敗しました（DBマイグレーション未適用の可能性）"));
-                        }}
-                      />
-                      %
-                      {(category.reserve_fee_rate ?? 0) > 0 && (
-                        <span className="text-amber-700 tabular-nums">
-                          ¥{Math.round(catCost * (category.reserve_fee_rate ?? 0)).toLocaleString()}
-                        </span>
-                      )}
-                    </span>
                   </td>
                   <td className="px-2 py-2 text-right text-muted-foreground bg-amber-50/40 whitespace-nowrap text-xs">小計</td>
                   <td className="px-2 py-2 text-right tabular-nums font-semibold bg-amber-50/40 whitespace-nowrap text-xs">¥{catCost.toLocaleString()}</td>
@@ -1226,60 +1170,9 @@ export function EstimateDetailView({
                 </td>
               </tr>
             ) : null}
-            <tr className="bg-amber-50/30 border-t border-border/40">
-              <td colSpan={6} className="px-3 py-2 text-right text-xs text-muted-foreground">
-                <div className="inline-flex flex-wrap items-center justify-end gap-x-1 gap-y-1">
-                  <span>予備費①</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    className="inline-block w-[4.5rem] min-w-[4.5rem] h-7 text-xs text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    value={Number((reserve1Rate * 100).toFixed(1))}
-                    disabled={savingReserve}
-                    onChange={(e) => {
-                      const pct = Number(e.target.value);
-                      if (Number.isNaN(pct)) return;
-                      setReserve1Rate(pct / 100);
-                    }}
-                    onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
-                  />
-                  <span>%</span>
-                  <span className="text-[10px] mx-1">／</span>
-                  <span title={hasCategoryReserve ? "大項目ごとの予備費②が設定済みのため、全体率は未使用です" : "大項目に未設定のときの全体既定率"}>
-                    予備費②{hasCategoryReserve ? "（行別適用中）" : "（全体既定）"}
-                  </span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    className="inline-block w-[4.5rem] min-w-[4.5rem] h-7 text-xs text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    value={Number((reserve2Rate * 100).toFixed(1))}
-                    disabled={savingReserve || hasCategoryReserve}
-                    onChange={(e) => {
-                      const pct = Number(e.target.value);
-                      if (Number.isNaN(pct)) return;
-                      setReserve2Rate(pct / 100);
-                    }}
-                    onBlur={() => void saveReserveRates(reserve1Rate, reserve2Rate)}
-                  />
-                  <span>%</span>
-                </div>
-                <p className="text-[10px] text-amber-700/80 mt-1">
-                  予備費②は各大項目行の「予備費②（行）」でフロアー別に設定できます
-                </p>
-              </td>
-              <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-sm text-amber-700">¥{reserve1.toLocaleString()}</td>
-              <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
-                ② ¥{reserve2.toLocaleString()}
-              </td>
-              <td colSpan={2}></td>
-            </tr>
             <tr className="bg-slate-100/70 border-t border-border/40 font-bold">
-              <td colSpan={6} className="px-3 py-3 text-right text-sm">合計(予備費込)</td>
-              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{(costTotal + reserve1 + reserve2).toLocaleString()}</td>
+              <td colSpan={6} className="px-3 py-3 text-right text-sm">合計</td>
+              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{costTotal.toLocaleString()}</td>
               <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{(estimate.total ?? 0).toLocaleString()}</td>
               <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-sm">{(estimate.gross_profit_rate ?? 0).toFixed(1)}%</td>
             </tr>

@@ -35,6 +35,7 @@ function buildDefaultPerms(): RolePermissions {
   result["settings_attendance"] = ["hq_admin"];
   result["settings_workflow"]   = ["hq_admin"];
   result["settings_crm"]        = ["hq_admin"];
+  result["reserve_fee"]         = ["hq_admin"];
   return result;
 }
 

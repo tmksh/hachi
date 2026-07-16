@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Save, Sparkles, Trash2 } from "lucide-react";
 import { getCustomer, updateCustomer, createCustomer } from "@/lib/actions/customers";
 import { getProfiles } from "@/lib/actions/profiles";
@@ -57,6 +58,8 @@ type FormState = {
   budget_min: string;
   budget_max: string;
   prospect_grade: string;
+  is_special_demand: boolean;
+  special_probability: string;
   status: string;
   tags: string[];
   notes: string;
@@ -85,6 +88,8 @@ function customerToForm(c: Customer): FormState {
     budget_min: c.budget_min != null ? String(c.budget_min) : "",
     budget_max: c.budget_max != null ? String(c.budget_max) : "",
     prospect_grade: c.prospect_grade ?? "",
+    is_special_demand: c.is_special_demand ?? false,
+    special_probability: c.special_probability != null ? String(c.special_probability) : "",
     status: c.status,
     tags: c.tags ?? [],
     notes: c.notes ?? "",
@@ -115,7 +120,13 @@ function formToPayload(form: FormState) {
     assigned_to: form.assigned_to || null,
     budget_min: form.budget_min ? Number(form.budget_min) : null,
     budget_max: form.budget_max ? Number(form.budget_max) : null,
-    prospect_grade: (form.prospect_grade || null) as "A" | "B" | "C" | null,
+    is_special_demand: form.is_special_demand,
+    special_probability: form.is_special_demand && form.special_probability !== ""
+      ? Math.min(100, Math.max(0, Number(form.special_probability)))
+      : null,
+    prospect_grade: form.is_special_demand
+      ? null
+      : ((form.prospect_grade || null) as "A" | "B" | "C" | null),
     status: form.status,
     tags: form.tags,
     notes: form.notes || null,
@@ -160,6 +171,8 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
     budget_min: "",
     budget_max: "",
     prospect_grade: "",
+    is_special_demand: false,
+    special_probability: "",
     status: "active",
     tags: [],
     notes: "",
@@ -440,18 +453,54 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
           <Label>問い合わせ内容</Label>
           <Textarea rows={4} value={form.inquiry_content} onChange={e => set("inquiry_content", e.target.value)} />
         </div>
-        <div className="space-y-2">
-          <Label>見込度</Label>
-          <Select value={form.prospect_grade || "_none"} onValueChange={v => set("prospect_grade", v === "_none" ? "" : v)}>
-            <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_none">未設定</SelectItem>
-              <SelectItem value="A">A（見込度：高）</SelectItem>
-              <SelectItem value="B">B（見込度：中）</SelectItem>
-              <SelectItem value="C">C（見込度：低）</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-[11px] text-muted-foreground">A/B/Cの確度%はBIダッシュボードの期首設定で変更できます</p>
+        <div className="space-y-2 sm:col-span-2 rounded-lg border border-border/60 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <Label>特需（大型案件）</Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                1件の成否で全体見込みが狂う大型案件。通常のA/B/C一律確度は使わず、この案件独自の確度%を入力します
+              </p>
+            </div>
+            <Switch
+              checked={form.is_special_demand}
+              onCheckedChange={(v) => {
+                set("is_special_demand", v);
+                if (v) set("prospect_grade", "");
+              }}
+            />
+          </div>
+          {form.is_special_demand ? (
+            <div className="space-y-1.5 pt-2 border-t border-border/50">
+              <Label>独自確度%</Label>
+              <div className="flex items-center gap-2 max-w-[200px]">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="tabular-nums"
+                  value={form.special_probability}
+                  onChange={(e) => set("special_probability", e.target.value)}
+                  placeholder="例: 40"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5 pt-2 border-t border-border/50">
+              <Label>見込度</Label>
+              <Select value={form.prospect_grade || "_none"} onValueChange={v => set("prospect_grade", v === "_none" ? "" : v)}>
+                <SelectTrigger className={FIELD_SELECT_TRIGGER}><SelectValue placeholder="選択" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">未設定</SelectItem>
+                  <SelectItem value="A">A（見込度：高）</SelectItem>
+                  <SelectItem value="B">B（見込度：中）</SelectItem>
+                  <SelectItem value="C">C（見込度：低）</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">A/B/Cの確度%はBIダッシュボードの期首設定で変更できます</p>
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <Label>ステータス</Label>

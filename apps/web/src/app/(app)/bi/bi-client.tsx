@@ -16,13 +16,20 @@ import {
   ArrowUpRight,
   Briefcase,
   Target,
+  ChevronRight,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  RotateCcw,
 } from "lucide-react";
 import { ComboChart } from "@/components/charts/combo-chart";
-import { AchievementDonut } from "@/components/charts/achievement-donut";
-import { WaterfallChart, type WaterfallStep } from "@/components/charts/waterfall-chart";
-import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
-import { getBiSettings, getBiActuals, getBiProspectSummary, type BiProspectSummary } from "@/lib/actions/bi";
+import { TrendAreaChart } from "@/components/charts/trend-area-chart";
+import { getBiSettings, getBiActuals, getBiProspectSummary, releaseReserve, type BiProspectSummary } from "@/lib/actions/bi";
+import { useAuth } from "@/components/providers/auth-provider";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { toast } from "sonner";
 import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
+import { MOCK_OVERHEAD_BUDGET_MAN } from "@/lib/bi-types";
 import {
   getCurrentFiscalYear,
   fiscalYearLabel,
@@ -30,7 +37,15 @@ import {
   buildFiscalMonthLabels,
   getForecastStartIndex,
   DEFAULT_FISCAL_MONTH_START,
+  normalizeBudgetMan,
+  buildRealisticMonthlyComboData,
+  shouldUseMonthlyTrendMock,
 } from "@/lib/bi-utils";
+import {
+  buildBiDashboardMock,
+  shouldUseBiDashboardMock,
+  buildBiDashboardMonthlyCombo,
+} from "@/lib/bi-mock-data";
 import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { cn } from "@/lib/utils";
@@ -144,6 +159,45 @@ function buildMonthlyDetailRows(
   return rows;
 }
 
+/** グラフ用モック系列から月次明細行を生成（表ビューとグラフの連動用） */
+function buildMonthlyDetailRowsFromCombo(
+  comboData: Array<{ month: string; 粗利額: number; 月次予定配賦: number; 累計: number }>,
+  forecastStartIdx: number,
+  grossProfitRatePct: number,
+): MonthlyDetailRow[] {
+  const rate = grossProfitRatePct > 0 ? grossProfitRatePct / 100 : 0.586;
+  const rows: MonthlyDetailRow[] = [];
+
+  for (let i = 0; i < forecastStartIdx; i++) {
+    const pt = comboData[i];
+    if (!pt) continue;
+    const grossProfit = pt.粗利額;
+    const allocation = Math.abs(pt.月次予定配賦);
+    const grossProfitTotal = grossProfit - allocation;
+    const hasActivity = grossProfit !== 0 || allocation !== 0;
+
+    rows.push({
+      kind: "actual",
+      label: pt.month,
+      hasActivity,
+      revenue: hasActivity && rate > 0 ? Math.round(grossProfit / rate) : 0,
+      grossProfit,
+      allocation,
+      grossProfitTotal,
+      cumulative: pt.累計,
+    });
+  }
+
+  const forecastStart = comboData[forecastStartIdx]?.month ?? "予測";
+  const forecastEnd = comboData[comboData.length - 1]?.month ?? "3月";
+  rows.push({
+    kind: "forecast",
+    label: `${forecastStart}〜${forecastEnd}（着地予測）`,
+  });
+
+  return rows;
+}
+
 function resolveMonthlyAllocation(
   index: number,
   allocations: number[],
@@ -209,6 +263,8 @@ function BiPanel({
   headerRight,
   className,
   flush,
+  collapsible,
+  defaultOpen = false,
 }: {
   title: string;
   description?: string;
@@ -216,20 +272,41 @@ function BiPanel({
   headerRight?: ReactNode;
   className?: string;
   flush?: boolean;
+  /** 折りたたみ可能にする（明細テーブルなど。既定は閉じた状態） */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const showBody = !collapsible || open;
+
   return (
     <div className={cn("frost-card rounded-lg flex flex-col", flush ? "gap-0" : "p-4 gap-3", className)}>
       <div className={cn(
-        "flex items-start justify-between gap-2 pb-2.5 border-b border-border/60 shrink-0",
+        "flex items-start justify-between gap-2 shrink-0",
+        showBody && "pb-2.5 border-b border-border/60",
         flush && "px-4 pt-4",
       )}>
-        <div className="min-w-0">
-          <span className="text-xs font-bold text-foreground">{title}</span>
-          {description ? <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p> : null}
-        </div>
+        {collapsible ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1.5 min-w-0 text-left group"
+          >
+            <ChevronRight className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-90")} />
+            <span className="min-w-0">
+              <span className="text-xs font-bold text-foreground group-hover:text-[var(--brand-dark)]">{title}</span>
+              {description ? <span className="block text-[11px] text-muted-foreground mt-0.5">{description}</span> : null}
+            </span>
+          </button>
+        ) : (
+          <div className="min-w-0">
+            <span className="text-xs font-bold text-foreground">{title}</span>
+            {description ? <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p> : null}
+          </div>
+        )}
         {headerRight}
       </div>
-      <div className="min-w-0">{children}</div>
+      {showBody ? <div className="min-w-0">{children}</div> : null}
     </div>
   );
 }
@@ -245,12 +322,20 @@ export function BiClient({
   initialActuals: BiActuals | null;
 }) {
   const searchParams = useSearchParams();
+  const { role } = useAuth();
+  const { canAccess } = useCompanyPermissions();
+  // 予備費の実値確認・決算戻しの操作可否は権限マトリクス（reserve_fee）で制御
+  const canManageReserve = role ? canAccess("reserve_fee", [role]) : false;
   const [showTheoretical, setShowTheoretical] = useState(true);
+  const [showActualReserve, setShowActualReserve] = useState(false);
+  const [releasingReserve, setReleasingReserve] = useState(false);
   const [settings, setSettings] = useState<BiAnnualSettings | null>(initialSettings);
   const [actuals, setActuals] = useState<BiActuals | null>(initialActuals);
   const [prevActuals, setPrevActuals] = useState<BiActuals | null>(null);
   const [prospectSummary, setProspectSummary] = useState<BiProspectSummary | null>(null);
   const [yoyMode, setYoyMode] = useState<"cumulative" | "monthly">("cumulative");
+  const [monthlyView, setMonthlyView] = useState<"chart" | "table">("chart");
+  const [includeSpecial, setIncludeSpecial] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(getCurrentFiscalYear());
@@ -298,39 +383,71 @@ export function BiClient({
     return () => { window.removeEventListener("focus", onFocus); clearInterval(interval); };
   }, [loadBiData]);
 
-  const settingsConfigured = settings !== null;
-  const targetRevenue  = settingsConfigured ? (settings.target_revenue ?? 0)        : null;
-  const overheadBudget = settingsConfigured ? (settings.overhead_budget ?? 0)       : null;
-  const sgaBudget      = settingsConfigured ? (settings.sga_budget ?? 0)            : null;
-  const targetGp       = settingsConfigured ? (settings.target_gross_profit ?? 0)   : null;
+  const handleToggleReserveRelease = useCallback(async (release: boolean) => {
+    setReleasingReserve(true);
+    try {
+      const res = await releaseReserve(fiscalYear, release);
+      if (!res.ok) { toast.error(res.error ?? "操作に失敗しました"); return; }
+      toast.success(release ? "予備費を利益に戻しました（決算）" : "予備費の決算戻しを取り消しました");
+      await loadBiData(true);
+    } finally {
+      setReleasingReserve(false);
+    }
+  }, [fiscalYear, loadBiData]);
+
+  const fiscalMonthStartRaw       = actuals?.fiscalMonthStart ?? DEFAULT_FISCAL_MONTH_START;
+  const useDashboardMock          = shouldUseBiDashboardMock(fiscalYear, fiscalMonthStartRaw);
+  const dashboardMock             = useDashboardMock ? buildBiDashboardMock(fiscalMonthStartRaw) : null;
+
+  const effectiveSettings         = dashboardMock?.settings ?? settings;
+  const effectiveActuals          = dashboardMock?.actuals ?? actuals;
+  const effectivePrevActuals      = dashboardMock?.prevActuals ?? prevActuals;
+  const effectiveProspectSummary  = dashboardMock?.prospectSummary ?? prospectSummary;
+
+  const settingsConfigured = effectiveSettings !== null;
+  const targetRevenue  = settingsConfigured ? normalizeBudgetMan(effectiveSettings.target_revenue ?? 0)        : null;
+  const overheadBudget = settingsConfigured ? normalizeBudgetMan(effectiveSettings.overhead_budget ?? 0)       : null;
+  const sgaBudget      = settingsConfigured ? normalizeBudgetMan(effectiveSettings.sga_budget ?? 0)            : null;
+  const targetGp       = settingsConfigured ? normalizeBudgetMan(effectiveSettings.target_gross_profit ?? 0)   : null;
 
   const overheadForCalc      = overheadBudget ?? 0;
   const sgaForCalc           = sgaBudget ?? 0;
   const targetRevenueForCalc = targetRevenue ?? 0;
   const targetGpForCalc      = targetGp ?? 0;
 
-  const fiscalMonthStart          = actuals?.fiscalMonthStart          ?? DEFAULT_FISCAL_MONTH_START;
+  const fiscalMonthStart          = effectiveActuals?.fiscalMonthStart          ?? DEFAULT_FISCAL_MONTH_START;
   const forecastStartIndex        = getForecastStartIndex(fiscalMonthStart);
 
-  const deptActuals               = actuals?.deptActuals               ?? FALLBACK_DEPT_ACTUALS;
-  const monthlyActuals            = actuals?.monthly                   ?? makeFallbackMonthly(fiscalMonthStart);
-  const monthlyOverheadAllocations = actuals?.monthlyOverheadAllocations ?? Array(12).fill(0);
-  const monthlySgaAllocations     = actuals?.monthlySgaAllocations     ?? Array(12).fill(0);
-  const forecastTiers             = actuals?.forecastTiers             ?? FALLBACK_FORECAST_TIERS;
-  const sparklines                = actuals?.sparklines;
-  const grossProfitRateDelta      = actuals?.deltas.grossProfitRatePt;
+  const deptActuals               = effectiveActuals?.deptActuals               ?? FALLBACK_DEPT_ACTUALS;
+  const monthlyActuals            = effectiveActuals?.monthly                   ?? makeFallbackMonthly(fiscalMonthStart);
+  const monthlyOverheadAllocations = effectiveActuals?.monthlyOverheadAllocations ?? Array(12).fill(0);
+  const monthlySgaAllocations     = effectiveActuals?.monthlySgaAllocations     ?? Array(12).fill(0);
+  const forecastTiers             = effectiveActuals?.forecastTiers             ?? FALLBACK_FORECAST_TIERS;
+  const sparklines                = effectiveActuals?.sparklines;
+  const grossProfitRateDelta      = effectiveActuals?.deltas.grossProfitRatePt;
 
   const deptTargetMap:   Record<string, number> = {};
   const deptGpTargetMap: Record<string, number> = {};
-  if (settings?.department_targets?.length) {
-    settings.department_targets.forEach((d) => {
+  if (effectiveSettings?.department_targets?.length) {
+    effectiveSettings.department_targets.forEach((d) => {
       deptTargetMap[d.department_name]   = d.target_revenue;
       deptGpTargetMap[d.department_name] = d.target_gross_profit;
     });
   }
 
-  const totalRevenue     = deptActuals.reduce((s, d) => s + d.revenue, 0);
-  const totalGrossProfit = deptActuals.reduce((s, d) => s + d.grossProfit, 0);
+  const totalRevenue          = deptActuals.reduce((s, d) => s + d.revenue, 0);
+  const totalGrossProfitActual = deptActuals.reduce((s, d) => s + d.grossProfit, 0);
+
+  // ── 予備費（非表示%）──────────────────────────────────────────────
+  // 会社指定の予備費率で売上から控除額を算出。通常時は利益から控除して保守表示し、
+  // 決算で戻す（reserve_released=true）と実値に戻る。管理者は実値トグルで一時的に確認可。
+  const reserveRate     = effectiveSettings?.reserve_fee_rate ?? 0;
+  const reserveReleased = effectiveSettings?.reserve_released ?? false;
+  const reserveAmount   = Math.round(totalRevenue * reserveRate);
+  // 控除中か（率>0 かつ 未決算 かつ 実値トグルOFF）
+  const reserveActive   = reserveRate > 0 && !reserveReleased && !showActualReserve;
+  const totalGrossProfit = totalGrossProfitActual - (reserveActive ? reserveAmount : 0);
+
   const grossProfitRate  = pct(totalGrossProfit, totalRevenue);
   const achieveRateTotal = pct(totalRevenue, targetRevenueForCalc);
   const grossProfitTotal = totalGrossProfit - overheadForCalc;
@@ -338,22 +455,7 @@ export function BiClient({
   const operatingProfit  = grossProfitTotal - sgaForCalc;
   const opRate           = pct(operatingProfit, totalRevenue);
 
-  // P&L ウォーターフォール: 売上 → 原価 → 粗利 →（設定済なら）予定配賦 → 販管費 → 営業利益
-  const totalCost = totalRevenue - totalGrossProfit;
-  const plWaterfallSteps: WaterfallStep[] = [
-    { label: "売上", value: totalRevenue, isTotal: true, color: CHART_DARK },
-    { label: "原価", value: -totalCost, color: BI_NEGATIVE },
-    { label: "粗利", value: totalGrossProfit, isTotal: true, color: CHART_PRIMARY },
-    ...(settingsConfigured
-      ? [
-          { label: "予定配賦", value: -overheadForCalc, color: "#b45309" },
-          { label: "販管費", value: -sgaForCalc, color: BI_NEGATIVE },
-          { label: "営業利益", value: operatingProfit, isTotal: true, color: operatingProfit < 0 ? BI_NEGATIVE : CHART_MID },
-        ]
-      : []),
-  ];
-
-  const monthlyComboData = (() => {
+  const monthlyComboDataRaw = (() => {
     let cum = 0;
     return monthlyActuals.map((m, i) => {
       const alloc = resolveMonthlyAllocation(
@@ -373,17 +475,49 @@ export function BiClient({
     });
   })();
 
-  const monthlyDetailRows = buildMonthlyDetailRows(
-    monthlyActuals,
-    monthlyOverheadAllocations,
-    settingsConfigured,
-    overheadForCalc,
-    forecastStartIndex,
-  );
+  const useTrendMock = useDashboardMock || shouldUseMonthlyTrendMock(monthlyActuals, monthlyComboDataRaw);
+  const monthlyComboData = useDashboardMock
+    ? buildBiDashboardMonthlyCombo(fiscalMonthStart)
+    : useTrendMock
+      ? buildRealisticMonthlyComboData(
+          monthlyActuals,
+          totalGrossProfit > 0 ? totalGrossProfit : 2400,
+          settingsConfigured ? overheadForCalc : MOCK_OVERHEAD_BUDGET_MAN,
+        )
+      : monthlyComboDataRaw;
+
+  const monthlyDetailRows = useTrendMock
+    ? buildMonthlyDetailRowsFromCombo(monthlyComboData, forecastStartIndex, grossProfitRate)
+    : buildMonthlyDetailRows(
+        monthlyActuals,
+        monthlyOverheadAllocations,
+        settingsConfigured,
+        overheadForCalc,
+        forecastStartIndex,
+      );
+
+  // 月別推移パネルの判断用サマリー（グラフがモックのときはグラフと同じ系列を参照）
+  const trendSummarySource = useTrendMock ? monthlyComboData : null;
+  const lastActualCumulative = (() => {
+    if (trendSummarySource) {
+      const idx = Math.min(forecastStartIndex, trendSummarySource.length) - 1;
+      return idx >= 0 ? trendSummarySource[idx].累計 : 0;
+    }
+    let last = 0;
+    for (const r of monthlyDetailRows) {
+      if (r.kind === "actual" && r.hasActivity) last = r.cumulative;
+    }
+    return last;
+  })();
+  const trendGrossProfitTotal = useTrendMock
+    ? monthlyComboData.reduce((s, r) => s + r.粗利額, 0)
+    : totalGrossProfit;
+  // 損益分岐点まで＝年間間接費 − 累計粗利（>0でまだ未達、<=0で超過）
+  const breakevenGap = overheadForCalc - trendGrossProfitTotal;
 
   // ── 昨対比較（売上・月次/累計） ──────────────────────────────────
-  const prevMonthly = prevActuals?.monthly ?? makeFallbackMonthly(fiscalMonthStart);
-  const hasPrevData = prevActuals?.hasData ?? false;
+  const prevMonthly = effectivePrevActuals?.monthly ?? makeFallbackMonthly(fiscalMonthStart);
+  const hasPrevData = effectivePrevActuals?.hasData ?? false;
   // 過去年度を選択中は全月が実績。当年度のみ未到来月を除外
   const isCurrentFY = fiscalYear === getCurrentFiscalYear(fiscalMonthStart);
   const yoyActualEndIdx = isCurrentFY ? forecastStartIndex : 12;
@@ -425,7 +559,7 @@ export function BiClient({
 
   // 部門別昨対比: 前年度の部門実績を部門名でマッチング
   const prevDeptMap = new Map(
-    (prevActuals?.deptActuals ?? []).map((d) => [d.name, d]),
+    (effectivePrevActuals?.deptActuals ?? []).map((d) => [d.name, d]),
   );
   const deptYoY = (name: string, currentRevenue: number) => {
     const prevRev = prevDeptMap.get(name)?.revenue ?? 0;
@@ -434,7 +568,7 @@ export function BiClient({
       ratio: prevRev > 0 ? r1((currentRevenue / prevRev) * 100) : null,
     };
   };
-  const prevDeptTotalRevenue = (prevActuals?.deptActuals ?? []).reduce((s, d) => s + d.revenue, 0);
+  const prevDeptTotalRevenue = (effectivePrevActuals?.deptActuals ?? []).reduce((s, d) => s + d.revenue, 0);
   const deptTotalYoYRatio = prevDeptTotalRevenue > 0 ? r1((totalRevenue / prevDeptTotalRevenue) * 100) : null;
 
   return (
@@ -510,6 +644,62 @@ export function BiClient({
         ]}
       />
 
+      {/* ── 予備費（非表示%）バナー ── */}
+      {reserveRate > 0 && (
+        <div className={cn(
+          "rounded-lg border px-4 py-3 flex flex-wrap items-center justify-between gap-3",
+          reserveReleased
+            ? "border-emerald-200 bg-emerald-50/60"
+            : "border-amber-200 bg-amber-50/60",
+        )}>
+          <div className="flex items-start gap-2 min-w-0">
+            <ShieldCheck className={cn("h-4 w-4 mt-0.5 shrink-0", reserveReleased ? "text-emerald-600" : "text-amber-600")} />
+            <div className="text-xs leading-relaxed">
+              {reserveReleased ? (
+                <span className="text-emerald-800">
+                  <b>決算：予備費 {fmtMan(reserveAmount)} を利益に計上済み</b>
+                  （予備費率 {r1(reserveRate * 100)}%）。現在は実値を表示しています。
+                </span>
+              ) : reserveActive ? (
+                <span className="text-amber-800">
+                  <b>予備費 {fmtMan(reserveAmount)} を利益から控除して表示中</b>
+                  （予備費率 {r1(reserveRate * 100)}%）。決算時に利益へ戻ります。
+                </span>
+              ) : (
+                <span className="text-amber-800">
+                  <b>実値を表示中</b>（予備費 {fmtMan(reserveAmount)} / 率 {r1(reserveRate * 100)}% を控除していません）。
+                </span>
+              )}
+            </div>
+          </div>
+          {canManageReserve && (
+            <div className="flex items-center gap-2 shrink-0">
+              {!reserveReleased && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => setShowActualReserve((v) => !v)}
+                >
+                  {showActualReserve ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  {showActualReserve ? "控除後に戻す" : "実値を表示"}
+                </Button>
+              )}
+              <Button
+                variant={reserveReleased ? "outline" : "default"}
+                size="sm"
+                className={cn("h-8 gap-1.5 text-xs", !reserveReleased && "bg-emerald-600 hover:bg-emerald-700")}
+                disabled={releasingReserve}
+                onClick={() => void handleToggleReserveRelease(!reserveReleased)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {reserveReleased ? "決算戻しを取消" : "決算：予備費を利益に戻す"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─────────────────────────────────────────────────────── */}
       {/* 全社サマリー                                            */}
       {/* ─────────────────────────────────────────────────────── */}
@@ -565,42 +755,6 @@ export function BiClient({
             subNegative={operatingProfit < 0}
           />
         </div>
-      </div>
-
-      {/* ── 目標達成状況 / P&L ウォーターフォール ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <BiPanel
-          title="目標達成状況"
-          description="年間売上目標に対する実績の達成率"
-        >
-          <div className="flex items-center justify-center py-2">
-            <AchievementDonut
-              actual={totalRevenue}
-              target={targetRevenue}
-              rate={achieveRateTotal}
-              achievedColor={CHART_DARK}
-              formatValue={(v) => fmtMan(v)}
-            />
-          </div>
-        </BiPanel>
-        <BiPanel
-          title="P&L ウォーターフォール"
-          description={settingsConfigured
-            ? "売上から営業利益までの段階推移"
-            : "売上 → 原価 → 粗利の段階推移（期首設定で販管費・営業利益も表示）"}
-        >
-          <div className="h-[240px] overflow-visible">
-            <WaterfallChart
-              steps={plWaterfallSteps}
-              height={240}
-              unit="万"
-              gridColor={CHART_ACCENT}
-              labelColor={CHART_PRIMARY}
-              tickColor={CHART_PRIMARY}
-              formatValue={(v) => fmtSigned(v)}
-            />
-          </div>
-        </BiPanel>
       </div>
 
       {/* ─────────────────────────────────────────────────────── */}
@@ -741,21 +895,6 @@ export function BiClient({
         </p>
       </BiPanel>
 
-      {/* 部門別チャート（横棒） */}
-      <BiPanel title="部門別チャート" description="部門ごとの売上・粗利額の比較">
-        <div className="pt-1">
-          <HorizontalBarChart
-            data={deptActuals.map((d) => ({ label: `${d.name}（${d.label}）`, values: [d.revenue, d.grossProfit] }))}
-            series={[
-              { label: "売上", color: CHART_DARK },
-              { label: "粗利額", color: CHART_MID },
-            ]}
-            formatValue={(v) => fmtMan(v)}
-            labelColor={CHART_PRIMARY}
-          />
-        </div>
-      </BiPanel>
-
       {/* ─────────────────────────────────────────────────────── */}
       {/* 月別推移                                                */}
       {/* ─────────────────────────────────────────────────────── */}
@@ -763,114 +902,163 @@ export function BiClient({
 
       <BiPanel
         title="月別推移（全社）"
-        description="粗利額・月次予定配賦（控除）と売上総利益（累計）の推移"
+        description="毎月の粗利から間接費を引き、利益を積み上げた推移"
+        flush
         headerRight={
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-            表示対象: <span className="font-medium text-foreground">全社</span>
-          </span>
+          <div className="flex items-center rounded-md border border-border/60 p-0.5 gap-0.5">
+            {([["chart", "グラフ"], ["table", "表"]] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setMonthlyView(mode)}
+                className={cn(
+                  "px-2.5 py-1 text-[11px] rounded transition-colors",
+                  monthlyView === mode
+                    ? "bg-[var(--brand-dark)] text-white font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         }
       >
-        <div className="h-[220px] sm:h-[280px] overflow-visible">
-          <ComboChart
-            data={monthlyComboData}
-            labelKey="month"
-            height={240}
-            unit="万"
-            centered
-            lineArea
-            forecastFromIndex={forecastStartIndex}
-            gridColor={CHART_ACCENT}
-            labelColor={CHART_PRIMARY}
-            tickColor={CHART_PRIMARY}
-            bars={[
-              { key: "粗利額", label: "粗利額（積上）", fill: CHART_DARK },
-              {
-                key: "月次予定配賦",
-                label: "月次予定配賦",
-                fill: "#b45309",
-                forecastFill: "rgba(180, 83, 9, 0.35)",
-              },
-            ]}
-            line={{ key: "累計", label: "売上総利益（累計）", color: CHART_PRIMARY }}
-            formatValue={(v) => `${v < 0 ? "▲" : ""}¥${Math.abs(v).toLocaleString()}万`}
-          />
+        {/* 判断用サマリー */}
+        <div className="px-4 pt-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-px rounded-lg overflow-hidden" style={{ background: "rgba(var(--brand-accent-rgb),0.6)" }}>
+            <div className="bg-card px-3.5 py-2.5 min-w-0">
+              <p className="text-[11px] text-muted-foreground truncate">現時点の累計利益</p>
+              <p className={cn(
+                "text-base font-bold tabular-nums mt-0.5 leading-none",
+                lastActualCumulative < 0 ? "text-rose-500" : "text-foreground",
+              )}>
+                {fmtSigned(lastActualCumulative)}
+              </p>
+            </div>
+            <div className="bg-card px-3.5 py-2.5 min-w-0">
+              <p className="text-[11px] text-muted-foreground truncate">
+                {settingsConfigured ? (breakevenGap > 0 ? "損益分岐点まで" : "損益分岐点を超過") : "損益分岐点"}
+              </p>
+              <p className={cn(
+                "text-base font-bold tabular-nums mt-0.5 leading-none",
+                !settingsConfigured ? "text-muted-foreground" : breakevenGap > 0 ? "text-amber-600" : "text-[var(--brand-dark)]",
+              )}>
+                {!settingsConfigured
+                  ? "未設定"
+                  : breakevenGap > 0
+                    ? `あと ${fmtMan(breakevenGap)}`
+                    : `+${fmtMan(breakevenGap)}`}
+              </p>
+            </div>
+            <div className="bg-card px-3.5 py-2.5 min-w-0 col-span-2 sm:col-span-1">
+              <p className="text-[11px] text-muted-foreground truncate">年間粗利 / 間接費</p>
+              <p className="text-base font-bold tabular-nums mt-0.5 leading-none">
+                {fmtMan(trendGrossProfitTotal)}
+                <span className="text-muted-foreground font-normal text-xs"> / {settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}</span>
+              </p>
+            </div>
+          </div>
         </div>
-      </BiPanel>
 
-      <BiPanel title="月次明細" description="月別の売上・粗利・月次予定配賦・売上総利益" flush>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">月</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">売上（実績）</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">粗利額</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">月次予定配賦</th>
-                <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">売上総利益</th>
-                <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">累計</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyDetailRows.map((row, i) => {
-                if (row.kind === "forecast") {
-                  return (
-                    <tr
-                      key={`forecast-${i}`}
-                      className="border-b last:border-0 opacity-50"
-                      style={{ background: "rgba(var(--brand-accent-rgb), 0.15)" }}
-                    >
-                      <td className="px-5 py-2.5 font-medium text-muted-foreground whitespace-nowrap italic">
-                        {row.label}
-                      </td>
-                      <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
-                      <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
-                      <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
-                      <td className="text-right px-5 py-2.5 tabular-nums text-muted-foreground">—</td>
-                      <td className="text-right px-5 py-2.5 tabular-nums text-muted-foreground">—</td>
-                    </tr>
-                  );
-                }
-
-                const { allocation, grossProfitTotal, cumulative, hasActivity } = row;
-                return (
-                  <tr
-                    key={`${row.label}-${i}`}
-                    className="border-b last:border-0 transition-colors"
-                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "")}
-                  >
-                    <td className="px-5 py-2.5 font-medium text-foreground whitespace-nowrap">{row.label}</td>
-                    <td className="text-right px-4 py-2.5 tabular-nums">
-                      {hasActivity ? fmtMan(row.revenue) : "—"}
-                    </td>
-                    <td className="text-right px-4 py-2.5 tabular-nums">
-                      {hasActivity ? fmtMan(row.grossProfit) : "—"}
-                    </td>
-                    <td className="text-right px-4 py-2.5 tabular-nums text-rose-500">
-                      {fmtMonthlyAlloc(allocation, settingsConfigured)}
-                    </td>
-                    <td className={cn(
-                      "text-right px-5 py-2.5 tabular-nums font-semibold",
-                      hasActivity && grossProfitTotal < 0 ? "text-rose-500" : hasActivity ? "text-[var(--brand-dark)]" : "text-muted-foreground",
-                    )}>
-                      {hasActivity ? fmtSigned(grossProfitTotal) : "—"}
-                    </td>
-                    <td className={cn(
-                      "text-right px-5 py-2.5 tabular-nums font-semibold",
-                      hasActivity && cumulative < 0 ? "text-rose-500" : hasActivity ? "text-[var(--brand-dark)]" : "text-muted-foreground",
-                    )}>
-                      {hasActivity ? fmtSigned(cumulative) : "—"}
-                    </td>
+        {monthlyView === "chart" ? (
+          <div className="px-4 pt-3 pb-4">
+            <div className="h-[240px] sm:h-[300px] overflow-visible">
+              <TrendAreaChart
+                data={monthlyComboData}
+                labelKey="month"
+                height={260}
+                unit="万"
+                forecastFromIndex={forecastStartIndex}
+                gridColor={CHART_ACCENT}
+                labelColor={CHART_PRIMARY}
+                tickColor={CHART_PRIMARY}
+                series={[
+                  { key: "累計", label: "間接費控除後の利益（累計）", color: CHART_PRIMARY },
+                  { key: "粗利額", label: "その月の粗利", color: CHART_DARK },
+                  { key: "月次予定配賦", label: "その月の間接費（控除）", color: "#b45309" },
+                ]}
+                formatValue={(v) => `${v < 0 ? "▲" : ""}¥${Math.abs(v).toLocaleString()}万`}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="pt-3">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-t text-xs" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
+                    <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">月</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">売上（実績）</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">粗利額</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">その月の間接費</th>
+                    <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">その月の利益</th>
+                    <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">累計利益</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="px-5 pb-4 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
-          <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
-          全社の月次予定配賦は年額 ÷ 12 で均等配賦しています。部門ビューの配賦は当月の売上構成比による按分です。
-        </p>
+                </thead>
+                <tbody>
+                  {monthlyDetailRows.map((row, i) => {
+                    if (row.kind === "forecast") {
+                      return (
+                        <tr
+                          key={`forecast-${i}`}
+                          className="border-b last:border-0 opacity-50"
+                          style={{ background: "rgba(var(--brand-accent-rgb), 0.15)" }}
+                        >
+                          <td className="px-5 py-2.5 font-medium text-muted-foreground whitespace-nowrap italic">
+                            {row.label}
+                          </td>
+                          <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
+                          <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
+                          <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">—</td>
+                          <td className="text-right px-5 py-2.5 tabular-nums text-muted-foreground">—</td>
+                          <td className="text-right px-5 py-2.5 tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                      );
+                    }
+
+                    const { allocation, grossProfitTotal, cumulative, hasActivity } = row;
+                    return (
+                      <tr
+                        key={`${row.label}-${i}`}
+                        className="border-b last:border-0 transition-colors"
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "")}
+                      >
+                        <td className="px-5 py-2.5 font-medium text-foreground whitespace-nowrap">{row.label}</td>
+                        <td className="text-right px-4 py-2.5 tabular-nums">
+                          {hasActivity ? fmtMan(row.revenue) : "—"}
+                        </td>
+                        <td className="text-right px-4 py-2.5 tabular-nums">
+                          {hasActivity ? fmtMan(row.grossProfit) : "—"}
+                        </td>
+                        <td className="text-right px-4 py-2.5 tabular-nums text-rose-500">
+                          {fmtMonthlyAlloc(allocation, settingsConfigured)}
+                        </td>
+                        <td className={cn(
+                          "text-right px-5 py-2.5 tabular-nums font-semibold",
+                          hasActivity && grossProfitTotal < 0 ? "text-rose-500" : hasActivity ? "text-[var(--brand-dark)]" : "text-muted-foreground",
+                        )}>
+                          {hasActivity ? fmtSigned(grossProfitTotal) : "—"}
+                        </td>
+                        <td className={cn(
+                          "text-right px-5 py-2.5 tabular-nums font-semibold",
+                          hasActivity && cumulative < 0 ? "text-rose-500" : hasActivity ? "text-[var(--brand-dark)]" : "text-muted-foreground",
+                        )}>
+                          {hasActivity ? fmtSigned(cumulative) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="px-5 pb-4 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
+              <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
+              「その月の利益」＝粗利 − その月の間接費、「累計利益」はその積み上げです。全社の間接費は年額 ÷ 12 で均等配賦しています。
+            </p>
+          </div>
+        )}
       </BiPanel>
 
       {/* ─────────────────────────────────────────────────────── */}
@@ -926,12 +1114,20 @@ export function BiClient({
               { key: "当期", label: `当期（${fiscalYearLabel(fiscalYear)}）`, fill: CHART_DARK },
               { key: "前期", label: `前期（${fiscalYearLabel(fiscalYear - 1)}）`, fill: CHART_MID },
             ]}
+            groupAnnotations={yoyRows.map((row) => {
+              const ratio = yoyMode === "cumulative" ? row.cumulativeRatio : row.monthlyRatio;
+              if (row.isFuture || ratio == null) return null;
+              return {
+                text: `${ratio}%`,
+                color: ratio >= 100 ? CHART_DARK : BI_NEGATIVE,
+              };
+            })}
             formatValue={(v) => `¥${Math.abs(v).toLocaleString()}万`}
           />
         </div>
       </BiPanel>
 
-      <BiPanel title="昨対比 月次明細" description="月別売上と累計の昨対比。年度合計は最下行" flush>
+      <BiPanel title="昨対比 月次明細" description="月別売上と累計の昨対比。年度合計は最下行（数字で確認）" flush collapsible>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1067,8 +1263,30 @@ export function BiClient({
       {/* ── 見込度別 見込み売上 ── */}
       <BiPanel
         title="見込み売上（見込度別）"
-        description="顧客の見込度（A/B/C）に会社設定の確度%を掛けた期待値。確度%は期首設定で変更できます"
+        description="通常見込はA/B/Cの会社確度%。特需は案件独自の確度%を使います"
         flush
+        headerRight={
+          <div className="flex items-center gap-2">
+            <Switch
+              id="include-special"
+              checked={includeSpecial}
+              onCheckedChange={setIncludeSpecial}
+              disabled={!effectiveProspectSummary?.hasSpecial}
+            />
+            <Label
+              htmlFor="include-special"
+              className={cn(
+                "text-xs cursor-pointer",
+                effectiveProspectSummary?.hasSpecial ? "text-slate-600" : "text-muted-foreground",
+              )}
+            >
+              特需を含める
+              {effectiveProspectSummary?.hasSpecial
+                ? `（${effectiveProspectSummary.special.customerCount}件）`
+                : "（なし）"}
+            </Label>
+          </div>
+        }
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1082,7 +1300,7 @@ export function BiClient({
               </tr>
             </thead>
             <tbody>
-              {(prospectSummary?.rows ?? []).map((row) => (
+              {(effectiveProspectSummary?.rows ?? []).map((row) => (
                 <tr key={row.grade} className="border-b transition-colors"
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "")}>
@@ -1093,15 +1311,40 @@ export function BiClient({
                   <td className="text-right px-5 py-3 tabular-nums font-semibold">¥{row.weightedRevenue.toLocaleString()}万</td>
                 </tr>
               ))}
+              {includeSpecial && effectiveProspectSummary?.hasSpecial && (
+                <tr className="border-b transition-colors bg-amber-50/40"
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "")}>
+                  <td className="px-5 py-3 font-medium">
+                    特需（大型）
+                    <span className="block text-[10px] font-normal text-muted-foreground">案件独自確度</span>
+                  </td>
+                  <td className="text-right px-4 py-3 tabular-nums">{effectiveProspectSummary.special.customerCount}件</td>
+                  <td className="text-right px-4 py-3 tabular-nums">¥{effectiveProspectSummary.special.baseRevenue.toLocaleString()}万</td>
+                  <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">個別</td>
+                  <td className="text-right px-5 py-3 tabular-nums font-semibold">
+                    ¥{effectiveProspectSummary.special.weightedRevenue.toLocaleString()}万
+                  </td>
+                </tr>
+              )}
               <tr className="border-t-2 font-semibold" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <td className="px-5 py-3">合計</td>
+                <td className="px-5 py-3">合計{includeSpecial && effectiveProspectSummary?.hasSpecial ? "（特需込み）" : ""}</td>
                 <td className="text-right px-4 py-3 tabular-nums">
-                  {(prospectSummary?.rows ?? []).reduce((s, r) => s + r.customerCount, 0)}件
+                  {(effectiveProspectSummary?.rows ?? []).reduce((s, r) => s + r.customerCount, 0)
+                    + (includeSpecial ? (effectiveProspectSummary?.special.customerCount ?? 0) : 0)}件
                 </td>
-                <td className="text-right px-4 py-3 tabular-nums">¥{(prospectSummary?.totalBase ?? 0).toLocaleString()}万</td>
+                <td className="text-right px-4 py-3 tabular-nums">
+                  ¥{(includeSpecial
+                    ? (effectiveProspectSummary?.totalBaseWithSpecial ?? 0)
+                    : (effectiveProspectSummary?.totalBase ?? 0)
+                  ).toLocaleString()}万
+                </td>
                 <td className="text-right px-4 py-3" />
                 <td className="text-right px-5 py-3 tabular-nums text-[var(--brand-dark)]">
-                  ¥{(prospectSummary?.totalWeighted ?? 0).toLocaleString()}万
+                  ¥{(includeSpecial
+                    ? (effectiveProspectSummary?.totalWeightedWithSpecial ?? 0)
+                    : (effectiveProspectSummary?.totalWeighted ?? 0)
+                  ).toLocaleString()}万
                 </td>
               </tr>
             </tbody>
@@ -1109,7 +1352,7 @@ export function BiClient({
         </div>
         <p className="px-5 pb-4 pt-3 text-[11px] text-muted-foreground flex items-start gap-1.5">
           <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
-          見込み金額は進行中商談（受注・失注を除く）の合計、商談がない顧客は予算上限を使用します。見込度はCRMの記入画面・概要から設定できます。
+          見込み金額は進行中商談（受注・失注を除く）の合計、商談がない顧客は予算上限を使用します。特需は1件の成否で全体が大きく動くため、含め/除外を切替できます。
         </p>
       </BiPanel>
 

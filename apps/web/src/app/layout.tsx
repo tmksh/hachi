@@ -40,7 +40,7 @@ export default function RootLayout({
           <TooltipProvider delayDuration={300}>
             {children}
           </TooltipProvider>
-          <Toaster position="top-right" richColors />
+          <Toaster position="top-right" richColors duration={2500} closeButton />
         </FontSizeProvider>
       </body>
     </html>

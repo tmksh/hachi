@@ -18,6 +18,7 @@ import {
 } from "@/lib/actions/bi";
 import {
   DEFAULT_OVERHEAD_ITEMS,
+  MOCK_OVERHEAD_BUDGET_MAN,
   type BiOverheadItem,
   type BiBudgetChangeLog,
 } from "@/lib/bi-types";
@@ -32,10 +33,12 @@ import {
   type BiDataSourceFilter,
   type BiSourceType,
 } from "@/lib/bi-config";
-import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
+import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS, normalizeBudgetMan } from "@/lib/bi-utils";
 import { toast } from "sonner";
-import { Trash2, Plus, Settings2, ArrowLeft, Info, SlidersHorizontal } from "lucide-react";
+import { Trash2, Plus, Settings2, ArrowLeft, Info, SlidersHorizontal, ShieldCheck, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/components/providers/auth-provider";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 
 // ── 数値入力ヘルパー ──────────────────────────────────────────────────
 function parseAmount(v: string): number {
@@ -51,11 +54,13 @@ function AmountInput({
   onChange,
   placeholder = "0",
   className = "",
+  unit = "man",
 }: {
   value: number;
   onChange: (v: number) => void;
   placeholder?: string;
   className?: string;
+  unit?: "man" | "yen";
 }) {
   const [raw, setRaw] = useState(formatAmount(value));
 
@@ -64,15 +69,14 @@ function AmountInput({
   }, [value]);
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative flex items-center gap-1 ${className}`}>
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">¥</span>
       <Input
-        className="pl-7 text-right tabular-nums"
+        className="pl-7 pr-2 text-right tabular-nums"
         value={raw}
         placeholder={placeholder}
         onChange={(e) => {
           setRaw(e.target.value);
-          // 入力中も親stateへ即反映（保存直前のブラー漏れによる値落ちを防ぐ）
           onChange(parseAmount(e.target.value));
         }}
         onBlur={() => {
@@ -81,6 +85,9 @@ function AmountInput({
           setRaw(formatAmount(v));
         }}
       />
+      {unit === "man" ? (
+        <span className="text-xs text-muted-foreground shrink-0 pr-1">万</span>
+      ) : null}
     </div>
   );
 }
@@ -102,15 +109,23 @@ export function BiSettingsPanel({
   onCancel,
 }: BiSettingsPanelProps) {
   const router = useRouter();
+  const { role } = useAuth();
+  const { canAccess } = useCompanyPermissions();
+  // 予備費の設定可否は権限マトリクス（機能キー: reserve_fee）で制御。既定は本部管理者のみ
+  const canEditReserve = role ? canAccess("reserve_fee", [role]) : false;
   const fiscalYear = fiscalYearProp ?? getCurrentFiscalYear();
 
   // ── 全社設定 ──
   const [targetRevenue, setTargetRevenue] = useState(0);
   const [targetGrossProfit, setTargetGrossProfit] = useState(0);
   const [sgaBudget, setSgaBudget] = useState(0);
+  // ── 予備費（非表示%）: 管理者のみ設定可 ──
+  const [reserveRatePct, setReserveRatePct] = useState(0);
+  // ── 会社指定粗利率（承認の基準ライン%）: 管理者のみ設定可 ──
+  const [baseRatePct, setBaseRatePct] = useState(50);
 
   // ── 予算配賦 ──
-  const [overheadMode, setOverheadMode] = useState<"breakdown" | "lump_sum">("lump_sum");
+  const [overheadMode, setOverheadMode] = useState<"breakdown" | "lump_sum">("breakdown");
   const [overheadLump, setOverheadLump] = useState(0);
   const [overheadItems, setOverheadItems] = useState<
     Array<{ id: string; name: string; amount: number; sort_order: number; is_custom: boolean }>
@@ -150,20 +165,28 @@ export function BiSettingsPanel({
       setCompanyConfig(config);
       setChangeLogs(logs);
       if (settings) {
-        setTargetRevenue(settings.target_revenue);
-        setTargetGrossProfit(settings.target_gross_profit);
-        setSgaBudget(settings.sga_budget);
+        setTargetRevenue(normalizeBudgetMan(settings.target_revenue));
+        setTargetGrossProfit(normalizeBudgetMan(settings.target_gross_profit));
+        setSgaBudget(normalizeBudgetMan(settings.sga_budget));
+        setReserveRatePct(Math.round((settings.reserve_fee_rate ?? 0) * 1000) / 10);
+        setBaseRatePct(Math.round((settings.base_gross_profit_rate ?? 0.5) * 1000) / 10);
         setOverheadMode(settings.overhead_mode);
-        setOverheadLump(settings.overhead_budget);
+        const overheadBudgetMan = normalizeBudgetMan(settings.overhead_budget);
+        setOverheadLump(overheadBudgetMan);
         setLoadedSnapshot({
-          targetRevenue: settings.target_revenue,
-          targetGrossProfit: settings.target_gross_profit,
-          overheadBudget: settings.overhead_budget,
-          sgaBudget: settings.sga_budget,
+          targetRevenue: normalizeBudgetMan(settings.target_revenue),
+          targetGrossProfit: normalizeBudgetMan(settings.target_gross_profit),
+          overheadBudget: overheadBudgetMan,
+          sgaBudget: normalizeBudgetMan(settings.sga_budget),
         });
 
         if (settings.overhead_items.length > 0) {
-          setOverheadItems(settings.overhead_items);
+          setOverheadItems(
+            settings.overhead_items.map((item) => ({
+              ...item,
+              amount: normalizeBudgetMan(item.amount),
+            }))
+          );
         } else {
           setOverheadItems(
             DEFAULT_OVERHEAD_ITEMS.map((item, i) => ({ ...item, id: `new-${i}` }))
@@ -171,9 +194,16 @@ export function BiSettingsPanel({
         }
 
         if (settings.department_targets.length > 0) {
-          setDeptTargets(settings.department_targets);
+          setDeptTargets(
+            settings.department_targets.map((dept) => ({
+              ...dept,
+              target_revenue: normalizeBudgetMan(dept.target_revenue),
+              target_gross_profit: normalizeBudgetMan(dept.target_gross_profit),
+            }))
+          );
         }
       } else {
+        setOverheadLump(MOCK_OVERHEAD_BUDGET_MAN);
         setOverheadItems(
           DEFAULT_OVERHEAD_ITEMS.map((item, i) => ({ ...item, id: `new-${i}` }))
         );
@@ -217,6 +247,8 @@ export function BiSettingsPanel({
           target_gross_profit: d.target_gross_profit,
           sort_order: i,
         })),
+        reserve_fee_rate: reserveRatePct / 100,
+        base_gross_profit_rate: baseRatePct / 100,
         budget_change: budgetFieldsChanged
           ? { effective_from: changeEffectiveFrom, note: changeNote || undefined }
           : undefined,
@@ -242,7 +274,7 @@ export function BiSettingsPanel({
     } finally {
       setSaving(false);
     }
-  }, [fiscalYear, targetRevenue, targetGrossProfit, effectiveOverhead, sgaBudget, overheadMode, overheadItems, deptTargets, companyConfig, budgetFieldsChanged, changeEffectiveFrom, changeNote, onSaved, router]);
+  }, [fiscalYear, targetRevenue, targetGrossProfit, effectiveOverhead, sgaBudget, overheadMode, overheadItems, deptTargets, companyConfig, reserveRatePct, baseRatePct, budgetFieldsChanged, changeEffectiveFrom, changeNote, onSaved, router]);
 
   const updateForecastTier = (id: string, patch: Partial<BiForecastTierConfig>) => {
     setCompanyConfig((prev) => ({
@@ -417,11 +449,11 @@ export function BiSettingsPanel({
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">全社売上目標（年額）</Label>
+            <Label className="text-xs text-muted-foreground">全社売上目標（年額・万円）</Label>
             <AmountInput value={targetRevenue} onChange={setTargetRevenue} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">全社粗利目標（年額）</Label>
+            <Label className="text-xs text-muted-foreground">全社粗利目標（年額・万円）</Label>
             <AmountInput value={targetGrossProfit} onChange={setTargetGrossProfit} />
           </div>
         </CardContent>
@@ -449,19 +481,19 @@ export function BiSettingsPanel({
           {overheadMode === "lump_sum" ? (
             /* ── モードB: 一括入力 ── */
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">予算配賦額（年額）</Label>
+              <Label className="text-xs text-muted-foreground">予算配賦額（年額・万円）</Label>
               <AmountInput value={overheadLump} onChange={setOverheadLump} className="max-w-xs" />
             </div>
           ) : (
             /* ── モードA: 内訳入力 ── */
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_160px_32px] gap-2 px-1 pb-1">
+              <div className="grid grid-cols-[1fr_180px_32px] gap-2 px-1 pb-1">
                 <span className="text-xs text-muted-foreground font-medium">項目</span>
-                <span className="text-xs text-muted-foreground font-medium text-right">金額（年額）</span>
+                <span className="text-xs text-muted-foreground font-medium text-right">金額（年額・万円）</span>
                 <span />
               </div>
               {overheadItems.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr_160px_32px] gap-2 items-center">
+                <div key={item.id} className="grid grid-cols-[1fr_180px_32px] gap-2 items-center">
                   {item.is_custom ? (
                     <Input
                       value={item.name}
@@ -501,9 +533,14 @@ export function BiSettingsPanel({
               <div className="flex justify-between items-center px-1">
                 <span className="text-sm font-semibold">合計</span>
                 <span className="text-base font-bold tabular-nums">
-                  ¥{overheadTotal.toLocaleString()}
+                  ¥{overheadTotal.toLocaleString()}万
                 </span>
               </div>
+              {overheadTotal > 0 && (
+                <p className="text-[11px] text-muted-foreground text-right px-1">
+                  月次按分（÷12）: ¥{Math.round(overheadTotal / 12).toLocaleString()}万/月
+                </p>
+              )}
             </div>
           )}
 
@@ -524,8 +561,71 @@ export function BiSettingsPanel({
         </CardHeader>
         <CardContent>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">販管費予算（年額）</Label>
+            <Label className="text-xs text-muted-foreground">販管費予算（年額・万円）</Label>
             <AmountInput value={sgaBudget} onChange={setSgaBudget} className="max-w-xs" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── 予備費（非表示%）── */}
+      <Card className={canEditReserve ? "border-amber-200/70" : ""}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-amber-600" />
+            予備費（非表示%）
+            {!canEditReserve && (
+              <span className="ml-1 inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
+                <Lock className="h-3 w-3" />設定権限がありません
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">会社指定粗利率（承認の基準ライン%）</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  disabled={!canEditReserve}
+                  className="max-w-[120px] tabular-nums"
+                  value={baseRatePct}
+                  onChange={(e) => setBaseRatePct(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">予備費率（売上に対する%）</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  disabled={!canEditReserve}
+                  className="max-w-[120px] tabular-nums"
+                  value={reserveRatePct}
+                  onChange={(e) => setReserveRatePct(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            承認の基準 ＝ <span className="font-semibold text-amber-700">{(baseRatePct + reserveRatePct).toFixed(1)}%</span>
+            （会社指定{baseRatePct.toFixed(1)}% ＋ 予備費{reserveRatePct.toFixed(1)}%）。見積・実行予算の粗利率がこれを下回ると上長承認が必要です。
+          </div>
+          <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+            <span>
+              通常時はBIダッシュボード上で、この率で計算した予備費を利益から控除した保守的な数字を表示します。
+              見積・実行予算では「会社指定粗利＋予備費」を満たさない場合に上長へ承認申請が必要になります。
+              決算時にBI上で利益へ戻せます。
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -538,8 +638,8 @@ export function BiSettingsPanel({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 pb-1 px-1">
             <span className="text-xs text-muted-foreground font-medium">部門</span>
-            <span className="text-xs text-muted-foreground font-medium">売上目標（年額）</span>
-            <span className="text-xs text-muted-foreground font-medium">粗利目標（年額）</span>
+            <span className="text-xs text-muted-foreground font-medium">売上目標（年額・万円）</span>
+            <span className="text-xs text-muted-foreground font-medium">粗利目標（年額・万円）</span>
           </div>
           {deptTargets.map((dept) => (
             <div key={dept.id} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center">
@@ -610,8 +710,8 @@ export function BiSettingsPanel({
                     <tr key={log.id} className="border-b last:border-0">
                       <td className="px-5 py-2.5 tabular-nums">{log.effective_from}</td>
                       <td className="px-4 py-2.5">{fieldLabel[log.field_name]}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">¥{Number(log.old_value).toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums font-medium">¥{Number(log.new_value).toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">¥{Number(log.old_value).toLocaleString()}万</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-medium">¥{Number(log.new_value).toLocaleString()}万</td>
                       <td className="px-5 py-2.5 text-xs text-muted-foreground">{log.note || "—"}</td>
                     </tr>
                   ))}

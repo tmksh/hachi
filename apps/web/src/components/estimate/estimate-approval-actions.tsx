@@ -21,6 +21,8 @@ import {
 import { getProfiles } from "@/lib/actions/profiles";
 import { updateEstimate } from "@/lib/actions/estimates";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { useAuth } from "@/components/providers/auth-provider";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 
 type Props = {
   estimateId: string;
@@ -38,6 +40,10 @@ export function EstimateApprovalActions({
   estimateStatus,
   onConfirmed,
 }: Props) {
+  const { role } = useAuth();
+  const { canAccess } = useCompanyPermissions();
+  // 予備費の内訳は「予備費設定」権限を持つ人だけに見せる（隠しバッファを社員に開示しない）
+  const canSeeReserve = role ? canAccess("reserve_fee", [role]) : false;
   const [marginInfo, setMarginInfo] = useState<Awaited<ReturnType<typeof getEstimateMarginThreshold>>>(null);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -154,6 +160,11 @@ export function EstimateApprovalActions({
         )}
         <span className="text-[10px] text-muted-foreground">
           粗利 {grossProfitRate.toFixed(1)}% / 基準 {threshold.toFixed(0)}%
+          {canSeeReserve && marginInfo && (marginInfo.reservePercent ?? 0) > 0 && (
+            <span className="text-amber-600">
+              （会社指定{marginInfo.baseThreshold?.toFixed(0)}%+予備費{marginInfo.reservePercent?.toFixed(0)}%）
+            </span>
+          )}
         </span>
       </div>
 

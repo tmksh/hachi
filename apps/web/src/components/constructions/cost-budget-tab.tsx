@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { BudgetApprovalActions } from "@/components/constructions/budget-approval-actions";
 
 /* ─────────────────── types ─────────────────── */
 type ContractorRow = {
@@ -901,6 +902,13 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           </span>
         </div>
       </div>
+
+      {/* 粗利承認: 会社指定粗利＋予備費に未達なら上長承認 */}
+      {contractAmount > 0 && (
+        <div className="flex items-center justify-end rounded-md border border-amber-100 bg-amber-50/40 px-3 py-2">
+          <BudgetApprovalActions constructionId={constructionId} grossProfitRate={grBudget} />
+        </div>
+      )}
 
       {/* 見積もり再参照時の確認（既存データ削除） */}
       <AlertDialog open={!!confirmReplaceRows} onOpenChange={(o) => { if (!o) setConfirmReplaceRows(null); }}>

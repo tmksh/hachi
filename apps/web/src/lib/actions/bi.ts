@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS, buildFiscalMonthLabels } from "@/lib/bi-utils";
+import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS, buildFiscalMonthLabels, normalizeBudgetMan } from "@/lib/bi-utils";
 import { getCompanyFiscalMonthStart } from "@/lib/actions/profiles";
 import type {
   BiAnnualSettings,
@@ -63,6 +63,27 @@ async function getCompanyId() {
   return { supabase, companyId: profile?.company_id ?? null };
 }
 
+/**
+ * 予備費の設定・決算戻しを操作できるロールか判定する。
+ * 会社設定(companies.settings.role_permissions.reserve_fee)の許可ロール配列で制御し、
+ * 未設定の場合は本部管理者(hq_admin)のみを既定とする。
+ */
+async function roleCanManageReserve(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  role: string | null | undefined,
+): Promise<boolean> {
+  if (!role) return false;
+  const { data: company } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", companyId)
+    .maybeSingle();
+  const perms = (company?.settings as { role_permissions?: Record<string, string[]> } | null)?.role_permissions;
+  const allowed = perms?.reserve_fee ?? ["hq_admin"];
+  return allowed.includes(role);
+}
+
 // ── 会社別 BI 分析設定 ────────────────────────────────────────────────
 export async function getBiCompanyConfig(): Promise<BiCompanyConfig> {
   const { supabase, companyId } = await getCompanyId();
@@ -116,8 +137,27 @@ export async function getBiSettings(fiscalYear?: number): Promise<BiAnnualSettin
 
   return {
     ...data,
-    overhead_items: (data.overhead_items ?? []).sort((a: BiOverheadItem, b: BiOverheadItem) => a.sort_order - b.sort_order),
-    department_targets: (data.department_targets ?? []).sort((a: BiDepartmentTarget, b: BiDepartmentTarget) => a.sort_order - b.sort_order),
+    target_revenue: normalizeBudgetMan(Number(data.target_revenue)),
+    target_gross_profit: normalizeBudgetMan(Number(data.target_gross_profit)),
+    overhead_budget: normalizeBudgetMan(Number(data.overhead_budget)),
+    sga_budget: normalizeBudgetMan(Number(data.sga_budget)),
+    reserve_fee_rate: Number(data.reserve_fee_rate ?? 0),
+    reserve_released: Boolean(data.reserve_released ?? false),
+    reserve_released_at: data.reserve_released_at ?? null,
+    base_gross_profit_rate: Number(data.base_gross_profit_rate ?? 0.5),
+    overhead_items: (data.overhead_items ?? [])
+      .map((item: BiOverheadItem) => ({
+        ...item,
+        amount: normalizeBudgetMan(Number(item.amount)),
+      }))
+      .sort((a: BiOverheadItem, b: BiOverheadItem) => a.sort_order - b.sort_order),
+    department_targets: (data.department_targets ?? [])
+      .map((dept: BiDepartmentTarget) => ({
+        ...dept,
+        target_revenue: normalizeBudgetMan(Number(dept.target_revenue)),
+        target_gross_profit: normalizeBudgetMan(Number(dept.target_gross_profit)),
+      }))
+      .sort((a: BiDepartmentTarget, b: BiDepartmentTarget) => a.sort_order - b.sort_order),
   } as BiAnnualSettings;
 }
 
@@ -159,6 +199,10 @@ export async function saveBiSettings(input: {
   overhead_mode: "breakdown" | "lump_sum";
   overhead_items: Array<{ name: string; amount: number; sort_order: number; is_custom: boolean }>;
   department_targets: Array<{ department_name: string; target_revenue: number; target_gross_profit: number; sort_order: number }>;
+  /** 予備費率（0〜1）。管理者(hq_admin)のみ変更が反映される */
+  reserve_fee_rate?: number;
+  /** 会社指定粗利率（0〜1）。管理者のみ変更が反映される */
+  base_gross_profit_rate?: number;
   budget_change?: {
     effective_from?: string;
     note?: string;
@@ -170,30 +214,50 @@ export async function saveBiSettings(input: {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, role")
     .eq("id", user.id)
     .single();
   if (!profile) return { ok: false, error: "プロフィールが見つかりません" };
 
   const { company_id } = profile;
+  const isAdmin = await roleCanManageReserve(supabase, company_id, profile.role);
+
+  const budget = {
+    target_revenue: normalizeBudgetMan(input.target_revenue),
+    target_gross_profit: normalizeBudgetMan(input.target_gross_profit),
+    overhead_budget: normalizeBudgetMan(input.overhead_budget),
+    sga_budget: normalizeBudgetMan(input.sga_budget),
+  };
 
   const { data: existing } = await supabase
     .from("bi_annual_settings")
-    .select("id, target_revenue, target_gross_profit, overhead_budget, sga_budget")
+    .select("id, target_revenue, target_gross_profit, overhead_budget, sga_budget, reserve_fee_rate, base_gross_profit_rate")
     .eq("company_id", company_id)
     .eq("fiscal_year", input.fiscal_year)
     .maybeSingle();
+
+  // 予備費率・会社指定粗利率は管理者のみ変更可。非管理者の保存では既存値を保持する
+  const existingReserve = Number(existing?.reserve_fee_rate ?? 0);
+  const reserveRate = isAdmin && input.reserve_fee_rate != null
+    ? Math.min(1, Math.max(0, input.reserve_fee_rate))
+    : existingReserve;
+  const existingBase = Number(existing?.base_gross_profit_rate ?? 0.5);
+  const baseRate = isAdmin && input.base_gross_profit_rate != null
+    ? Math.min(1, Math.max(0, input.base_gross_profit_rate))
+    : existingBase;
 
   const { data: setting, error: settingErr } = await supabase
     .from("bi_annual_settings")
     .upsert({
       company_id,
       fiscal_year: input.fiscal_year,
-      target_revenue: input.target_revenue,
-      target_gross_profit: input.target_gross_profit,
-      overhead_budget: input.overhead_budget,
-      sga_budget: input.sga_budget,
+      target_revenue: budget.target_revenue,
+      target_gross_profit: budget.target_gross_profit,
+      overhead_budget: budget.overhead_budget,
+      sga_budget: budget.sga_budget,
       overhead_mode: input.overhead_mode,
+      reserve_fee_rate: reserveRate,
+      base_gross_profit_rate: baseRate,
       updated_at: new Date().toISOString(),
     }, { onConflict: "company_id,fiscal_year" })
     .select()
@@ -204,10 +268,10 @@ export async function saveBiSettings(input: {
   const effectiveFrom = input.budget_change?.effective_from || new Date().toISOString().slice(0, 10);
   const changeNote = input.budget_change?.note?.trim() || null;
   const nextValues = {
-    overhead_budget: input.overhead_budget,
-    sga_budget: input.sga_budget,
-    target_revenue: input.target_revenue,
-    target_gross_profit: input.target_gross_profit,
+    overhead_budget: budget.overhead_budget,
+    sga_budget: budget.sga_budget,
+    target_revenue: budget.target_revenue,
+    target_gross_profit: budget.target_gross_profit,
   };
 
   const changeRows: Array<{
@@ -223,7 +287,7 @@ export async function saveBiSettings(input: {
   }> = [];
 
   for (const field of BUDGET_TRACKED_FIELDS) {
-    const oldValue = Number(existing?.[field] ?? 0);
+    const oldValue = normalizeBudgetMan(Number(existing?.[field] ?? 0));
     const newValue = Number(nextValues[field]);
     if (existing && oldValue !== newValue) {
       changeRows.push({
@@ -254,7 +318,7 @@ export async function saveBiSettings(input: {
         company_id,
         setting_id: setting.id,
         name: item.name,
-        amount: item.amount,
+        amount: normalizeBudgetMan(item.amount),
         sort_order: item.sort_order,
         is_custom: item.is_custom,
       }))
@@ -268,14 +332,48 @@ export async function saveBiSettings(input: {
         company_id,
         setting_id: setting.id,
         department_name: dept.department_name,
-        target_revenue: dept.target_revenue,
-        target_gross_profit: dept.target_gross_profit,
+        target_revenue: normalizeBudgetMan(dept.target_revenue),
+        target_gross_profit: normalizeBudgetMan(dept.target_gross_profit),
         sort_order: dept.sort_order,
       }))
     );
     if (deptErr) return { ok: false, error: deptErr.message };
   }
 
+  return { ok: true };
+}
+
+// ── 決算：予備費を利益に戻す／取り消す（管理者のみ） ──────────────────
+export async function releaseReserve(
+  fiscalYear: number,
+  release: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "認証が必要です" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .single();
+  if (!profile) return { ok: false, error: "プロフィールが見つかりません" };
+  if (!(await roleCanManageReserve(supabase, profile.company_id, profile.role))) {
+    return { ok: false, error: "予備費の決算戻しを操作する権限がありません" };
+  }
+
+  const { error } = await supabase
+    .from("bi_annual_settings")
+    .update({
+      reserve_released: release,
+      reserve_released_at: release ? new Date().toISOString() : null,
+      reserve_released_by: release ? user.id : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("company_id", profile.company_id)
+    .eq("fiscal_year", fiscalYear);
+
+  if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 
@@ -545,15 +643,19 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
 
   const budgetChanges: BiBudgetChangeEntry[] = (changeLogs ?? []).map((c) => ({
     field_name: c.field_name as BiBudgetChangeEntry["field_name"],
-    old_value: Number(c.old_value),
-    new_value: Number(c.new_value),
+    old_value: normalizeBudgetMan(Number(c.old_value)),
+    new_value: normalizeBudgetMan(Number(c.new_value)),
     effective_from: c.effective_from,
   }));
 
-  const baselineOverhead = budgetChanges.find((c) => c.field_name === "overhead_budget")?.old_value
-    ?? Number(settings?.overhead_budget ?? 0);
-  const baselineSga = budgetChanges.find((c) => c.field_name === "sga_budget")?.old_value
-    ?? Number(settings?.sga_budget ?? 0);
+  const baselineOverhead = normalizeBudgetMan(
+    budgetChanges.find((c) => c.field_name === "overhead_budget")?.old_value
+      ?? Number(settings?.overhead_budget ?? 0)
+  );
+  const baselineSga = normalizeBudgetMan(
+    budgetChanges.find((c) => c.field_name === "sga_budget")?.old_value
+      ?? Number(settings?.sga_budget ?? 0)
+  );
   let monthlyOverheadAllocations = buildMonthlyOverheadAllocations(year, baselineOverhead, budgetChanges, fiscalMonthStart);
   const monthlySgaAllocations = buildMonthlyBudgetAllocations(year, "sga_budget", baselineSga, budgetChanges, fiscalMonthStart);
 
@@ -660,7 +762,7 @@ export async function getBiDepartmentNames(fiscalYear?: number): Promise<string[
   return [...DEFAULT_DEPARTMENTS];
 }
 
-// ── 見込度（A/B/C）別の見込み売上 ────────────────────────────────────
+// ── 見込度（A/B/C）別の見込み売上 ＋ 特需 ────────────────────────────
 export type BiProspectGradeSummary = {
   grade: "A" | "B" | "C";
   /** 会社設定の確度%（0〜100） */
@@ -672,11 +774,22 @@ export type BiProspectGradeSummary = {
   weightedRevenue: number;
 };
 
+export type BiSpecialProspectSummary = {
+  customerCount: number;
+  baseRevenue: number;
+  weightedRevenue: number;
+};
+
 export type BiProspectSummary = {
   rows: BiProspectGradeSummary[];
+  /** 特需（大型案件）— 独自確度%を使用。BI上で含め/除外を切替 */
+  special: BiSpecialProspectSummary;
   totalBase: number;
   totalWeighted: number;
+  totalBaseWithSpecial: number;
+  totalWeightedWithSpecial: number;
   hasData: boolean;
+  hasSpecial: boolean;
 };
 
 export async function getBiProspectSummary(): Promise<BiProspectSummary> {
@@ -684,22 +797,27 @@ export async function getBiProspectSummary(): Promise<BiProspectSummary> {
   const config = await getBiCompanyConfig();
   const rates = config.prospect_grade_rates;
 
+  const emptySpecial: BiSpecialProspectSummary = { customerCount: 0, baseRevenue: 0, weightedRevenue: 0 };
   const empty: BiProspectSummary = {
     rows: (["A", "B", "C"] as const).map((grade) => ({
       grade, rate: rates[grade], customerCount: 0, baseRevenue: 0, weightedRevenue: 0,
     })),
+    special: emptySpecial,
     totalBase: 0,
     totalWeighted: 0,
+    totalBaseWithSpecial: 0,
+    totalWeightedWithSpecial: 0,
     hasData: false,
+    hasSpecial: false,
   };
   if (!companyId) return empty;
 
   const { data: customers } = await supabase
     .from("customers")
-    .select("id, prospect_grade, budget_max")
+    .select("id, prospect_grade, budget_max, is_special_demand, special_probability")
     .eq("company_id", companyId)
-    .in("prospect_grade", ["A", "B", "C"])
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .or("prospect_grade.in.(A,B,C),is_special_demand.eq.true");
 
   if (!customers?.length) return empty;
 
@@ -716,12 +834,24 @@ export async function getBiProspectSummary(): Promise<BiProspectSummary> {
   }
 
   const byGrade = new Map<"A" | "B" | "C", { count: number; base: number }>();
+  let specialCount = 0;
+  let specialBase = 0;
+  let specialWeighted = 0;
+
   for (const c of customers) {
-    const grade = c.prospect_grade as "A" | "B" | "C";
-    const base = dealSumByCustomer.get(c.id) ?? Number(c.budget_max ?? 0);
+    const baseYen = dealSumByCustomer.get(c.id) ?? Number(c.budget_max ?? 0);
+    if (c.is_special_demand) {
+      const rate = Math.min(100, Math.max(0, Number(c.special_probability ?? 0)));
+      specialCount += 1;
+      specialBase += baseYen;
+      specialWeighted += baseYen * rate / 100;
+      continue;
+    }
+    if (c.prospect_grade !== "A" && c.prospect_grade !== "B" && c.prospect_grade !== "C") continue;
+    const grade = c.prospect_grade;
     const entry = byGrade.get(grade) ?? { count: 0, base: 0 };
     entry.count += 1;
-    entry.base += base;
+    entry.base += baseYen;
     byGrade.set(grade, entry);
   }
 
@@ -737,10 +867,22 @@ export async function getBiProspectSummary(): Promise<BiProspectSummary> {
     };
   });
 
+  const special: BiSpecialProspectSummary = {
+    customerCount: specialCount,
+    baseRevenue: toManYen(specialBase),
+    weightedRevenue: toManYen(specialWeighted),
+  };
+  const totalBase = rows.reduce((s, r) => s + r.baseRevenue, 0);
+  const totalWeighted = rows.reduce((s, r) => s + r.weightedRevenue, 0);
+
   return {
     rows,
-    totalBase: rows.reduce((s, r) => s + r.baseRevenue, 0),
-    totalWeighted: rows.reduce((s, r) => s + r.weightedRevenue, 0),
-    hasData: rows.some((r) => r.customerCount > 0),
+    special,
+    totalBase,
+    totalWeighted,
+    totalBaseWithSpecial: totalBase + special.baseRevenue,
+    totalWeightedWithSpecial: totalWeighted + special.weightedRevenue,
+    hasData: rows.some((r) => r.customerCount > 0) || special.customerCount > 0,
+    hasSpecial: special.customerCount > 0,
   };
 }

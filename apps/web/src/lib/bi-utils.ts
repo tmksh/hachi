@@ -60,3 +60,55 @@ export function listFiscalYears(count = 5, startMonth = DEFAULT_FISCAL_MONTH_STA
 
 /** @deprecated 固定値の代わりに getForecastStartIndex() を使う */
 export const BI_FORECAST_START_INDEX = 6;
+
+/** 期首設定の金額（円入力）を万円に正規化 */
+export function normalizeBudgetMan(value: number): number {
+  if (value >= 100_000) return Math.round(value / 10_000);
+  return value;
+}
+
+export type MonthlyComboPoint = {
+  month: string;
+  粗利額: number;
+  月次予定配賦: number;
+  累計: number;
+};
+
+/** 建設業の季節性を反映した月次粗利の相対ウェイト（4月始まり12ヶ月） */
+const MOCK_GP_WEIGHTS = [0.82, 0.96, 1.14, 1.32, 1.09, 0.91, 0.78, 0.75, 1.05, 1.28, 1.19, 0.87];
+
+/** 月別推移グラフ用のリアルなモックデータ（万円） */
+export function buildRealisticMonthlyComboData(
+  months: Array<{ month: string }>,
+  totalGrossProfitMan: number,
+  overheadMan: number,
+): MonthlyComboPoint[] {
+  const weightSum = MOCK_GP_WEIGHTS.reduce((s, w) => s + w, 0);
+  const gpScale = totalGrossProfitMan > 0 ? totalGrossProfitMan / weightSum : 220;
+  const monthlyOverhead = overheadMan > 0 ? Math.round(overheadMan / 12) : 150;
+  let cum = 0;
+  return months.map((m, i) => {
+    const grossProfit = Math.round(MOCK_GP_WEIGHTS[i] * gpScale);
+    const alloc = monthlyOverhead;
+    cum += grossProfit - alloc;
+    return {
+      month: m.month,
+      粗利額: grossProfit,
+      月次予定配賦: -alloc,
+      累計: cum,
+    };
+  });
+}
+
+/** 実績月が少ない・スケール異常時はモック表示に切り替える */
+export function shouldUseMonthlyTrendMock(
+  monthly: Array<{ grossProfit: number }>,
+  comboData: MonthlyComboPoint[],
+): boolean {
+  const activeMonths = monthly.filter((m) => m.grossProfit > 0).length;
+  if (activeMonths < 6) return true;
+  const maxAbs = comboData
+    .flatMap((r) => [r.粗利額, r.月次予定配賦, r.累計])
+    .reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  return maxAbs > 5_000;
+}

@@ -51,6 +51,10 @@ export type Customer = {
   line_user_id: string | null;
   slack_channel_id: string | null;
   prospect_grade: 'A' | 'B' | 'C' | null;
+  /** 特需（大型案件）。trueの場合はA/B/C一律確度ではなく special_probability を使用 */
+  is_special_demand: boolean;
+  /** 特需案件の独自確度%（0〜100） */
+  special_probability: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
