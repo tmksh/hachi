@@ -187,7 +187,13 @@ async function inviteTeamMemberInner(input: {
     .eq("id", companyId)
     .single();
 
-  const inviteUrl = linkData.properties.action_link;
+  const hashedToken = linkData.properties.hashed_token;
+  if (!hashedToken) {
+    return { ok: false, error: "招待トークンの生成に失敗しました。もう一度お試しください。" };
+  }
+  // action_link（Supabase verify経由）だと redirect 後に token_hash が付かず
+  // /api/auth/accept-invite が無効扱いになるため、hashed_token で直接組み立てる
+  const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
   const companyName = company?.name ?? "業務管理システム";
   const inviterName = actorProfile?.display_name ?? "管理者";
 
@@ -359,6 +365,10 @@ export async function resendTeamInvite(userId: string): Promise<void> {
   const inviterName = actorProfile?.display_name ?? "管理者";
   const inviteeName = (target.display_name as string | null) ?? target.email;
 
+  const hashedToken = linkData.properties.hashed_token;
+  if (!hashedToken) throw new Error("招待トークンの生成に失敗しました");
+  const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
+
   const { error: mailError } = await getResend().emails.send({
     from: INVITE_FROM_EMAIL,
     to: target.email,
@@ -367,7 +377,7 @@ export async function resendTeamInvite(userId: string): Promise<void> {
       inviteeName,
       inviterName,
       companyName,
-      inviteUrl: linkData.properties.action_link,
+      inviteUrl,
       appUrl,
     }),
   });

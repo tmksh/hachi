@@ -5,12 +5,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /**
  * 招待メールのリンク先ハンドラー。
  *
- * Supabase が送る招待メールには ?token_hash=xxx&type=invite が付く。
+ * 招待メールには ?token_hash=xxx&type=invite を付与する。
  * ここで:
  *   1. OTP を検証してセッションを確立（Cookie に保存）
  *   2. user_metadata から company_id / role / display_name を取得
  *   3. profiles をまだ持っていなければ作成
- *   4. /onboarding へリダイレクト（Google 連携を促す）
+ *   4. /update-password?from=invite へリダイレクト（パスワード設定）
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -30,6 +30,7 @@ export async function GET(request: Request) {
   });
 
   if (error || !data.user) {
+    console.error("[accept-invite] verifyOtp failed", error?.message);
     return NextResponse.redirect(`${origin}/login?error=invite_expired`);
   }
 
