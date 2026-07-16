@@ -15,6 +15,7 @@ import {
   getBiCompanyConfig,
   saveBiCompanyConfig,
   getBiBudgetChangeLog,
+  releaseReserve,
 } from "@/lib/actions/bi";
 import {
   DEFAULT_OVERHEAD_ITEMS,
@@ -123,6 +124,9 @@ export function BiSettingsPanel({
   const [reserveRatePct, setReserveRatePct] = useState(0);
   // ── 会社指定粗利率（承認の基準ライン%）: 管理者のみ設定可 ──
   const [baseRatePct, setBaseRatePct] = useState(50);
+  // ── 予備費の決算戻し状態 ──
+  const [reserveReleased, setReserveReleased] = useState(false);
+  const [releasingReserve, setReleasingReserve] = useState(false);
 
   // ── 予算配賦 ──
   const [overheadMode, setOverheadMode] = useState<"breakdown" | "lump_sum">("breakdown");
@@ -170,6 +174,7 @@ export function BiSettingsPanel({
         setSgaBudget(normalizeBudgetMan(settings.sga_budget));
         setReserveRatePct(Math.round((settings.reserve_fee_rate ?? 0) * 1000) / 10);
         setBaseRatePct(Math.round((settings.base_gross_profit_rate ?? 0.5) * 1000) / 10);
+        setReserveReleased(settings.reserve_released ?? false);
         setOverheadMode(settings.overhead_mode);
         const overheadBudgetMan = normalizeBudgetMan(settings.overhead_budget);
         setOverheadLump(overheadBudgetMan);
@@ -275,6 +280,21 @@ export function BiSettingsPanel({
       setSaving(false);
     }
   }, [fiscalYear, targetRevenue, targetGrossProfit, effectiveOverhead, sgaBudget, overheadMode, overheadItems, deptTargets, companyConfig, reserveRatePct, baseRatePct, budgetFieldsChanged, changeEffectiveFrom, changeNote, onSaved, router]);
+
+  const handleToggleReserveRelease = useCallback(async (release: boolean) => {
+    setReleasingReserve(true);
+    try {
+      const res = await releaseReserve(fiscalYear, release);
+      if (!res.ok) {
+        toast.error(res.error ?? "予備費の決算戻しに失敗しました");
+        return;
+      }
+      setReserveReleased(release);
+      toast.success(release ? "予備費を利益に戻しました（決算）" : "予備費の決算戻しを取り消しました");
+    } finally {
+      setReleasingReserve(false);
+    }
+  }, [fiscalYear]);
 
   const updateForecastTier = (id: string, patch: Partial<BiForecastTierConfig>) => {
     setCompanyConfig((prev) => ({
@@ -627,6 +647,29 @@ export function BiSettingsPanel({
               決算時にBI上で利益へ戻せます。
             </span>
           </div>
+          {canEditReserve && reserveRatePct > 0 && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5">
+              <div className="text-xs">
+                <p className="font-medium">
+                  決算処理：予備費を利益に戻す
+                </p>
+                <p className="text-muted-foreground mt-0.5">
+                  {reserveReleased
+                    ? "現在は「戻し済み」。BIは予備費を含む実値を表示しています。"
+                    : "現在は「控除中」。決算でここから利益へ戻せます。"}
+                </p>
+              </div>
+              <Button
+                variant={reserveReleased ? "outline" : "default"}
+                size="sm"
+                className={reserveReleased ? "shrink-0" : "shrink-0 bg-amber-600 hover:bg-amber-700"}
+                disabled={releasingReserve}
+                onClick={() => void handleToggleReserveRelease(!reserveReleased)}
+              >
+                {releasingReserve ? "処理中..." : reserveReleased ? "決算戻しを取消" : "決算：予備費を利益に戻す"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
