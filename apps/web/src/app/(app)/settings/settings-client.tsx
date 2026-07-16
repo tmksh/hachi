@@ -72,8 +72,6 @@ import {
   RefreshCw,
   Trash2,
   Send,
-  Eye,
-  EyeOff,
   Mail,
   User,
   Bell,
@@ -276,8 +274,6 @@ export function SettingsClient({
   const [addSaving, setAddSaving] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [invitePassword, setInvitePassword] = useState("");
-  const [showInvitePassword, setShowInvitePassword] = useState(false);
   const [newRole, setNewRole] = useState<TeamRole>("employee");
   const [inviteSent, setInviteSent] = useState(false);
   const [inviteLinkFallback, setInviteLinkFallback] = useState<string | null>(null);
@@ -496,8 +492,6 @@ export function SettingsClient({
   const openAddDialog = () => {
     setNewName("");
     setNewEmail("");
-    setInvitePassword("");
-    setShowInvitePassword(false);
     setNewRole("employee");
     setInviteSent(false);
     setInviteLinkFallback(null);
@@ -515,7 +509,6 @@ export function SettingsClient({
         email: newEmail.trim(),
         displayName: newName.trim(),
         role: newRole,
-        password: invitePassword.trim() || undefined,
       });
       if (!result.ok) {
         toast.error("メンバー追加に失敗しました", { description: result.error });
@@ -523,9 +516,7 @@ export function SettingsClient({
       }
       setInviteSent(true);
       setInviteLinkFallback(result.inviteUrl && !result.emailSent ? result.inviteUrl : null);
-      if (invitePassword.trim()) {
-        toast.success("アカウントを作成しました");
-      } else if (result.emailSent) {
+      if (result.emailSent) {
         toast.success("招待メールを送信しました");
       } else {
         toast.warning("招待を作成しました（メール未送信）", { description: result.error });
@@ -1374,14 +1365,14 @@ export function SettingsClient({
             <DialogHeader>
               <DialogTitle>メンバーを招待</DialogTitle>
               <DialogDescription>
-                {invitePassword.trim() ? "仮パスワードを設定するとメールなしで即時アカウント作成します。" : "招待メールを送信します。"}
+                招待メールを送信します。受信者がリンクからパスワードを設定して参加します。
               </DialogDescription>
             </DialogHeader>
             {inviteSent ? (
               <div className="space-y-4">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 space-y-1">
                   <div className="flex items-center gap-2 font-semibold"><Send className="h-4 w-4" />{inviteLinkFallback ? "招待を作成しました" : "招待メールを送信しました"}</div>
-                  <p className="text-xs">{invitePassword ? <>アカウントを作成しました。メールアドレス（<span className="font-medium">{newEmail}</span>）と設定したパスワードをメンバーに共有してください。</> : inviteLinkFallback ? <>メールは送信されていません。下記の招待リンクを <span className="font-medium">{newEmail}</span> へ直接共有してください。</> : <><span className="font-medium">{newEmail}</span> に招待リンクを送信しました。</>}</p>
+                  <p className="text-xs">{inviteLinkFallback ? <>メールは送信されていません。下記の招待リンクを <span className="font-medium">{newEmail}</span> へ直接共有してください。</> : <><span className="font-medium">{newEmail}</span> に招待リンクを送信しました。受信者がリンクからパスワードを設定します。</>}</p>
                 </div>
                 {inviteLinkFallback && (
                   <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1.5">
@@ -1414,17 +1405,7 @@ export function SettingsClient({
                   <div className="space-y-1.5">
                     <Label className="text-xs">メールアドレス *</Label>
                     <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="taro@example.com" />
-                    <p className="text-[11px] text-muted-foreground">このアドレス宛に招待リンクを送信します。</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">仮パスワード<span className="ml-1.5 text-muted-foreground font-normal">（任意）</span></Label>
-                    <div className="relative">
-                      <Input type={showInvitePassword ? "text" : "password"} value={invitePassword} onChange={(e) => setInvitePassword(e.target.value)} placeholder="設定する場合は6文字以上" className="pr-10" />
-                      <button type="button" onClick={() => setShowInvitePassword(!showInvitePassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                        {showInvitePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {invitePassword.trim() ? <p className="text-[11px] text-amber-600 font-medium">⚠ 招待メールは送信されません。パスワードを本人に直接お伝えください。</p> : <p className="text-[11px] text-muted-foreground">空欄のままにすると招待リンクをメール送信します。</p>}
+                    <p className="text-[11px] text-muted-foreground">このアドレス宛に招待リンクを送信します。受信者がパスワードを設定します。</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">ロール *</Label>
