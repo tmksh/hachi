@@ -82,6 +82,7 @@ export async function getDocuments(filters?: { category?: string; customer_id?: 
   if (filters?.construction_id) {
     query = query.eq("construction_id", filters.construction_id);
   }
+  query = query.limit(500);
 
   const { data, error } = await query;
   if (error) throw error;

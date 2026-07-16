@@ -57,12 +57,28 @@ export async function getCompany() {
   return data as Company;
 }
 
+/** 会社の settings のみを取得する軽量版（権限・会計設定の参照用） */
+export async function getCompanySettings(): Promise<Record<string, unknown> | null> {
+  const supabase = await createClient();
+  const user = await getAuthUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return null;
+
+  const { data } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", profile.company_id)
+    .maybeSingle();
+  return (data?.settings as Record<string, unknown> | null) ?? null;
+}
+
 /**
  * 会社の会計年度始まり月を settings から読み取る（1〜12, デフォルト 4=4月）
  */
 export async function getCompanyFiscalMonthStart(): Promise<number> {
-  const company = await getCompany();
-  const s = company.settings as Record<string, unknown> | null;
+  const s = await getCompanySettings();
   const v = s?.fiscal_month_start;
   if (typeof v === "number" && v >= 1 && v <= 12) return v;
   return 4;

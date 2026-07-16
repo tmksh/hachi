@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,7 +82,16 @@ export function DocumentsClient({
     getDocuments({ category: tab === "all" ? undefined : tab }).then(setDocs).catch(() => {}).finally(() => setLoading(false));
   };
 
-  useEffect(load, [tab]);
+  // 初回マウント時は SSR の初期データをそのまま使い、再取得しない
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      if (tab === "all") return;
+    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   // カテゴリラベルをkeyから引く
   const catLabel = (key: string) => categories.find(c => c.key === key)?.label ?? key;

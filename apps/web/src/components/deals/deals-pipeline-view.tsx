@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,10 +123,33 @@ type DealsPipelineViewProps = {
 
 export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: DealsPipelineViewProps = {}) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // React Query でキャッシュし、再訪時は即表示（staleTime 内は再取得なし）
+  const { data: dealsData, isPending: dealsPending } = useQuery({
+    queryKey: ["deals", "pipeline"],
+    queryFn: () => getDeals(),
+  });
+  const { data: profilesData } = useQuery({
+    queryKey: ["profiles"],
+    queryFn: () => getProfiles(),
+    staleTime: 5 * 60_000,
+  });
+  const { data: stagesData } = useQuery({
+    queryKey: ["deal-stages"],
+    queryFn: () => getDealStages(),
+    staleTime: 5 * 60_000,
+  });
+
+  // 楽観更新（D&D・削除）はローカル state を正とし、再取得時にサーバー値へ同期
   const [deals, setDeals]               = useState<DealRow[]>([]);
-  const [profiles, setProfiles]         = useState<Profile[]>([]);
-  const [stages, setStages]             = useState<StageRow[]>([]);
-  const [loading, setLoading]           = useState(true);
+  const profiles = (profilesData ?? []) as Profile[];
+  const stages   = (stagesData ?? []) as StageRow[];
+  const loading  = dealsPending && deals.length === 0;
+  useEffect(() => {
+    if (dealsData) setDeals(dealsData as DealRow[]);
+  }, [dealsData]);
+
   const [draggedDeal, setDraggedDeal]   = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [addOpenInternal, setAddOpenInternal] = useState(false);
@@ -143,14 +167,8 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
   const setAddOpen = onAddOpenChange ?? setAddOpenInternal;
 
   const fetchDeals = useCallback(async () => {
-    try { const d = await getDeals(); setDeals(d as DealRow[]); } catch {} finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    fetchDeals();
-    getProfiles().then(setProfiles).catch(() => {});
-    getDealStages().then(data => setStages(data as StageRow[])).catch(() => {});
-  }, [fetchDeals]);
+    await queryClient.invalidateQueries({ queryKey: ["deals", "pipeline"] });
+  }, [queryClient]);
 
   const wonStageKeys  = stages.filter(s => s.is_won).map(s => s.key);
   const lostStageKeys = stages.filter(s => s.is_lost).map(s => s.key);
@@ -204,6 +222,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
     try {
       await deleteDeal(deleteTarget.id);
       setDeals(prev => prev.filter(d => d.id !== deleteTarget.id));
+      void fetchDeals();
     } catch { /* ignore */ } finally {
       setDeleting(false);
       setDeleteTarget(null);

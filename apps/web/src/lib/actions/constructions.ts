@@ -44,6 +44,12 @@ function throwIfSupabaseError(error: { message: string } | null): void {
 }
 
 async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string) {
+  // DB側カウンター（原子的・同時採番でも重複しない）。migration 未適用環境では従来ロジックへフォールバック
+  const { data: seq, error: rpcError } = await supabase.rpc("next_document_number", { p_kind: "estimate" });
+  if (!rpcError && typeof seq === "number" && seq > 0) {
+    return `EST-${String(seq).padStart(4, "0")}`;
+  }
+
   const { data, error } = await supabase
     .from("estimates")
     .select("estimate_no")
@@ -61,7 +67,8 @@ export async function getConstructions() {
   const { data, error } = await supabase
     .from("constructions")
     .select("*, customer:customers(id, name, company_name), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) throw error;
   return data;
 }
@@ -75,7 +82,8 @@ export async function getAllConstructionEstimates() {
       "id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at, updated_at, notes, construction_id, customer:customers(id, name), construction:constructions(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
     )
     .not("construction_id", "is", null)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(500);
   if (error) throw error;
 
   type Rel<T> = T | T[] | null | undefined;
@@ -102,24 +110,42 @@ export async function getAllConstructionEstimates() {
 
 export async function getConstruction(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("constructions")
-    .select("*, customer:customers(id, name, company_name, address), contract:contracts(id, contract_no, title, amount, contract_date, start_date, end_date, notes, status, estimate_id), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
-    .eq("id", id)
-    .single();
+
+  // 本体・タスク・発注・見積一覧・請求は互いに独立しているため並列取得する
+  const [
+    { data, error },
+    { data: tasks },
+    { data: orders },
+    { data: linkedEstimates },
+    { data: invoices },
+  ] = await Promise.all([
+    supabase
+      .from("constructions")
+      .select("*, customer:customers(id, name, company_name, address), contract:contracts(id, contract_no, title, amount, contract_date, start_date, end_date, notes, status, estimate_id), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("construction_tasks")
+      .select("*")
+      .eq("construction_id", id)
+      .order("sort_order"),
+    supabase
+      .from("contractor_orders")
+      .select("*, craftsman:craftsmen(id, name)")
+      .eq("construction_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("estimates")
+      .select("id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at, updated_at, notes, assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
+      .eq("construction_id", id)
+      .order("version", { ascending: false }),
+    supabase
+      .from("invoices")
+      .select("id, invoice_no, invoice_date, due_date, total, status, created_at")
+      .eq("construction_id", id)
+      .order("invoice_date", { ascending: false }),
+  ]);
   if (error) throw error;
-
-  const { data: tasks } = await supabase
-    .from("construction_tasks")
-    .select("*")
-    .eq("construction_id", id)
-    .order("sort_order");
-
-  const { data: orders } = await supabase
-    .from("contractor_orders")
-    .select("*, craftsman:craftsmen(id, name)")
-    .eq("construction_id", id)
-    .order("created_at", { ascending: false });
 
   // 契約に紐づく見積もり + 工事に直接紐づく見積もり一覧
   let estimate = null;
@@ -139,12 +165,6 @@ export async function getConstruction(id: string) {
   }> = [];
   const contractData = data as typeof data & { estimate_id?: string | null };
 
-  const { data: linkedEstimates } = await supabase
-    .from("estimates")
-    .select("id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at, updated_at, notes, assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
-    .eq("construction_id", id)
-    .order("version", { ascending: false });
-
   if (linkedEstimates?.length) {
     estimates = linkedEstimates.map((est) => {
       const assignee = Array.isArray(est.assignee)
@@ -159,16 +179,17 @@ export async function getConstruction(id: string) {
   }
 
   if (contractData.contract_id) {
-    const { data: contract } = await supabase
-      .from("contracts")
-      .select("estimate_id")
-      .eq("id", contractData.contract_id)
-      .single();
-    if (contract?.estimate_id) {
+    // 契約の estimate_id は本体クエリの join（contract:contracts(...)）で取得済み
+    type ContractRel = { estimate_id?: string | null } | Array<{ estimate_id?: string | null }> | null | undefined;
+    const contractRel = (data as { contract?: ContractRel }).contract;
+    const contractEstimateId = Array.isArray(contractRel)
+      ? contractRel[0]?.estimate_id
+      : contractRel?.estimate_id;
+    if (contractEstimateId) {
       const { data: est } = await supabase
         .from("estimates")
         .select("*, categories:estimate_categories(*), items:estimate_items(*)")
-        .eq("id", contract.estimate_id)
+        .eq("id", contractEstimateId)
         .single();
       if (est) {
         estimate = est;
@@ -204,12 +225,6 @@ export async function getConstruction(id: string) {
       .single();
     if (est) estimate = est;
   }
-
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select("id, invoice_no, invoice_date, due_date, total, status, created_at")
-    .eq("construction_id", id)
-    .order("invoice_date", { ascending: false });
 
   return {
     ...data,

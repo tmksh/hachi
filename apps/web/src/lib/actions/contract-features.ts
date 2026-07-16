@@ -45,6 +45,12 @@ function throwIfSupabaseError(error: { message: string } | null): void {
 }
 
 async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string) {
+  // DB側カウンター（原子的・同時採番でも重複しない）。migration 未適用環境では従来ロジックへフォールバック
+  const { data: seq, error: rpcError } = await supabase.rpc("next_document_number", { p_kind: "estimate" });
+  if (!rpcError && typeof seq === "number" && seq > 0) {
+    return `EST-${String(seq).padStart(4, "0")}`;
+  }
+
   const { data, error } = await supabase
     .from("estimates")
     .select("estimate_no")

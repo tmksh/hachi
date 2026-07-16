@@ -78,7 +78,8 @@ export async function getEmailThreads(folder?: string) {
   let query = supabase
     .from("email_threads")
     .select("*, account:email_accounts!email_threads_account_id_fkey(id, email_address, provider)")
-    .order("last_message_at", { ascending: false });
+    .order("last_message_at", { ascending: false })
+    .limit(200);
 
   if (folder === "starred") {
     query = query.eq("is_starred", true);

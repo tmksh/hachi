@@ -37,25 +37,27 @@ export async function getDeals() {
   const { data, error } = await supabase
     .from("deals")
     .select("*, customer:customers(id, name, company_name), assignee:profiles!deals_assigned_to_fkey(id, display_name)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) throw error;
   return data;
 }
 
 export async function getDeal(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("deals")
-    .select("*, customer:customers(id, name, company_name, phone, email), assignee:profiles!deals_assigned_to_fkey(id, display_name)")
-    .eq("id", id)
-    .single();
+  const [{ data, error }, { data: activities }] = await Promise.all([
+    supabase
+      .from("deals")
+      .select("*, customer:customers(id, name, company_name, phone, email), assignee:profiles!deals_assigned_to_fkey(id, display_name)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("deal_activities")
+      .select("*, performer:profiles!deal_activities_performed_by_fkey(id, display_name)")
+      .eq("deal_id", id)
+      .order("performed_at", { ascending: false }),
+  ]);
   if (error) throw error;
-
-  const { data: activities } = await supabase
-    .from("deal_activities")
-    .select("*, performer:profiles!deal_activities_performed_by_fkey(id, display_name)")
-    .eq("deal_id", id)
-    .order("performed_at", { ascending: false });
 
   return { ...data, activities: activities || [] };
 }

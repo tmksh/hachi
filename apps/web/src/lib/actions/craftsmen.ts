@@ -9,7 +9,8 @@ export async function getCraftsmen() {
     .from("craftsmen")
     .select("*")
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) throw error;
   return data as Craftsman[];
 }

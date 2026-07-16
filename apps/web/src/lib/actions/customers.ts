@@ -203,17 +203,25 @@ export async function findExistingCustomer(
 
   const phoneDigits = (input.phone ?? "").replace(/\D/g, "");
   if (phoneDigits.length >= 10) {
+    // 照合には id と phone だけあればよいので全カラム取得を避ける
     const { data: candidates } = await supabase
       .from("customers")
-      .select("*")
+      .select("id, phone")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .not("phone", "is", null)
-      .limit(200);
-    const match = (candidates ?? []).find(
+      .limit(500);
+    const matchId = (candidates ?? []).find(
       (c) => (c.phone ?? "").replace(/\D/g, "") === phoneDigits,
-    );
-    if (match) return match;
+    )?.id;
+    if (matchId) {
+      const { data } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", matchId)
+        .maybeSingle();
+      if (data) return data;
+    }
   }
 
   const name = input.name?.trim();

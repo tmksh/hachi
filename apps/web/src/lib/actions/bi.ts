@@ -559,23 +559,31 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const fiscalMonthStart = await getCompanyFiscalMonthStart();
+  // 会計年度設定と BI 設定は互いに独立しているため並列取得する
+  const [fiscalMonthStart, companyConfig] = await Promise.all([
+    getCompanyFiscalMonthStart(),
+    getBiCompanyConfig(),
+  ]);
   const MONTH_LABELS = buildFiscalMonthLabels(fiscalMonthStart);
 
   const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
   const { start, end } = fiscalYearRange(year, fiscalMonthStart);
-  const companyConfig = await getBiCompanyConfig();
 
+  // 工事は年度外でも請求書との紐付け計算（粗利率の解決・二重計上除外）に必要なため
+  // 全件取得のまま。商談・契約は集計時に年度外レコードが必ず除外されるため、
+  // 「日付なし or 年度内」の条件で DB 側に絞り込みを寄せて転送量を削減する。
   const [{ data: constructions }, { data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }] = await Promise.all([
     supabase
       .from("constructions")
       .select("id, department_name, status, order_amount, actual_cost, budget_cost, end_date, start_date"),
     supabase
       .from("deals")
-      .select("id, department_name, stage, value, expected_close_date"),
+      .select("id, department_name, stage, value, expected_close_date")
+      .or(`expected_close_date.is.null,and(expected_close_date.gte.${start},expected_close_date.lte.${end})`),
     supabase
       .from("contracts")
-      .select("id, department_name, status, amount, contract_date, end_date"),
+      .select("id, department_name, status, amount, contract_date, end_date")
+      .or(`contract_date.is.null,end_date.is.null,and(contract_date.gte.${start},contract_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end})`),
     supabase
       .from("invoices")
       .select("id, total, status, paid_at, construction_id")
@@ -793,8 +801,10 @@ export type BiProspectSummary = {
 };
 
 export async function getBiProspectSummary(): Promise<BiProspectSummary> {
-  const { supabase, companyId } = await getCompanyId();
-  const config = await getBiCompanyConfig();
+  const [{ supabase, companyId }, config] = await Promise.all([
+    getCompanyId(),
+    getBiCompanyConfig(),
+  ]);
   const rates = config.prospect_grade_rates;
 
   const emptySpecial: BiSpecialProspectSummary = { customerCount: 0, baseRevenue: 0, weightedRevenue: 0 };

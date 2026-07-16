@@ -9,7 +9,8 @@ export async function getWorkflowRequests(status?: string) {
   let query = supabase
     .from("workflow_requests")
     .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(300);
 
   if (status && status !== "all") {
     query = query.eq("status", status);

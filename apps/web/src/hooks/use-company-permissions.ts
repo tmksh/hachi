@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { NAV_ITEM_ROLES, SYSTEM_PERMISSION_ROLES, type AssignableRole, type Role } from "@/lib/constants";
-import { getCompany } from "@/lib/actions/profiles";
+import { getCompanySettings } from "@/lib/actions/profiles";
 
 export type CustomRole = {
   id: string;
@@ -64,9 +64,8 @@ export function useCompanyPermissions() {
 
   const refresh = useCallback(async () => {
     try {
-      const company = await getCompany();
-      if (!company) return;
-      const s = company.settings as Record<string, unknown>;
+      const s = await getCompanySettings();
+      if (!s) return;
       if (s?.role_permissions) {
         const merged = { ...DEFAULT_PERMISSIONS, ...(s.role_permissions as RolePermissions) };
         setPermissions(merged);

@@ -356,30 +356,42 @@ export function BiClient({
     }
   }, [searchParams]);
 
-  const loadBiData = useCallback((silent = false) => {
+  const loadBiData = useCallback((silent = false, includePrevYear = true) => {
     if (!silent) setSettingsLoaded(false);
     return Promise.all([
       getBiSettings(fiscalYear),
       getBiActuals(fiscalYear),
-      getBiActuals(fiscalYear - 1),
+      // 前年実績は変化がほぼないため、ポーリング時はスキップして負荷を抑える
+      includePrevYear ? getBiActuals(fiscalYear - 1) : Promise.resolve(undefined),
       getBiProspectSummary(),
     ])
-      .then(([s, a, p, ps]) => { setSettings(s); setActuals(a); setPrevActuals(p); setProspectSummary(ps); })
+      .then(([s, a, p, ps]) => {
+        setSettings(s);
+        setActuals(a);
+        if (p !== undefined) setPrevActuals(p);
+        setProspectSummary(ps);
+      })
       .finally(() => setSettingsLoaded(true));
   }, [fiscalYear]);
 
-  // 初回マウントは SSR の初期データがあるので静かに再取得、年度変更時のみローディング表示
+  // 初回マウントは SSR の初期データを使い、不足分（前年実績・見込みサマリ）のみ取得。
+  // 年度変更時はローディング表示付きで全体を再取得。
   const didMount = useRef(false);
   useEffect(() => {
-    loadBiData(!didMount.current);
-    didMount.current = true;
-  }, [loadBiData]);
+    if (!didMount.current) {
+      didMount.current = true;
+      Promise.all([getBiActuals(fiscalYear - 1), getBiProspectSummary()])
+        .then(([p, ps]) => { setPrevActuals(p); setProspectSummary(ps); });
+      return;
+    }
+    loadBiData(false);
+  }, [fiscalYear, loadBiData]);
 
-  // 案件データ更新を反映（フォーカス復帰 + 30秒ポーリング）。スケルトンを出さず静かに更新
+  // 案件データ更新を反映（フォーカス復帰 + 2分ポーリング）。スケルトンを出さず静かに更新
   useEffect(() => {
-    const onFocus = () => loadBiData(true);
+    const onFocus = () => loadBiData(true, false);
     window.addEventListener("focus", onFocus);
-    const interval = setInterval(() => { if (document.visibilityState === "visible") loadBiData(true); }, 30000);
+    const interval = setInterval(() => { if (document.visibilityState === "visible") loadBiData(true, false); }, 120000);
     return () => { window.removeEventListener("focus", onFocus); clearInterval(interval); };
   }, [loadBiData]);
 

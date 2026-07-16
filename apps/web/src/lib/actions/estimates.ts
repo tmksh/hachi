@@ -9,7 +9,8 @@ export async function getEstimates() {
   const { data, error } = await supabase
     .from("estimates")
     .select("*, customer:customers(id, name, company_name), construction:constructions!construction_id(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) throw error;
   return data;
 }
@@ -27,24 +28,24 @@ export async function getEstimatesByCustomer(customerId: string) {
 
 export async function getEstimate(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("estimates")
-    .select("*, customer:customers(id, name, company_name)")
-    .eq("id", id)
-    .single();
+  const [{ data, error }, { data: categories }, { data: items }] = await Promise.all([
+    supabase
+      .from("estimates")
+      .select("*, customer:customers(id, name, company_name)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("estimate_categories")
+      .select("*")
+      .eq("estimate_id", id)
+      .order("sort_order"),
+    supabase
+      .from("estimate_items")
+      .select("*")
+      .eq("estimate_id", id)
+      .order("sort_order"),
+  ]);
   if (error) throw error;
-
-  const { data: categories } = await supabase
-    .from("estimate_categories")
-    .select("*")
-    .eq("estimate_id", id)
-    .order("sort_order");
-
-  const { data: items } = await supabase
-    .from("estimate_items")
-    .select("*")
-    .eq("estimate_id", id)
-    .order("sort_order");
 
   return { ...data, categories: categories || [], items: items || [] } as Estimate & {
     categories: EstimateCategory[];

@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isFontSize(fontMeta)) applyFontSize(fontMeta);
       const { data } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, company_id, display_name, email, role, avatar_url, department, position, phone")
         .eq("id", authUser.id)
         .single();
       setProfile(data as Profile | null);

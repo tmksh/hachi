@@ -9,7 +9,8 @@ export async function getInvoices() {
   const { data, error } = await supabase
     .from("invoices")
     .select("*, customer:customers(id, name, company_name), construction:constructions(id, title)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) throw error;
   return data;
 }
@@ -27,18 +28,19 @@ export async function getInvoicesForConstruction(constructionId: string) {
 
 export async function getInvoice(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("invoices")
-    .select("*, customer:customers(id, name, company_name, address, email), construction:constructions(id, title)")
-    .eq("id", id)
-    .single();
+  const [{ data, error }, { data: items }] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("*, customer:customers(id, name, company_name, address, email), construction:constructions(id, title)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", id)
+      .order("sort_order"),
+  ]);
   if (error) throw error;
-
-  const { data: items } = await supabase
-    .from("invoice_items")
-    .select("*")
-    .eq("invoice_id", id)
-    .order("sort_order");
 
   return { ...data, items: items || [] };
 }

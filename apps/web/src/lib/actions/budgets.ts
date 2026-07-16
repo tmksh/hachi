@@ -19,54 +19,61 @@ export async function getBudgets() {
     .order("fiscal_year", { ascending: false });
   if (error) throw error;
 
-  // 各年度の完了工事実績を集計して付加する
-  const enriched = await Promise.all(
-    (data ?? []).map(async (budget) => {
-      const { start, end } = fiscalYearRange(budget.fiscal_year);
-      const { data: constructions } = await supabase
-        .from("constructions")
-        .select("order_amount, actual_cost, budget_cost")
-        .eq("status", "completed")
-        .gte("end_date", start)
-        .lte("end_date", end);
+  const budgets = data ?? [];
+  if (budgets.length === 0) return [];
 
-      const actualRevenue  = (constructions ?? []).reduce((s, c) => s + (c.order_amount ?? 0), 0);
-      const actualCost     = (constructions ?? []).reduce((s, c) => s + (c.actual_cost  ?? 0), 0);
-      const budgetCostSum  = (constructions ?? []).reduce((s, c) => s + (c.budget_cost  ?? 0), 0);
-      const grossProfit    = actualRevenue - actualCost;
-      const completedCount = (constructions ?? []).length;
+  // 全対象年度をカバーする範囲で完了工事を一括取得し、年度別に集計する（N+1 回避）
+  const years = budgets.map((b) => b.fiscal_year);
+  const { start: rangeStart } = fiscalYearRange(Math.min(...years));
+  const { end: rangeEnd }     = fiscalYearRange(Math.max(...years));
 
-      return {
-        ...budget,
-        actuals: {
-          revenue:      actualRevenue,
-          cost:         actualCost,
-          budget_cost:  budgetCostSum,
-          gross_profit: grossProfit,
-          gross_rate:   actualRevenue > 0 ? (grossProfit / actualRevenue) * 100 : 0,
-          completed_count: completedCount,
-        },
-      };
-    })
-  );
+  const { data: constructions } = await supabase
+    .from("constructions")
+    .select("order_amount, actual_cost, budget_cost, end_date")
+    .eq("status", "completed")
+    .gte("end_date", rangeStart)
+    .lte("end_date", rangeEnd);
 
-  return enriched;
+  return budgets.map((budget) => {
+    const { start, end } = fiscalYearRange(budget.fiscal_year);
+    const inYear = (constructions ?? []).filter(
+      (c) => c.end_date != null && c.end_date >= start && c.end_date <= end,
+    );
+
+    const actualRevenue  = inYear.reduce((s, c) => s + (c.order_amount ?? 0), 0);
+    const actualCost     = inYear.reduce((s, c) => s + (c.actual_cost  ?? 0), 0);
+    const budgetCostSum  = inYear.reduce((s, c) => s + (c.budget_cost  ?? 0), 0);
+    const grossProfit    = actualRevenue - actualCost;
+
+    return {
+      ...budget,
+      actuals: {
+        revenue:      actualRevenue,
+        cost:         actualCost,
+        budget_cost:  budgetCostSum,
+        gross_profit: grossProfit,
+        gross_rate:   actualRevenue > 0 ? (grossProfit / actualRevenue) * 100 : 0,
+        completed_count: inYear.length,
+      },
+    };
+  });
 }
 
 export async function getBudget(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("budgets")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const [{ data, error }, { data: items }] = await Promise.all([
+    supabase
+      .from("budgets")
+      .select("*")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("budget_items")
+      .select("*")
+      .eq("budget_id", id)
+      .order("sort_order"),
+  ]);
   if (error) throw error;
-
-  const { data: items } = await supabase
-    .from("budget_items")
-    .select("*")
-    .eq("budget_id", id)
-    .order("sort_order");
 
   return { ...data, items: items || [] };
 }

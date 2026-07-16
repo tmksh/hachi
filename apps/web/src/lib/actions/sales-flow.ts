@@ -215,16 +215,21 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     .eq("company_id", company_id)
     .in("role", ["field_manager", "employee", "sales", "admin"]);
 
-  const constructionCounts = await Promise.all(
-    (profiles ?? []).map(async (p) => {
-      const { count: c } = await supabase
-        .from("constructions")
-        .select("*", { count: "exact", head: true })
-        .eq("assigned_to", p.id)
-        .in("status", ["preparing", "in_progress"]);
-      return { ...p, activeConstructions: c ?? 0 };
-    }),
-  );
+  // 進行中工事の担当者を一括取得して JS 側で件数集計（担当者ごとの count クエリを回避）
+  const { data: activeConstructions } = await supabase
+    .from("constructions")
+    .select("assigned_to")
+    .in("status", ["preparing", "in_progress"])
+    .not("assigned_to", "is", null);
+  const countByAssignee = new Map<string, number>();
+  for (const c of activeConstructions ?? []) {
+    if (!c.assigned_to) continue;
+    countByAssignee.set(c.assigned_to, (countByAssignee.get(c.assigned_to) ?? 0) + 1);
+  }
+  const constructionCounts = (profiles ?? []).map((p) => ({
+    ...p,
+    activeConstructions: countByAssignee.get(p.id) ?? 0,
+  }));
 
   const assigneeRec = await recommendFieldAssignee(
     constructionCounts.map((p) => ({
