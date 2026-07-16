@@ -17,8 +17,8 @@ export async function GET(request: Request) {
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type");
 
-  // 不正なアクセスはログインへ
-  if (!token_hash || type !== "invite") {
+  // 不正なアクセスはログインへ（invite / recovery を許可）
+  if (!token_hash || (type !== "invite" && type !== "recovery")) {
     return NextResponse.redirect(`${origin}/login?error=invalid_invite`);
   }
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase.auth.verifyOtp({
     token_hash,
-    type: "invite",
+    type: type as "invite" | "recovery",
   });
 
   if (error || !data.user) {

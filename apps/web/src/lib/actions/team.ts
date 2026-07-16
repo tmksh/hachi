@@ -47,6 +47,9 @@ export async function listTeamMembers(): Promise<Profile[]> {
   const { companyId } = await assertTenantAdmin();
   const admin = createAdminClient();
 
+  // 招待済みだが profiles 未作成のユーザーを同期（再送ボタンを出せるようにする）
+  await syncInvitedProfiles(admin, companyId);
+
   const { data, error } = await admin
     .from("profiles")
     .select("*")
@@ -54,6 +57,45 @@ export async function listTeamMembers(): Promise<Profile[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Profile[];
+}
+
+/** auth にいるが profiles が無い招待ユーザーを profiles に補完する */
+async function syncInvitedProfiles(
+  admin: ReturnType<typeof createAdminClient>,
+  companyId: string,
+) {
+  try {
+    const { data: authData, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
+    if (error || !authData?.users?.length) return;
+
+    const { data: existing } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("company_id", companyId);
+    const existingIds = new Set((existing ?? []).map((p) => p.id));
+
+    const missing = authData.users.filter((u) => {
+      const meta = (u.user_metadata ?? {}) as { company_id?: string };
+      return meta.company_id === companyId && !existingIds.has(u.id);
+    });
+
+    for (const u of missing) {
+      const meta = (u.user_metadata ?? {}) as {
+        display_name?: string;
+        role?: string;
+      };
+      const { error: insertErr } = await admin.from("profiles").insert({
+        id: u.id,
+        company_id: companyId,
+        display_name: meta.display_name?.trim() || u.email || "招待中",
+        email: u.email ?? "",
+        role: meta.role || "employee",
+      });
+      if (insertErr) console.error("[syncInvitedProfiles] insert failed", u.id, insertErr);
+    }
+  } catch (e) {
+    console.error("[syncInvitedProfiles] failed", e);
+  }
 }
 
 export type InviteResult = {
@@ -65,6 +107,134 @@ export type InviteResult = {
   /** メール未送信時に管理者が手動共有するための招待リンク */
   inviteUrl?: string;
 };
+
+/** 既存の招待ユーザーを見つけてプロフィール補完し、招待メールを再送する */
+async function recoverAndResendInvite(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  companyId: string;
+  actorId: string;
+  email: string;
+  displayName: string;
+  role: TeamRole;
+  appUrl: string;
+}): Promise<InviteResult> {
+  const { admin, companyId, actorId, email, displayName, role, appUrl } = input;
+
+  const { data: authData, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  if (listErr) {
+    return { ok: false, error: `既存ユーザーの確認に失敗しました: ${listErr.message}` };
+  }
+  const user = (authData?.users ?? []).find(
+    (u) => (u.email ?? "").toLowerCase() === email.toLowerCase(),
+  );
+  if (!user) {
+    return { ok: false, error: "このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。" };
+  }
+
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("id, company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (existing && existing.company_id !== companyId) {
+    return { ok: false, error: "このメールアドレスは別の組織で使用されています。" };
+  }
+
+  if (!existing) {
+    const { error: insertErr } = await admin.from("profiles").insert({
+      id: user.id,
+      company_id: companyId,
+      display_name: displayName,
+      email,
+      role,
+    });
+    if (insertErr) {
+      return { ok: false, error: `プロフィール作成に失敗しました: ${insertErr.message}` };
+    }
+  } else {
+    await admin.from("profiles").update({
+      display_name: displayName,
+      role,
+      updated_at: new Date().toISOString(),
+    }).eq("id", user.id);
+  }
+
+  await admin.auth.admin.updateUserById(user.id, {
+    user_metadata: { company_id: companyId, role, display_name: displayName },
+  });
+
+  // 既存ユーザーへの再招待は invite が弾かれることがあるため recovery も試す
+  let hashedToken: string | null = null;
+  let linkType: "invite" | "recovery" = "invite";
+
+  const inviteAttempt = await admin.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: {
+      redirectTo: `${appUrl}/api/auth/accept-invite`,
+      data: { company_id: companyId, role, display_name: displayName },
+    },
+  });
+  if (!inviteAttempt.error && inviteAttempt.data.properties.hashed_token) {
+    hashedToken = inviteAttempt.data.properties.hashed_token;
+  } else {
+    const recoveryAttempt = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: `${appUrl}/update-password?from=invite` },
+    });
+    if (recoveryAttempt.error || !recoveryAttempt.data.properties.hashed_token) {
+      return {
+        ok: false,
+        error: `招待の再送に失敗しました: ${inviteAttempt.error?.message ?? recoveryAttempt.error?.message ?? "不明なエラー"}`,
+      };
+    }
+    hashedToken = recoveryAttempt.data.properties.hashed_token;
+    linkType = "recovery";
+  }
+
+  const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=${linkType}`;
+
+  const { data: actorProfile } = await admin
+    .from("profiles").select("display_name").eq("id", actorId).single();
+  const { data: company } = await admin
+    .from("companies").select("name").eq("id", companyId).single();
+  const companyName = company?.name ?? "業務管理システム";
+  const inviterName = actorProfile?.display_name ?? "管理者";
+
+  if (!process.env.RESEND_API_KEY) {
+    return {
+      ok: true,
+      emailSent: false,
+      inviteUrl,
+      error: "すでに招待済みのため一覧に追加しました。RESEND_API_KEY 未設定のためメールは未送信です。招待リンクを共有してください。",
+    };
+  }
+
+  const { error: mailError } = await getResend().emails.send({
+    from: INVITE_FROM_EMAIL,
+    to: email,
+    subject: `【${companyName}】システムへのご招待（再送）`,
+    html: buildInviteEmailHtml({
+      inviteeName: displayName,
+      inviterName,
+      companyName,
+      inviteUrl,
+      appUrl,
+    }),
+  });
+  if (mailError) {
+    return {
+      ok: true,
+      emailSent: false,
+      inviteUrl,
+      error: `一覧に追加しましたがメール送信に失敗しました（${mailError.message}）。招待リンクを共有してください。`,
+    };
+  }
+
+  return { ok: true, emailSent: true };
+}
 
 /**
  * メンバー招待。
@@ -167,8 +337,18 @@ async function inviteTeamMemberInner(input: {
     },
   });
   if (linkError) {
+    // すでに招待済み（auth にいる）場合はプロフィールを補完して再送扱いにする
     if ((linkError as { code?: string }).code === "email_exists") {
-      return { ok: false, error: "このメールアドレスはすでに登録されています。別のメールアドレスをお使いください。" };
+      const recovered = await recoverAndResendInvite({
+        admin,
+        companyId,
+        actorId,
+        email: input.email.trim(),
+        displayName: input.displayName.trim(),
+        role: input.role,
+        appUrl,
+      });
+      return recovered;
     }
     return { ok: false, error: `招待リンクの生成に失敗しました: ${linkError.message}` };
   }
@@ -196,6 +376,28 @@ async function inviteTeamMemberInner(input: {
   const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
   const companyName = company?.name ?? "業務管理システム";
   const inviterName = actorProfile?.display_name ?? "管理者";
+
+  // メンバー一覧・再送ができるよう、招待時点で profiles を作成する
+  const invitedUserId = linkData.user?.id;
+  if (invitedUserId) {
+    const { data: existingProfile } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", invitedUserId)
+      .maybeSingle();
+    if (!existingProfile) {
+      const { error: profileError } = await admin.from("profiles").insert({
+        id: invitedUserId,
+        company_id: companyId,
+        display_name: input.displayName.trim(),
+        email: input.email.trim(),
+        role: input.role,
+      });
+      if (profileError) {
+        console.error("[inviteTeamMember] profile insert failed", profileError);
+      }
+    }
+  }
 
   // メール送信に失敗してもアカウント（招待）自体は作成済みのため、
   // 招待リンクを返して管理者が手動共有できるようにする
@@ -339,7 +541,10 @@ export async function resendTeamInvite(userId: string): Promise<void> {
     display_name: (target.display_name as string | null) ?? target.email,
   };
 
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+  let hashedToken: string | null = null;
+  let linkType: "invite" | "recovery" = "invite";
+
+  const inviteAttempt = await admin.auth.admin.generateLink({
     type: "invite",
     email: target.email,
     options: {
@@ -347,7 +552,24 @@ export async function resendTeamInvite(userId: string): Promise<void> {
       data: userMeta,
     },
   });
-  if (linkError) throw new Error(linkError.message);
+  if (!inviteAttempt.error && inviteAttempt.data.properties.hashed_token) {
+    hashedToken = inviteAttempt.data.properties.hashed_token;
+  } else {
+    const recoveryAttempt = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: target.email,
+      options: { redirectTo: `${appUrl}/update-password?from=invite` },
+    });
+    if (recoveryAttempt.error || !recoveryAttempt.data.properties.hashed_token) {
+      throw new Error(
+        inviteAttempt.error?.message
+          ?? recoveryAttempt.error?.message
+          ?? "招待リンクの生成に失敗しました",
+      );
+    }
+    hashedToken = recoveryAttempt.data.properties.hashed_token;
+    linkType = "recovery";
+  }
 
   const { data: actorProfile } = await admin
     .from("profiles")
@@ -365,9 +587,7 @@ export async function resendTeamInvite(userId: string): Promise<void> {
   const inviterName = actorProfile?.display_name ?? "管理者";
   const inviteeName = (target.display_name as string | null) ?? target.email;
 
-  const hashedToken = linkData.properties.hashed_token;
-  if (!hashedToken) throw new Error("招待トークンの生成に失敗しました");
-  const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
+  const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=${linkType}`;
 
   const { error: mailError } = await getResend().emails.send({
     from: INVITE_FROM_EMAIL,
