@@ -1,6 +1,7 @@
 /** BRIDGE — ブランドカラー管理（任意 hex 対応） */
 
-export const DEFAULT_HEX = "#2A8055";
+/** BRIDGE Linq ロゴのティール */
+export const DEFAULT_HEX = "#1CC8D4";
 
 // ── 色変換ユーティリティ ───────────────────────────────────────────────
 

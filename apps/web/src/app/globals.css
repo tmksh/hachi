@@ -129,17 +129,18 @@ html[data-font-size="lg"] {
 
 :root {
   --radius: 0.5rem;
-  /* Primary color RGB for rgba() usage — #0F5132 dark forest green */
-  --primary-rgb: 15, 81, 50;
-  --primary-dark-rgb: 8, 44, 27;
-  /* Brand tokens — overridden by JS (applyBrandPreset) at runtime */
-  --brand-gradient: linear-gradient(135deg, #2a8055 0%, #0f5132 100%);
-  --brand-light: #2a8055;
-  --brand-dark: #0f5132;
-  --brand-accent: #d8ede4;
-  --brand-mid: #a8d4bc;
-  --brand-accent-rgb: 216, 237, 228;
-  --brand-light-rgb: 42, 128, 85;
+  /* Primary color RGB for rgba() usage — #10737A dark teal (BRIDGE Linq) */
+  --primary-rgb: 16, 115, 122;
+  --primary-dark-rgb: 8, 58, 61;
+  /* Brand tokens — overridden by JS (applyBrandPreset) at runtime.
+     初期値は DEFAULT_HEX #1CC8D4 から computeBrandFromHex で算出した値 */
+  --brand-gradient: linear-gradient(135deg, #34d9e5 0%, #10737a 100%);
+  --brand-light: #34d9e5;
+  --brand-dark: #10737a;
+  --brand-accent: #e5f4f6;
+  --brand-mid: #a0e4e9;
+  --brand-accent-rgb: 229, 244, 246;
+  --brand-light-rgb: 52, 217, 229;
   /* Background: near-white #F8F9FA */
   --background: oklch(0.980 0.002 240);
   --foreground: oklch(0.15 0.01 240);
