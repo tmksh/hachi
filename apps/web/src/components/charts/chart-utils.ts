@@ -87,6 +87,18 @@ export function smoothAreaPath(
   return `${top} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z`;
 }
 
+/** 積み上げエリア用: 上辺〜下辺の帯を滑らかに閉じる */
+export function smoothBandPath(
+  top: Array<{ x: number; y: number }>,
+  bottom: Array<{ x: number; y: number }>,
+): string {
+  if (top.length === 0 || bottom.length === 0) return "";
+  const topPath = smoothLinePath(top);
+  const bottomRev = [...bottom].reverse();
+  const bottomPath = smoothLinePath(bottomRev).replace(/^M/, "L");
+  return `${topPath} ${bottomPath} Z`;
+}
+
 export function polarToCartesian(
   cx: number,
   cy: number,

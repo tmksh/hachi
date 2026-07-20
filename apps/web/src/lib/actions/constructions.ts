@@ -1070,14 +1070,27 @@ async function recalculateEstimateTotals(
   supabase: Awaited<ReturnType<typeof createClient>>,
   estimateId: string,
 ) {
-  const { data: items, error: itemsError } = await supabase
-    .from("estimate_items")
-    .select("selling_amount, cost_amount")
-    .eq("estimate_id", estimateId);
+  const [{ data: items, error: itemsError }, { data: est, error: estError }] = await Promise.all([
+    supabase
+      .from("estimate_items")
+      .select("selling_amount, cost_amount, is_text_row")
+      .eq("estimate_id", estimateId),
+    supabase
+      .from("estimates")
+      .select("reserve_fee_1_amount, reserve_fee_2_amount")
+      .eq("id", estimateId)
+      .single(),
+  ]);
   throwIfSupabaseError(itemsError);
+  throwIfSupabaseError(estError);
 
-  const subtotal = (items ?? []).reduce((sum, item) => sum + Number(item.selling_amount ?? 0), 0);
-  const costTotal = (items ?? []).reduce((sum, item) => sum + Number(item.cost_amount ?? 0), 0);
+  const lineItems = (items ?? []).filter((item) => !item.is_text_row);
+  const subtotal = lineItems.reduce((sum, item) => sum + Number(item.selling_amount ?? 0), 0);
+  const lineCost = lineItems.reduce((sum, item) => sum + Number(item.cost_amount ?? 0), 0);
+  // 予備費・予備予備費は明細外サマリー金額を原価に加算（売価はゼロ扱い）
+  const reserveCost =
+    Number(est?.reserve_fee_1_amount ?? 0) + Number(est?.reserve_fee_2_amount ?? 0);
+  const costTotal = lineCost + reserveCost;
   const tax = Math.floor(subtotal * 0.1);
   const total = subtotal + tax;
   const grossProfit = subtotal - costTotal;
@@ -1177,8 +1190,14 @@ export async function updateEstimateCategoryReserve(categoryId: string, reserveF
   return data;
 }
 
-export async function addEstimateItem(estimateId: string, categoryId: string, name?: string) {
+export async function addEstimateItem(
+  estimateId: string,
+  categoryId: string,
+  name?: string,
+  options?: { isTextRow?: boolean },
+) {
   const trimmed = name?.trim() ?? "";
+  const isTextRow = options?.isTextRow === true;
 
   const { supabase, companyId } = await assertEstimateAccess(estimateId);
 
@@ -1208,9 +1227,9 @@ export async function addEstimateItem(estimateId: string, categoryId: string, na
       company_id: companyId,
       estimate_id: estimateId,
       category_id: categoryId,
-      name: trimmed,
-      quantity: 1,
-      unit: "式",
+      name: trimmed || (isTextRow ? "（注釈）" : ""),
+      quantity: isTextRow ? 0 : 1,
+      unit: isTextRow ? null : "式",
       cost_price: 0,
       cost_amount: 0,
       selling_price: 0,
@@ -1218,6 +1237,7 @@ export async function addEstimateItem(estimateId: string, categoryId: string, na
       gross_profit: 0,
       gross_profit_rate: 0,
       sort_order: sortOrder,
+      is_text_row: isTextRow,
     })
     .select()
     .single();
@@ -1302,7 +1322,10 @@ export async function bulkApplyMarginToEstimate(
   throwIfSupabaseError(fetchErr);
   if (!allItems || allItems.length === 0) throw new Error("明細がありません");
 
-  const updates = allItems.map((item) => {
+  const calcItems = allItems.filter((item) => !item.is_text_row);
+  if (calcItems.length === 0) throw new Error("計算対象の明細がありません");
+
+  const updates = calcItems.map((item) => {
     const qty = Number(item.quantity) || 0;
     let costPrice: number;
     let sellingPrice: number;

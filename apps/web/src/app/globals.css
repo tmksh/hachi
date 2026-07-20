@@ -607,4 +607,19 @@ html[data-font-size="lg"] {
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  /* ── BRIDGE Linq キューブ: AI思考中は3つのキューブが1個ずつ順番に跳ねる ── */
+  @keyframes cube-hop {
+    0%, 55%, 100% { transform: translateY(0); }
+    22%           { transform: translateY(-4px); }
+    38%           { transform: translateY(1px); }
+  }
+  .animate-cube-thinking .brand-cube {
+    animation: cube-hop 1.4s ease-in-out infinite;
+    transform-box: fill-box;
+    will-change: transform;
+  }
+  .animate-cube-thinking .brand-cube-1 { animation-delay: 0s; }
+  .animate-cube-thinking .brand-cube-2 { animation-delay: 0.18s; }
+  .animate-cube-thinking .brand-cube-3 { animation-delay: 0.36s; }
 }

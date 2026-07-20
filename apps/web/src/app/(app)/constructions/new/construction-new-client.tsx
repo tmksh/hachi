@@ -9,9 +9,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Sparkles } from "lucide-react";
 import { createConstruction } from "@/lib/actions/constructions";
 import { getStatusLabel } from "@/lib/status-config";
+
+/** URL に AI 工期が無い場合のフォールバック推定（受注額ベース） */
+function estimateDurationFromAmount(orderAmount: string): { start: string; end: string; reason: string } | null {
+  const amount = Number(orderAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const start = new Date();
+  start.setDate(start.getDate() + 14);
+  const months = amount > 10_000_000 ? 6 : amount > 3_000_000 ? 4 : 2;
+  const end = new Date(start);
+  end.setDate(end.getDate() + months * 30);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    start: fmt(start),
+    end: fmt(end),
+    reason: `標準工事・受注額 ¥${amount.toLocaleString()} を基準に推定`,
+  };
+}
 
 type EligibleContract = {
   id: string;
@@ -47,6 +64,7 @@ type ConstructionNewClientProps = {
   initialOrderAmount: string;
   initialStartDate: string;
   initialEndDate: string;
+  initialDurationReason?: string;
   initialAssignedTo: string;
   initialAssigneeCandidates?: Array<{ profileId: string; displayName: string; score: number }>;
 };
@@ -63,6 +81,7 @@ function ConstructionNewPageContent({
   initialOrderAmount,
   initialStartDate,
   initialEndDate,
+  initialDurationReason = "",
   initialAssignedTo,
   initialAssigneeCandidates = [],
 }: ConstructionNewClientProps) {
@@ -82,6 +101,24 @@ function ConstructionNewPageContent({
   const [budgetCost, setBudgetCost] = useState("");
   const [departmentName, setDepartmentName] = useState("");
   const [assigneeCandidates] = useState(initialAssigneeCandidates);
+  const [dateSource, setDateSource] = useState<"ai" | "contract" | "manual" | null>(
+    initialStartDate && initialEndDate ? "ai" : null,
+  );
+
+  const aiSuggestion = useMemo(() => {
+    if (initialStartDate && initialEndDate) {
+      return {
+        start: initialStartDate,
+        end: initialEndDate,
+        reason: initialDurationReason || "受注額を基準に推定",
+      };
+    }
+    // 受注確定以外の導線でも提案工期を見せる（No.64）
+    if (initialDealId || initialOrderAmount) {
+      return estimateDurationFromAmount(initialOrderAmount);
+    }
+    return null;
+  }, [initialStartDate, initialEndDate, initialDurationReason, initialDealId, initialOrderAmount]);
 
   useEffect(() => {
     setContracts(initialContracts);
@@ -89,30 +126,52 @@ function ConstructionNewPageContent({
     setDepartments(initialDepartments);
   }, [initialContracts, initialProfiles, initialDepartments]);
 
+  // URL に AI 工期がありフォームが空なら自動反映（旧NG: バナーのみで入力欄が空）
+  useEffect(() => {
+    if (!aiSuggestion) return;
+    setStartDate((prev) => prev || aiSuggestion.start);
+    setEndDate((prev) => prev || aiSuggestion.end);
+    setDateSource((prev) => prev ?? "ai");
+  }, [aiSuggestion]);
+
   const applyContract = useCallback((contract: EligibleContract) => {
     setCustomerId(contract.customer_id ?? "");
     setOrderAmount(String(contract.amount ?? ""));
-    // AI推定工期は契約側が空のとき保持（No.64）
-    setStartDate((prev) => toDateInputValue(contract.start_date) || prev || initialStartDate);
-    setEndDate((prev) => toDateInputValue(contract.end_date) || prev || initialEndDate);
+    const contractStart = toDateInputValue(contract.start_date);
+    const contractEnd = toDateInputValue(contract.end_date);
+    // 優先: 契約工期 → 既存入力/AI推定（No.64）
+    setStartDate((prev) => contractStart || prev || initialStartDate || aiSuggestion?.start || "");
+    setEndDate((prev) => contractEnd || prev || initialEndDate || aiSuggestion?.end || "");
+    if (contractStart && contractEnd) setDateSource("contract");
+    else if (initialStartDate || aiSuggestion) setDateSource((s) => s ?? "ai");
     setAssignedTo((prev) => contract.assigned_to || prev || initialAssignedTo);
     setDepartmentName(contract.department_name ?? "");
     if (!titleTouched) {
       setTitle(contract.title);
     }
-  }, [titleTouched, initialStartDate, initialEndDate, initialAssignedTo]);
+  }, [titleTouched, initialStartDate, initialEndDate, initialAssignedTo, aiSuggestion]);
 
   const clearContractFields = useCallback(() => {
     setCustomerId(initialCustomerId);
     setOrderAmount(initialOrderAmount);
-    setStartDate("");
-    setEndDate("");
-    setAssignedTo("");
+    // 契約解除時は AI 推定工期へ戻す（空にしない）
+    setStartDate(initialStartDate || aiSuggestion?.start || "");
+    setEndDate(initialEndDate || aiSuggestion?.end || "");
+    setDateSource(initialStartDate || aiSuggestion ? "ai" : null);
+    setAssignedTo(initialAssignedTo || "");
     setDepartmentName("");
     if (!titleTouched) {
       setTitle(initialTitle);
     }
-  }, [initialCustomerId, initialOrderAmount, initialTitle, titleTouched]);
+  }, [initialCustomerId, initialOrderAmount, initialTitle, titleTouched, initialStartDate, initialEndDate, initialAssignedTo, aiSuggestion]);
+
+  const applyAiSuggestion = () => {
+    if (!aiSuggestion) return;
+    setStartDate(aiSuggestion.start);
+    setEndDate(aiSuggestion.end);
+    setDateSource("ai");
+    toast.success("AI推定工期を反映しました。必要に応じて調整してください");
+  };
 
   useEffect(() => {
     const filtered = initialCustomerId
@@ -205,11 +264,37 @@ function ConstructionNewPageContent({
       {initialDealId && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900">
           受注確定フローから遷移しました。契約・見積・顧客情報が自動転記されています。
-          {initialStartDate && initialEndDate && (
-            <span className="block text-xs mt-1 text-emerald-800/80">
-              AI推定工期: {initialStartDate} 〜 {initialEndDate}
-            </span>
-          )}
+        </div>
+      )}
+
+      {aiSuggestion && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50/90 px-4 py-3 text-sm text-sky-950">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <p className="font-medium flex items-center gap-1.5">
+                <Sparkles className="size-3.5 shrink-0 text-sky-700" />
+                AI推定工期（提案）
+              </p>
+              <p className="text-base font-semibold tabular-nums tracking-tight">
+                {aiSuggestion.start} 〜 {aiSuggestion.end}
+              </p>
+              <p className="text-xs text-sky-900/70">{aiSuggestion.reason}</p>
+              <p className="text-xs text-muted-foreground">
+                着工日・竣工日は下の入力欄で確認・手動調整できます
+                {dateSource === "contract" && "（現在は契約工期を転記中）"}
+                {dateSource === "ai" && "（現在はAI推定を反映中）"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-sky-300 bg-white hover:bg-sky-100"
+              onClick={applyAiSuggestion}
+            >
+              この工期を反映
+            </Button>
+          </div>
         </div>
       )}
 
@@ -323,13 +408,37 @@ function ConstructionNewPageContent({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">着工日</Label>
-              <Input className="h-8" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <Label className="text-xs">
+                着工日
+                {dateSource === "ai" && <span className="ml-1 text-[10px] text-sky-700 font-normal">AI推定</span>}
+                {dateSource === "contract" && <span className="ml-1 text-[10px] text-emerald-700 font-normal">契約転記</span>}
+              </Label>
+              <Input
+                className="h-8"
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setDateSource("manual");
+                  setStartDate(e.target.value);
+                }}
+              />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">竣工日</Label>
-              <Input className="h-8" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Label className="text-xs">
+                竣工日
+                {dateSource === "ai" && <span className="ml-1 text-[10px] text-sky-700 font-normal">AI推定</span>}
+                {dateSource === "contract" && <span className="ml-1 text-[10px] text-emerald-700 font-normal">契約転記</span>}
+              </Label>
+              <Input
+                className="h-8"
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setDateSource("manual");
+                  setEndDate(e.target.value);
+                }}
+              />
             </div>
 
             <div className="space-y-1">

@@ -11,11 +11,11 @@ import {
   getCurrentFiscalYear,
   getForecastStartIndex,
   DEFAULT_FISCAL_MONTH_START,
+  MOCK_GP_WEIGHTS,
 } from "@/lib/bi-utils";
 import type { BiProspectSummary } from "@/lib/actions/bi";
 
-/** 建設業の季節ウェイト（月別推移と共有） */
-export const MOCK_GP_WEIGHTS = [0.82, 0.96, 1.14, 1.32, 1.09, 0.91, 0.78, 0.75, 1.05, 1.28, 1.19, 0.87];
+export { MOCK_GP_WEIGHTS };
 
 export const MOCK_TARGET_REVENUE_MAN = 7100;
 export const MOCK_TARGET_GP_MAN = 4200;
@@ -166,7 +166,7 @@ export function buildBiDashboardMock(
       { grade: "B", rate: 50, customerCount: 5, baseRevenue: 800, weightedRevenue: 400 },
       { grade: "C", rate: 20, customerCount: 8, baseRevenue: 400, weightedRevenue: 80 },
     ],
-    special: { customerCount: 1, baseRevenue: 2000, weightedRevenue: 1200 },
+    special: { customerCount: 1, baseRevenue: 2000, weightedRevenue: 1200, companyRate: 100 },
     totalBase: 2400,
     totalWeighted: 1440,
     totalBaseWithSpecial: 4400,

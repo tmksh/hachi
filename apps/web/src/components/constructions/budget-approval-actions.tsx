@@ -18,8 +18,6 @@ import {
   submitBudgetApproval,
 } from "@/lib/actions/sales-flow";
 import { getProfiles } from "@/lib/actions/profiles";
-import { useAuth } from "@/components/providers/auth-provider";
-import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 
 type Props = {
   constructionId: string;
@@ -28,10 +26,8 @@ type Props = {
 };
 
 export function BudgetApprovalActions({ constructionId, grossProfitRate }: Props) {
-  const { role } = useAuth();
-  const { canAccess } = useCompanyPermissions();
-  // 予備費の内訳は「予備費設定」権限を持つ人だけに開示
-  const canSeeReserve = role ? canAccess("reserve_fee", [role]) : false;
+  // 予備費は社員にも表示（非表示による不信感を防止）
+  const canSeeReserve = true;
   const [info, setInfo] = useState<Awaited<ReturnType<typeof getConstructionMarginThreshold>> | null>(null);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);

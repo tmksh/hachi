@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { NAV_ITEM_ROLES, SYSTEM_PERMISSION_ROLES, type AssignableRole, type Role } from "@/lib/constants";
+import { type AssignableRole } from "@/lib/constants";
 import { getCompanySettings } from "@/lib/actions/profiles";
+import {
+  DEFAULT_ROLE_PERMISSIONS,
+  mergeRolePermissions,
+  canAccessFeature,
+  type RolePermissions,
+} from "@/lib/role-permissions";
 
 export type CustomRole = {
   id: string;
@@ -11,42 +17,19 @@ export type CustomRole = {
   color: string;
 };
 
-/** 機能キー → 許可ロール slug 配列 */
-export type RolePermissions = Record<string, string[]>;
+export type { RolePermissions };
 
 const STORAGE_KEY = "bridge_role_permissions";
 const CUSTOM_ROLES_KEY = "bridge_custom_roles";
 
-/** NAV_ITEM_ROLES から初期値を生成 */
-function buildDefaultPerms(): RolePermissions {
-  const all: Role[] = [...SYSTEM_PERMISSION_ROLES];
-  const result: RolePermissions = {};
-  const allKeys = [
-    "dashboard", "bi", "crm", "deals", "quotes", "craftsmen",
-    "contracts", "constructions", "invoices", "budget",
-    "calendar", "mail", "attendance", "workflow", "circulation", "documents",
-  ];
-  allKeys.forEach((key) => {
-    const restricted = NAV_ITEM_ROLES[key] as Role[] | undefined;
-    result[key] = restricted ? [...restricted] : [...all];
-  });
-  result["settings_member"]     = ["hq_admin"];
-  result["settings_company"]    = ["hq_admin"];
-  result["settings_attendance"] = ["hq_admin"];
-  result["settings_workflow"]   = ["hq_admin"];
-  result["settings_crm"]        = ["hq_admin"];
-  result["reserve_fee"]         = ["hq_admin"];
-  return result;
-}
-
-export const DEFAULT_PERMISSIONS = buildDefaultPerms();
+export const DEFAULT_PERMISSIONS = DEFAULT_ROLE_PERMISSIONS;
 
 export function useCompanyPermissions() {
   const [permissions, setPermissions] = useState<RolePermissions>(() => {
     if (typeof window === "undefined") return DEFAULT_PERMISSIONS;
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? { ...DEFAULT_PERMISSIONS, ...JSON.parse(stored) } : DEFAULT_PERMISSIONS;
+      return stored ? mergeRolePermissions(JSON.parse(stored) as RolePermissions) : DEFAULT_PERMISSIONS;
     } catch {
       return DEFAULT_PERMISSIONS;
     }
@@ -67,7 +50,7 @@ export function useCompanyPermissions() {
       const s = await getCompanySettings();
       if (!s) return;
       if (s?.role_permissions) {
-        const merged = { ...DEFAULT_PERMISSIONS, ...(s.role_permissions as RolePermissions) };
+        const merged = mergeRolePermissions(s.role_permissions as RolePermissions);
         setPermissions(merged);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(s.role_permissions));
       }
@@ -82,28 +65,14 @@ export function useCompanyPermissions() {
   }, []);
 
   useEffect(() => {
-    let idleId: number | undefined;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const run = () => void refresh();
-
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      idleId = window.requestIdleCallback(run, { timeout: 2500 });
-    } else {
-      timeoutId = setTimeout(run, 500);
-    }
-
-    return () => {
-      if (idleId !== undefined) window.cancelIdleCallback(idleId);
-      if (timeoutId !== undefined) clearTimeout(timeoutId);
-    };
+    // 権限マトリクスはメニュー表示の正本のため、遅延せず即時取得する
+    void refresh();
   }, [refresh]);
 
-  /** ロール（システム or カスタム）が機能キーにアクセスできるか */
+  /** ロール（システム or カスタム）が機能キーにアクセスできるか — マトリクス正本 */
   const canAccess = useCallback(
     (featureKey: string, roleSlugs: string[]): boolean => {
-      const allowed = permissions[featureKey];
-      if (!allowed) return true;
-      return roleSlugs.some((r) => allowed.includes(r));
+      return canAccessFeature(featureKey, roleSlugs, permissions);
     },
     [permissions],
   );

@@ -252,6 +252,15 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
   if (latestEstimate?.id) params.set("estimate_id", latestEstimate.id);
   if (duration.startDate) params.set("start_date", duration.startDate);
   if (duration.endDate) params.set("end_date", duration.endDate);
+  if (duration.reason) params.set("duration_reason", duration.reason);
+  // 契約に工期が未設定なら AI 推定を契約へも反映（工事登録での転記を安定させる）
+  if (duration.startDate && duration.endDate && !contract.start_date) {
+    await supabase.from("contracts").update({
+      start_date: duration.startDate,
+      end_date: duration.endDate,
+      updated_at: new Date().toISOString(),
+    }).eq("id", contract.id);
+  }
   if (assigneeRec.recommendedId) params.set("assigned_to", assigneeRec.recommendedId);
   if (assigneeRec.candidates.length > 0) {
     params.set(
@@ -409,15 +418,55 @@ export async function getEstimateMarginThreshold(estimateId: string) {
   const reservePercent = await getCompanyReservePercent(supabase, company_id);
   // 会社指定粗利＋予備費を満たす必要がある
   const threshold = baseThreshold + reservePercent;
+
+  // 差戻し/却下済みWFに紐づいたまま pending が残っている場合は補正（再申請ボタンが出ない不具合の自己修復）
+  let approvalStatus = (data.approval_status ?? "none") as string;
+  let remandComment: string | null = null;
+  const workflowRequestId = data.workflow_request_id as string | null;
+  if (workflowRequestId && (approvalStatus === "pending" || approvalStatus === "returned" || approvalStatus === "rejected")) {
+    const { data: wf } = await supabase
+      .from("workflow_requests")
+      .select("status, payload")
+      .eq("id", workflowRequestId)
+      .single();
+    const payload = (wf?.payload ?? {}) as Record<string, unknown>;
+    const isRemand = Boolean(payload.remand);
+    if (typeof payload.remand_comment === "string" && payload.remand_comment.trim()) {
+      remandComment = payload.remand_comment.trim();
+    } else if (typeof payload.reject_comment === "string" && payload.reject_comment.trim()) {
+      remandComment = payload.reject_comment.trim();
+    }
+    if (wf?.status === "rejected" && approvalStatus === "pending") {
+      const healed = isRemand ? "returned" : "rejected";
+      approvalStatus = healed;
+      await supabase.from("estimates").update({
+        approval_status: healed,
+        updated_at: new Date().toISOString(),
+      }).eq("id", estimateId);
+    }
+    if (wf?.status === "rejected" && !remandComment) {
+      const { data: step } = await supabase
+        .from("workflow_steps")
+        .select("comment")
+        .eq("request_id", workflowRequestId)
+        .eq("status", "rejected")
+        .order("decided_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (step?.comment?.trim()) remandComment = step.comment.trim();
+    }
+  }
+
   return {
     grossProfitRate: data.gross_profit_rate ?? 0,
     threshold,
     baseThreshold,
     reservePercent,
     needsApproval: (data.gross_profit_rate ?? 0) < threshold,
-    approvalStatus: data.approval_status ?? "none",
-    workflowRequestId: data.workflow_request_id,
+    approvalStatus,
+    workflowRequestId,
     status: data.status as string | null,
+    remandComment,
   };
 }
 
@@ -651,36 +700,27 @@ export async function processRecordingComplete(input: {
     }).eq("id", input.customerId);
   }
 
-  // 商談が未紐付けなら自動作成・紐付け（No.15）
+  // 商談が未紐付けなら新規作成して紐付け（No.15: 録音停止→商談自動登録）
   let dealId = input.dealId ?? null;
   if (!dealId) {
-    const { data: existingDeal } = await supabase
-      .from("deals")
-      .select("id")
-      .eq("customer_id", input.customerId)
-      .in("stage", ["inquiry", "first_meeting", "materials_sent", "quote_submitted", "negotiation", "closing"])
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("name, assigned_to")
+      .eq("id", input.customerId)
+      .single();
+    const { data: newDeal, error: dealError } = await supabase.from("deals").insert({
+      company_id,
+      customer_id: input.customerId,
+      title: summaryResult.title || `${customer?.name ?? "顧客"} 様 商談`,
+      stage: "first_meeting",
+      summary: summaryResult.summary,
+      assigned_to: customer?.assigned_to ?? user_id,
+    }).select("id").single();
 
-    if (existingDeal) {
-      dealId = existingDeal.id;
-    } else {
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("name, assigned_to")
-        .eq("id", input.customerId)
-        .single();
-      const { data: newDeal } = await supabase.from("deals").insert({
-        company_id,
-        customer_id: input.customerId,
-        title: summaryResult.title || `${customer?.name ?? "顧客"} 様 商談`,
-        stage: "first_meeting",
-        summary: summaryResult.summary,
-        assigned_to: customer?.assigned_to ?? user_id,
-      }).select("id").single();
-      dealId = newDeal?.id ?? null;
+    if (dealError) {
+      console.error("[processRecordingComplete] deal insert failed", dealError);
     }
+    dealId = newDeal?.id ?? null;
 
     if (dealId) {
       await supabase.from("customer_recordings").update({
@@ -728,7 +768,7 @@ export async function processRecordingComplete(input: {
       customer_id: input.customerId,
       assigned_to: user_id,
       created_by: user_id,
-      category: "meeting",
+      category: "sales",
     }).select("id").single();
     calendarEventId = calEvent?.id ?? null;
   }

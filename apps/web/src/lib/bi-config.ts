@@ -34,6 +34,11 @@ export type BiCompanyConfig = {
   monthly_overhead_mode: "equal" | "revenue_share";
   /** 顧客の見込度 A/B/C → 確度%（各社バラバラに設定可能） */
   prospect_grade_rates: ProspectGradeRates;
+  /**
+   * 特需の会社デフォルト契約率%（0〜100）。
+   * 案件に special_probability が未設定のときこの値を使う。運用は実質100%/0%の判断になりやすい。
+   */
+  special_demand_rate: number;
 };
 
 export const CONSTRUCTION_STATUSES = [
@@ -101,6 +106,7 @@ export const DEFAULT_BI_COMPANY_CONFIG: BiCompanyConfig = {
   unassigned_department_label: "未分類",
   monthly_overhead_mode: "equal",
   prospect_grade_rates: { A: 80, B: 50, C: 20 },
+  special_demand_rate: 100,
 };
 
 export function mergeBiCompanyConfig(raw: unknown): BiCompanyConfig {
@@ -135,6 +141,10 @@ export function mergeBiCompanyConfig(raw: unknown): BiCompanyConfig {
       B: clampRate(partial.prospect_grade_rates?.B, DEFAULT_BI_COMPANY_CONFIG.prospect_grade_rates.B),
       C: clampRate(partial.prospect_grade_rates?.C, DEFAULT_BI_COMPANY_CONFIG.prospect_grade_rates.C),
     },
+    special_demand_rate: clampRate(
+      partial.special_demand_rate,
+      DEFAULT_BI_COMPANY_CONFIG.special_demand_rate,
+    ),
   };
 }
 

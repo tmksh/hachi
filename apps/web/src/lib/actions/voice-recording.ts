@@ -105,16 +105,25 @@ export async function saveVoiceTranscriptResult(input: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile) throw new Error("Profile not found");
+
   const { data: saved, error } = await supabase
     .from("customer_recordings")
     .insert({
+      company_id: profile.company_id,
       customer_id: input.customerId,
       deal_id: input.dealId ?? null,
-      storage_path: input.storagePath,
       transcript: input.transcript,
       summary: input.result.summary,
       title: input.result.title,
       memo: "",
+      status: "completed",
+      created_by: user.id,
     })
     .select("id")
     .single();
@@ -122,7 +131,7 @@ export async function saveVoiceTranscriptResult(input: {
   if (error) throw error;
 
   // 営業フロー後処理（ToDo生成・ステージ提案等）
-  await processRecordingComplete({
+  const processed = await processRecordingComplete({
     customerId: input.customerId,
     recordingId: saved.id,
     dealId: input.dealId,
@@ -130,5 +139,5 @@ export async function saveVoiceTranscriptResult(input: {
     memo: "",
   });
 
-  return { recordingId: saved.id };
+  return { recordingId: saved.id, dealId: processed.dealId ?? null };
 }

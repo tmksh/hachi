@@ -26,7 +26,7 @@ export type BiAnnualSettings = {
   overhead_mode: "breakdown" | "lump_sum";
   overhead_items: BiOverheadItem[];
   department_targets: BiDepartmentTarget[];
-  /** 予備費率（0〜1）。売上に対して抜く非表示バッファ。管理者のみ設定 */
+  /** 予備費率（0〜1）。会社確保分。BI上は社員にも表示し、利益から控除して保守表示 */
   reserve_fee_rate: number;
   /** 決算で予備費を利益に戻したか */
   reserve_released: boolean;

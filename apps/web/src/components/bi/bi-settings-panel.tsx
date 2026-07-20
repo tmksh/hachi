@@ -587,12 +587,12 @@ export function BiSettingsPanel({
         </CardContent>
       </Card>
 
-      {/* ── 予備費（非表示%）── */}
+      {/* ── 予備費（会社確保分・社員にも表示）── */}
       <Card className={canEditReserve ? "border-amber-200/70" : ""}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-amber-600" />
-            予備費（非表示%）
+            予備費（会社確保分・目安2%）
             {!canEditReserve && (
               <span className="ml-1 inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
                 <Lock className="h-3 w-3" />設定権限がありません
@@ -642,9 +642,9 @@ export function BiSettingsPanel({
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg p-2.5">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
             <span>
-              通常時はBIダッシュボード上で、この率で計算した予備費を利益から控除した保守的な数字を表示します。
+              会社への上納分（固定確保）です。社員にも表示し、非表示による不信感を防ぎます。
+              BIダッシュボードでは利益から控除した保守的な数字を表示し、決算時に利益へ戻せます。
               見積・実行予算では「会社指定粗利＋予備費」を満たさない場合に上長へ承認申請が必要になります。
-              決算時にBI上で利益へ戻せます。
             </span>
           </div>
           {canEditReserve && reserveRatePct > 0 && (
@@ -852,6 +852,34 @@ export function BiSettingsPanel({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">特需の契約率（会社デフォルト）</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                特需案件で個別確度が未設定のときに使う掛け率です。運用上は100%か0%かの判断になりやすく、使い方は各社に委ねます
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                className="max-w-[120px] tabular-nums"
+                value={companyConfig.special_demand_rate}
+                onChange={(e) =>
+                  setCompanyConfig((prev) => ({
+                    ...prev,
+                    special_demand_rate: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                  }))
+                }
+              />
+              <span className="text-sm text-muted-foreground">%</span>
             </div>
           </div>
 

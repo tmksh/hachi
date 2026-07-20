@@ -786,6 +786,8 @@ export type BiSpecialProspectSummary = {
   customerCount: number;
   baseRevenue: number;
   weightedRevenue: number;
+  /** 会社設定の特需デフォルト契約率%（案件未設定時に適用） */
+  companyRate: number;
 };
 
 export type BiProspectSummary = {
@@ -806,8 +808,14 @@ export async function getBiProspectSummary(): Promise<BiProspectSummary> {
     getBiCompanyConfig(),
   ]);
   const rates = config.prospect_grade_rates;
+  const specialCompanyRate = config.special_demand_rate;
 
-  const emptySpecial: BiSpecialProspectSummary = { customerCount: 0, baseRevenue: 0, weightedRevenue: 0 };
+  const emptySpecial: BiSpecialProspectSummary = {
+    customerCount: 0,
+    baseRevenue: 0,
+    weightedRevenue: 0,
+    companyRate: specialCompanyRate,
+  };
   const empty: BiProspectSummary = {
     rows: (["A", "B", "C"] as const).map((grade) => ({
       grade, rate: rates[grade], customerCount: 0, baseRevenue: 0, weightedRevenue: 0,
@@ -851,7 +859,12 @@ export async function getBiProspectSummary(): Promise<BiProspectSummary> {
   for (const c of customers) {
     const baseYen = dealSumByCustomer.get(c.id) ?? Number(c.budget_max ?? 0);
     if (c.is_special_demand) {
-      const rate = Math.min(100, Math.max(0, Number(c.special_probability ?? 0)));
+      // 案件独自%があれば優先。未設定時はBI機種設定の会社デフォルト契約率を使用
+      const raw = c.special_probability;
+      const rate = Math.min(
+        100,
+        Math.max(0, raw != null && Number.isFinite(Number(raw)) ? Number(raw) : specialCompanyRate),
+      );
       specialCount += 1;
       specialBase += baseYen;
       specialWeighted += baseYen * rate / 100;
@@ -881,6 +894,7 @@ export async function getBiProspectSummary(): Promise<BiProspectSummary> {
     customerCount: specialCount,
     baseRevenue: toManYen(specialBase),
     weightedRevenue: toManYen(specialWeighted),
+    companyRate: specialCompanyRate,
   };
   const totalBase = rows.reduce((s, r) => s + r.baseRevenue, 0);
   const totalWeighted = rows.reduce((s, r) => s + r.weightedRevenue, 0);

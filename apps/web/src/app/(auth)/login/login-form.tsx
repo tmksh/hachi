@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Loader2, Mail, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useBrandColor } from "@/hooks/use-brand-color";
+import { BrandLogo } from "@/components/layout/brand-logo";
 interface LoginFormProps {
   companyName?: string | null;
 }
@@ -72,6 +73,9 @@ export function LoginForm({ companyName }: LoginFormProps) {
     <div className="w-full max-w-md px-4">
       <Card className="border-0 shadow-xl shadow-primary/5">
         <CardHeader className="text-center space-y-4 pb-2">
+          <div className="flex justify-center pt-2">
+            <BrandLogo />
+          </div>
           {companyName ? (
             <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
               <Building2 className="h-3.5 w-3.5 shrink-0" />
@@ -164,7 +168,7 @@ export function LoginForm({ companyName }: LoginFormProps) {
 
         <CardFooter className="justify-center pb-6">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} {companyName ?? "BRIDGE"} All rights reserved.
+            &copy; {new Date().getFullYear()} {companyName ?? "BRIDGE Linq"} All rights reserved.
           </p>
         </CardFooter>
       </Card>

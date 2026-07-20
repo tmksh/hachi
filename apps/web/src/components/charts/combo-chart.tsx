@@ -41,6 +41,8 @@ type ComboChartProps = {
   gridColor?: string;
   labelColor?: string;
   tickColor?: string;
+  /** 棒を太くして見やすくする（株主向けダッシュボード等） */
+  thickBars?: boolean;
 };
 
 export type GroupAnnotation = {
@@ -70,6 +72,7 @@ export function ComboChart({
   gridColor = "currentColor",
   labelColor = "currentColor",
   tickColor = "currentColor",
+  thickBars = false,
 }: ComboChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 640, height: heightProp });
@@ -122,8 +125,10 @@ export function ComboChart({
 
   const groupWidth = chartW / Math.max(data.length, 1);
   const barWidth = centered
-    ? Math.min(22, groupWidth * 0.42)
-    : Math.min(18, (groupWidth * 0.6) / bars.length);
+    ? Math.min(thickBars ? 52 : 22, groupWidth * (thickBars ? 0.72 : 0.42))
+    : Math.min(thickBars ? 48 : 18, (groupWidth * (thickBars ? 0.88 : 0.6)) / Math.max(bars.length, 1));
+  const barGap = thickBars ? 6 : 2;
+  const barRadius = thickBars ? 8 : 3;
 
   const linePoints = line
     ? data.map((row, i) => ({
@@ -230,7 +235,7 @@ export function ComboChart({
             const forecast = isForecast(rowIndex);
             const barsBlockW = centered
               ? barWidth
-              : bars.length * barWidth + (bars.length - 1) * 2;
+              : bars.length * barWidth + (bars.length - 1) * barGap;
             const startX = centered
               ? centerX - barWidth / 2
               : groupX + (groupWidth - barsBlockW) / 2;
@@ -241,7 +246,7 @@ export function ComboChart({
                   x={centerX}
                   y={height - 6}
                   textAnchor="middle"
-                  fontSize={11}
+                  fontSize={thickBars ? 12 : 11}
                   fill={labelColor}
                   opacity={forecast ? 0.55 : 1}
                 >
@@ -251,7 +256,7 @@ export function ComboChart({
                   const value = Number(row[b.key] ?? 0);
                   const y = value >= 0 ? yOf(value) : zeroY;
                   const barH = Math.abs(yOf(value) - zeroY);
-                  const x = centered ? startX : startX + bi * (barWidth + 2);
+                  const x = centered ? startX : startX + bi * (barWidth + barGap);
                   const fill = forecast && b.forecastFill ? b.forecastFill : b.fill;
                   return (
                     <rect
@@ -260,7 +265,7 @@ export function ComboChart({
                       y={y}
                       width={barWidth}
                       height={Math.max(barH, 0)}
-                      rx={3}
+                      rx={barRadius}
                       fill={fill}
                       opacity={forecast && !b.forecastFill ? 0.45 : 1}
                       pointerEvents="none"

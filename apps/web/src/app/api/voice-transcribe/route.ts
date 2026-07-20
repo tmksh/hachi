@@ -65,35 +65,48 @@ export async function POST(req: NextRequest) {
 
     // customer_recordings に保存 → 商談自動登録（No.15）
     if (customerId) {
-      const { data: saved } = await supabase
+      const { data: saved, error: saveError } = await supabase
         .from("customer_recordings")
         .insert({
+          company_id: profile.company_id,
           customer_id: customerId,
           deal_id: dealId ?? null,
-          storage_path: storagePath,
           transcript,
           summary: result.summary,
           title: result.title,
           memo: "",
+          status: "completed",
+          created_by: user.id,
         })
         .select("id")
         .single();
 
+      if (saveError) {
+        console.error("[voice-transcribe] customer_recordings insert failed", saveError);
+      }
+
+      let registeredDealId: string | undefined;
       if (saved?.id) {
         try {
           const { processRecordingComplete } = await import("@/lib/actions/sales-flow");
-          await processRecordingComplete({
+          const processed = await processRecordingComplete({
             customerId,
             recordingId: saved.id,
             dealId,
             transcript,
           });
+          registeredDealId = processed.dealId ?? undefined;
         } catch (err) {
           console.error("[voice-transcribe] processRecordingComplete failed", err);
         }
       }
 
-      return NextResponse.json({ transcript, result, recordingId: saved?.id });
+      return NextResponse.json({
+        transcript,
+        result,
+        recordingId: saved?.id,
+        dealId: registeredDealId,
+      });
     }
 
     return NextResponse.json({ transcript, result });

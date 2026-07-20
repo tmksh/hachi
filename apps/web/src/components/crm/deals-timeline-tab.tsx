@@ -139,14 +139,25 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   };
 
   const saveSummary = async () => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      toast.error("商談が選択されていません");
+      return;
+    }
     setSaving(true);
     try {
-      await updateDealSummary(selectedId, summaryDraft);
-      setDeals((prev) => prev.map((d) => d.id === selectedId ? { ...d, summary: summaryDraft } : d));
+      const saved = await updateDealSummary(selectedId, summaryDraft);
+      const nextSummary = saved.summary ?? summaryDraft;
+      setSummaryDraft(nextSummary);
+      // 保存後に活動履歴（メモ更新）も含めて再取得
+      const refreshed = await getCustomerDealsWithActivities(customerId);
+      setDeals(refreshed);
+      if (!refreshed.some((d) => d.id === selectedId) && refreshed[0]) {
+        setSelectedId(refreshed[0].id);
+        setSummaryDraft(refreshed[0].summary ?? "");
+      }
       toast.success("要約を保存しました");
-    } catch {
-      toast.error("保存に失敗しました");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
       setSaving(false);
     }

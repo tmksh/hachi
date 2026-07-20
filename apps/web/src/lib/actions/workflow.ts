@@ -132,7 +132,14 @@ async function syncWorkflowPayloadSideEffects(
     if (outcome === "approved") {
       estimatePatch.status = "issued";
     }
-    await supabase.from("estimates").update(estimatePatch).eq("id", estimateId);
+    const { error: estimateErr } = await supabase
+      .from("estimates")
+      .update(estimatePatch)
+      .eq("id", estimateId);
+    if (estimateErr) {
+      console.error("[syncWorkflowPayloadSideEffects] estimate update failed", estimateErr);
+      throw new Error(`見積の承認状態更新に失敗しました: ${estimateErr.message}`);
+    }
   }
 
   if (contractId) {
@@ -307,9 +314,29 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
 
   const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
   if (step) {
+    // 却下時は差戻しフラグを明示的にクリア（No.48: 却下→差戻し誤表示の再発防止）
+    const { data: existing } = await supabase
+      .from("workflow_requests")
+      .select("payload")
+      .eq("id", step.request_id)
+      .single();
+    const prev = (existing?.payload ?? {}) as Record<string, unknown>;
+    const { remand: _r, remand_comment: _c, remanded_at: _a, ...rest } = prev;
+    const payload = {
+      ...rest,
+      remand: false,
+      reject_comment: comment ?? null,
+      rejected_at: new Date().toISOString(),
+    };
+
     await supabase
       .from("workflow_requests")
-      .update({ status: "rejected", decided_at: new Date().toISOString() })
+      .update({
+        status: "rejected",
+        decided_at: new Date().toISOString(),
+        payload,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", step.request_id);
 
     const { data: request } = await supabase

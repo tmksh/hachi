@@ -58,15 +58,22 @@ export function toEstimatePdfPreviewData(
     tax: estimate.tax ?? 0,
     total: estimate.total ?? 0,
     categories: (estimate.categories ?? []).map((cat) => ({ id: cat.id, name: cat.name })),
-    items: (estimate.items ?? []).map((item) => ({
-      id: item.id,
-      category_id: item.category_id,
-      name: item.name,
-      quantity: Number(item.quantity) || 0,
-      unit: item.unit,
-      selling_price: Number(item.selling_price) || 0,
-      selling_amount: Number(item.selling_amount) || 0,
-    })),
+    // 顧客向け見積書: 売価ゼロ円の行・テキスト行は出力しない（原価内訳書には別途出力）
+    items: (estimate.items ?? [])
+      .filter((item) => {
+        const sell = Number(item.selling_amount) || 0;
+        const isText = Boolean((item as { is_text_row?: boolean }).is_text_row);
+        return !isText && sell > 0;
+      })
+      .map((item) => ({
+        id: item.id,
+        category_id: item.category_id,
+        name: item.name,
+        quantity: Number(item.quantity) || 0,
+        unit: item.unit,
+        selling_price: Number(item.selling_price) || 0,
+        selling_amount: Number(item.selling_amount) || 0,
+      })),
   };
 }
 

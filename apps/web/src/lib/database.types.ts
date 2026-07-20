@@ -153,6 +153,10 @@ export type Estimate = {
   gross_profit_rate: number;
   reserve_fee_1_rate: number;
   reserve_fee_2_rate: number;
+  /** 予備費（会社確保分）金額。明細外サマリーで記入 */
+  reserve_fee_1_amount?: number;
+  /** 予備予備費（現場対応分）金額。明細外サマリーで記入 */
+  reserve_fee_2_amount?: number;
   default_gross_profit_rate: number;
   validity_date: string | null;
   issued_at: string | null;
@@ -214,6 +218,8 @@ export type EstimateItem = {
   gross_profit_rate: number;
   sort_order: number;
   notes: string | null;
+  /** テキスト行（注釈用・売価ゼロ・計算なし） */
+  is_text_row?: boolean;
   created_at: string;
   updated_at: string;
 };

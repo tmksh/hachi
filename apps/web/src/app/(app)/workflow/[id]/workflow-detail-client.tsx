@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { getWorkflowStatusLabel } from "@/lib/status-config";
+import { getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
 import { ArrowLeft, Check, X, CornerUpLeft, MessageSquare, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -176,6 +176,7 @@ export function WorkflowDetailClient({
   const steps = (data.steps ?? []) as Step[];
   const comments = (data.comments ?? []) as Comment[];
   const fields = (data as Detail & { payload?: Record<string, unknown> }).payload ?? {};
+  const requestRemanded = isWorkflowRemanded(data.status, fields);
   const contractId = fields.contract_id as string | undefined;
   const activeStepOrder = Math.min(
     ...steps.filter((s) => s.status === "pending").map((s) => s.step_order),
@@ -300,7 +301,14 @@ export function WorkflowDetailClient({
                         <Badge variant="outline" className="ml-2 text-xs">前ステップ待ち</Badge>
                       )}
                     </p>
-                    <StatusBadge status={step.status} />
+                    <StatusBadge
+                      status={requestRemanded && step.status === "rejected" ? "returned" : step.status}
+                      label={
+                        requestRemanded && step.status === "rejected"
+                          ? "差戻し"
+                          : undefined
+                      }
+                    />
                     {step.comment && (
                       <p className="text-xs text-muted-foreground mt-1 break-all">
                         「{step.comment}」

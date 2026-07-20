@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle, FileCheck, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, CornerUpLeft, FileCheck, Loader2 } from "lucide-react";
 import {
   getEstimateMarginThreshold,
   submitEstimateApproval,
@@ -21,8 +21,6 @@ import {
 import { getProfiles } from "@/lib/actions/profiles";
 import { updateEstimate } from "@/lib/actions/estimates";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
-import { useAuth } from "@/components/providers/auth-provider";
-import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 
 type Props = {
   estimateId: string;
@@ -40,10 +38,8 @@ export function EstimateApprovalActions({
   estimateStatus,
   onConfirmed,
 }: Props) {
-  const { role } = useAuth();
-  const { canAccess } = useCompanyPermissions();
-  // 予備費の内訳は「予備費設定」権限を持つ人だけに見せる（隠しバッファを社員に開示しない）
-  const canSeeReserve = role ? canAccess("reserve_fee", [role]) : false;
+  // 予備費は社員にも表示（非表示による不信感を防止）
+  const canSeeReserve = true;
   const [marginInfo, setMarginInfo] = useState<Awaited<ReturnType<typeof getEstimateMarginThreshold>>>(null);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -63,6 +59,7 @@ export function EstimateApprovalActions({
   const needsApproval = grossProfitRate < threshold - 1e-9;
   const approvalStatus = marginInfo?.approvalStatus ?? "none";
   const canReapply = approvalStatus === "returned" || approvalStatus === "rejected";
+  const isReturned = approvalStatus === "returned";
   const isIssued = estimateStatus === "issued"
     || estimateStatus === "sent"
     || estimateStatus === "accepted"
@@ -98,9 +95,10 @@ export function EstimateApprovalActions({
         comment: comment.trim(),
         approverId,
       });
-      toast.success("上長への承認申請を送信しました");
+      toast.success(canReapply ? "再申請を送信しました" : "上長への承認申請を送信しました");
       setDialogOpen(false);
-      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId } : prev);
+      setComment("");
+      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId, remandComment: null } : prev);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "申請に失敗しました");
     } finally {
@@ -134,38 +132,64 @@ export function EstimateApprovalActions({
 
   return (
     <>
-      <div className="flex items-center gap-2 flex-wrap">
-        {approvalStatus === "pending" && marginInfo?.workflowRequestId ? (
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/workflow/${marginInfo.workflowRequestId}`}>
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              承認待ち
-            </Link>
-          </Button>
-        ) : approvalStatus === "approved" || approvalStatus === "conditional" ? (
-          <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
-            <CheckCircle className="h-4 w-4 mr-1" />
-            {approvalStatus === "conditional" ? "条件付き承認済み" : "承認済み"}
-          </Button>
-        ) : (
-          <Button
-            variant="default"
-            size="sm"
-            className="bg-amber-600 hover:bg-amber-700"
-            onClick={() => setDialogOpen(true)}
-          >
-            <AlertTriangle className="h-4 w-4 mr-1" />
-            {canReapply ? "再申請する" : "上司への承認申請"}
-          </Button>
-        )}
-        <span className="text-[10px] text-muted-foreground">
-          粗利 {grossProfitRate.toFixed(1)}% / 基準 {threshold.toFixed(0)}%
-          {canSeeReserve && marginInfo && (marginInfo.reservePercent ?? 0) > 0 && (
-            <span className="text-amber-600">
-              （会社指定{marginInfo.baseThreshold?.toFixed(0)}%+予備費{marginInfo.reservePercent?.toFixed(0)}%）
-            </span>
+      <div className="flex flex-col items-end gap-1.5">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {approvalStatus === "pending" && marginInfo?.workflowRequestId ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/workflow/${marginInfo.workflowRequestId}`}>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                承認待ち
+              </Link>
+            </Button>
+          ) : approvalStatus === "approved" || approvalStatus === "conditional" ? (
+            <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
+              <CheckCircle className="h-4 w-4 mr-1" />
+              {approvalStatus === "conditional" ? "条件付き承認済み" : "承認済み"}
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              className={isReturned ? "bg-amber-600 hover:bg-amber-700" : "bg-amber-600 hover:bg-amber-700"}
+              onClick={() => setDialogOpen(true)}
+            >
+              {isReturned
+                ? <CornerUpLeft className="h-4 w-4 mr-1" />
+                : <AlertTriangle className="h-4 w-4 mr-1" />}
+              {canReapply ? "承認申請（再申請）" : "上司への承認申請"}
+            </Button>
           )}
-        </span>
+          <span className="text-[10px] text-muted-foreground">
+            粗利 {grossProfitRate.toFixed(1)}% / 基準 {threshold.toFixed(0)}%
+            {canSeeReserve && marginInfo && (marginInfo.reservePercent ?? 0) > 0 && (
+              <span className="text-amber-600">
+                （会社指定{marginInfo.baseThreshold?.toFixed(0)}%+予備費{marginInfo.reservePercent?.toFixed(0)}%）
+              </span>
+            )}
+          </span>
+        </div>
+        {canReapply && (
+          <div className={
+            isReturned
+              ? "max-w-md rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800"
+              : "max-w-md rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700"
+          }>
+            <p className="font-medium">
+              {isReturned ? "差戻しされています。修正のうえ再申請してください。" : "却下されています。内容を見直して再申請できます。"}
+            </p>
+            {marginInfo?.remandComment && (
+              <p className="mt-0.5 text-muted-foreground break-all">指摘: {marginInfo.remandComment}</p>
+            )}
+            {marginInfo?.workflowRequestId && (
+              <Link
+                href={`/workflow/${marginInfo.workflowRequestId}`}
+                className="mt-0.5 inline-block text-amber-900 underline underline-offset-2"
+              >
+                申請詳細を確認
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -178,6 +202,12 @@ export function EstimateApprovalActions({
               粗利率 {grossProfitRate.toFixed(1)}% は基準 {threshold.toFixed(0)}% を下回っています。
               {canReapply ? "修正内容を踏まえ、申請理由を入力して再申請してください。" : "申請理由を入力し、承認者を選択してください。"}
             </p>
+            {marginInfo?.remandComment && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p className="text-xs font-medium text-amber-700 mb-0.5">差戻し指摘</p>
+                {marginInfo.remandComment}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>申請コメント（粗利率低下の理由）</Label>
               <Textarea

@@ -82,7 +82,9 @@ export function getWorkflowStatusLabel(
   status: string,
   payload?: Record<string, unknown> | null,
 ): string {
-  if (status === "rejected" && payload?.remand) return "差戻し";
+  // remand: true のみ差戻し。false / 未設定の rejected は却下（No.48 / 逆パターン対策）
+  if (status === "rejected" && payload?.remand === true) return "差戻し";
+  if (status === "rejected") return "却下";
   return getStatusLabel(status);
 }
 
@@ -90,7 +92,7 @@ export function isWorkflowRemanded(
   status: string,
   payload?: Record<string, unknown> | null,
 ): boolean {
-  return status === "rejected" && Boolean(payload?.remand);
+  return status === "rejected" && payload?.remand === true;
 }
 
 export function getStatusOption(

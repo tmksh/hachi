@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo, memo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS, canAccessNavItem } from "@/lib/constants";
+import { NAV_GROUPS } from "@/lib/constants";
 import type { Profile } from "@/hooks/use-auth";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import {
   LayoutDashboard,
   Users,
@@ -25,6 +26,7 @@ const GROUP_ICONS = {
 export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const { canAccess } = useCompanyPermissions();
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -42,11 +44,11 @@ export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile
         .map((group) => ({
           ...group,
           items: group.items.filter(
-            (item) => !profile?.role || canAccessNavItem(item.key, profile.role),
+            (item) => !profile?.role || canAccess(item.key, [profile.role]),
           ),
         }))
         .filter((group) => group.items.length > 0),
-    [profile?.role],
+    [profile?.role, canAccess],
   );
 
   return (

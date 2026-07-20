@@ -74,8 +74,12 @@ export type MonthlyComboPoint = {
   累計: number;
 };
 
-/** 建設業の季節性を反映した月次粗利の相対ウェイト（4月始まり12ヶ月） */
-const MOCK_GP_WEIGHTS = [0.82, 0.96, 1.14, 1.32, 1.09, 0.91, 0.78, 0.75, 1.05, 1.28, 1.19, 0.87];
+/**
+ * 建設業の季節性を大げさに効かせた月次粗利ウェイト（4月始まり）。
+ * 山谷を極端にしてストリームグラフでも動きが分かるようにする。
+ * 例: 4月ほぼゼロ → 7月急峰 → 8–9月谷 → 12月最高峰 → 1–2月急落 → 3月再加速
+ */
+export const MOCK_GP_WEIGHTS = [0.12, 0.35, 1.55, 3.1, 0.55, 0.18, 0.22, 1.05, 2.6, 3.4, 0.65, 1.85];
 
 /** 月別推移グラフ用のリアルなモックデータ（万円） */
 export function buildRealisticMonthlyComboData(
@@ -84,11 +88,14 @@ export function buildRealisticMonthlyComboData(
   overheadMan: number,
 ): MonthlyComboPoint[] {
   const weightSum = MOCK_GP_WEIGHTS.reduce((s, w) => s + w, 0);
-  const gpScale = totalGrossProfitMan > 0 ? totalGrossProfitMan / weightSum : 220;
+  // 年間粗利を盛って山谷を強調（見た目用モック）
+  const displayTotal = totalGrossProfitMan > 0 ? totalGrossProfitMan * 1.35 : 2800;
+  const gpScale = displayTotal / weightSum;
   const monthlyOverhead = overheadMan > 0 ? Math.round(overheadMan / 12) : 150;
   let cum = 0;
   return months.map((m, i) => {
     const grossProfit = Math.round(MOCK_GP_WEIGHTS[i] * gpScale);
+    // 閑散月は固定費の方が大きく、累計が下がる（山谷がはっきりする）
     const alloc = monthlyOverhead;
     cum += grossProfit - alloc;
     return {

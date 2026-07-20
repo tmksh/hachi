@@ -53,6 +53,7 @@ export default async function ConstructionNewPage({
       initialOrderAmount={get("order_amount")}
       initialStartDate={get("start_date")}
       initialEndDate={get("end_date")}
+      initialDurationReason={get("duration_reason")}
       initialAssignedTo={get("assigned_to")}
       initialAssigneeCandidates={(() => {
         try {

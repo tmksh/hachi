@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Noto_Sans_JP } from "next/font/google";
+import { Inter, Noto_Sans_JP, Space_Grotesk } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FontSizeProvider } from "@/components/providers/font-size-provider";
@@ -15,6 +15,13 @@ const inter = Inter({
 const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: ["700"],
   display: "swap",
 });
 
@@ -34,7 +41,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: FONT_SIZE_INIT_SCRIPT }} />
       </head>
       <body
-        className={`${inter.variable} ${notoSansJP.variable} font-sans antialiased`}
+        className={`${inter.variable} ${notoSansJP.variable} ${spaceGrotesk.variable} font-sans antialiased`}
       >
         <FontSizeProvider>
           <TooltipProvider delayDuration={300}>

@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { TimeSelect } from "@/components/ui/time-select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -1776,11 +1777,7 @@ function EventDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">開始日 *</Label>
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
+                <DatePicker value={startDate} onChange={setStartDate} placeholder="開始日を選択" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">開始時刻</Label>
@@ -1792,11 +1789,7 @@ function EventDialog({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">終了日</Label>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
+                <DatePicker value={endDate} onChange={setEndDate} placeholder="終了日を選択" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">終了時刻</Label>

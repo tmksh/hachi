@@ -6,6 +6,7 @@ export const NAV_GROUPS = [
     items: [
       { key: "dashboard", label: "ダッシュボード", href: "/dashboard" },
       { key: "bi", label: "BIダッシュボード", href: "/bi" },
+      { key: "bi2", label: "BIデザイン案", href: "/bi2" },
     ],
   },
   {
@@ -97,6 +98,7 @@ export const ADMIN_ROLES: Role[] = ["hq_admin", "admin"];
  */
 export const ROUTE_ROLES: Record<string, Role[]> = {
   "/bi":          ["hq_admin", "contractor_admin"],
+  "/bi2":         ["hq_admin", "contractor_admin"],
   "/crm":         ["hq_admin", "contractor_admin"],
   "/deals":       ["hq_admin", "contractor_admin"],
   "/quotes":      ["hq_admin", "contractor_admin"],
@@ -136,16 +138,25 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   "marketing-creative": ["hq_admin"],
 };
 
-/** ナビ項目にアクセスできるか */
+/**
+ * ナビ項目にアクセスできるか（ハードコードのデフォルト表）。
+ * 実行時のメニュー表示は useCompanyPermissions / role-permissions を使うこと。
+ * この関数は未設定会社のフォールバック・初期シード用。
+ */
 export function canAccessNavItem(key: string, role: Role): boolean {
   const allowed = NAV_ITEM_ROLES[key];
   if (!allowed) return true;
   return allowed.includes(role);
 }
 
-/** パスにアクセスできるか (ミドルウェアとページ共通ヘルパー) */
+/**
+ * パスにアクセスできるか（ハードコードのデフォルト表）。
+ * 会社の権限マトリクスがある場合は canAccessPathWithPermissions を使うこと。
+ */
 export function canAccessRoute(pathname: string, role: Role): boolean {
-  const matched = Object.keys(ROUTE_ROLES).find((p) => pathname.startsWith(p));
+  const matched = Object.keys(ROUTE_ROLES)
+    .sort((a, b) => b.length - a.length)
+    .find((p) => pathname.startsWith(p));
   if (!matched) return true;
   const allowed = ROUTE_ROLES[matched];
   if (allowed.length === 0) return false;

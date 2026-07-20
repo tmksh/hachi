@@ -145,7 +145,7 @@ export async function fetchNotifications(): Promise<Notification[]> {
 
   const decidedNotifs: Notification[] = (decidedRequests || []).map((r) => {
     const payload = (r as { payload?: Record<string, unknown> }).payload;
-    const isRemand = r.status === "rejected" && Boolean(payload?.remand);
+    const isRemand = r.status === "rejected" && payload?.remand === true;
     return {
       id: `wf_decided_${r.id}`,
       type: "workflow" as const,

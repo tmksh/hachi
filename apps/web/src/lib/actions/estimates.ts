@@ -125,6 +125,11 @@ export async function createEstimate(
       validity_date: input.validity_date || null,
       assigned_to: input.assigned_to || null,
       status: "draft",
+      // 新規見積: 予備費を必ず確保する文化のためデフォルト料率をセット（金額はサマリー欄で記入）
+      reserve_fee_1_rate: 0.02,
+      reserve_fee_2_rate: 0.03,
+      reserve_fee_1_amount: 0,
+      reserve_fee_2_amount: 0,
       subtotal,
       tax,
       total: subtotal + tax,
@@ -202,7 +207,7 @@ export async function createEstimate(
 
 export async function updateEstimate(
   id: string,
-  input: Partial<Pick<Estimate, "title" | "customer_id" | "notes" | "validity_date" | "assigned_to" | "status" | "reserve_fee_1_rate" | "reserve_fee_2_rate">>,
+  input: Partial<Pick<Estimate, "title" | "customer_id" | "notes" | "validity_date" | "assigned_to" | "status" | "reserve_fee_1_rate" | "reserve_fee_2_rate" | "reserve_fee_1_amount" | "reserve_fee_2_amount">>,
   items?: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">>
 ) {
   const supabase = await createClient();
@@ -248,6 +253,41 @@ export async function updateEstimate(
   } else {
     const { error } = await supabase.from("estimates").update(input).eq("id", id);
     if (error) throw error;
+
+    // 予備費金額変更時は明細外原価を含めて合計を再計算
+    if (input.reserve_fee_1_amount != null || input.reserve_fee_2_amount != null) {
+      const [{ data: items }, { data: est }] = await Promise.all([
+        supabase
+          .from("estimate_items")
+          .select("selling_amount, cost_amount, is_text_row")
+          .eq("estimate_id", id),
+        supabase
+          .from("estimates")
+          .select("reserve_fee_1_amount, reserve_fee_2_amount")
+          .eq("id", id)
+          .single(),
+      ]);
+      const lineItems = (items ?? []).filter((item) => !item.is_text_row);
+      const subtotal = lineItems.reduce((sum, item) => sum + Number(item.selling_amount ?? 0), 0);
+      const lineCost = lineItems.reduce((sum, item) => sum + Number(item.cost_amount ?? 0), 0);
+      const reserveCost =
+        Number(est?.reserve_fee_1_amount ?? 0) + Number(est?.reserve_fee_2_amount ?? 0);
+      const costTotal = lineCost + reserveCost;
+      const tax = Math.floor(subtotal * 0.1);
+      const grossProfit = subtotal - costTotal;
+      await supabase
+        .from("estimates")
+        .update({
+          subtotal,
+          tax,
+          total: subtotal + tax,
+          cost_total: costTotal,
+          gross_profit: grossProfit,
+          gross_profit_rate: subtotal > 0 ? (grossProfit / subtotal) * 100 : 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    }
   }
 
   if (before && input.status && before.status !== input.status) {

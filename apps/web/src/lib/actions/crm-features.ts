@@ -520,12 +520,19 @@ export async function confirmSchedulingCandidate(input: {
   const [hourStr, minuteStr] = input.candidate.timeLabel.split(":");
   const hour = Number(hourStr) || 10;
   const minute = Number(minuteStr) || 0;
-  const startAt = new Date(`${input.candidate.date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
+  // JST 固定（サーバーが UTC でも候補時刻がずれないようにする）
+  const startAt = new Date(
+    `${input.candidate.date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+09:00`,
+  );
   const endAt = new Date(startAt.getTime() + input.duration_minutes * 60_000);
+  if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+    throw new Error("候補日時の形式が不正です");
+  }
 
   const title = input.title ?? `面談: ${input.candidate.displayLabel}`;
   const description = `面談区分: ${input.meeting_type}`;
 
+  // category は DB CHECK: sales | construction | task | facility | equipment
   const { data: event, error: eventErr } = await supabase.from("calendar_events").insert({
     company_id,
     title,
@@ -535,9 +542,9 @@ export async function confirmSchedulingCandidate(input: {
     customer_id: input.customer_id,
     assigned_to: user_id,
     created_by: user_id,
-    category: "meeting",
+    category: "sales",
   }).select().single();
-  if (eventErr) throw eventErr;
+  if (eventErr) throw new Error(eventErr.message || "カレンダーイベントの保存に失敗しました");
 
   // Google Calendar 連携（トークンがあれば同期。失敗してもローカル登録は維持）
   const { data: profile } = await supabase
@@ -583,12 +590,11 @@ export async function confirmSchedulingCandidate(input: {
       }
 
       const timeZone = "Asia/Tokyo";
-      const gRes = await fetch(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-        {
+      const createGoogleEvent = (token: string) =>
+        fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -597,8 +603,40 @@ export async function confirmSchedulingCandidate(input: {
             start: { dateTime: startAt.toISOString(), timeZone },
             end: { dateTime: endAt.toISOString(), timeZone },
           }),
-        },
-      );
+        });
+
+      let gRes = await createGoogleEvent(accessToken);
+      // 期限切れトークンで 401 のとき refresh して再試行
+      if (gRes.status === 401 && profile.google_refresh_token) {
+        const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        if (clientId && clientSecret) {
+          const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              client_id: clientId,
+              client_secret: clientSecret,
+              refresh_token: profile.google_refresh_token,
+              grant_type: "refresh_token",
+            }),
+          });
+          if (refreshRes.ok) {
+            const tokenJson = await refreshRes.json() as { access_token?: string; expires_in?: number };
+            if (tokenJson.access_token) {
+              accessToken = tokenJson.access_token;
+              await supabase.from("profiles").update({
+                google_access_token: accessToken,
+                google_token_expires_at: tokenJson.expires_in
+                  ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
+                  : null,
+              }).eq("id", user_id);
+              gRes = await createGoogleEvent(accessToken);
+            }
+          }
+        }
+      }
+
       if (gRes.ok) {
         const gData = await gRes.json() as { id?: string };
         googleEventId = gData.id ?? null;
@@ -607,9 +645,13 @@ export async function confirmSchedulingCandidate(input: {
             google_event_id: googleEventId,
           }).eq("id", event.id);
         }
+      } else {
+        const errText = await gRes.text().catch(() => "");
+        console.warn("[confirmScheduling] Google Calendar sync failed", gRes.status, errText);
       }
-    } catch {
+    } catch (err) {
       // Google同期失敗時はローカルイベントのみで成功扱い
+      console.warn("[confirmScheduling] Google Calendar sync error", err);
     }
   }
 
@@ -784,27 +826,51 @@ export async function getCustomerDealsWithActivities(customerId: string) {
 }
 
 export async function updateDealSummary(dealId: string, summary: string) {
-  const { supabase, company_id, user_id } = await getCompanyContext();
-  const { data, error } = await supabase.from("deals").update({
-    summary,
-    updated_at: new Date().toISOString(),
-  }).eq("id", dealId).select().single();
-  if (error) throw error;
+  if (!dealId?.trim()) throw new Error("商談が選択されていません");
 
-  // メモ保存を活動履歴にも残す（No.19）
-  if (summary.trim()) {
-    await supabase.from("deal_activities").insert({
+  const { supabase, company_id, user_id } = await getCompanyContext();
+  const text = typeof summary === "string" ? summary : String(summary ?? "");
+
+  const { data, error } = await supabase
+    .from("deals")
+    .update({
+      summary: text,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", dealId)
+    .eq("company_id", company_id)
+    .select("id, summary, updated_at")
+    .maybeSingle();
+
+  if (error) {
+    // マイグレーション未適用時のメッセージを分かりやすくする
+    const msg = error.message ?? "";
+    if (/summary/i.test(msg) && /column|schema cache/i.test(msg)) {
+      throw new Error("商談メモ列が未作成です。DBマイグレーション（00037）を適用してください");
+    }
+    throw new Error(msg || "商談メモの保存に失敗しました");
+  }
+  if (!data) {
+    throw new Error("商談が見つからないか、更新権限がありません");
+  }
+
+  // メモ保存を活動履歴にも残す（No.19）。失敗しても本体保存は成功扱い
+  if (text.trim()) {
+    const { error: activityError } = await supabase.from("deal_activities").insert({
       company_id,
       deal_id: dealId,
       type: "note",
       title: "商談メモを更新",
-      description: summary.slice(0, 2000),
+      description: text.slice(0, 2000),
       performed_by: user_id,
       performed_at: new Date().toISOString(),
     });
+    if (activityError) {
+      console.warn("[updateDealSummary] deal_activities insert failed", activityError);
+    }
   }
 
-  return data;
+  return { id: data.id as string, summary: (data.summary as string | null) ?? text };
 }
 
 // ── AI見込度判定（顧客の prospect_grade: A/B/C）────────────────

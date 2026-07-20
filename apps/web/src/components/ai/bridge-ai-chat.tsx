@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Sparkles, Send, X, Loader2 } from "lucide-react";
+import { Send, X, Loader2 } from "lucide-react";
 import { sendBridgeAiMessage } from "@/lib/actions/bridge-ai";
+import { BrandMark } from "@/components/layout/brand-logo";
+import { cn } from "@/lib/utils";
 
 export const BRIDGE_AI_PANEL_WIDTH = 400;
 
@@ -50,7 +52,6 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const TEAL_ACTIVE_GRADIENT = "var(--brand-gradient)";
 
   useEffect(() => {
     if (!open) return;
@@ -97,11 +98,10 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="fixed bottom-6 right-6 z-50 size-14 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform"
-          style={{ background: TEAL_ACTIVE_GRADIENT }}
+          className="fixed bottom-6 right-6 z-50 size-14 rounded-full shadow-lg flex items-center justify-center bg-background border border-border hover:scale-105 transition-transform"
           aria-label="BRIDGE AI"
         >
-          <Sparkles className="h-6 w-6" />
+          <BrandMark className="h-9 w-auto" />
         </button>
       )}
 
@@ -120,11 +120,8 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
         aria-hidden={!open}
       >
         <div className="px-4 py-3 border-b flex items-center gap-2.5">
-          <span
-            className="h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0"
-            style={{ background: TEAL_ACTIVE_GRADIENT }}
-          >
-            <Sparkles className="h-4 w-4" />
+          <span className="h-8 w-9 flex items-center justify-center shrink-0">
+            <BrandMark className={cn("h-9 w-auto", sending && "animate-cube-thinking")} />
           </span>
           <span className="flex flex-col items-start leading-tight flex-1">
             <span className="text-base font-semibold">BLIDGE AI</span>
@@ -152,15 +149,15 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.map((m, i) => (
               <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-                <span className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                <span className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border border-border"}`}>
                   {m.text}
                 </span>
               </div>
             ))}
             {sending && (
               <div className="text-left">
-                <span className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm bg-muted text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-3 rounded-lg px-4 py-3 text-sm bg-card border border-border text-muted-foreground">
+                  <BrandMark className="h-12 w-auto animate-cube-thinking" />
                   考え中...
                 </span>
               </div>
@@ -172,7 +169,7 @@ export function BridgeAiChat({ open, onOpenChange }: { open: boolean; onOpenChan
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="メッセージを入力...（Enterで改行、⌘/Ctrl+Enterで送信）"
+            placeholder="メッセージを入力"
             rows={2}
             className="min-h-[40px] max-h-32 resize-none [field-sizing:fixed]"
             onKeyDown={(e) => {

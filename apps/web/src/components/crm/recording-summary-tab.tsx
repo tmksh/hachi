@@ -169,6 +169,7 @@ export function RecordingSummaryTab({
           transcript?: string;
           result?: MeetingResult;
           recordingId?: string;
+          dealId?: string;
           error?: string;
         };
 
@@ -180,17 +181,28 @@ export function RecordingSummaryTab({
         setResult(data.result ?? null);
         if (data.result?.summary) setMemo(data.result.summary);
         setRecordingState("done");
-        toast.success("文字起こし完了！結果を確認してください");
 
         // 同期API側で録音保存＋商談登録済み。recordingIdが無い場合のみフロントから後処理
         if (!data.recordingId && finalTranscript && data.result) {
-          saveVoiceTranscriptResult({
-            customerId,
-            dealId,
-            storagePath,
-            transcript: finalTranscript,
-            result: data.result,
-          }).catch(() => {});
+          try {
+            const saved = await saveVoiceTranscriptResult({
+              customerId,
+              dealId,
+              storagePath,
+              transcript: finalTranscript,
+              result: data.result,
+            });
+            toast.success(saved.dealId ? "文字起こし完了。商談に登録しました" : "文字起こし完了！結果を確認してください");
+          } catch {
+            toast.success("文字起こし完了！結果を確認してください");
+            toast.error("商談への自動登録に失敗しました");
+          }
+        } else {
+          toast.success(
+            data.dealId || data.recordingId
+              ? "文字起こし完了。商談に登録しました"
+              : "文字起こし完了！結果を確認してください",
+          );
         }
       } else {
         // 非同期処理（12分超）
@@ -231,15 +243,22 @@ export function RecordingSummaryTab({
           setRecordingState("done");
           toast.success("文字起こし完了！結果を確認してください");
 
-          // 営業フロー後処理
+          // 営業フロー後処理（商談自動登録）
           if (job.transcript && job.result) {
-            saveVoiceTranscriptResult({
-              customerId,
-              dealId,
-              storagePath,
-              transcript: job.transcript,
-              result: job.result,
-            }).catch(() => {});
+            try {
+              const saved = await saveVoiceTranscriptResult({
+                customerId,
+                dealId,
+                storagePath,
+                transcript: job.transcript,
+                result: job.result,
+              });
+              if (saved.dealId) {
+                toast.success("商談に登録しました");
+              }
+            } catch {
+              toast.error("商談への自動登録に失敗しました");
+            }
           }
         } else if (job.status === "error") {
           clearInterval(pollRef.current!);

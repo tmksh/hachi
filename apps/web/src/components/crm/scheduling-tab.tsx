@@ -108,15 +108,20 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
   const confirmCandidate = async (candidate: SchedulingCandidate) => {
     setConfirmingId(candidate.id);
     try {
-      await confirmSchedulingCandidate({
+      const result = await confirmSchedulingCandidate({
         customer_id: customerId,
         candidate,
         meeting_type: meetingType,
         duration_minutes: Number(duration),
       });
-      toast.success("カレンダーに登録しました");
-    } catch {
-      toast.error("カレンダー登録に失敗しました。候補日を案内するメール文面を生成します");
+      toast.success(
+        result.googleEventId
+          ? "カレンダーに登録しました（Googleカレンダーへ同期済み）"
+          : "カレンダーに登録しました",
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "カレンダー登録に失敗しました";
+      toast.error(`${msg}。候補日を案内するメール文面を生成します`);
       void generateEmail([candidate]);
     } finally {
       setConfirmingId(null);

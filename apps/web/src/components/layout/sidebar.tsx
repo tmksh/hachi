@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo, memo, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { BrandLogo, BrandMark } from "@/components/layout/brand-logo";
 import { usePathname } from "next/navigation";
 import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS, canAccessNavItem, ROLE_LABELS } from "@/lib/constants";
+import { NAV_GROUPS, ROLE_LABELS } from "@/lib/constants";
 import { useKpiColor } from "@/hooks/use-kpi-color";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -238,9 +238,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   };
 
   const { color: kpiColor } = useKpiColor();
-  const { canAccess: canAccessCustom } = useCompanyPermissions();
+  const { canAccess } = useCompanyPermissions();
 
-  /** ロールでフィルタされたナビグループ */
+  /** 権限マトリクスでフィルタされたナビグループ（正本は会社の role_permissions） */
   const visibleGroups = useMemo(
     () =>
       NAV_GROUPS
@@ -248,12 +248,11 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
           ...group,
           items: group.items.filter((item) => {
             if (!profile?.role) return true;
-            if (!canAccessNavItem(item.key, profile.role)) return false;
-            return canAccessCustom(item.key, [profile.role]);
+            return canAccess(item.key, [profile.role]);
           }),
         }))
         .filter((group) => group.items.length > 0),
-    [profile?.role, canAccessCustom],
+    [profile?.role, canAccess],
   );
 
   const toggleGroup = (key: string) => {
@@ -283,17 +282,23 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
             expanded ? "h-14 px-3" : "h-12 justify-center px-1",
           )}
         >
-          <button
-            onClick={() => onExpandedChange(!expanded)}
-            className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl sidebar-nav-hover"
-          >
-            <Image src="/logo.png" alt="BRIDGE" width={40} height={34} className="object-contain w-8 h-auto" />
-          </button>
-          {expanded && (
-              <span className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden animate-in fade-in slide-in-from-left-2 duration-150">
-                BRIDGE
-              </span>
-            )}
+          {expanded ? (
+            <button
+              onClick={() => onExpandedChange(!expanded)}
+              aria-label="BRIDGE Linq"
+              className="h-10 flex items-center px-1 transition-transform hover:scale-[1.03] shrink-0 rounded-xl sidebar-nav-hover animate-in fade-in slide-in-from-left-2 duration-150"
+            >
+              <BrandLogo />
+            </button>
+          ) : (
+            <button
+              onClick={() => onExpandedChange(!expanded)}
+              aria-label="BRIDGE Linq"
+              className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl sidebar-nav-hover"
+            >
+              <BrandMark className="h-8 w-auto" />
+            </button>
+          )}
         </div>
 
         {/* Nav Groups */}

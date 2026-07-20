@@ -11,8 +11,12 @@ import {
 } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
-import { type Role, canAccessRoute } from "@/lib/constants";
+import { type Role } from "@/lib/constants";
 import { applyFontSize, isFontSize } from "@/lib/font-size";
+import {
+  canAccessPathWithPermissions,
+  type RolePermissions,
+} from "@/lib/role-permissions";
 
 export type Profile = {
   id: string;
@@ -47,12 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(
     async (authUser: User | null) => {
       if (!authUser) {
         setProfile(null);
+        setRolePermissions(null);
         return;
       }
       const fontMeta = authUser.user_metadata?.font_size;
@@ -63,6 +69,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("id", authUser.id)
         .single();
       setProfile(data as Profile | null);
+
+      if (data?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("settings")
+          .eq("id", data.company_id)
+          .maybeSingle();
+        const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+        const rp = settings?.role_permissions;
+        setRolePermissions(
+          rp && typeof rp === "object" ? (rp as RolePermissions) : null,
+        );
+      } else {
+        setRolePermissions(null);
+      }
     },
     [supabase],
   );
@@ -121,10 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isManager: role === "hq_admin" || role === "contractor_admin",
       isEmployee: role === "employee",
       hasRole: (...roles: Role[]) => !!role && roles.includes(role),
-      canAccess: (pathname: string) => !!role && canAccessRoute(pathname, role),
+      canAccess: (pathname: string) =>
+        !!role && canAccessPathWithPermissions(pathname, role, rolePermissions),
       supabase,
     }),
-    [user, profile, loading, signOut, role, supabase],
+    [user, profile, loading, signOut, role, rolePermissions, supabase],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

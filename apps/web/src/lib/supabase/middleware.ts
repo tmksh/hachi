@@ -1,18 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  canAccessPathWithPermissions,
+  featureKeyForPath,
+  type RolePermissions,
+} from "@/lib/role-permissions";
 
-// ルートプレフィックス → 許可ロール（ここで完結させて Edge Runtime の import を最小化）
-const ROUTE_ROLES: Record<string, string[]> = {
-  "/bi":        ["hq_admin", "contractor_admin"],
-  "/crm":       ["hq_admin", "contractor_admin"],
-  "/deals":     ["hq_admin", "contractor_admin"],
-  "/quotes":    ["hq_admin", "contractor_admin"],
-  "/craftsmen": ["hq_admin", "contractor_admin"],
-  "/contracts": ["hq_admin", "contractor_admin"],
-  "/invoices":  ["hq_admin", "contractor_admin"],
-  "/budget":    ["hq_admin"],
-  "/marketing": [],
-};
+/** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
+const LEGACY_ROUTE_PREFIXES = [
+  "/bi", "/bi2", "/crm", "/deals", "/quotes", "/craftsmen",
+  "/contracts", "/constructions", "/invoices", "/budget", "/marketing",
+];
 
 // ── サブドメイン予約語（これらは会社 slug として使えない） ───────────────────────
 const RESERVED_SUBDOMAINS = new Set([
@@ -35,6 +33,10 @@ function redirectToCanonicalDomain(request: NextRequest): NextResponse | null {
 
   const hostname = (request.headers.get("host") ?? "").split(":")[0];
   if (!hostname.endsWith(".netlify.app")) return null;
+
+  // ブランチデプロイ / Deploy Preview（例: staging--site.netlify.app）は
+  // ステージング環境として使うためリダイレクトしない
+  if (hostname.includes("--")) return null;
 
   const url = request.nextUrl.clone();
   url.protocol = "https:";
@@ -229,21 +231,33 @@ export async function updateSession(request: NextRequest) {
   if (user) {
     const { pathname } = request.nextUrl;
 
-    const matchedPath = Object.keys(ROUTE_ROLES).find((p) =>
-      pathname.startsWith(p),
-    );
+    const needsRoleCheck =
+      !!featureKeyForPath(pathname)
+      || LEGACY_ROUTE_PREFIXES.some((p) => pathname.startsWith(p));
 
-    if (matchedPath) {
+    if (needsRoleCheck) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, company_id")
         .eq("id", user.id)
         .single();
 
       const role = profile?.role as string | undefined;
-      const allowed = ROUTE_ROLES[matchedPath];
+      let permissions: RolePermissions | null = null;
 
-      if (!role || allowed.length === 0 || !allowed.includes(role)) {
+      if (profile?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("settings")
+          .eq("id", profile.company_id)
+          .maybeSingle();
+        const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+        if (settings?.role_permissions && typeof settings.role_permissions === "object") {
+          permissions = settings.role_permissions as RolePermissions;
+        }
+      }
+
+      if (!role || !canAccessPathWithPermissions(pathname, role, permissions)) {
         const url = request.nextUrl.clone();
         url.pathname = "/unauthorized";
         return NextResponse.redirect(url);

@@ -25,14 +25,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { getEstimates } from "@/lib/actions/estimates";
-import { getEstimate } from "@/lib/actions/estimates";
+import { getEstimates, getEstimate, updateEstimate } from "@/lib/actions/estimates";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { calcGrossProfitRatePercent, toMarginThresholdPercent } from "@/lib/estimate-margin";
-import { useAuth } from "@/components/providers/auth-provider";
-import { useCompanyPermissions } from "@/hooks/use-company-permissions";
-
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
 };
@@ -180,6 +176,8 @@ export type EstimateForView = {
   cost_total?: number;
   reserve_fee_1_rate?: number;
   reserve_fee_2_rate?: number;
+  reserve_fee_1_amount?: number;
+  reserve_fee_2_amount?: number;
   default_gross_profit_rate?: number;
   categories?: EstimateCategory[];
   items?: EstimateItem[];
@@ -257,6 +255,34 @@ function EstimateItemRow({
       setSaving(false);
     }
   };
+
+  const isTextRow = Boolean(draft.is_text_row);
+
+  if (isTextRow) {
+    return (
+      <tr className={cn("border-t border-border/40 bg-slate-50/60 hover:bg-muted/10", saving && "opacity-70")}>
+        <td className="px-2 py-1 text-center">
+          <input type="checkbox" className="rounded border-slate-300" />
+        </td>
+        <td className="px-2 py-1.5" colSpan={10}>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px] shrink-0 border-slate-300 text-slate-600">
+              テキスト行
+            </Badge>
+            <input
+              className={cn(ITEM_CELL, "italic text-muted-foreground")}
+              value={draft.name}
+              disabled={isTemp}
+              placeholder="注釈を入力（例: 洗面器材はお客様支給のため保証致しかねます）"
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+              onBlur={() => void commit("name", draft.name)}
+            />
+          </div>
+        </td>
+        <td className="px-2 py-1.5 text-muted-foreground text-[10px] whitespace-nowrap">売価ゼロ</td>
+      </tr>
+    );
+  }
 
   return (
     <tr className={cn("border-t border-border/40 hover:bg-muted/10", saving && "opacity-70")}>
@@ -391,13 +417,13 @@ export function EstimateDetailView({
   const [bulkRateSell, setBulkRateSell] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkApplying, setBulkApplying] = useState(false);
   const [marginInfo, setMarginInfo] = useState<{ threshold: number; baseThreshold: number; reservePercent: number } | null>(null);
-  const { role } = useAuth();
-  const { canAccess } = useCompanyPermissions();
-  // 予備費の内訳は「予備費設定」権限を持つ人だけに開示
-  const canSeeReserve = role ? canAccess("reserve_fee", [role]) : false;
+  // 予備費は社員にも表示（非表示による不信感を防止）
+  const canSeeReserve = true;
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = estimate.items ?? [];
   const costTotal = estimate.cost_total ?? 0;
+  const reserve1Amount = Number(estimate.reserve_fee_1_amount ?? 0);
+  const reserve2Amount = Number(estimate.reserve_fee_2_amount ?? 0);
 
   const itemsByCategory = categories.map((cat) => ({
     category: cat,
@@ -406,8 +432,10 @@ export function EstimateDetailView({
   const uncategorized = items.filter((item) => !item.category_id);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const [inlineAdd, setInlineAdd] = useState<"category" | string | null>(null);
+  const [inlineAddKind, setInlineAddKind] = useState<"calc" | "text">("calc");
   const [inlineName, setInlineName] = useState("");
   const [savingLine, setSavingLine] = useState(false);
+  const [savingReserve, setSavingReserve] = useState(false);
   const [seedingEmpty, setSeedingEmpty] = useState(false);
   const inlineInputRef = useRef<HTMLInputElement>(null);
   const seededEstimateIdRef = useRef<string | null>(null);
@@ -579,13 +607,14 @@ export function EstimateDetailView({
     setInlineAdd("category");
   };
 
-  const startAddItem = (categoryId: string) => {
+  const startAddItem = (categoryId: string, kind: "calc" | "text" = "calc") => {
     setCollapsedIds((prev) => { const next = new Set(prev); next.delete(categoryId); return next; });
     setInlineName("");
+    setInlineAddKind(kind);
     setInlineAdd(categoryId);
   };
 
-  const cancelInline = () => { setInlineAdd(null); setInlineName(""); };
+  const cancelInline = () => { setInlineAdd(null); setInlineName(""); setInlineAddKind("calc"); };
 
   const commitInline = async () => {
     if (!estimate.id || !inlineName.trim() || savingLine || !inlineAdd) return;
@@ -624,6 +653,7 @@ export function EstimateDetailView({
     }
 
     const categoryId = mode;
+    const isTextRow = inlineAddKind === "text";
     const tempId = `temp-item-${Date.now()}`;
     const optimistic: EstimateItem = {
       id: tempId,
@@ -633,8 +663,8 @@ export function EstimateDetailView({
       name,
       description: null,
       specification: null,
-      quantity: 1,
-      unit: "式",
+      quantity: isTextRow ? 0 : 1,
+      unit: isTextRow ? null : "式",
       cost_price: 0,
       cost_amount: 0,
       selling_price: 0,
@@ -643,6 +673,7 @@ export function EstimateDetailView({
       gross_profit_rate: 0,
       sort_order: prevItems.filter((i) => i.category_id === categoryId).length,
       notes: null,
+      is_text_row: isTextRow,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -651,7 +682,7 @@ export function EstimateDetailView({
     setInlineAdd(null);
     setSavingLine(true);
     try {
-      const item = await addEstimateItem(estimate.id, categoryId, name);
+      const item = await addEstimateItem(estimate.id, categoryId, name, { isTextRow });
       onEstimateChange({
         ...estimate,
         items: [...prevItems, item],
@@ -661,6 +692,43 @@ export function EstimateDetailView({
       toast.error(e instanceof Error ? e.message : "追加に失敗しました");
     } finally {
       setSavingLine(false);
+      setInlineAddKind("calc");
+    }
+  };
+
+  const handleReserveAmountChange = async (field: "reserve_fee_1_amount" | "reserve_fee_2_amount", value: number) => {
+    const next = Math.max(0, Math.round(value) || 0);
+    const prev = { ...estimate };
+    onEstimateChange({ ...estimate, [field]: next });
+    setSavingReserve(true);
+    try {
+      await updateEstimate(estimate.id, { [field]: next });
+      // 合計再計算はサーバー側。最新を取り直さずローカルで概算反映
+      const r1 = field === "reserve_fee_1_amount" ? next : reserve1Amount;
+      const r2 = field === "reserve_fee_2_amount" ? next : reserve2Amount;
+      const lineCost = items
+        .filter((i) => !i.is_text_row)
+        .reduce((s, i) => s + (i.cost_amount ?? 0), 0);
+      const sell = items
+        .filter((i) => !i.is_text_row)
+        .reduce((s, i) => s + (i.selling_amount ?? 0), 0);
+      const cost_total = lineCost + r1 + r2;
+      const tax = Math.floor(sell * 0.1);
+      onEstimateChange({
+        ...estimate,
+        [field]: next,
+        cost_total,
+        subtotal: sell,
+        tax,
+        total: sell + tax,
+        gross_profit: sell - cost_total,
+        gross_profit_rate: sell > 0 ? ((sell - cost_total) / sell) * 100 : 0,
+      });
+    } catch (e) {
+      onEstimateChange(prev);
+      toast.error(e instanceof Error ? e.message : "予備費の更新に失敗しました");
+    } finally {
+      setSavingReserve(false);
     }
   };
 
@@ -1079,14 +1147,16 @@ export function EstimateDetailView({
                           value={inlineName}
                           onChange={(e) => setInlineName(e.target.value)}
                           onKeyDown={handleInlineKeyDown}
-                          placeholder="詳細項目名を入力..."
+                          placeholder={inlineAddKind === "text" ? "注釈テキストを入力..." : "詳細項目名を入力..."}
                           className="flex-1 bg-transparent border-b border-primary outline-none text-xs py-0.5 placeholder:text-muted-foreground/50"
                         />
                         {savingLine
                           ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
                           : (
                             <>
-                              <button type="button" onClick={() => void commitInline()} disabled={!inlineName.trim()} className="text-[10px] text-primary font-medium hover:underline disabled:opacity-40">追加</button>
+                              <button type="button" onClick={() => void commitInline()} disabled={!inlineName.trim()} className="text-[10px] text-primary font-medium hover:underline disabled:opacity-40">
+                                {inlineAddKind === "text" ? "テキスト行を追加" : "追加"}
+                              </button>
                               <button type="button" onClick={cancelInline} className="text-[10px] text-muted-foreground hover:underline">キャンセル</button>
                             </>
                           )
@@ -1096,12 +1166,23 @@ export function EstimateDetailView({
                   </tr>
                 )}
                 {!collapsed && !isAddingHere && inlineAdd === null && (
-                  <tr className="cursor-pointer" onClick={() => startAddItem(category.id)}>
+                  <tr>
                     <td colSpan={12} className="p-0">
-                      <div className="max-h-0 group-hover/cat:max-h-8 overflow-hidden transition-all duration-150 hover:bg-primary/5">
-                        <div className="px-3 py-1.5 text-xs text-primary border-t border-dashed border-border/40">
-                          <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" />詳細項目を追加</span>
-                        </div>
+                      <div className="px-3 py-2 border-t border-dashed border-border/40 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startAddItem(category.id, "calc")}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/5 rounded px-2 py-1"
+                        >
+                          <Plus className="h-3 w-3" />計算行を追加
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startAddItem(category.id, "text")}
+                          className="inline-flex items-center gap-1 text-xs text-slate-600 hover:bg-slate-100 rounded px-2 py-1"
+                        >
+                          <Plus className="h-3 w-3" />テキスト行を追加
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1160,16 +1241,67 @@ export function EstimateDetailView({
                 </td>
               </tr>
             ) : inlineAdd === null ? (
-              <tr className="cursor-pointer" onClick={startAddCategory}>
+              <tr>
                 <td colSpan={12} className="p-0">
-                  <div className="max-h-0 group-hover/cat-add:max-h-10 overflow-hidden transition-all duration-150">
-                    <div className="px-3 py-2 text-xs text-primary border-t border-dashed border-border/40 hover:bg-primary/5">
-                      <span className="inline-flex items-center gap-1"><Plus className="h-3.5 w-3.5" />大項目を追加</span>
-                    </div>
+                  <div className="px-3 py-2.5 border-t border-dashed border-border/40">
+                    <button
+                      type="button"
+                      onClick={startAddCategory}
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/5 rounded px-2 py-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />大項目を追加
+                    </button>
                   </div>
                 </td>
               </tr>
             ) : null}
+            {/* 予備費・予備予備費は明細表の外（サマリー付近）で記入 */}
+            <tr className="bg-amber-50/40 border-t border-amber-200/60">
+              <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
+                <span className="font-medium">予備費（会社確保分）</span>
+                <span className="block text-[10px] text-muted-foreground font-normal">担当者は使用不可・売価ゼロ</span>
+              </td>
+              <td colSpan={2} className="px-3 py-2.5">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  disabled={savingReserve}
+                  className="h-8 text-xs tabular-nums text-right"
+                  value={reserve1Amount || ""}
+                  placeholder="0"
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 0;
+                    onEstimateChange({ ...estimate, reserve_fee_1_amount: v });
+                  }}
+                  onBlur={(e) => void handleReserveAmountChange("reserve_fee_1_amount", Number(e.target.value) || 0)}
+                />
+              </td>
+              <td colSpan={4} className="px-3 py-2.5 text-[10px] text-muted-foreground">原価のみ計上（顧客向けPDF非出力）</td>
+            </tr>
+            <tr className="bg-amber-50/25 border-t border-amber-100/80">
+              <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
+                <span className="font-medium">予備予備費（現場対応分）</span>
+                <span className="block text-[10px] text-muted-foreground font-normal">実行予算移行後に明細側で操作可</span>
+              </td>
+              <td colSpan={2} className="px-3 py-2.5">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  disabled={savingReserve}
+                  className="h-8 text-xs tabular-nums text-right"
+                  value={reserve2Amount || ""}
+                  placeholder="0"
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 0;
+                    onEstimateChange({ ...estimate, reserve_fee_2_amount: v });
+                  }}
+                  onBlur={(e) => void handleReserveAmountChange("reserve_fee_2_amount", Number(e.target.value) || 0)}
+                />
+              </td>
+              <td colSpan={4} className="px-3 py-2.5 text-[10px] text-muted-foreground">原価のみ計上（顧客向けPDF非出力）</td>
+            </tr>
             <tr className="bg-slate-100/70 border-t border-border/40 font-bold">
               <td colSpan={6} className="px-3 py-3 text-right text-sm">合計</td>
               <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{costTotal.toLocaleString()}</td>

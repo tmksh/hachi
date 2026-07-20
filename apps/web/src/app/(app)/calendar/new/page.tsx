@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimeSelect } from "@/components/ui/time-select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ArrowLeft, Save } from "lucide-react";
 import { createCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
 import { createGoogleCalendarEvent } from "@/lib/google-calendar";
@@ -137,7 +138,7 @@ function CalendarNewPageContent() {
             </div>
             <div className="space-y-2">
               <Label>開始日 *</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <DatePicker value={startDate} onChange={setStartDate} placeholder="開始日を選択" />
             </div>
             {!allDay && (
               <div className="space-y-2">
@@ -147,7 +148,7 @@ function CalendarNewPageContent() {
             )}
             <div className="space-y-2">
               <Label>終了日</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <DatePicker value={endDate} onChange={setEndDate} placeholder="終了日を選択" />
             </div>
             {!allDay && (
               <div className="space-y-2">

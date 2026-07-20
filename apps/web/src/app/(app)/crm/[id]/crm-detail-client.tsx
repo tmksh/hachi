@@ -252,13 +252,15 @@ function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientPr
         </TabsContent>
 
         <TabsContent value="deals" className="mt-4">
-          <DealsTimelineTab customerId={id as string} />
+          {/* タブ切替時に再取得（録音後の商談自動登録を反映） */}
+          {mainTab === "deals" && (
+            <DealsTimelineTab key={`deals-${id}`} customerId={id as string} />
+          )}
         </TabsContent>
 
         <TabsContent value="recording" className="mt-4">
           <RecordingSummaryTab
             customerId={id as string}
-            dealId={related?.deals?.find((d) => d.stage !== "won" && d.stage !== "lost")?.id}
             customerEmail={data.email}
           />
         </TabsContent>
