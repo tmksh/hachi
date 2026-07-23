@@ -1190,6 +1190,39 @@ export async function updateEstimateCategoryReserve(categoryId: string, reserveF
   return data;
 }
 
+export async function updateEstimateCategoryName(categoryId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("大項目名を入力してください");
+
+  const supabase = await createClient();
+  const { data: category, error: findError } = await supabase
+    .from("estimate_categories")
+    .select("id, estimate_id, name")
+    .eq("id", categoryId)
+    .single();
+  throwIfSupabaseError(findError);
+  if (!category) throw new Error("大項目が見つかりません");
+
+  await assertEstimateAccess(category.estimate_id);
+
+  if (category.name === trimmed) return category;
+
+  const { data, error } = await supabase
+    .from("estimate_categories")
+    .update({ name: trimmed })
+    .eq("id", categoryId)
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  await supabase
+    .from("estimates")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", category.estimate_id);
+
+  return data;
+}
+
 export async function addEstimateItem(
   estimateId: string,
   categoryId: string,

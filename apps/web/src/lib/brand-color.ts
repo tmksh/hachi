@@ -49,6 +49,29 @@ export function computeBrandFromHex(hex: string): BrandColors {
   return { light, dark, accent, mid };
 }
 
+/**
+ * ブランド色と同系統（ほぼ同一色相）で、明度・彩度差を大きくした系列色を返す。
+ * 積み上げグラフでも隣同士が同化しないよう、ステップを広めに取る。
+ */
+export function buildBrandSeriesPalette(hex: string, count = 4): Array<{ color: string; colorEnd: string }> {
+  const [h, s] = hexToHsl(hex);
+  const n = Math.max(1, count);
+  // 明度 16%〜78% を広く分割。色相は ±8° までわずかに振って同系統感を保ちつつ差を出す
+  const lMin = 16;
+  const lMax = 78;
+  return Array.from({ length: n }, (_, i) => {
+    const t = n === 1 ? 0 : i / (n - 1);
+    const l = Math.round(lMin + (lMax - lMin) * t);
+    const lEnd = Math.min(84, l + 14);
+    const sat = Math.max(32, Math.min(92, s + Math.round((0.5 - t) * 28)));
+    const hue = (h + Math.round((t - 0.5) * 16) + 360) % 360;
+    return {
+      color: hslToHex(hue, sat, l),
+      colorEnd: hslToHex(hue, Math.max(24, sat - 10), lEnd),
+    };
+  });
+}
+
 export function getGradient(light: string, dark: string): string {
   return `linear-gradient(135deg, ${light} 0%, ${dark} 100%)`;
 }

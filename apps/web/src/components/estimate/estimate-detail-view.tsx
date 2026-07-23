@@ -12,6 +12,7 @@ import {
   addEstimateCategory,
   addEstimateItem,
   updateEstimateItem,
+  updateEstimateCategoryName,
   importCategoryFromReference,
   bulkApplyMarginToEstimate,
   type EstimateItemUpdatePatch,
@@ -217,6 +218,66 @@ const ITEM_CELL_NUM =
 
 const ITEM_CELL_UNIT =
   "w-full min-w-[2rem] bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap text-center text-muted-foreground";
+
+function CategoryNameInput({
+  category,
+  onRenamed,
+}: {
+  category: EstimateCategory;
+  onRenamed: (next: EstimateCategory) => void;
+}) {
+  const [name, setName] = useState(category.name);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(category.name);
+  }, [category.id, category.name]);
+
+  const commit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === category.name || saving) {
+      if (!trimmed) setName(category.name);
+      return;
+    }
+    setSaving(true);
+    onRenamed({ ...category, name: trimmed });
+    try {
+      const saved = await updateEstimateCategoryName(category.id, trimmed);
+      onRenamed(saved as EstimateCategory);
+    } catch (e) {
+      setName(category.name);
+      onRenamed(category);
+      toast.error(e instanceof Error ? e.message : "大項目名の更新に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <input
+      className={cn(
+        "min-w-0 flex-1 bg-transparent border-0 outline-none text-xs font-semibold text-slate-700 leading-tight py-0.5 px-1 rounded",
+        "focus:bg-white/80 focus:ring-1 focus:ring-slate-300",
+        saving && "opacity-70",
+      )}
+      value={name}
+      placeholder="大項目名"
+      disabled={saving}
+      onChange={(e) => setName(e.target.value)}
+      onBlur={() => void commit()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === "Escape") {
+          setName(category.name);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+}
 
 function EstimateItemRow({
   item,
@@ -1186,26 +1247,32 @@ export function EstimateDetailView({
             const isAddingHere = inlineAdd === category.id;
             return (
               <tbody key={category.id} className="group/cat">
-                <tr
-                  className="bg-slate-200/80 border-t border-border/40 cursor-pointer hover:bg-slate-300/70"
-                  onClick={() => toggleCategory(category.id)}
-                >
-                  <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                <tr className="bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70">
+                  <td className="px-2 py-2 text-center">
                     <input type="checkbox" className="rounded border-slate-300" />
                   </td>
                   <td className="px-3 py-2 font-semibold text-slate-700" colSpan={5}>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-left hover:text-slate-900"
-                      aria-expanded={!collapsed}
-                      onClick={(e) => { e.stopPropagation(); toggleCategory(category.id); }}
-                    >
-                      <span className="text-slate-400 w-3 text-center">{collapsed ? "▸" : "▾"}</span>
-                      {category.name.trim() || (
-                        <span className="text-muted-foreground font-normal">大項目名</span>
-                      )}
-                    </button>
-                    <span className="text-[10px] text-muted-foreground ml-2 font-normal">{catItems.length}項目</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <button
+                        type="button"
+                        className="text-slate-400 w-4 shrink-0 text-center hover:text-slate-700"
+                        aria-expanded={!collapsed}
+                        aria-label={collapsed ? "展開" : "折りたたむ"}
+                        onClick={() => toggleCategory(category.id)}
+                      >
+                        {collapsed ? "▸" : "▾"}
+                      </button>
+                      <CategoryNameInput
+                        category={category}
+                        onRenamed={(next) => {
+                          onEstimateChange({
+                            ...estimate,
+                            categories: categories.map((c) => (c.id === next.id ? { ...c, name: next.name } : c)),
+                          });
+                        }}
+                      />
+                      <span className="text-[10px] text-muted-foreground font-normal shrink-0">{catItems.length}項目</span>
+                    </div>
                   </td>
                   <td className="px-2 py-2 text-right text-muted-foreground bg-amber-50/40 whitespace-nowrap text-xs">小計</td>
                   <td className="px-2 py-2 text-right tabular-nums font-semibold bg-amber-50/40 whitespace-nowrap text-xs">¥{catCost.toLocaleString()}</td>

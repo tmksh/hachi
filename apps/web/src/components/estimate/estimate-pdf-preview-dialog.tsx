@@ -139,11 +139,11 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
   const previewLabel = isCost ? "原価内訳書プレビュー" : "見積書プレビュー";
   const itemCount = data.items.length + (isCost ? 2 : 0);
 
-  // 原価内訳書は社内確認用なので横幅を広めに。顧客見積書はA4想定を維持
-  const dialogMaxW = isCost ? "sm:max-w-[960px]" : "sm:max-w-[627px]";
-  const paperMaxW = isCost ? "max-w-[900px]" : "max-w-[595px]";
-  const paperFontSize = isCost ? "13px" : "11px";
-  const paperPadding = isCost ? "40px 44px" : "48px 52px";
+  // 画面プレビューは横幅を広めに。印刷時は mode に応じて幅を調整
+  const dialogMaxW = "sm:max-w-[960px]";
+  const paperMaxW = "max-w-[900px]";
+  const paperFontSize = isCost ? "13px" : "12px";
+  const paperPadding = "40px 44px";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,12 +222,9 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
       <style jsx global>{`
         @media print {
           #quote-print-area {
-            width: 595px !important;
+            width: 900px !important;
             max-width: none !important;
             min-height: 842px !important;
-          }
-          #quote-print-area[data-pdf-mode="cost_breakdown"] {
-            width: 900px !important;
           }
         }
       `}</style>
@@ -237,59 +234,59 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
 
 function CustomerEstimateTable({ data, itemCount }: { data: EstimatePdfPreviewData; itemCount: number }) {
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
       <thead>
         <tr style={{ background: "#f1f5f9" }}>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "left", padding: "5px 8px" }}>品名</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "5px 8px", width: "48px" }}>数量</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "center", padding: "5px 8px", width: "36px" }}>単位</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "5px 8px", width: "90px" }}>単価</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "5px 8px", width: "90px" }}>金額</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "left", padding: "8px 10px" }}>品名</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "64px" }}>数量</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "center", padding: "8px 10px", width: "52px" }}>単位</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "120px" }}>単価</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "120px" }}>金額</th>
         </tr>
       </thead>
       <tbody>
         {data.categories.length > 0
           ? data.categories.flatMap((cat) => [
               <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-                <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "4px 8px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+                <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
               </tr>,
               ...data.items.filter((i) => i.category_id === cat.id).map((item) => (
                 <tr key={item.id}>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px" }}>{item.name || "—"}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center" }}>{item.unit ?? "式"}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
+                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
+                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
+                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{item.unit ?? "式"}</td>
+                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
+                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
                 </tr>
               )),
             ])
           : data.items.map((item) => (
               <tr key={item.id}>
-                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px" }}>{item.name || "—"}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "center" }}>{item.unit ?? "式"}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
+                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
+                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
+                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{item.unit ?? "式"}</td>
+                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
+                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
               </tr>
             ))}
         {Array.from({ length: Math.max(0, 8 - itemCount) }).map((_, i) => (
           <tr key={`empty-${i}`}>
-            <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "10px" }}>&nbsp;</td>
+            <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "12px" }}>&nbsp;</td>
           </tr>
         ))}
       </tbody>
       <tfoot>
         <tr>
-          <td colSpan={4} style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right" }}>小計</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{data.subtotal.toLocaleString()}</td>
+          <td colSpan={4} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>小計</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{data.subtotal.toLocaleString()}</td>
         </tr>
         <tr>
-          <td colSpan={4} style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right" }}>消費税（10%）</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "4px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{data.tax.toLocaleString()}</td>
+          <td colSpan={4} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>消費税（10%）</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{data.tax.toLocaleString()}</td>
         </tr>
         <tr style={{ background: "#f1f5f9", fontWeight: "bold" }}>
-          <td colSpan={4} style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right" }}>合計（税込）</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{data.total.toLocaleString()}</td>
+          <td colSpan={4} style={{ border: "1px solid #cbd5e1", padding: "8px 10px", textAlign: "right" }}>合計（税込）</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "8px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{data.total.toLocaleString()}</td>
         </tr>
       </tfoot>
     </table>
