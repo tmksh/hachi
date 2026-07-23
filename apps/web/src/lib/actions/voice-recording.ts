@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { uploadToStorageAsAdmin } from "@/lib/storage-server";
 import { resolveLinqAiConfig } from "@/lib/integrations/linq-ai/platform-config";
 import { processRecordingComplete } from "@/lib/actions/sales-flow";
+import { sanitizeMeetingTitle } from "@/lib/integrations/linq-ai";
 
 const ASYNC_THRESHOLD_SEC = 720;   // 12分
 const ASYNC_THRESHOLD_BYTES = 25 * 1024 * 1024; // 25MB
@@ -120,7 +121,7 @@ export async function saveVoiceTranscriptResult(input: {
       deal_id: input.dealId ?? null,
       transcript: input.transcript,
       summary: input.result.summary,
-      title: input.result.title,
+      title: sanitizeMeetingTitle(input.result.title),
       memo: "",
       status: "completed",
       created_by: user.id,
@@ -130,13 +131,14 @@ export async function saveVoiceTranscriptResult(input: {
 
   if (error) throw error;
 
-  // 営業フロー後処理（ToDo生成・ステージ提案等）
+  // 営業フロー後処理（商談自動登録・ToDo生成・ステージ提案等）
   const processed = await processRecordingComplete({
     customerId: input.customerId,
     recordingId: saved.id,
     dealId: input.dealId,
     transcript: input.transcript,
     memo: "",
+    precomputed: input.result,
   });
 
   return { recordingId: saved.id, dealId: processed.dealId ?? null };

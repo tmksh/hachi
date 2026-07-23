@@ -14,7 +14,7 @@ import { createEstimate, getEstimate, type CreateEstimateCategoryInput } from "@
 import { getCustomers } from "@/lib/actions/customers";
 import { generateEstimateDraftForCustomer } from "@/lib/actions/sales-flow";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
-import { EstimatePdfPreviewDialog, type EstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
+import { EstimatePdfPreviewDialog, toEstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
 import { useBridgeChat } from "@/contexts/chat-panel-context";
 
 type DetailItem = { id: string; name: string; quantity: number; unit: string; cost_price: number; selling_price: number };
@@ -156,27 +156,34 @@ function QuoteNewPageContent() {
   const tax = Math.floor(subtotal * 0.1);
   const total = subtotal + tax;
 
-  const pdfPreviewData: EstimatePdfPreviewData = {
-    estimate_no: "下書き",
-    title: title.trim() || null,
-    customer_name: customerName !== "—" ? customerName : null,
-    notes: notes || null,
-    subtotal,
-    tax,
-    total,
-    categories: categories.map((cat) => ({ id: cat.id, name: cat.name.trim() || "明細" })),
-    items: categories.flatMap((cat) =>
-      cat.items.map((item) => ({
-        id: item.id,
-        category_id: cat.id,
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        selling_price: item.selling_price,
-        selling_amount: item.quantity * item.selling_price,
-      })),
-    ),
-  };
+  const pdfPreviewData = toEstimatePdfPreviewData(
+    {
+      estimate_no: "下書き",
+      title: title.trim() || null,
+      notes: notes || null,
+      subtotal,
+      tax,
+      total,
+      cost_total: costTotal,
+      reserve_fee_1_amount: 0,
+      reserve_fee_2_amount: 0,
+      categories: categories.map((cat) => ({ id: cat.id, name: cat.name.trim() || "明細" })),
+      items: categories.flatMap((cat) =>
+        cat.items.map((item) => ({
+          id: item.id,
+          category_id: cat.id,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          cost_price: item.cost_price,
+          cost_amount: item.quantity * item.cost_price,
+          selling_price: item.selling_price,
+          selling_amount: item.quantity * item.selling_price,
+        })),
+      ),
+    },
+    { name: customerName !== "—" ? customerName : null },
+  );
 
   const updateCategoryName = (catId: string, name: string) => {
     setCategories((prev) => prev.map((cat) => (cat.id === catId ? { ...cat, name } : cat)));

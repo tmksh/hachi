@@ -253,6 +253,19 @@ JSONのみ返してください: {"subject":"件名","body":"本文"}`,
 // 1-3 商談進捗
 // ---------------------------------------------------------------------------
 
+/**
+ * LLM がプロンプト内のテンプレ（"商談タイトル（20文字以内）" 等）をそのまま
+ * オウム返しした場合に無害なフォールバックへ置き換える
+ */
+export function sanitizeMeetingTitle(title: string | null | undefined, fallback?: string): string {
+  const t = (title ?? "").trim();
+  const isPlaceholder = !t || /20文字以内|^商談タイトル$|^タイトル$/.test(t);
+  if (isPlaceholder) {
+    return fallback ?? `商談 ${format(new Date(), "M/d")}`;
+  }
+  return t.slice(0, 40);
+}
+
 function extractCustomerUpdates(text: string): MeetingSummaryResult["customerUpdates"] {
   const updates: MeetingSummaryResult["customerUpdates"] = [];
   const phone = text.match(/0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}/)?.[0];
@@ -274,14 +287,18 @@ export async function summarizeMeetingRecording(
   const text = [input.transcript, input.memo].filter(Boolean).join("\n").trim();
 
   if (ai.enabled && text.length > 0) {
+    // ネットワーク断等で fetch が reject しても商談自動登録を止めない
     const llm = await callLlm(
-      `あなたは工務店・リフォーム会社の営業アシスタントです。以下の商談録音テキストを分析し、JSONのみ返してください（説明文不要）:
+      `あなたは工務店・リフォーム会社の営業アシスタントです。以下の商談録音テキストを分析し、JSONのみ返してください（説明文不要）。titleはテンプレ文言をそのまま使わず、内容を要約した具体的な件名にすること:
 {"title":"商談タイトル","summary":"3文以内の要約","keyPoints":["要点1","要点2"],"todos":[{"title":"ToDo","priority":"high|medium|low","dueDate":"YYYY-MM-DDまたはnull"}]}
 
 録音テキスト:
 ${text.slice(0, 8000)}`,
       ai,
-    );
+    ).catch((err) => {
+      console.error("[linq-ai] summarizeMeetingRecording LLM failed:", err);
+      return null;
+    });
     if (llm) {
       const parsed = parseJsonBlock<{
         title?: string;
@@ -294,7 +311,7 @@ ${text.slice(0, 8000)}`,
           source: "linq",
           productionReady: true,
           model: ai.model,
-          title: parsed.title ?? `商談 ${format(new Date(), "M/d")}`,
+          title: sanitizeMeetingTitle(parsed.title),
           summary: parsed.summary,
           keyPoints: parsed.keyPoints ?? [],
           customerUpdates: extractCustomerUpdates(text),

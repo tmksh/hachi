@@ -334,8 +334,8 @@ export function RecordingSummaryTab({
       setRecordingState("idle");
       setSendToCustomer(false);
       load();
-    } catch {
-      toast.error("保存に失敗しました");
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? `保存に失敗しました: ${e.message}` : "保存に失敗しました");
     } finally {
       setSaving(false);
     }
@@ -449,11 +449,11 @@ export function RecordingSummaryTab({
               <p className="text-sm font-semibold">履歴</p>
               <p className="text-xs text-muted-foreground mt-0.5 mb-3">保存した録音・文字起こし</p>
               {recordings.length === 0 ? (
-                <p className="text-xs text-muted-foreground flex-1 flex items-center justify-center py-4 text-center rounded-lg border border-dashed border-border/60 bg-muted/10">
+                <p className="text-xs text-muted-foreground flex items-center justify-center py-6 text-center rounded-lg border border-dashed border-border/60 bg-muted/10">
                   履歴なし
                 </p>
               ) : (
-                <div className="divide-y divide-border/40 rounded-lg border border-border/60 overflow-hidden flex-1 min-h-0 overflow-y-auto">
+                <div className="divide-y divide-border/40 rounded-lg border border-border/60 overflow-hidden max-h-72 overflow-y-auto">
                   {recordings.map((r) => (
                     <div
                       key={r.id}
@@ -463,11 +463,21 @@ export function RecordingSummaryTab({
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(selectedId === r.id ? null : r.id); } }}
                       className="w-full text-left px-3 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-sm truncate">{r.title}</span>
-                        <span className="text-[11px] text-muted-foreground shrink-0">
-                          {format(new Date(r.recorded_at), "yyyy/MM/dd HH:mm", { locale: ja })}
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Mic className="h-3.5 w-3.5" />
                         </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-sm truncate">{r.title}</span>
+                            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                              {format(new Date(r.recorded_at), "yyyy/MM/dd HH:mm", { locale: ja })}
+                            </span>
+                          </div>
+                          {selectedId !== r.id && r.summary && (
+                            <p className="text-xs text-muted-foreground truncate mt-0.5">{r.summary}</p>
+                          )}
+                        </div>
                       </div>
                       {selectedId === r.id && (
                         <div className="mt-2 space-y-2 text-sm text-left">

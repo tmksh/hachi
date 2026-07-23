@@ -6,6 +6,7 @@ import {
   proposeStageTransition,
   recommendFieldAssignee,
   summarizeMeetingRecording,
+  sanitizeMeetingTitle,
   estimateConstructionDuration,
   resolveLinqAiConfig,
 } from "@/lib/integrations/linq-ai";
@@ -315,6 +316,8 @@ export async function submitEstimateApproval(input: {
     .single();
   if (error || !estimate) throw new Error("見積が見つかりません");
 
+  assertReserveFeesSecured(estimate);
+
   const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
     ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
   const reservePercent = await getCompanyReservePercent(supabase, company_id);
@@ -471,14 +474,30 @@ export async function getEstimateMarginThreshold(estimateId: string) {
 }
 
 /** 粗利率が基準以上の見積を確定（発行済み）にする（No.38） */
+/** 予備費未計上での確定・提出を防ぐ（議事録: 予備費確保文化） */
+function assertReserveFeesSecured(estimate: {
+  reserve_fee_1_amount?: number | null;
+  reserve_fee_2_amount?: number | null;
+}) {
+  const r1 = Number(estimate.reserve_fee_1_amount ?? 0);
+  const r2 = Number(estimate.reserve_fee_2_amount ?? 0);
+  if (r1 <= 0 || r2 <= 0) {
+    throw new Error(
+      "予備費・予備予備費をサマリー欄に計上してから確定・提出してください（未計上のまま提出できません）",
+    );
+  }
+}
+
 export async function confirmEstimateIssued(estimateId: string) {
   const { supabase, company_id } = await getCompanyContext();
   const { data: estimate, error } = await supabase
     .from("estimates")
-    .select("gross_profit_rate, default_gross_profit_rate, status")
+    .select("gross_profit_rate, default_gross_profit_rate, status, reserve_fee_1_amount, reserve_fee_2_amount")
     .eq("id", estimateId)
     .single();
   if (error || !estimate) throw new Error("見積が見つかりません");
+
+  assertReserveFeesSecured(estimate);
 
   // 明細から再計算して最新粗利率で判定（画面上の調整と一致させる）
   const { data: items } = await supabase
@@ -659,22 +678,72 @@ export async function submitBudgetApproval(input: {
 // 1-3 録音完了 → 要約・ToDo・ステージ提案
 // ---------------------------------------------------------------------------
 
+type RecordingSummaryLike = {
+  source: string;
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  todos: Array<{ title: string; dueDate?: string; priority: "high" | "medium" | "low" }>;
+  customerUpdates: Array<{ field: string; value: string; reason: string }>;
+};
+
+function toCustomerUpdatesArray(updates: Record<string, string | null> | undefined): RecordingSummaryLike["customerUpdates"] {
+  return Object.entries(updates ?? {})
+    .filter((e): e is [string, string] => typeof e[1] === "string" && e[1].trim() !== "" && e[1] !== "null")
+    .map(([field, value]) => ({ field, value, reason: "録音から抽出" }));
+}
+
 export async function processRecordingComplete(input: {
   customerId: string;
   recordingId: string;
   dealId?: string;
   transcript: string;
   memo?: string;
+  /** 文字起こしAPI側で生成済みの要約。指定すると二重のLLM呼び出しを回避する */
+  precomputed?: {
+    title: string;
+    summary: string;
+    keyPoints: string[];
+    todos: Array<{ title: string; priority: "high" | "medium" | "low"; dueDate?: string }>;
+    customerUpdates: Record<string, string | null>;
+  };
 }) {
   const { supabase, company_id, user_id } = await getCompanyContext();
   const aiConfig = await resolveLinqAiConfig();
 
-  const summaryResult = await summarizeMeetingRecording({
-    customerId: input.customerId,
-    dealId: input.dealId,
-    transcript: input.transcript,
-    memo: input.memo,
-  }, aiConfig);
+  let summaryResult: RecordingSummaryLike;
+  if (input.precomputed?.summary) {
+    summaryResult = {
+      source: "linq",
+      title: sanitizeMeetingTitle(input.precomputed.title),
+      summary: input.precomputed.summary,
+      keyPoints: input.precomputed.keyPoints ?? [],
+      todos: input.precomputed.todos ?? [],
+      customerUpdates: toCustomerUpdatesArray(input.precomputed.customerUpdates),
+    };
+  } else {
+    try {
+      summaryResult = await summarizeMeetingRecording({
+        customerId: input.customerId,
+        dealId: input.dealId,
+        transcript: input.transcript,
+        memo: input.memo,
+      }, aiConfig);
+    } catch (err) {
+      // 要約に失敗しても商談自動登録（No.15）は必ず実行する
+      console.error("[processRecordingComplete] summarize failed", err);
+      const text = [input.transcript, input.memo].filter(Boolean).join("\n").trim();
+      const d = new Date();
+      summaryResult = {
+        source: "fallback",
+        title: `商談 ${d.getMonth() + 1}/${d.getDate()}`,
+        summary: text.slice(0, 200),
+        keyPoints: [],
+        todos: [],
+        customerUpdates: [],
+      };
+    }
+  }
 
   await supabase.from("customer_recordings").update({
     summary: summaryResult.summary,

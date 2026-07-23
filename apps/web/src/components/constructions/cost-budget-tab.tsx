@@ -390,13 +390,17 @@ function mapEstimateToBudgetRows(
     notes: string | null;
     cost_amount: number;
     selling_amount: number;
+    is_text_row?: boolean | null;
   }[],
+  /** 実行予算移行後は予備予備費のみ明細側へ戻す（議事録） */
+  reserveFee2Amount = 0,
 ): ContractorRow[] {
-  if (!items.length) return [];
+  const calcItems = items.filter((item) => !item.is_text_row);
+  if (!calcItems.length && reserveFee2Amount <= 0) return [];
   const catMap = new Map(categories.map((c) => [c.id, c.name]));
   const groups = new Map<string, { name: string; workTypes: Set<string>; budget: number; order_amount: number }>();
 
-  for (const item of items) {
+  for (const item of calcItems) {
     const contractor = item.notes?.trim() ?? "";
     const catName = item.category_id ? (catMap.get(item.category_id) ?? "") : "";
     const key = contractor || `cat:${item.category_id ?? item.name}`;
@@ -413,7 +417,7 @@ function mapEstimateToBudgetRows(
     groups.set(key, g);
   }
 
-  return Array.from(groups.values()).map((g, i) => ({
+  const rows = Array.from(groups.values()).map((g, i) => ({
     id: `est-row-${i}-${Date.now()}`,
     status: "未発注" as const,
     name: g.name,
@@ -425,6 +429,24 @@ function mapEstimateToBudgetRows(
     add_orders: [0, 0, 0],
     monthly: {},
   }));
+
+  // 予備予備費（現場対応分）を明細行として戻す。担当者が金額ベースで付け替え可能
+  if (reserveFee2Amount > 0) {
+    rows.push({
+      id: `est-reserve2-${Date.now()}`,
+      status: "未発注" as const,
+      name: "",
+      work_type: "予備予備費（現場対応分）",
+      budget: 0,
+      add_contracts: [0, 0],
+      management_budget: 0,
+      order_amount: reserveFee2Amount,
+      add_orders: [0, 0, 0],
+      monthly: {},
+    });
+  }
+
+  return rows;
 }
 
 function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
@@ -546,7 +568,9 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           notes: string | null;
           cost_amount: number;
           selling_amount: number;
+          is_text_row?: boolean | null;
         }[],
+        Number((est as { reserve_fee_2_amount?: number | null }).reserve_fee_2_amount ?? 0),
       );
       toast.dismiss(loadingId);
       if (newRows.length === 0) {

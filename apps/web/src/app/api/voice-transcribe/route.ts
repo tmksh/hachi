@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveLinqAiConfig } from "@/lib/integrations/linq-ai/platform-config";
+import { sanitizeMeetingTitle } from "@/lib/integrations/linq-ai";
 
 export const maxDuration = 60; // Netlify 上での最大実行時間（秒）
 
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
             recordingId: saved.id,
             dealId,
             transcript,
+            precomputed: result,
           });
           registeredDealId = processed.dealId ?? undefined;
         } catch (err) {
@@ -175,7 +177,7 @@ export async function generateMeetingResult(transcript: string, apiKey: string, 
         },
         {
           role: "user",
-          content: `以下の商談録音テキストを分析し、JSONのみ返してください（説明文不要）。
+          content: `以下の商談録音テキストを分析し、JSONのみ返してください（説明文不要）。titleはテンプレ文言をそのまま使わず、内容を要約した具体的な件名（20文字以内）にすること。
 
 {"title":"商談タイトル（20文字以内）","summary":"3文以内の要約","keyPoints":["要点1","要点2","要点3"],"todos":[{"title":"ToDo","priority":"high|medium|low","dueDate":"YYYY-MM-DDまたはnull"}],"speakers":[{"label":"話者A","role":"営業|顧客|不明","highlights":["発言1"]}],"customerUpdates":{"phone":"電話番号またはnull","email":"メールまたはnull","budget_max":"予算数値またはnull","address":"住所またはnull"}}
 
@@ -204,7 +206,7 @@ ${transcript.slice(0, 12000)}`,
       customerUpdates?: Record<string, string | null>;
     };
     return {
-      title: parsed.title ?? "商談記録",
+      title: sanitizeMeetingTitle(parsed.title, "商談記録"),
       summary: parsed.summary ?? "",
       keyPoints: parsed.keyPoints ?? [],
       todos: (parsed.todos ?? []).map((t) => ({

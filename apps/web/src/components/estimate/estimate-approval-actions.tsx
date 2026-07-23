@@ -19,7 +19,6 @@ import {
   confirmEstimateIssued,
 } from "@/lib/actions/sales-flow";
 import { getProfiles } from "@/lib/actions/profiles";
-import { updateEstimate } from "@/lib/actions/estimates";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 
 type Props = {
@@ -29,6 +28,8 @@ type Props = {
   defaultGrossProfitRate?: number | null;
   estimateStatus?: string | null;
   onConfirmed?: () => void;
+  /** 承認ステータスが変わったとき（親の差戻しバナー更新用） */
+  onStatusChange?: () => void;
 };
 
 export function EstimateApprovalActions({
@@ -37,9 +38,8 @@ export function EstimateApprovalActions({
   defaultGrossProfitRate,
   estimateStatus,
   onConfirmed,
+  onStatusChange,
 }: Props) {
-  // 予備費は社員にも表示（非表示による不信感を防止）
-  const canSeeReserve = true;
   const [marginInfo, setMarginInfo] = useState<Awaited<ReturnType<typeof getEstimateMarginThreshold>>>(null);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,7 +55,6 @@ export function EstimateApprovalActions({
 
   const threshold = marginInfo?.threshold
     ?? toMarginThresholdPercent(defaultGrossProfitRate);
-  // 基準以上（>=）なら確定可能（No.38）
   const needsApproval = grossProfitRate < threshold - 1e-9;
   const approvalStatus = marginInfo?.approvalStatus ?? "none";
   const canReapply = approvalStatus === "returned" || approvalStatus === "rejected";
@@ -72,14 +71,10 @@ export function EstimateApprovalActions({
       toast.success("見積を確定（発行済み）にしました");
       setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "approved", status: "issued" } : prev);
       onConfirmed?.();
+      onStatusChange?.();
     } catch (e) {
-      try {
-        await updateEstimate(estimateId, { status: "issued" });
-        toast.success("見積を確定（発行済み）にしました");
-        onConfirmed?.();
-      } catch {
-        toast.error(e instanceof Error ? e.message : "確定に失敗しました");
-      }
+      // 予備費未計上・粗利未達などの業務ルール違反はすり抜けさせない
+      toast.error(e instanceof Error ? e.message : "確定に失敗しました");
     } finally {
       setConfirming(false);
     }
@@ -99,6 +94,7 @@ export function EstimateApprovalActions({
       setDialogOpen(false);
       setComment("");
       setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId, remandComment: null } : prev);
+      onStatusChange?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "申請に失敗しました");
     } finally {
@@ -106,7 +102,6 @@ export function EstimateApprovalActions({
     }
   };
 
-  // 粗利率が基準以上 → 確定ボタン（No.38）
   if (!needsApproval) {
     if (isIssued) {
       return (
@@ -132,65 +127,31 @@ export function EstimateApprovalActions({
 
   return (
     <>
-      <div className="flex flex-col items-end gap-1.5">
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {approvalStatus === "pending" && marginInfo?.workflowRequestId ? (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/workflow/${marginInfo.workflowRequestId}`}>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                承認待ち
-              </Link>
-            </Button>
-          ) : approvalStatus === "approved" || approvalStatus === "conditional" ? (
-            <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
-              <CheckCircle className="h-4 w-4 mr-1" />
-              {approvalStatus === "conditional" ? "条件付き承認済み" : "承認済み"}
-            </Button>
-          ) : (
-            <Button
-              variant="default"
-              size="sm"
-              className={isReturned ? "bg-amber-600 hover:bg-amber-700" : "bg-amber-600 hover:bg-amber-700"}
-              onClick={() => setDialogOpen(true)}
-            >
-              {isReturned
-                ? <CornerUpLeft className="h-4 w-4 mr-1" />
-                : <AlertTriangle className="h-4 w-4 mr-1" />}
-              {canReapply ? "承認申請（再申請）" : "上司への承認申請"}
-            </Button>
-          )}
-          <span className="text-[10px] text-muted-foreground">
-            粗利 {grossProfitRate.toFixed(1)}% / 基準 {threshold.toFixed(0)}%
-            {canSeeReserve && marginInfo && (marginInfo.reservePercent ?? 0) > 0 && (
-              <span className="text-amber-600">
-                （会社指定{marginInfo.baseThreshold?.toFixed(0)}%+予備費{marginInfo.reservePercent?.toFixed(0)}%）
-              </span>
-            )}
-          </span>
-        </div>
-        {canReapply && (
-          <div className={
-            isReturned
-              ? "max-w-md rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800"
-              : "max-w-md rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-700"
-          }>
-            <p className="font-medium">
-              {isReturned ? "差戻しされています。修正のうえ再申請してください。" : "却下されています。内容を見直して再申請できます。"}
-            </p>
-            {marginInfo?.remandComment && (
-              <p className="mt-0.5 text-muted-foreground break-all">指摘: {marginInfo.remandComment}</p>
-            )}
-            {marginInfo?.workflowRequestId && (
-              <Link
-                href={`/workflow/${marginInfo.workflowRequestId}`}
-                className="mt-0.5 inline-block text-amber-900 underline underline-offset-2"
-              >
-                申請詳細を確認
-              </Link>
-            )}
-          </div>
-        )}
-      </div>
+      {approvalStatus === "pending" && marginInfo?.workflowRequestId ? (
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/workflow/${marginInfo.workflowRequestId}`}>
+            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            承認待ち
+          </Link>
+        </Button>
+      ) : approvalStatus === "approved" || approvalStatus === "conditional" ? (
+        <Button variant="outline" size="sm" disabled className="text-emerald-700 border-emerald-200">
+          <CheckCircle className="h-4 w-4 mr-1" />
+          {approvalStatus === "conditional" ? "条件付き承認済み" : "承認済み"}
+        </Button>
+      ) : (
+        <Button
+          variant="default"
+          size="sm"
+          className="bg-amber-600 hover:bg-amber-700"
+          onClick={() => setDialogOpen(true)}
+        >
+          {isReturned
+            ? <CornerUpLeft className="h-4 w-4 mr-1" />
+            : <AlertTriangle className="h-4 w-4 mr-1" />}
+          {canReapply ? "承認申請（再申請）" : "上司への承認申請"}
+        </Button>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -233,8 +194,8 @@ export function EstimateApprovalActions({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleSubmit} disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            <Button onClick={() => void handleSubmit()} disabled={submitting}>
+              {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
               {canReapply ? "再申請する" : "申請する"}
             </Button>
           </DialogFooter>

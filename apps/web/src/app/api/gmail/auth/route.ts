@@ -13,6 +13,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login", origin));
   }
 
+  // 未設定のまま Google へ飛ぶと「invalid_client」画面になるため事前チェック
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return NextResponse.json(
+      { error: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が環境変数に未設定です。ホスティング側の環境変数を設定してください" },
+      { status: 503 },
+    );
+  }
+
   const scopes = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",

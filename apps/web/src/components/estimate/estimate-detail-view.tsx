@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,12 +19,20 @@ import {
 import {
   EstimatePdfPreviewDialog,
   toEstimatePdfPreviewData,
+  toCostBreakdownPdfPreviewData,
+  type EstimatePdfPreviewData,
 } from "@/components/estimate/estimate-pdf-preview-dialog";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { getEstimates, getEstimate, updateEstimate } from "@/lib/actions/estimates";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
@@ -404,6 +413,7 @@ export function EstimateDetailView({
   pdfCustomer?: { name?: string | null; company_name?: string | null } | null;
 }) {
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [pdfData, setPdfData] = useState<EstimatePdfPreviewData | null>(null);
   const [refSelectOpen, setRefSelectOpen] = useState(false);
   const [refEstimateList, setRefEstimateList] = useState<EstimateListItem[]>([]);
   const [refListLoading, setRefListLoading] = useState(false);
@@ -416,9 +426,32 @@ export function EstimateDetailView({
   const [bulkRateCost, setBulkRateCost] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkRateSell, setBulkRateSell] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkApplying, setBulkApplying] = useState(false);
-  const [marginInfo, setMarginInfo] = useState<{ threshold: number; baseThreshold: number; reservePercent: number } | null>(null);
+  const [marginInfo, setMarginInfo] = useState<{
+    threshold: number;
+    baseThreshold: number;
+    reservePercent: number;
+    approvalStatus: string;
+    remandComment: string | null;
+    workflowRequestId: string | null;
+  } | null>(null);
   // 予備費は社員にも表示（非表示による不信感を防止）
   const canSeeReserve = true;
+
+  const refreshMarginInfo = useCallback(() => {
+    getEstimateMarginThreshold(estimate.id)
+      .then((r) => {
+        if (!r) return;
+        setMarginInfo({
+          threshold: r.threshold,
+          baseThreshold: r.baseThreshold,
+          reservePercent: r.reservePercent,
+          approvalStatus: r.approvalStatus ?? "none",
+          remandComment: r.remandComment ?? null,
+          workflowRequestId: r.workflowRequestId ?? null,
+        });
+      })
+      .catch(() => {});
+  }, [estimate.id]);
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = estimate.items ?? [];
   const costTotal = estimate.cost_total ?? 0;
@@ -447,16 +480,8 @@ export function EstimateDetailView({
   }, [estimate.id]);
 
   useEffect(() => {
-    let active = true;
-    getEstimateMarginThreshold(estimate.id)
-      .then((r) => {
-        if (active && r) {
-          setMarginInfo({ threshold: r.threshold, baseThreshold: r.baseThreshold, reservePercent: r.reservePercent });
-        }
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [estimate.id]);
+    refreshMarginInfo();
+  }, [refreshMarginInfo]);
 
   useEffect(() => {
     if (loading || !estimate.id) return;
@@ -787,28 +812,34 @@ export function EstimateDetailView({
   const reservePercent = marginInfo?.reservePercent ?? 0;
   const baseThreshold = marginInfo?.baseThreshold ?? marginThreshold;
   const isLowMargin = grossRate < marginThreshold;
+  const approvalStatus = marginInfo?.approvalStatus ?? "none";
+  const isReturned = approvalStatus === "returned";
+  const isRejected = approvalStatus === "rejected";
+  const showApprovalNotice = isReturned || isRejected;
 
   return (
     <div className={cn("space-y-3", loading && "opacity-60")}>
-      {/* ヘッダー */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {onBack && (
-          <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground shrink-0">
-            <ArrowLeft className="h-3.5 w-3.5" />見積一覧
-          </button>
-        )}
-        {estimate.title && (
-          <span className="text-base font-semibold">{estimate.title}</span>
-        )}
-        {estimate.estimate_no && (
-          <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
-            {estimate.estimate_no}
-          </span>
-        )}
-        {estimate.status && (
-          <Badge variant="outline" className="text-xs">{ESTIMATE_STATUS_MAP[estimate.status] ?? estimate.status}</Badge>
-        )}
-        <div className="ml-auto flex items-center gap-2">
+      {/* ヘッダー: 左=メタ / 右=ボタン群のみ */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          {onBack && (
+            <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground shrink-0">
+              <ArrowLeft className="h-3.5 w-3.5" />見積一覧
+            </button>
+          )}
+          {estimate.title && (
+            <span className="text-base font-semibold truncate">{estimate.title}</span>
+          )}
+          {estimate.estimate_no && (
+            <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded shrink-0">
+              {estimate.estimate_no}
+            </span>
+          )}
+          {estimate.status && (
+            <Badge variant="outline" className="text-xs shrink-0">{ESTIMATE_STATUS_MAP[estimate.status] ?? estimate.status}</Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <Popover open={refSelectOpen} onOpenChange={(o) => { setRefSelectOpen(o); if (!o) setRefSearch(""); }}>
             <PopoverTrigger asChild>
               <Button
@@ -887,9 +918,32 @@ export function EstimateDetailView({
               </div>
             </PopoverContent>
           </Popover>
-          <Button variant="outline" size="sm" onClick={() => setPdfOpen(true)}>
-            <FileDown className="h-4 w-4 mr-1" />PDFプレビュー
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <FileDown className="h-4 w-4 mr-1" />PDFプレビュー
+                <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  setPdfData(toEstimatePdfPreviewData(estimate, pdfCustomer));
+                  setPdfOpen(true);
+                }}
+              >
+                見積書（顧客向け）
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setPdfData(toCostBreakdownPdfPreviewData(estimate, pdfCustomer));
+                  setPdfOpen(true);
+                }}
+              >
+                原価内訳書（社内・予備費含む）
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <EstimateApprovalActions
             estimateId={estimate.id}
             grossProfitRate={grossRate}
@@ -902,6 +956,7 @@ export function EstimateDetailView({
                 gross_profit_rate: grossRate,
               });
             }}
+            onStatusChange={refreshMarginInfo}
           />
           {headerExtra}
         </div>
@@ -933,12 +988,39 @@ export function EstimateDetailView({
             </p>
           </div>
         </div>
-        {isLowMargin && (
+        {showApprovalNotice ? (
+          <div className={cn(
+            "border-t px-3 py-2.5 text-[11px] leading-relaxed",
+            isReturned
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-rose-200 bg-rose-50 text-rose-800",
+          )}>
+            <p className="font-medium flex items-start gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                {isReturned
+                  ? "差戻しされています。修正のうえ再申請してください。"
+                  : "却下されています。内容を見直して再申請できます。"}
+              </span>
+            </p>
+            {marginInfo?.remandComment && (
+              <p className="mt-1 pl-5 text-muted-foreground break-words">指摘: {marginInfo.remandComment}</p>
+            )}
+            {marginInfo?.workflowRequestId && (
+              <Link
+                href={`/workflow/${marginInfo.workflowRequestId}`}
+                className="mt-1.5 ml-5 inline-block font-medium underline underline-offset-2"
+              >
+                申請詳細を確認
+              </Link>
+            )}
+          </div>
+        ) : isLowMargin ? (
           <div className="flex items-center gap-1.5 border-t border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-tight text-amber-700">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             粗利率が基準({marginThreshold.toFixed(0)}%)を下回っています。上司への承認申請が必要です。
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* 明細テーブル */}
@@ -1255,7 +1337,14 @@ export function EstimateDetailView({
                 </td>
               </tr>
             ) : null}
-            {/* 予備費・予備予備費は明細表の外（サマリー付近）で記入 */}
+            {/* 予備費・予備予備費は明細表の外（サマリー付近）で記入。顧客向けPDF非出力 */}
+            {(reserve1Amount <= 0 || reserve2Amount <= 0) && (
+              <tr className="bg-rose-50 border-t border-rose-200">
+                <td colSpan={12} className="px-3 py-2 text-[11px] text-rose-800 font-medium">
+                  予備費・予備予備費を両方計上してください。未計上のままでは確定・提出できません。
+                </td>
+              </tr>
+            )}
             <tr className="bg-amber-50/40 border-t border-amber-200/60">
               <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
                 <span className="font-medium">予備費（会社確保分）</span>
@@ -1313,11 +1402,16 @@ export function EstimateDetailView({
         </div>
       </div>
 
-      <EstimatePdfPreviewDialog
-        open={pdfOpen}
-        onOpenChange={setPdfOpen}
-        data={toEstimatePdfPreviewData(estimate, pdfCustomer)}
-      />
+      {pdfData && (
+        <EstimatePdfPreviewDialog
+          open={pdfOpen}
+          onOpenChange={(open) => {
+            setPdfOpen(open);
+            if (!open) setPdfData(null);
+          }}
+          data={pdfData}
+        />
+      )}
     </div>
   );
 }

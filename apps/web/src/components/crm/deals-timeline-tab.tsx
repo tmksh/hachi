@@ -148,16 +148,23 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       const saved = await updateDealSummary(selectedId, summaryDraft);
       const nextSummary = saved.summary ?? summaryDraft;
       setSummaryDraft(nextSummary);
-      // 保存後に活動履歴（メモ更新）も含めて再取得
+      setDeals((prev) => prev.map((d) => (d.id === selectedId ? { ...d, summary: nextSummary } : d)));
+      toast.success("要約を保存しました");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "保存に失敗しました");
+      setSaving(false);
+      return;
+    }
+    // 保存成功後の履歴再取得は失敗しても「保存失敗」と誤表示しない
+    try {
       const refreshed = await getCustomerDealsWithActivities(customerId);
       setDeals(refreshed);
       if (!refreshed.some((d) => d.id === selectedId) && refreshed[0]) {
         setSelectedId(refreshed[0].id);
         setSummaryDraft(refreshed[0].summary ?? "");
       }
-      toast.success("要約を保存しました");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "保存に失敗しました");
+    } catch {
+      // ローカル状態は既に更新済みのため無視
     } finally {
       setSaving(false);
     }
