@@ -314,12 +314,19 @@ function CrmMasterSkeleton() {
   );
 }
 
-export function CrmMasterTab() {
-  const [stages, setStages]         = useState<Stage[]>([]);
-  const [lostReasons, setLostReasons] = useState<Item[]>([]);
-  const [leadSources, setLeadSources] = useState<Item[]>([]);
-  const [tags, setTags]             = useState<Item[]>([]);
-  const [loading, setLoading]       = useState(true);
+export type CrmMasterInitialData = {
+  stages: Stage[];
+  lostReasons: Item[];
+  leadSources: Item[];
+  tags: Item[];
+};
+
+export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialData }) {
+  const [stages, setStages]         = useState<Stage[]>(initialData?.stages ?? []);
+  const [lostReasons, setLostReasons] = useState<Item[]>(initialData?.lostReasons ?? []);
+  const [leadSources, setLeadSources] = useState<Item[]>(initialData?.leadSources ?? []);
+  const [tags, setTags]             = useState<Item[]>(initialData?.tags ?? []);
+  const [loading, setLoading]       = useState(!initialData);
 
   const reload = useCallback(async () => {
     const [s, l, ls, t] = await Promise.all([
@@ -335,8 +342,9 @@ export function CrmMasterTab() {
   }, []);
 
   useEffect(() => {
+    if (initialData) return;
     void reload().finally(() => setLoading(false));
-  }, [reload]);
+  }, [reload, initialData]);
 
   if (loading) return <CrmMasterSkeleton />;
 

@@ -5,13 +5,14 @@ import type { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TEAL_CARD_SM, TEAL_KPI_ICON } from "@/lib/teal-theme";
-import { useKpiColor } from "@/hooks/use-kpi-color";
 
 export type KpiItem = {
   label: string;
   value: string | number;
   sub?: string;
   icon?: LucideIcon;
+  /** BI2 と同じ3Dイラスト（指定時は icon より優先） */
+  illustration?: string;
   valueClassName?: string;
   sparkline?: number[];
   sparklineColor?: string;
@@ -21,7 +22,7 @@ interface KpiRowProps {
   items: KpiItem[];
   loading?: boolean;
   className?: string;
-  columns?: 2 | 3 | 4 | 5;
+  columns?: 2 | 3 | 4 | 5 | 6;
   /** 縦積みレイアウト（列数が多く横並びだと見切れる場合に使用） */
   stacked?: boolean;
 }
@@ -50,7 +51,7 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
 }
 
 /** コンテナ幅に応じて列数を決定（チャットパネル開閉に追従） */
-function useResponsiveColumns(requested: 2 | 3 | 4 | 5) {
+function useResponsiveColumns(requested: 2 | 3 | 4 | 5 | 6) {
   const ref = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(requested);
 
@@ -58,11 +59,12 @@ function useResponsiveColumns(requested: 2 | 3 | 4 | 5) {
     const el = ref.current;
     if (!el) return;
 
-    const breakpoints: Record<2 | 3 | 4 | 5, number> = {
+    const breakpoints: Record<2 | 3 | 4 | 5 | 6, number> = {
       2: 0,
       3: 480,
       4: 560,
       5: 720,
+      6: 860,
     };
     const min = breakpoints[requested];
 
@@ -70,6 +72,12 @@ function useResponsiveColumns(requested: 2 | 3 | 4 | 5) {
       const w = el.clientWidth;
       if (requested === 2) {
         setCols(2);
+        return;
+      }
+      if (requested === 6) {
+        if (w < breakpoints[5]) setCols(3);
+        else if (w < breakpoints[6]) setCols(5);
+        else setCols(6);
         return;
       }
       if (w < min) {
@@ -97,7 +105,7 @@ export function KpiRow({
   columns = 4,
   stacked = false,
 }: KpiRowProps) {
-  useKpiColor();
+  // CSS 変数のみ参照（useBrandColor は呼ばない＝KPI毎の再レンダーを避ける）
   const { ref, cols } = useResponsiveColumns(columns);
   const iconStyle = { background: "var(--brand-gradient)" } as const;
 
@@ -109,12 +117,20 @@ export function KpiRow({
     >
       {loading
         ? Array.from({ length: items.length || cols }).map((_, i) => (
-            <div key={i} className={cn(TEAL_CARD_SM, "px-3 py-2.5 min-w-0", stacked && "h-[88px]")}>
+            <div key={i} className={cn(TEAL_CARD_SM, "px-3 py-2.5 min-w-0", stacked && "h-[104px]")}>
               <Skeleton className="h-6 w-full" />
             </div>
           ))
         : items.map((item, i) => {
             const Icon = item.icon;
+            const illust = item.illustration ? (
+              <img
+                src={item.illustration}
+                alt=""
+                aria-hidden
+                className="h-full w-full object-contain pointer-events-none select-none"
+              />
+            ) : null;
 
             if (stacked) {
               return (
@@ -122,18 +138,22 @@ export function KpiRow({
                   key={i}
                   className={cn(
                     TEAL_CARD_SM,
-                    "px-3.5 py-3 flex flex-col gap-1.5 min-w-0 group hover:shadow-md transition-shadow",
+                    "relative px-3.5 py-3 min-h-[104px] flex flex-col gap-1.5 min-w-0 overflow-visible group hover:shadow-md transition-shadow",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-xs font-semibold text-slate-600 leading-tight min-w-0">
+                    <span className="text-xs font-semibold text-slate-600 leading-tight min-w-0 pr-14">
                       {item.label}
                     </span>
-                    {Icon && (
+                    {illust ? (
+                      <div className="absolute right-0.5 top-0.5 h-16 w-16 shrink-0">
+                        {illust}
+                      </div>
+                    ) : Icon ? (
                       <div className={cn(TEAL_KPI_ICON, "shrink-0")} style={iconStyle}>
                         <Icon className={KPI_ICON_INNER} />
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   <p
                     className={cn(
@@ -165,11 +185,13 @@ export function KpiRow({
                   "px-3 py-2.5 flex items-center gap-2.5 flex-nowrap min-w-0 overflow-hidden group hover:shadow-md transition-shadow",
                 )}
               >
-                {Icon && (
+                {illust ? (
+                  <div className="h-9 w-9 shrink-0">{illust}</div>
+                ) : Icon ? (
                   <div className={TEAL_KPI_ICON} style={iconStyle}>
                     <Icon className={KPI_ICON_INNER} />
                   </div>
-                )}
+                ) : null}
                 <span className="text-xs font-semibold truncate min-w-0 text-slate-600">
                   {item.label}
                 </span>

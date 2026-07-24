@@ -39,7 +39,7 @@ type Detail = Awaited<ReturnType<typeof getWorkflowRequest>>;
 type Step = {
   id: string;
   step_order: number;
-  approver: { id: string; display_name: string } | null;
+  approver: { id: string; display_name: string; role?: string | null } | null;
   status: string;
   comment: string | null;
   decided_at?: string | null;
@@ -97,6 +97,11 @@ export function WorkflowDetailClient({
       .then((detail) => {
         setData(detail);
         const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;
+        if (payload) {
+          setPaymentTerms(String(payload.payment_terms ?? ""));
+          setBankAccount(String(payload.bank_account ?? ""));
+          setAdminNotes(String(payload.admin_notes ?? ""));
+        }
         if (payload?.estimate_id) {
           getWorkflowApprovalSupport(id as string)
             .then(setApprovalSupport)
@@ -105,7 +110,7 @@ export function WorkflowDetailClient({
           setApprovalSupport(null);
         }
       })
-      .catch(() => {});
+      .catch(() => toast.error("最新状態の取得に失敗しました。画面を再読み込みしてください"));
   };
 
   const handleApprove = async (stepId: string) => {
@@ -137,10 +142,24 @@ export function WorkflowDetailClient({
         toast.success("条件付きで承認しました");
       } else {
         await remandWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
-        toast.success("差戻しました");
+        toast.success("差戻しました。申請者へ通知しました");
       }
       setActionDialog(null);
-      reload();
+      await new Promise<void>((resolve) => {
+        if (!id) { resolve(); return; }
+        getWorkflowRequest(id as string)
+          .then((detail) => {
+            setData(detail);
+            const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;
+            if (payload) {
+              setPaymentTerms(String(payload.payment_terms ?? ""));
+              setBankAccount(String(payload.bank_account ?? ""));
+              setAdminNotes(String(payload.admin_notes ?? ""));
+            }
+          })
+          .catch(() => {})
+          .finally(() => resolve());
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "失敗しました");
     } finally {
@@ -182,10 +201,29 @@ export function WorkflowDetailClient({
     ...steps.filter((s) => s.status === "pending").map((s) => s.step_order),
     Number.POSITIVE_INFINITY,
   );
+  const currentStep = steps.find((s) => s.status === "pending" && s.step_order === activeStepOrder);
+  const isMyCurrentStep = Boolean(currentStep && user?.id === currentStep.approver?.id);
+  // 仕様 Step17: 総務ロールが自分の承認番になったときだけ追記可
   const canEditAdminSupplement = Boolean(
     contractId
-    && hasRole("administration", "admin", "hq_admin")
-    && data.status === "submitted",
+    && hasRole("administration")
+    && data.status === "submitted"
+    && isMyCurrentStep,
+  );
+  const adminSupplemented = Boolean(
+    fields.admin_supplemented_at
+    || (
+      typeof fields.payment_terms === "string"
+      && fields.payment_terms.trim()
+      && typeof fields.bank_account === "string"
+      && fields.bank_account.trim()
+    ),
+  );
+  const needsAdminSupplementBeforeApprove = Boolean(
+    contractId
+    && hasRole("administration")
+    && isMyCurrentStep
+    && !adminSupplemented,
   );
   const PAYLOAD_LABELS: Record<string, string> = {
     estimate_id: "見積ID",
@@ -216,11 +254,8 @@ export function WorkflowDetailClient({
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.title}</h1>
         <StatusBadge
-          status={data.status}
-          label={getWorkflowStatusLabel(
-            data.status,
-            (data as Detail & { payload?: Record<string, unknown> }).payload,
-          )}
+          status={requestRemanded ? "returned" : data.status}
+          label={getWorkflowStatusLabel(data.status, fields)}
         />
         {(data as Detail & { is_urgent?: boolean }).is_urgent && (
           <Badge variant="destructive">緊急</Badge>
@@ -286,11 +321,15 @@ export function WorkflowDetailClient({
               const isCurrentStep = step.status === "pending" && step.step_order === activeStepOrder;
               const canAct = isMyStep && isCurrentStep;
               const waitingEarlier = step.status === "pending" && step.step_order > activeStepOrder;
+              const isSoumu = step.approver?.role === "administration";
               return (
                 <div key={step.id} className="flex items-start justify-between p-3 border rounded-lg gap-3">
                   <div className="space-y-1 flex-1 min-w-0">
                     <p className="text-sm font-medium">
                       Step {step.step_order}: {step.approver?.display_name ?? "-"}
+                      {isSoumu && (
+                        <Badge variant="outline" className="ml-2 text-xs border-teal-300 text-teal-700">総務</Badge>
+                      )}
                       {isMyStep && (
                         <Badge variant="secondary" className="ml-2 text-xs">あなた</Badge>
                       )}
@@ -306,7 +345,9 @@ export function WorkflowDetailClient({
                       label={
                         requestRemanded && step.status === "rejected"
                           ? "差戻し"
-                          : undefined
+                          : step.status === "rejected"
+                            ? "却下"
+                            : undefined
                       }
                     />
                     {step.comment && (
@@ -322,10 +363,22 @@ export function WorkflowDetailClient({
                   </div>
                   {canAct && (
                     <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
-                      <Button size="sm" onClick={() => handleApprove(step.id)} className="gap-1 h-8">
+                      <Button
+                        size="sm"
+                        onClick={() => handleApprove(step.id)}
+                        className="gap-1 h-8"
+                        disabled={needsAdminSupplementBeforeApprove}
+                        title={needsAdminSupplementBeforeApprove ? "先に総務追記を保存してください" : undefined}
+                      >
                         <Check className="h-3.5 w-3.5" />承認
                       </Button>
-                      <Button size="sm" variant="secondary" onClick={() => openActionDialog("conditional", step.id)} className="gap-1 h-8">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openActionDialog("conditional", step.id)}
+                        className="gap-1 h-8"
+                        disabled={needsAdminSupplementBeforeApprove}
+                      >
                         <AlertTriangle className="h-3.5 w-3.5" />条件付き承認
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => openActionDialog("remand", step.id)} className="gap-1 h-8">
@@ -350,7 +403,10 @@ export function WorkflowDetailClient({
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              総務ロールの承認者が必要事項を追記してから承認できます。
+              総務ロールのみ追記可能です。支払条件と振込口座を保存してから承認してください。
+              {!adminSupplemented && (
+                <span className="block mt-1 text-amber-700 font-medium">未追記のため承認ボタンは無効です</span>
+              )}
             </p>
             <div className="space-y-1.5">
               <Label className="text-xs">支払条件</Label>

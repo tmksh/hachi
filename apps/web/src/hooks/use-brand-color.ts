@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { DEFAULT_HEX, applyBrandColor, type BrandMode } from "@/lib/brand-color";
 
 const KEY_GRADIENT = "dashboard-brand-hex";
@@ -12,80 +12,116 @@ function load(key: string, fallback: string) {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
 }
 
-export function useBrandColor() {
-  const [gradientHex, setGradientHex] = useState(DEFAULT_HEX);
-  const [solidHex,    setSolidHex]    = useState(DEFAULT_HEX);
-  const [mode,        setMode]        = useState<BrandMode>("gradient");
+type BrandState = { gradientHex: string; solidHex: string; mode: BrandMode };
 
-  // マウント時: localStorage から読み込み + CSS 変数適用
+function readInitial(): BrandState {
+  if (typeof window === "undefined") {
+    return { gradientHex: DEFAULT_HEX, solidHex: DEFAULT_HEX, mode: "gradient" };
+  }
+  const mode = load(KEY_MODE, "gradient") as BrandMode;
+  return {
+    gradientHex: load(KEY_GRADIENT, DEFAULT_HEX),
+    solidHex: load(KEY_SOLID, DEFAULT_HEX),
+    mode: mode === "solid" ? "solid" : "gradient",
+  };
+}
+
+/** アプリ全体で CSS 変数適用は1回だけ行う */
+let brandCssApplied = false;
+
+function persistAndApply(next: BrandState) {
+  applyBrandColor(next.mode === "solid" ? next.solidHex : next.gradientHex, next.mode);
+  brandCssApplied = true;
+  try {
+    localStorage.setItem(KEY_GRADIENT, next.gradientHex);
+    localStorage.setItem(KEY_SOLID, next.solidHex);
+    localStorage.setItem(KEY_MODE, next.mode);
+  } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent(BRAND_EVENT, { detail: next }));
+}
+
+export function useBrandColor() {
+  const [state, setState] = useState(readInitial);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // マウント時: setState せず CSS だけ適用（再レンダー誘発を避ける）
   useEffect(() => {
-    const gHex = load(KEY_GRADIENT, DEFAULT_HEX);
-    const sHex = load(KEY_SOLID,    DEFAULT_HEX);
-    const m    = (load(KEY_MODE, "gradient") as BrandMode);
-    setGradientHex(gHex);
-    setSolidHex(sHex);
-    setMode(m);
-    applyBrandColor(m === "solid" ? sHex : gHex, m);
+    if (brandCssApplied) return;
+    brandCssApplied = true;
+    const { gradientHex, solidHex, mode } = stateRef.current;
+    applyBrandColor(mode === "solid" ? solidHex : gradientHex, mode);
   }, []);
 
   // 同タブ内の他インスタンスからの変更を受信
   useEffect(() => {
     const handler = (e: Event) => {
-      const { gradientHex: gH, solidHex: sH, mode: m } = (e as CustomEvent).detail;
-      setGradientHex(gH);
-      setSolidHex(sH);
-      setMode(m);
+      const detail = (e as CustomEvent<BrandState>).detail;
+      setState((prev) => {
+        if (
+          prev.gradientHex === detail.gradientHex
+          && prev.solidHex === detail.solidHex
+          && prev.mode === detail.mode
+        ) {
+          return prev;
+        }
+        return detail;
+      });
     };
     window.addEventListener(BRAND_EVENT, handler);
     return () => window.removeEventListener(BRAND_EVENT, handler);
   }, []);
 
-  const _dispatch = (gH: string, sH: string, m: BrandMode) => {
-    applyBrandColor(m === "solid" ? sH : gH, m);
-    try {
-      localStorage.setItem(KEY_GRADIENT, gH);
-      localStorage.setItem(KEY_SOLID,    sH);
-      localStorage.setItem(KEY_MODE,     m);
-    } catch {}
-    window.dispatchEvent(new CustomEvent(BRAND_EVENT, { detail: { gradientHex: gH, solidHex: sH, mode: m } }));
-  };
-
   const setGradientColor = useCallback((hex: string) => {
-    setGradientHex(hex);
-    if (mode === "gradient") _dispatch(hex, solidHex, "gradient");
-    else _dispatch(hex, solidHex, mode);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, solidHex]);
+    const prev = stateRef.current;
+    if (prev.gradientHex === hex) return;
+    const next = { ...prev, gradientHex: hex };
+    setState(next);
+    persistAndApply(next);
+  }, []);
 
   const setSolidColor = useCallback((hex: string) => {
-    setSolidHex(hex);
-    if (mode === "solid") _dispatch(gradientHex, hex, "solid");
-    else _dispatch(gradientHex, hex, mode);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, gradientHex]);
+    const prev = stateRef.current;
+    if (prev.solidHex === hex) return;
+    const next = { ...prev, solidHex: hex };
+    setState(next);
+    persistAndApply(next);
+  }, []);
 
   const switchMode = useCallback((m: BrandMode) => {
-    setMode(m);
-    _dispatch(gradientHex, solidHex, m);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gradientHex, solidHex]);
+    const prev = stateRef.current;
+    if (prev.mode === m) return;
+    const next = { ...prev, mode: m };
+    setState(next);
+    persistAndApply(next);
+  }, []);
 
   const reset = useCallback(() => {
-    setGradientHex(DEFAULT_HEX);
-    setSolidHex(DEFAULT_HEX);
-    setMode("gradient");
-    _dispatch(DEFAULT_HEX, DEFAULT_HEX, "gradient");
+    const next: BrandState = {
+      gradientHex: DEFAULT_HEX,
+      solidHex: DEFAULT_HEX,
+      mode: "gradient",
+    };
+    setState(next);
+    persistAndApply(next);
     try {
       localStorage.removeItem(KEY_GRADIENT);
       localStorage.removeItem(KEY_SOLID);
       localStorage.removeItem(KEY_MODE);
-    } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    } catch { /* ignore */ }
   }, []);
 
-  // 後方互換: hex / color / setColor
-  const hex   = mode === "solid" ? solidHex : gradientHex;
-  const color = hex;
+  const hex = state.mode === "solid" ? state.solidHex : state.gradientHex;
 
-  return { hex, color, gradientHex, solidHex, mode, setGradientColor, setSolidColor, switchMode, reset };
+  return {
+    hex,
+    color: hex,
+    gradientHex: state.gradientHex,
+    solidHex: state.solidHex,
+    mode: state.mode,
+    setGradientColor,
+    setSolidColor,
+    switchMode,
+    reset,
+  };
 }

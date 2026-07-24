@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { StatusSelect } from "@/components/shared/status-select";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getWorkflowRequests, updateWorkflowRequestStatus } from "@/lib/actions/workflow";
-import { getStatusOption } from "@/lib/status-config";
+import { getStatusOption, getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
 
 type Row = Awaited<ReturnType<typeof getWorkflowRequests>>[number];
 const TYPE_LABELS: Record<string, string> = { expense: "経費", leave: "休暇", purchase: "購入", custom: "その他" };
@@ -89,13 +90,23 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
                   <TableCell className="font-medium">{r.title}</TableCell>
                   <TableCell>{r.requester?.display_name ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.amount ? `¥${r.amount.toLocaleString()}` : "-"}</TableCell>
-                  <TableCell>
-                    <StatusSelect
-                      entity="workflow"
-                      value={r.status}
-                      disabled={updating === r.id}
-                      onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
-                    />
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {isWorkflowRemanded(r.status, (r.payload ?? null) as Record<string, unknown> | null) ? (
+                      <StatusBadge
+                        status="returned"
+                        label={getWorkflowStatusLabel(
+                          r.status,
+                          (r.payload ?? null) as Record<string, unknown> | null,
+                        )}
+                      />
+                    ) : (
+                      <StatusSelect
+                        entity="workflow"
+                        value={r.status}
+                        disabled={updating === r.id}
+                        onValueChange={(v) => handleStatusChange(r.id, v as Row["status"])}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

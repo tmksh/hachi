@@ -226,6 +226,12 @@ function ConstructionNewPageContent({
       return;
     }
 
+    // 受注確定フローでは現場担当アサインが必須（No.18 通知前提）
+    if (initialDealId && !assignedTo) {
+      toast.error("現場担当者を選択してください");
+      return;
+    }
+
     setSaving(true);
     try {
       await createConstruction({
@@ -241,10 +247,21 @@ function ConstructionNewPageContent({
         budget_cost: budgetCost ? Number(budgetCost) : undefined,
         department_name: departmentName || undefined,
       });
-      toast.success("登録しました");
+      toast.success(
+        assignedTo
+          ? "登録しました。現場担当へ通知を送信しました"
+          : "登録しました",
+      );
       router.push("/constructions");
-    } catch {
-      toast.error("登録に失敗");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "登録に失敗";
+      // 工事本体は登録済みで通知だけ失敗した場合もメッセージを出す
+      if (msg.includes("通知")) {
+        toast.warning(msg);
+        router.push("/constructions");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSaving(false);
     }

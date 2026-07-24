@@ -12,6 +12,7 @@ import {
 } from "@/lib/integrations/linq-ai";
 import { createWorkflowRequest } from "@/lib/actions/workflow";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { isWorkflowRemanded } from "@/lib/status-config";
 
 async function getCompanyContext() {
   const supabase = await createClient();
@@ -64,83 +65,136 @@ async function getCompanyBaseMarginPercent(
 }
 
 /** 3経路通知（他モジュールからも利用） */
+export type SalesFlowNotifyInput = {
+  title: string;
+  description?: string;
+  href?: string;
+  customerId?: string;
+  dealId?: string;
+  urgent?: boolean;
+  /** true のとき ToDo は作らずお知らせのみ（既存 ToDo の通知用） */
+  skipTodo?: boolean;
+  /** ToDo tags に追加（例: construction） */
+  extraTags?: string[];
+};
+
+export type SalesFlowNotifyResult = {
+  todoCreated: boolean;
+  announcementCreated: boolean;
+};
+
+/**
+ * 営業フロー3経路通知（バナー / お知らせ / ToDoフラグ）。
+ * 失敗時は握りつぶさず結果を返し、呼び出し側で検知できるようにする。
+ */
 export async function notifySalesFlowUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
   companyId: string,
   userId: string,
-  input: {
-    title: string;
-    description?: string;
-    href?: string;
-    customerId?: string;
-    dealId?: string;
-    urgent?: boolean;
-    /** true のとき ToDo は作らずお知らせのみ（既存 ToDo の通知用） */
-    skipTodo?: boolean;
-  },
+  input: SalesFlowNotifyInput,
   fromUserId?: string,
-) {
-  await notifyUser(supabase, companyId, userId, input, fromUserId);
+): Promise<SalesFlowNotifyResult> {
+  return notifyUser(supabase, companyId, userId, input, fromUserId);
 }
 
 async function notifyUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
   companyId: string,
   userId: string,
-  input: {
-    title: string;
-    description?: string;
-    href?: string;
-    customerId?: string;
-    dealId?: string;
-    urgent?: boolean;
-    skipTodo?: boolean;
-  },
+  input: SalesFlowNotifyInput,
   fromUserId?: string,
-) {
+): Promise<SalesFlowNotifyResult> {
   const { tokyoDateString } = await import("@/lib/tokyo-date");
   const today = tokyoDateString();
+  const result: SalesFlowNotifyResult = { todoCreated: false, announcementCreated: false };
+
+  const detailLine = input.href ? `詳細: ${input.href}` : null;
+  const description = [input.description, detailLine].filter(Boolean).join("\n\n") || null;
+  const body = description || input.title;
+  const tags = [
+    ...(input.urgent ? ["urgent", "sales_flow", "notify_flag"] : ["sales_flow"]),
+    ...(input.extraTags ?? []),
+  ];
 
   if (!input.skipTodo) {
-    const { error: todoErr } = await supabase.from("todos").insert({
+    const todoBase = {
       company_id: companyId,
       assigned_to: userId,
-      customer_id: input.customerId ?? null,
-      deal_id: input.dealId ?? null,
       title: input.title,
-      description: input.description ?? null,
-      status: "pending",
+      description,
+      status: "pending" as const,
       priority: input.urgent ? "high" : "medium",
       due_date: input.urgent ? today : null,
-      tags: input.urgent ? ["urgent", "sales_flow", "notify_flag"] : ["sales_flow"],
+      tags,
       source: "sales_flow",
-    });
-    if (todoErr) console.error("[notifyUser] todo insert failed", todoErr);
+    };
+
+    // customer_id / deal_id の FK 失敗で ToDo 全体が落ちないよう段階リトライ（No.18）
+    const todoAttempts: Array<{ customer_id: string | null; deal_id: string | null }> = [
+      { customer_id: input.customerId ?? null, deal_id: input.dealId ?? null },
+      { customer_id: input.customerId ?? null, deal_id: null },
+      { customer_id: null, deal_id: null },
+    ];
+    let lastTodoErr: { message?: string } | null = null;
+    for (const attempt of todoAttempts) {
+      const { error: todoErr } = await supabase.from("todos").insert({ ...todoBase, ...attempt });
+      if (!todoErr) {
+        result.todoCreated = true;
+        lastTodoErr = null;
+        break;
+      }
+      lastTodoErr = todoErr;
+    }
+    if (lastTodoErr) {
+      console.error("[notifyUser] todo insert failed", lastTodoErr);
+    }
+  } else {
+    result.todoCreated = true;
   }
 
-  const body = [
-    input.description,
-    input.href ? `詳細: ${input.href}` : null,
-  ].filter(Boolean).join("\n\n") || input.title;
-
-  const { error: annErr } = await supabase.from("announcements").insert({
+  const authorId = fromUserId ?? userId;
+  const annFull = {
     company_id: companyId,
-    author_id: fromUserId ?? userId,
+    author_id: authorId,
     title: input.title,
     body,
     is_urgent: input.urgent ?? false,
-    target_type: "individuals",
+    target_type: "individuals" as const,
     target_user_ids: [userId],
     published_at: new Date().toISOString(),
-  });
-  if (annErr) console.error("[notifyUser] announcement insert failed", annErr);
+  };
+  const { error: annErr } = await supabase.from("announcements").insert(annFull);
+  if (!annErr) {
+    result.announcementCreated = true;
+  } else {
+    // target_user_ids 未マイグレーション環境向けフォールバック
+    const { target_user_ids: _ids, ...annBasic } = annFull;
+    const { error: annRetryErr } = await supabase.from("announcements").insert({
+      ...annBasic,
+      target_type: "all",
+      body: `${body}\n\n（宛先: 担当者通知）`,
+    });
+    if (!annRetryErr) {
+      result.announcementCreated = true;
+    } else {
+      console.error("[notifyUser] announcement insert failed", annErr, annRetryErr);
+    }
+  }
 
   void dispatchWebhook(companyId, "sales_flow.notification", {
     user_id: userId,
     title: input.title,
     href: input.href,
     urgent: input.urgent ?? false,
+    todo_created: result.todoCreated,
+    announcement_created: result.announcementCreated,
   });
+
+  if (!result.todoCreated && !result.announcementCreated) {
+    throw new Error("担当者への通知（バナー・お知らせ・ToDo）の作成に失敗しました");
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,39 +263,52 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     source: "deal_won",
   });
 
-  const duration = await estimateConstructionDuration("", Number(amount), await resolveLinqAiConfig());
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, display_name, department")
-    .eq("company_id", company_id)
-    .in("role", ["field_manager", "employee", "sales", "admin"]);
+  // AI 提案は遷移をブロックしない（契約作成後すぐ返す）。工期は裏で契約へ反映。
+  const customerAddress = (deal.customer as { address?: string })?.address;
+  void (async () => {
+    try {
+      const aiConfig = await resolveLinqAiConfig();
+      const [duration, profilesRes, activeRes] = await Promise.all([
+        estimateConstructionDuration("", Number(amount), aiConfig),
+        supabase
+          .from("profiles")
+          .select("id, display_name, department")
+          .eq("company_id", company_id)
+          .in("role", ["field_manager", "employee", "sales", "admin"]),
+        supabase
+          .from("constructions")
+          .select("assigned_to")
+          .in("status", ["preparing", "in_progress"])
+          .not("assigned_to", "is", null),
+      ]);
 
-  // 進行中工事の担当者を一括取得して JS 側で件数集計（担当者ごとの count クエリを回避）
-  const { data: activeConstructions } = await supabase
-    .from("constructions")
-    .select("assigned_to")
-    .in("status", ["preparing", "in_progress"])
-    .not("assigned_to", "is", null);
-  const countByAssignee = new Map<string, number>();
-  for (const c of activeConstructions ?? []) {
-    if (!c.assigned_to) continue;
-    countByAssignee.set(c.assigned_to, (countByAssignee.get(c.assigned_to) ?? 0) + 1);
-  }
-  const constructionCounts = (profiles ?? []).map((p) => ({
-    ...p,
-    activeConstructions: countByAssignee.get(p.id) ?? 0,
-  }));
+      if (duration.startDate && duration.endDate) {
+        await supabase.from("contracts").update({
+          start_date: duration.startDate,
+          end_date: duration.endDate,
+          updated_at: new Date().toISOString(),
+        }).eq("id", contract.id);
+      }
 
-  const assigneeRec = await recommendFieldAssignee(
-    constructionCounts.map((p) => ({
-      id: p.id,
-      displayName: p.display_name,
-      activeConstructions: p.activeConstructions,
-      department: p.department ?? undefined,
-    })),
-    { customerAddress: (deal.customer as { address?: string })?.address },
-    await resolveLinqAiConfig(),
-  );
+      const countByAssignee = new Map<string, number>();
+      for (const c of activeRes.data ?? []) {
+        if (!c.assigned_to) continue;
+        countByAssignee.set(c.assigned_to, (countByAssignee.get(c.assigned_to) ?? 0) + 1);
+      }
+      await recommendFieldAssignee(
+        (profilesRes.data ?? []).map((p) => ({
+          id: p.id,
+          displayName: p.display_name,
+          activeConstructions: countByAssignee.get(p.id) ?? 0,
+          department: p.department ?? undefined,
+        })),
+        { customerAddress },
+        aiConfig,
+      );
+    } catch {
+      // AI 失敗でも契約作成・遷移は成功扱い
+    }
+  })();
 
   const params = new URLSearchParams({
     deal_id: dealId,
@@ -251,30 +318,6 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     order_amount: String(amount),
   });
   if (latestEstimate?.id) params.set("estimate_id", latestEstimate.id);
-  if (duration.startDate) params.set("start_date", duration.startDate);
-  if (duration.endDate) params.set("end_date", duration.endDate);
-  if (duration.reason) params.set("duration_reason", duration.reason);
-  // 契約に工期が未設定なら AI 推定を契約へも反映（工事登録での転記を安定させる）
-  if (duration.startDate && duration.endDate && !contract.start_date) {
-    await supabase.from("contracts").update({
-      start_date: duration.startDate,
-      end_date: duration.endDate,
-      updated_at: new Date().toISOString(),
-    }).eq("id", contract.id);
-  }
-  if (assigneeRec.recommendedId) params.set("assigned_to", assigneeRec.recommendedId);
-  if (assigneeRec.candidates.length > 0) {
-    params.set(
-      "assignee_candidates",
-      encodeURIComponent(JSON.stringify(
-        assigneeRec.candidates.slice(0, 5).map((c) => ({
-          profileId: c.profileId,
-          displayName: c.displayName,
-          score: c.score,
-        })),
-      )),
-    );
-  }
 
   return {
     contractId: contract.id,
@@ -283,18 +326,6 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     customerId: deal.customer_id,
     estimateId: latestEstimate?.id ?? null,
     redirectUrl: `/constructions/new?${params.toString()}`,
-    durationSuggestion: {
-      startDate: duration.startDate,
-      endDate: duration.endDate,
-      reason: duration.reason,
-    },
-    assigneeSuggestion: assigneeRec.recommendedId
-      ? {
-          profileId: assigneeRec.recommendedId,
-          displayName: assigneeRec.candidates.find((c) => c.profileId === assigneeRec.recommendedId)?.displayName ?? "",
-          score: assigneeRec.candidates.find((c) => c.profileId === assigneeRec.recommendedId)?.score ?? 0,
-        }
-      : null,
   };
 }
 
@@ -433,19 +464,22 @@ export async function getEstimateMarginThreshold(estimateId: string) {
       .eq("id", workflowRequestId)
       .single();
     const payload = (wf?.payload ?? {}) as Record<string, unknown>;
-    const isRemand = Boolean(payload.remand);
+    const isRemand = isWorkflowRemanded(wf?.status ?? "", payload);
     if (typeof payload.remand_comment === "string" && payload.remand_comment.trim()) {
       remandComment = payload.remand_comment.trim();
     } else if (typeof payload.reject_comment === "string" && payload.reject_comment.trim()) {
       remandComment = payload.reject_comment.trim();
     }
-    if (wf?.status === "rejected" && approvalStatus === "pending") {
-      const healed = isRemand ? "returned" : "rejected";
-      approvalStatus = healed;
-      await supabase.from("estimates").update({
-        approval_status: healed,
-        updated_at: new Date().toISOString(),
-      }).eq("id", estimateId);
+    if (wf?.status === "rejected") {
+      const expected = isRemand ? "returned" : "rejected";
+      // pending 残留、または差戻し/却下の取り違えを自己修復
+      if (approvalStatus !== expected) {
+        approvalStatus = expected;
+        await supabase.from("estimates").update({
+          approval_status: expected,
+          updated_at: new Date().toISOString(),
+        }).eq("id", estimateId);
+      }
     }
     if (wf?.status === "rejected" && !remandComment) {
       const { data: step } = await supabase

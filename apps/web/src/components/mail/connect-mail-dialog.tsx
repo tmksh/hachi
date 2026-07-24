@@ -87,10 +87,45 @@ export function ConnectMailDialog({
     onOpenChange(v);
   };
 
-  const handleSelectProvider = (p: Provider) => {
+  const handleSelectProvider = async (p: Provider) => {
     setSelectedProvider(p);
     if (p === "gmail") {
-      window.location.href = "/api/gmail/auth";
+      setLoading(true);
+      try {
+        const res = await fetch("/api/gmail/oauth-status");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error || "OAuth設定の確認に失敗しました");
+          setLoading(false);
+          return;
+        }
+        if (!data.configured) {
+          const issueMsgs: Record<string, string> = {
+            missing: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が未設定です",
+            placeholder: "Google OAuth 環境変数がプレースホルダのままです",
+            invalid_format: "GOOGLE_CLIENT_ID の形式が不正です",
+          };
+          toast.error(
+            issueMsgs[data.issue as string]
+              ?? "Gmail OAuth が設定されていません",
+            { description: data.redirectUri
+              ? `GCPの承認済みリダイレクトURIに追加: ${data.redirectUri}`
+              : undefined,
+              duration: 10000 },
+          );
+          setLoading(false);
+          return;
+        }
+        // 設定済みでも GCP 側でクライアント削除・種別違いがあると Google が 401 invalid_client を返す
+        toast.message("Google 認証へ移動します", {
+          description: `リダイレクトURI（GCPに登録必須）: ${data.redirectUri}`,
+          duration: 4000,
+        });
+        window.location.href = "/api/gmail/auth";
+      } catch {
+        toast.error("OAuth設定の確認に失敗しました");
+        setLoading(false);
+      }
       return;
     }
     if (p === "imap") {

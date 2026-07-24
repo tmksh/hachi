@@ -16,9 +16,17 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Loader2, ExternalLink, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { getContractWorkflowRequests, submitContractWorkflow } from "@/lib/actions/contract-features";
+import {
+  getContractApprovalWorkflowTypes,
+  getContractWorkflowRequests,
+  submitContractWorkflow,
+  type ContractApprovalWorkflowType,
+} from "@/lib/actions/contract-features";
 import { findTemplate, type FormValues } from "@/lib/contract-templates";
 import { getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import type { ContractDetail } from "./contract-detail-types";
 
 type WorkflowRow = Awaited<ReturnType<typeof getContractWorkflowRequests>>[number];
@@ -58,6 +66,8 @@ export function ContractWorkflowTab({
   const [tab, setTab] = useState("all");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [wfTypes, setWfTypes] = useState<ContractApprovalWorkflowType[]>([]);
+  const [selectedTypeId, setSelectedTypeId] = useState("");
 
   const loadHistory = () => {
     setLoading(true);
@@ -68,6 +78,17 @@ export function ContractWorkflowTab({
   };
 
   useEffect(() => { loadHistory(); }, [contractId]);
+
+  useEffect(() => {
+    getContractApprovalWorkflowTypes()
+      .then((types) => {
+        setWfTypes(types);
+        setSelectedTypeId((prev) => prev || types[0]?.id || "");
+      })
+      .catch(() => {});
+  }, []);
+
+  const selectedType = wfTypes.find((t) => t.id === selectedTypeId) ?? wfTypes[0] ?? null;
 
   const pending = history.find((r) => r.status === "submitted");
   const remanded = history.find((r) => isWorkflowRemanded(r.status, r.payload as Record<string, unknown> | null));
@@ -88,10 +109,19 @@ export function ContractWorkflowTab({
   }, [approved, onEsignEnabled]);
 
   const submit = async () => {
+    if (!selectedTypeId && wfTypes.length > 0) {
+      toast.error("承認ワークフロー種別を選択してください");
+      return;
+    }
     setSubmitting(true);
     try {
-      const req = await submitContractWorkflow(contractId, data.title);
-      toast.success("承認ワークフローに申請しました");
+      const req = await submitContractWorkflow(contractId, data.title, selectedTypeId || undefined);
+      const steps = selectedType?.approvalSteps.length ?? 0;
+      toast.success(
+        steps > 1
+          ? `承認ワークフローに申請しました（${steps}段階）`
+          : "承認ワークフローに申請しました",
+      );
       setConfirmOpen(false);
       loadHistory();
       onRefresh?.();
@@ -137,22 +167,41 @@ export function ContractWorkflowTab({
             )}
           </div>
 
+          {remanded && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-sm text-amber-950 space-y-2">
+              <p className="font-medium">差戻しされています</p>
+              <p className="text-xs text-amber-900/90">
+                {(remanded.payload as { remand_comment?: string } | null)?.remand_comment
+                  ? `指摘: ${(remanded.payload as { remand_comment?: string }).remand_comment}`
+                  : "指摘内容を確認し、書類作成タブで修正のうえ再申請してください。"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="h-8" asChild>
+                  <Link href={`/workflow/${remanded.id}`}>差戻し詳細</Link>
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 bg-amber-700 hover:bg-amber-800"
+                  onClick={() => {
+                    // 書類作成タブ（仕様 Step15）へ戻る
+                    router.push(`/contracts/${contractId}?tab=documents`);
+                  }}
+                >
+                  書類作成タブで修正する
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
-            {pending ? (
+            {pending && !remanded ? (
               <Button size="sm" variant="outline" asChild>
                 <Link href={`/workflow/${pending.id}`}>
                   申請中 — 詳細を見る
                 </Link>
               </Button>
             ) : remanded ? (
-              <>
-                <Button size="sm" variant="outline" className="text-amber-700 border-amber-200" asChild>
-                  <Link href={`/workflow/${remanded.id}`}>
-                    差戻し — 修正内容を確認
-                  </Link>
-                </Button>
-                <Button size="sm" onClick={() => setConfirmOpen(true)}>再申請する</Button>
-              </>
+              <Button size="sm" onClick={() => setConfirmOpen(true)}>再申請する</Button>
             ) : (
               <Button size="sm" onClick={() => setConfirmOpen(true)}>承認ワークフローに申請</Button>
             )}
@@ -222,19 +271,76 @@ export function ContractWorkflowTab({
           <AlertDialogHeader>
             <AlertDialogTitle>社内承認を取りますか？</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>契約書の内容を確定し、社内承認ワークフロー（営業部長 / 工事課長 / 取締役 等）に申請します。</p>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>契約書の内容を確定し、ポータルで設定した承認ルートどおりに申請します。</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>テンプレート: {template?.name ?? "—"}</li>
                   <li>工事名称: {String(form.work_name ?? data.title)}</li>
                   <li>契約金額: ¥{totalAmount.toLocaleString()}</li>
                 </ul>
+                {wfTypes.length > 0 ? (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs font-medium text-foreground">承認ワークフロー種別</p>
+                    <Select value={selectedType?.id ?? ""} onValueChange={setSelectedTypeId}>
+                      <SelectTrigger className="h-9 bg-background">
+                        <SelectValue placeholder="種別を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wfTypes.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                            {t.approvalSteps.length > 0
+                              ? `（${t.approvalSteps.length}段階）`
+                              : "（ルート未設定）"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedType && selectedType.approvalSteps.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <ol className="rounded-md border bg-background px-3 py-2 space-y-1 text-xs text-foreground">
+                          {selectedType.approvalSteps.map((s) => (
+                            <li key={`${s.stepOrder}-${s.approverId}`}>
+                              Step {s.stepOrder}: {s.displayName}
+                              {s.isAdministration && (
+                                <span className="ml-1 text-teal-700">（総務・追記可）</span>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                        {!selectedType.hasAdministrationApprover && (
+                          <p className="text-[11px] text-teal-800">
+                            ルートに総務がいません。申請時に総務ロールを最終ステップへ自動追加します。
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-700">
+                        承認ルートが未設定です。
+                        <Link href="/settings?tab=organization&sub=workflow_types" className="underline ml-1">
+                          設定で追加
+                        </Link>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700">
+                    契約書用のワークフロー種別がありません。
+                    <Link href="/settings?tab=organization&sub=workflow_types" className="underline ml-1">
+                      設定＞組織＞ワークフロー
+                    </Link>
+                    で「契約書承認」等を作成してください。
+                  </p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={submitting}>キャンセル</AlertDialogCancel>
-            <AlertDialogAction disabled={submitting} onClick={(e) => { e.preventDefault(); void submit(); }}>
+            <AlertDialogAction
+              disabled={submitting || !selectedType || selectedType.approvalSteps.length === 0}
+              onClick={(e) => { e.preventDefault(); void submit(); }}
+            >
               {submitting ? "申請中..." : "申請する"}
             </AlertDialogAction>
           </AlertDialogFooter>

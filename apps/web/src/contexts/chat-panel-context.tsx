@@ -2,12 +2,42 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
+export type OpenBridgeChatOptions = {
+  /** 開いたあと自動送信するプロンプト（API 向け） */
+  prompt?: string;
+  /** チャット上に表示する短い文言（未指定時は prompt を表示） */
+  displayText?: string;
+  /** 応答後に社内チャット転送 UI を出す */
+  allowForward?: boolean;
+};
+
+export type BridgeSeed = {
+  prompt: string;
+  displayText?: string;
+  allowForward?: boolean;
+};
+
+export type OpenInternalChatOptions = {
+  /** 開いたときこの相手の会話を表示 */
+  userId?: string;
+  /** 入力欄に入れる／自動送信する本文 */
+  message?: string;
+  /** true なら開いたあと message を自動送信 */
+  autoSend?: boolean;
+};
+
+export type InternalChatSeed = {
+  userId: string;
+  message?: string;
+  autoSend?: boolean;
+};
+
 type ChatPanelContextValue = {
   bridgeChatOpen: boolean;
   internalChatOpen: boolean;
   internalChatRefreshKey: number;
-  openBridgeChat: () => void;
-  openInternalChat: () => void;
+  openBridgeChat: (opts?: OpenBridgeChatOptions) => void;
+  openInternalChat: (opts?: OpenInternalChatOptions) => void;
   refreshInternalChat: () => void;
 };
 
@@ -29,8 +59,8 @@ export function ChatPanelProvider({
 }: {
   open: boolean;
   internalChatOpen: boolean;
-  openBridgeChat: () => void;
-  openInternalChat: () => void;
+  openBridgeChat: (opts?: OpenBridgeChatOptions) => void;
+  openInternalChat: (opts?: OpenInternalChatOptions) => void;
   children: React.ReactNode;
 }) {
   const [internalChatRefreshKey, setInternalChatRefreshKey] = useState(0);

@@ -129,6 +129,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
   const { data: dealsData, isPending: dealsPending } = useQuery({
     queryKey: ["deals", "pipeline"],
     queryFn: () => getDeals(),
+    staleTime: 60_000,
   });
   const { data: profilesData } = useQuery({
     queryKey: ["profiles"],

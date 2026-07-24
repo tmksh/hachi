@@ -92,6 +92,176 @@ async function resolveDefaultApprovalApprovers(
   return ids;
 }
 
+type ApprovalRouteStep = { approver_id: string; step_order?: number };
+
+const NON_CONTRACT_WF_KEYS = new Set([
+  "estimate_margin",
+  "budget_approval",
+  "execution_budget",
+  "expense",
+  "leave",
+  "purchase",
+]);
+
+function isContractWorkflowType(t: { key: string; name: string }): boolean {
+  if (t.key === "contract_08") return true;
+  if (NON_CONTRACT_WF_KEYS.has(t.key)) return false;
+  if (/^contract[_-]?/i.test(t.key)) return true;
+  if (/契約/.test(t.key) || /契約/.test(t.name)) return true;
+  return false;
+}
+
+function normalizeApprovalRoute(route: unknown): ApprovalRouteStep[] {
+  if (!Array.isArray(route)) return [];
+  return (route as ApprovalRouteStep[])
+    .filter((s) => s && typeof s.approver_id === "string" && s.approver_id)
+    .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0));
+}
+
+function scoreContractWorkflowType(t: {
+  key: string;
+  name: string;
+  approval_route: unknown;
+}): number {
+  const routeLen = normalizeApprovalRoute(t.approval_route).length;
+  let score = routeLen * 20;
+  if (t.key === "contract_08") score += routeLen > 0 ? 40 : -30;
+  if (/契約書承認/.test(t.name) || /契約書承認/.test(t.key)) score += 30;
+  else if (/契約/.test(t.name) || /契約/.test(t.key)) score += 15;
+  return score;
+}
+
+export type ContractApprovalWorkflowType = {
+  id: string;
+  key: string;
+  name: string;
+  hasAdministrationApprover: boolean;
+  approvalSteps: Array<{
+    stepOrder: number;
+    approverId: string;
+    displayName: string;
+    role: string | null;
+    isAdministration: boolean;
+  }>;
+};
+
+/** 契約書申請で選べるWF種別（ポータル設定と同一の approval_route） */
+export async function getContractApprovalWorkflowTypes(): Promise<ContractApprovalWorkflowType[]> {
+  const { supabase, company_id } = await getCompanyContext();
+  const [{ data: types }, { data: profiles }] = await Promise.all([
+    supabase
+      .from("workflow_types")
+      .select("id, key, name, approval_route, sort_order")
+      .eq("company_id", company_id)
+      .order("sort_order")
+      .order("created_at"),
+    supabase
+      .from("profiles")
+      .select("id, display_name, role")
+      .eq("company_id", company_id),
+  ]);
+
+  const profileById = new Map(
+    (profiles ?? []).map((p) => [p.id, { name: p.display_name ?? "—", role: p.role ?? null }]),
+  );
+  const contractTypes = (types ?? [])
+    .filter((t) => isContractWorkflowType(t))
+    .sort((a, b) => scoreContractWorkflowType(b) - scoreContractWorkflowType(a));
+
+  return contractTypes.map((t) => {
+    const route = normalizeApprovalRoute(t.approval_route);
+    const approvalSteps = route.map((s, i) => {
+      const profile = profileById.get(s.approver_id);
+      const role = profile?.role ?? null;
+      return {
+        stepOrder: s.step_order ?? i + 1,
+        approverId: s.approver_id,
+        displayName: profile?.name ?? "（未設定）",
+        role,
+        isAdministration: role === "administration",
+      };
+    });
+    return {
+      id: t.id,
+      key: t.key,
+      name: t.name,
+      hasAdministrationApprover: approvalSteps.some((s) => s.isAdministration),
+      approvalSteps,
+    };
+  });
+}
+
+/** 承認ルートに総務ロールがいなければ末尾へ自動追加（No.86 / Step17） */
+async function ensureAdministrationInApprovers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  approverIds: string[],
+): Promise<{ approverIds: string[]; appended: boolean; administrationId: string | null }> {
+  if (approverIds.length === 0) {
+    return { approverIds, appended: false, administrationId: null };
+  }
+
+  const { data: inRoute } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("company_id", companyId)
+    .in("id", approverIds);
+  const existingAdmin = (inRoute ?? []).find((p) => p.role === "administration");
+  if (existingAdmin) {
+    return { approverIds, appended: false, administrationId: existingAdmin.id };
+  }
+
+  const { data: soumu } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("role", "administration")
+    .order("display_name")
+    .limit(1)
+    .maybeSingle();
+
+  if (!soumu) {
+    return { approverIds, appended: false, administrationId: null };
+  }
+  if (approverIds.includes(soumu.id)) {
+    return { approverIds, appended: false, administrationId: soumu.id };
+  }
+  return {
+    approverIds: [...approverIds, soumu.id],
+    appended: true,
+    administrationId: soumu.id,
+  };
+}
+
+async function resolveContractWorkflowType(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  workflowTypeId?: string,
+) {
+  if (workflowTypeId) {
+    const { data } = await supabase
+      .from("workflow_types")
+      .select("id, key, name, approval_route")
+      .eq("company_id", companyId)
+      .eq("id", workflowTypeId)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const { data: types } = await supabase
+    .from("workflow_types")
+    .select("id, key, name, approval_route")
+    .eq("company_id", companyId);
+
+  const candidates = (types ?? []).filter((t) => isContractWorkflowType(t));
+  if (candidates.length === 0) {
+    return (types ?? [])[0] ?? null;
+  }
+
+  candidates.sort((a, b) => scoreContractWorkflowType(b) - scoreContractWorkflowType(a));
+  return candidates[0] ?? null;
+}
+
 export async function getContractCommunications(contractId: string) {
   const { supabase } = await getCompanyContext();
   const { data, error } = await supabase
@@ -597,17 +767,32 @@ export async function copyEstimateForContract(
 
 export async function getContractWorkflowRequests(contractId: string) {
   const { supabase, company_id } = await getCompanyContext();
+  // contains と JSON パスの両方で拾う（形式差で承認済みWFを見失い電子契約がロックされるのを防ぐ）
   const { data, error } = await supabase
     .from("workflow_requests")
     .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
     .eq("company_id", company_id)
-    .contains("payload", { contract_id: contractId })
+    .or(`payload->>contract_id.eq.${contractId},payload->contract_id.eq."${contractId}"`)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    const fallback = await supabase
+      .from("workflow_requests")
+      .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+      .eq("company_id", company_id)
+      .contains("payload", { contract_id: contractId })
+      .order("created_at", { ascending: false });
+    if (fallback.error) throw fallback.error;
+    return fallback.data ?? [];
+  }
   return data ?? [];
 }
 
-export async function submitContractWorkflow(contractId: string, title: string, workflowTypeKey = "contract_08") {
+export async function submitContractWorkflow(
+  contractId: string,
+  title: string,
+  /** ポータルで設定したWF種別ID。未指定時は契約系種別をスコアリングして自動選択 */
+  workflowTypeId?: string,
+) {
   const { supabase, company_id, user_id } = await getCompanyContext();
 
   const { data: contract } = await supabase
@@ -651,30 +836,43 @@ export async function submitContractWorkflow(contractId: string, title: string, 
     payload["契約金額（税抜）"] = `¥${excl.toLocaleString()}`;
   }
 
-  const { data: wfType } = await supabase
-    .from("workflow_types")
-    .select("id, approval_route")
-    .eq("company_id", company_id)
-    .eq("key", workflowTypeKey)
-    .maybeSingle();
+  // ポータルの承認ルートと一致させる（No.85: contract_08 固定だとカスタム種別の多段階が消える）
+  const type = await resolveContractWorkflowType(supabase, company_id, workflowTypeId);
+  if (!type) throw new Error("契約書用のワークフロー種別がありません。設定＞組織＞ワークフローで作成してください");
 
-  const fallback = wfType
-    ? null
-    : (await supabase.from("workflow_types").select("id, approval_route").eq("company_id", company_id).limit(1).maybeSingle()).data;
-
-  const type = wfType ?? fallback;
-  if (!type) throw new Error("ワークフロー種別がありません");
-
-  const approvalRoute = (type.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
+  const approvalRoute = normalizeApprovalRoute(type.approval_route);
   let approverIds = approvalRoute.length > 0
-    ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
+    ? approvalRoute.map((s) => s.approver_id)
     : await resolveDefaultApprovalApprovers(supabase, company_id);
+
+  if (approverIds.length === 0) {
+    throw new Error(
+      `「${type.name}」に承認ルートが設定されていません。設定＞組織＞ワークフローで Step を追加してください`,
+    );
+  }
+
+  // 仕様 Step17: 総務ロールへ回付できるよう、ルートに総務が無ければ末尾へ自動配置
+  const ensured = await ensureAdministrationInApprovers(supabase, company_id, approverIds);
+  approverIds = ensured.approverIds;
+  if (!ensured.administrationId) {
+    throw new Error(
+      "総務ロールのメンバーがいません。設定＞組織＞メンバーで総務ロールを割り当ててから申請してください",
+    );
+  }
 
   const request = await createWorkflowRequest({
     type_id: type.id,
     title: `契約承認: ${title}`,
     amount: computedAmount ?? undefined,
-    payload,
+    payload: {
+      ...payload,
+      workflow_type_key: type.key,
+      workflow_type_name: type.name,
+      approval_step_count: approverIds.length,
+      administration_approver_id: ensured.administrationId,
+      administration_auto_appended: ensured.appended,
+      requires_admin_supplement: true,
+    },
     approver_ids: approverIds,
   });
 
@@ -685,8 +883,8 @@ export async function submitContractWorkflow(contractId: string, title: string, 
     await notifySalesFlowUser(supabase, company_id, firstApprover, {
       title: `契約承認依頼: ${title}`,
       description: approverIds.length > 1
-        ? `社内承認（Step 1 / ${approverIds.length}）をお願いします`
-        : "契約書の社内承認をお願いします",
+        ? `社内承認（Step 1 / ${approverIds.length}・${type.name}）をお願いします`
+        : `契約書の社内承認（${type.name}）をお願いします`,
       href: `/workflow/${request.id}`,
       urgent: true,
     }, user_id);
@@ -695,12 +893,15 @@ export async function submitContractWorkflow(contractId: string, title: string, 
   void dispatchWebhook(company_id, "contract.workflow_submitted", {
     contract_id: contractId,
     workflow_request_id: request.id,
+    workflow_type_id: type.id,
+    approver_count: approverIds.length,
+    administration_auto_appended: ensured.appended,
   });
 
   return request;
 }
 
-/** 総務ロールが契約承認時に支払条件・口座等を追記（No.86） */
+/** 総務ロールが契約承認時に支払条件・口座等を追記（No.86 / Step17） */
 export async function saveContractAdminSupplement(
   requestId: string,
   input: { payment_terms?: string; bank_account?: string; admin_notes?: string },
@@ -711,8 +912,13 @@ export async function saveContractAdminSupplement(
     .select("role")
     .eq("id", user_id)
     .single();
-  if (profile?.role !== "administration" && profile?.role !== "admin" && profile?.role !== "hq_admin") {
-    throw new Error("総務（または管理者）のみ追記できます");
+  // 仕様: 総務のみ追記可能
+  if (profile?.role !== "administration") {
+    throw new Error("総務ロールのみ追記できます");
+  }
+
+  if (!input.payment_terms?.trim() || !input.bank_account?.trim()) {
+    throw new Error("支払条件と振込口座を入力してください");
   }
 
   const { data: request } = await supabase

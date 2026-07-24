@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestOrigin } from "@/lib/request-origin";
 import { encrypt } from "@/lib/crypto";
+import {
+  gmailCallbackUri,
+  validateGoogleOAuthCredentials,
+} from "@/lib/google-oauth-config";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,15 +19,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const validated = validateGoogleOAuthCredentials();
+    if (!validated.ok) {
+      return NextResponse.redirect(`${origin}/mail?gmail_error=oauth_not_configured`);
+    }
+
     // Exchange code for tokens
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: process.env.GOOGLE_CLIENT_ID!,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: `${origin}/api/gmail/callback`,
+        client_id: validated.creds.clientId,
+        client_secret: validated.creds.clientSecret,
+        redirect_uri: gmailCallbackUri(origin),
         grant_type: "authorization_code",
       }),
     });
@@ -31,6 +40,10 @@ export async function GET(request: NextRequest) {
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error("Gmail token exchange failed:", err);
+      // client_id / secret 不一致は Google が invalid_client を返す
+      if (/invalid_client/i.test(err)) {
+        return NextResponse.redirect(`${origin}/mail?gmail_error=invalid_client`);
+      }
       return NextResponse.redirect(`${origin}/mail?gmail_error=token_exchange`);
     }
 

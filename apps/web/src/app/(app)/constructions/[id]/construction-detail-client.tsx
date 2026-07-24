@@ -18,21 +18,14 @@ import {
   Loader2, Wand2,
   CalendarDays, ScrollText, PencilLine, BookOpen, FolderOpen,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import {
   getConstruction,
   getConstructionContractDocs,
 } from "@/lib/actions/constructions";
-import { CostBudgetTab } from "@/components/constructions/cost-budget-tab";
-import { GanttTab } from "@/components/constructions/gantt-tab";
-import { ContractTab } from "@/components/constructions/contract-tab";
-import { ChangeOrderTab } from "@/components/constructions/change-order-tab";
-import { InvoicesTab, OrdersTab, type OrderRow } from "@/components/constructions/invoices-tab";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
-import { CustomerFilesTab, CUSTOMER_DOCUMENTS_DESCRIPTION } from "@/components/crm/customer-files-tab";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
-import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
-import { EstimateListView, type EstimateListItem } from "@/components/estimate/estimate-list-view";
 import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
@@ -44,6 +37,50 @@ import {
 } from "@/lib/actions/constructions";
 import { getChangeOrders } from "@/lib/actions/change-orders";
 import { getInvoicesForConstruction } from "@/lib/actions/invoices";
+import type { OrderRow } from "@/components/constructions/invoices-tab";
+import type { EstimateForView } from "@/components/estimate/estimate-detail-view";
+import type { EstimateListItem } from "@/components/estimate/estimate-list-view";
+
+const tabFallback = <Skeleton className="h-64 w-full rounded-xl" />;
+
+const CostBudgetTab = dynamic(
+  () => import("@/components/constructions/cost-budget-tab").then((m) => m.CostBudgetTab),
+  { loading: () => tabFallback },
+);
+const GanttTab = dynamic(
+  () => import("@/components/constructions/gantt-tab").then((m) => m.GanttTab),
+  { loading: () => tabFallback },
+);
+const ContractTab = dynamic(
+  () => import("@/components/constructions/contract-tab").then((m) => m.ContractTab),
+  { loading: () => tabFallback },
+);
+const ChangeOrderTab = dynamic(
+  () => import("@/components/constructions/change-order-tab").then((m) => m.ChangeOrderTab),
+  { loading: () => tabFallback },
+);
+const InvoicesTab = dynamic(
+  () => import("@/components/constructions/invoices-tab").then((m) => m.InvoicesTab),
+  { loading: () => tabFallback },
+);
+const OrdersTab = dynamic(
+  () => import("@/components/constructions/invoices-tab").then((m) => m.OrdersTab),
+  { loading: () => tabFallback },
+);
+const CustomerFilesTab = dynamic(
+  () => import("@/components/crm/customer-files-tab").then((m) => m.CustomerFilesTab),
+  { loading: () => tabFallback },
+);
+const CUSTOMER_DOCUMENTS_DESCRIPTION =
+  "CRM・契約・工事からアップロードされた顧客関連ドキュメントを横断表示します。";
+const EstimateDetailView = dynamic(
+  () => import("@/components/estimate/estimate-detail-view").then((m) => m.EstimateDetailView),
+  { loading: () => tabFallback },
+);
+const EstimateListView = dynamic(
+  () => import("@/components/estimate/estimate-list-view").then((m) => m.EstimateListView),
+  { loading: () => tabFallback },
+);
 
 type Detail = Awaited<ReturnType<typeof getConstruction>>;
 type Order = Detail["orders"][number] & { craftsman?: { id: string; name: string } | null };

@@ -51,13 +51,33 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
     }
     setBulkGenerating(true);
     try {
-      const { created, skipped } = await generateMonthlyInvoicesForMonth(bulkMonth);
-      toast.success(`${created}件の請求書を生成しました（スキップ${skipped}件）`);
+      const result = await generateMonthlyInvoicesForMonth(bulkMonth);
+      const failNote = result.failures?.length
+        ? `（失敗${result.failures.length}件）`
+        : "";
+      if (result.created === 0) {
+        toast.message(
+          `新規作成はありませんでした（対象月の未生成工事なし / スキップ${result.skipped}件）${failNote}`,
+        );
+      } else {
+        toast.success(
+          `${result.created}件の請求書を生成しました（スキップ${result.skipped}件）${failNote}`,
+        );
+      }
       setBulkOpen(false);
-      setInvoices(await getInvoices());
-      router.refresh();
+      try {
+        setInvoices(await getInvoices());
+      } catch {
+        // 一覧再取得失敗でも生成自体は成功しているので refresh にフォールバック
+        router.refresh();
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "月次一括生成に失敗しました");
+      const msg = e instanceof Error
+        ? e.message
+        : (typeof e === "object" && e && "message" in e && typeof (e as { message: unknown }).message === "string")
+          ? (e as { message: string }).message
+          : "月次一括生成に失敗しました";
+      toast.error(msg);
     } finally {
       setBulkGenerating(false);
     }
@@ -170,8 +190,9 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
           <DialogHeader>
             <DialogTitle>月次請求書の一括生成</DialogTitle>
             <DialogDescription>
-              施工中・完了の工事（契約金額あり）のうち、対象月の請求書が未生成のものについて、
-              締日を請求日・翌月末を支払期限とした下書き請求書を一括作成します。
+              準備中・施工中・完了の工事（契約金額あり・対象月と工期が重なるもの）のうち、
+              未生成分について会社設定の締日（invoice_closing_day）を請求日・翌月末を支払期限とした
+              下書き請求書を一括作成します。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">

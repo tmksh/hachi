@@ -16,6 +16,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { createCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
 import { createGoogleCalendarEvent } from "@/lib/google-calendar";
 import { MemberShareSelect } from "@/components/calendar/member-share-select";
+import { cn } from "@/lib/utils";
 
 async function getGoogleToken(): Promise<string | null> {
   try {
@@ -136,26 +137,33 @@ function CalendarNewPageContent() {
               />
               <Label htmlFor="all-day" className="cursor-pointer">終日</Label>
             </div>
-            <div className="space-y-2">
-              <Label>開始日 *</Label>
-              <DatePicker value={startDate} onChange={setStartDate} placeholder="開始日を選択" />
-            </div>
-            {!allDay && (
-              <div className="space-y-2">
-                <Label>開始時刻</Label>
-                <TimeSelect value={startTime} onChange={setStartTime} />
+            <div
+              className={cn(
+                "grid gap-4 sm:col-span-2",
+                allDay ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2 lg:grid-cols-4",
+              )}
+            >
+              <div className="space-y-2 min-w-0">
+                <Label>開始日 *</Label>
+                <DatePicker value={startDate} onChange={setStartDate} placeholder="開始日を選択" />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label>終了日</Label>
-              <DatePicker value={endDate} onChange={setEndDate} placeholder="終了日を選択" />
-            </div>
-            {!allDay && (
-              <div className="space-y-2">
-                <Label>終了時刻</Label>
-                <TimeSelect value={endTime} onChange={setEndTime} />
+              {!allDay && (
+                <div className="space-y-2 min-w-0">
+                  <Label>開始時刻</Label>
+                  <TimeSelect value={startTime} onChange={setStartTime} />
+                </div>
+              )}
+              <div className="space-y-2 min-w-0">
+                <Label>終了日</Label>
+                <DatePicker value={endDate} onChange={setEndDate} placeholder="終了日を選択" />
               </div>
-            )}
+              {!allDay && (
+                <div className="space-y-2 min-w-0">
+                  <Label>終了時刻</Label>
+                  <TimeSelect value={endTime} onChange={setEndTime} />
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               <Label>カテゴリ</Label>
               <Select value={category} onValueChange={setCategory}>

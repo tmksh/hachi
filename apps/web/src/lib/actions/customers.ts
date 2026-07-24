@@ -6,7 +6,7 @@ import type { Customer } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
 
 const CUSTOMER_LIST_SELECT =
-  "*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
+  "id, company_id, name, company_name, email, phone, customer_type, status, source, assigned_to, address, department, prospect_grade, inquiry_category, inquiry_date, created_at, updated_at, deleted_at, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
 
 export type CustomerListResult = {
   customers: (Customer & {
@@ -45,7 +45,7 @@ export async function getCustomers(options?: {
   if (error) throw error;
 
   return {
-    customers: (data ?? []) as CustomerListResult["customers"],
+    customers: (data ?? []) as unknown as CustomerListResult["customers"],
     total: count ?? 0,
     page,
     limit,

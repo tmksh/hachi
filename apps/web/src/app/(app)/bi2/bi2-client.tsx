@@ -505,7 +505,10 @@ export function Bi2Client({
     }
   }, [searchParams]);
 
+  const biFetchInflight = useRef(false);
   const loadBiData = useCallback((silent = false, includePrevYear = true) => {
+    if (biFetchInflight.current) return Promise.resolve();
+    biFetchInflight.current = true;
     if (!silent) setSettingsLoaded(false);
     return Promise.all([
       getBiSettings(fiscalYear),
@@ -520,7 +523,10 @@ export function Bi2Client({
         if (p !== undefined) setPrevActuals(p);
         setProspectSummary(ps);
       })
-      .finally(() => setSettingsLoaded(true));
+      .finally(() => {
+        biFetchInflight.current = false;
+        setSettingsLoaded(true);
+      });
   }, [fiscalYear]);
 
   // 初回マウントは SSR の初期データを使い、不足分（前年実績・見込みサマリ）のみ取得。
@@ -536,12 +542,19 @@ export function Bi2Client({
     loadBiData(false);
   }, [fiscalYear, loadBiData]);
 
-  // 案件データ更新を反映（フォーカス復帰 + 2分ポーリング）。スケルトンを出さず静かに更新
+  // タブ復帰時のみ静かに更新（window focus は頻発するので使わない）+ 2分ポーリング
   useEffect(() => {
-    const onFocus = () => loadBiData(true, false);
-    window.addEventListener("focus", onFocus);
-    const interval = setInterval(() => { if (document.visibilityState === "visible") loadBiData(true, false); }, 120000);
-    return () => { window.removeEventListener("focus", onFocus); clearInterval(interval); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadBiData(true, false);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void loadBiData(true, false);
+    }, 120000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(interval);
+    };
   }, [loadBiData]);
 
   const handleToggleReserveRelease = useCallback(async (release: boolean) => {
@@ -1019,7 +1032,7 @@ export function Bi2Client({
 
                   {cardId === "sub-overhead" && (
                     <MetricIllustCard
-                      label="予算配賦"
+                      label="予定配賦"
                       value={settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}
                       hint="製造間接費"
                       illustration="/bi/icons/bi-icon-overhead.png?v=4"
@@ -1045,14 +1058,14 @@ export function Bi2Client({
                         style={{ background: `radial-gradient(circle, ${CHART_ACCENT} 0%, transparent 70%)` }}
                       />
                       <p className="text-base font-bold text-white/85 relative">損益フロー</p>
-                      <p className="text-sm text-white/60 mt-1.5 relative">粗利から予算配賦・販管費を引くと営業利益</p>
+                      <p className="text-sm text-white/60 mt-1.5 relative">粗利から予定配賦・販管費を引くと営業利益</p>
                       <div className="mt-6 space-y-0 flex-1 relative">
                         {[
                           { label: "売上", value: fmtMan(totalRevenue) },
                           { label: "粗利", value: fmtMan(totalGrossProfit) },
-                          { label: "予算配賦", value: settingsConfigured ? `−${fmtMan(overheadForCalc)}` : "未設定", dim: true },
+                          { label: "予定配賦", value: settingsConfigured ? fmtMan(overheadForCalc) : "未設定", dim: true },
                           { label: "売上総利益", value: fmtSigned(grossProfitTotal) },
-                          { label: "販管費", value: settingsConfigured ? `−${fmtMan(sgaForCalc)}` : "未設定", dim: true },
+                          { label: "販管費", value: settingsConfigured ? fmtMan(sgaForCalc) : "未設定", dim: true },
                         ].map((row, i) => (
                           <div
                             key={row.label}
@@ -1109,7 +1122,7 @@ export function Bi2Client({
                             {!settingsConfigured ? "—" : breakevenGap > 0 ? fmtMan(breakevenGap) : `+${fmtMan(Math.abs(breakevenGap))}`}
                           </b>
                         </span>
-                        <span>粗利 / 予算配賦 <b className="tabular-nums" style={{ color: "#0f172a" }}>{fmtMan(trendGrossProfitTotal)}</b> / {settingsConfigured ? fmtMan(overheadForCalc) : "—"}</span>
+                        <span>粗利 / 予定配賦 <b className="tabular-nums" style={{ color: "#0f172a" }}>{fmtMan(trendGrossProfitTotal)}</b> / {settingsConfigured ? fmtMan(overheadForCalc) : "—"}</span>
                       </div>
                       {monthlyView === "chart" ? (
                         monthlyChartMode === "stream" ? (
@@ -1151,7 +1164,7 @@ export function Bi2Client({
                               tickColor="#94a8c0"
                               bars={[
                                 { key: "粗利額", label: "粗利額", fill: CHART_DARK },
-                                { key: "月次予定配賦", label: "月別予算配賦", fill: BI_NEGATIVE },
+                                { key: "月次予定配賦", label: "月別予定配賦", fill: BI_NEGATIVE },
                               ]}
                               line={{ key: "累計", label: "累計売上総利益", color: CHART_PRIMARY }}
                               lineArea
@@ -1164,7 +1177,7 @@ export function Bi2Client({
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b text-xs" style={{ background: CHART_ACCENT, color: "#64748b" }}>
-                                {["月", "売上", "粗利", "予算配賦", "売上総利益", "累計"].map((h) => (
+                                {["月", "売上", "粗利", "予定配賦", "売上総利益", "累計"].map((h) => (
                                   <th key={h} className={cn("py-2.5 font-semibold", h === "月" ? "text-left px-3" : "text-right px-3")}>{h}</th>
                                 ))}
                               </tr>
@@ -1417,9 +1430,9 @@ export function Bi2Client({
                       title="着地予測"
                       right={
                         <span className="text-xs font-medium tabular-nums" style={{ color: "#64748b" }}>
-                          予定配賦 {settingsConfigured ? `−${fmtMan(overheadForCalc)}` : "未設定"}
+                          予定配賦 {settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}
                           {" · "}
-                          販管費 {settingsConfigured ? `−${fmtMan(sgaForCalc)}` : "未設定"}
+                          販管費 {settingsConfigured ? fmtMan(sgaForCalc) : "未設定"}
                         </span>
                       }
                     >

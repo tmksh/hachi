@@ -41,9 +41,10 @@ import {
   type FieldDef,
 } from "@/lib/actions/workflow";
 import { getProfiles } from "@/lib/actions/profiles";
+import { ROLE_LABELS, type Role } from "@/lib/constants";
 
 type WfType = Awaited<ReturnType<typeof getWorkflowTypes>>[number];
-type Profile = { id: string; display_name: string };
+type Profile = { id: string; display_name: string; role?: string | null };
 
 const FIELD_TYPE_LABELS: Record<FieldDef["type"], string> = {
   text: "テキスト",
@@ -77,7 +78,7 @@ export function WorkflowTypesTab() {
     Promise.all([getWorkflowTypes(), getProfiles()])
       .then(([t, p]) => {
         setTypes(t);
-        setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name })));
+        setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name, role: x.role })));
       })
       .catch(() => toast.error("読み込みに失敗"))
       .finally(() => setLoading(false));
@@ -164,10 +165,12 @@ export function WorkflowTypesTab() {
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">契約書の多段階承認について</p>
+        <p className="font-medium text-foreground">契約書の多段階承認・総務追記について</p>
         <p>
-          「契約書承認」（key: contract_08）を開き、承認ルートに Step1（例: 上長）→ Step2（例: 総務）の順で並べてください。
-          承認は順番に進み、総務ロールは承認画面で支払条件・口座情報を追記できます。
+          種別名に「契約」を含むもの（例: 契約書承認 / 契約書承認テスト）、または key: contract_08 が契約書申請に使われます。
+          承認ルートに Step1→Step2→Step3 の順で並べると、契約書申請で同じ順番が自動配置されます。
+          総務ロールのメンバーをルートに含めると、回付時に通知され、承認画面で支払条件・口座情報を追記してから承認できます（仕様 Step17）。
+          ルートに総務が無い場合も、申請時に総務ロールを末尾へ自動追加します。
         </p>
       </div>
       <div className="flex items-center justify-between">
@@ -352,14 +355,52 @@ export function WorkflowTypesTab() {
               <CardHeader className="pb-2"><CardTitle className="text-sm">デフォルト承認ルート</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">申請時に自動でセットされる承認者の順番を設定します（変更可）</p>
+                {(/契約/.test(name) || editing?.key === "contract_08") && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={!profiles.some((p) => p.role === "administration" && !approverIds.includes(p.id))}
+                      onClick={() => {
+                        const soumu = profiles.find((p) => p.role === "administration" && !approverIds.includes(p.id));
+                        if (soumu) addApprover(soumu.id);
+                        else toast.error("未追加の総務ロールメンバーがいません");
+                      }}
+                    >
+                      総務ロールをルート末尾に追加
+                    </Button>
+                    {!profiles.some((p) => p.role === "administration") && (
+                      <span className="text-[11px] text-amber-700">総務ロールのメンバーがいません</span>
+                    )}
+                  </div>
+                )}
                 {approverIds.length > 0 && (
                   <div className="space-y-1.5">
                     {approverIds.map((id, i) => {
                       const p = profiles.find(x => x.id === id);
+                      const roleLabel = p?.role
+                        ? (ROLE_LABELS[p.role as Role] ?? p.role)
+                        : null;
                       return (
                         <div key={id} className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30">
                           <span className="text-xs text-muted-foreground w-16 shrink-0">Step {i + 1}</span>
-                          <span className="text-sm flex-1">{p?.display_name ?? "不明"}</span>
+                          <span className="text-sm flex-1 min-w-0 truncate">
+                            {p?.display_name ?? "不明"}
+                            {roleLabel && (
+                              <Badge
+                                variant="outline"
+                                className={`ml-1.5 text-[10px] h-4 px-1.5 align-middle ${
+                                  p?.role === "administration"
+                                    ? "border-teal-300 text-teal-700"
+                                    : ""
+                                }`}
+                              >
+                                {roleLabel}
+                              </Badge>
+                            )}
+                          </span>
                           <Button size="icon" variant="ghost" className="size-6" onClick={() => removeApprover(id)}>
                             <X className="size-3" />
                           </Button>
@@ -373,7 +414,10 @@ export function WorkflowTypesTab() {
                     <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="承認者を追加..." /></SelectTrigger>
                     <SelectContent>
                       {availableApprovers.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.display_name}
+                          {p.role ? `（${ROLE_LABELS[p.role as Role] ?? p.role}）` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

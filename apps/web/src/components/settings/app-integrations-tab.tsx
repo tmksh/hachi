@@ -45,17 +45,22 @@ import { ExternalLink, Loader2 } from "lucide-react";
 
 type ConnectProvider = AppIntegrationProvider | null;
 
-export function AppIntegrationsTab() {
-  const [catalog, setCatalog] = useState<
-    Array<
-      Pick<
-        ProviderDefinition,
-        "provider" | "name" | "description" | "color" | "connectHint" | "fields" | "settingsFields"
-      >
-    >
-  >([]);
-  const [integrations, setIntegrations] = useState<AppIntegrationPublic[]>([]);
-  const [loading, setLoading] = useState(true);
+type CatalogItem = Pick<
+  ProviderDefinition,
+  "provider" | "name" | "description" | "color" | "connectHint" | "fields" | "settingsFields"
+>;
+
+export type AppIntegrationsInitialData = {
+  integrations: AppIntegrationPublic[];
+  catalog: CatalogItem[];
+};
+
+export function AppIntegrationsTab({ initialData }: { initialData?: AppIntegrationsInitialData }) {
+  const [catalog, setCatalog] = useState<CatalogItem[]>(initialData?.catalog ?? []);
+  const [integrations, setIntegrations] = useState<AppIntegrationPublic[]>(
+    initialData?.integrations ?? [],
+  );
+  const [loading, setLoading] = useState(!initialData);
   const [connectProvider, setConnectProvider] = useState<ConnectProvider>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
@@ -86,10 +91,11 @@ export function AppIntegrationsTab() {
   };
 
   useEffect(() => {
+    if (initialData) return;
     reload()
       .catch(() => toast.error("アプリ連携の取得に失敗しました"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [initialData]);
 
   const openConnect = (provider: AppIntegrationProvider) => {
     const existing = integrationMap.get(provider);

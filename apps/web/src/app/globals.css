@@ -615,6 +615,15 @@ html[data-font-size="lg"] {
     22%           { transform: translateY(-4px); }
     38%           { transform: translateY(1px); }
   }
+  @keyframes nav-progress-slide {
+    0% { transform: translateX(-120%); width: 28%; }
+    50% { transform: translateX(120%); width: 45%; }
+    100% { transform: translateX(280%); width: 28%; }
+  }
+  .nav-progress-bar {
+    animation: nav-progress-slide 1.1s ease-in-out infinite;
+  }
+
   .animate-cube-thinking .brand-cube {
     animation: cube-hop 1.4s ease-in-out infinite;
     transform-box: fill-box;

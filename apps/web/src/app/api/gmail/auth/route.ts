@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getRequestOrigin } from "@/lib/request-origin";
+import {
+  gmailCallbackUri,
+  googleOAuthIssueToErrorCode,
+  validateGoogleOAuthCredentials,
+} from "@/lib/google-oauth-config";
 
 export async function GET(request: Request) {
   const origin = getRequestOrigin(request);
@@ -13,12 +18,11 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login", origin));
   }
 
-  // 未設定のまま Google へ飛ぶと「invalid_client」画面になるため事前チェック
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return NextResponse.json(
-      { error: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が環境変数に未設定です。ホスティング側の環境変数を設定してください" },
-      { status: 503 },
-    );
+  // 未設定・不正な Client ID のまま Google へ飛ぶと「401: invalid_client」になる
+  const validated = validateGoogleOAuthCredentials();
+  if (!validated.ok) {
+    const code = googleOAuthIssueToErrorCode(validated.issue);
+    return NextResponse.redirect(new URL(`/mail?gmail_error=${code}`, origin));
   }
 
   const scopes = [
@@ -30,8 +34,8 @@ export async function GET(request: Request) {
   ].join(" ");
 
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: `${origin}/api/gmail/callback`,
+    client_id: validated.creds.clientId,
+    redirect_uri: gmailCallbackUri(origin),
     response_type: "code",
     scope: scopes,
     access_type: "offline",

@@ -30,16 +30,25 @@ function MasterList({
   async function handleAdd() {
     if (!input.trim()) return;
     setSaving(true);
-    try { await onCreate(input.trim()); setInput(""); }
-    catch { toast.error("追加に失敗しました"); }
-    finally { setSaving(false); }
+    try {
+      await onCreate(input.trim());
+      setInput("");
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "追加に失敗しました");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDelete(id: string) {
     setDeletingId(id);
-    try { await onDelete(id); }
-    catch { toast.error("削除に失敗しました"); }
-    finally { setDeletingId(null); }
+    try {
+      await onDelete(id);
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "削除に失敗しました");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -78,9 +87,14 @@ function MasterList({
   );
 }
 
-export function CraftsmenMasterTab() {
-  const [specialties, setSpecialties]       = useState<Item[]>([]);
-  const [qualifications, setQualifications] = useState<Item[]>([]);
+export type CraftsmenMasterInitialData = {
+  specialties: Item[];
+  qualifications: Item[];
+};
+
+export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMasterInitialData }) {
+  const [specialties, setSpecialties]       = useState<Item[]>(initialData?.specialties ?? []);
+  const [qualifications, setQualifications] = useState<Item[]>(initialData?.qualifications ?? []);
 
   const reload = useCallback(async () => {
     const [s, q] = await Promise.all([
@@ -91,7 +105,10 @@ export function CraftsmenMasterTab() {
     setQualifications(q as Item[]);
   }, []);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    if (initialData) return;
+    void reload();
+  }, [reload, initialData]);
 
   return (
     <div className="space-y-4">

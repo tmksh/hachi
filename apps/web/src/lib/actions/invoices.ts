@@ -11,8 +11,9 @@ export async function getInvoices() {
     .select("*, customer:customers(id, name, company_name), construction:constructions(id, title)")
     .order("created_at", { ascending: false })
     .limit(500);
-  if (error) throw error;
-  return data;
+  // PostgrestError をそのまま throw すると本番で Server Components エラーになる
+  if (error) throw new Error(error.message || "請求書一覧の取得に失敗しました");
+  return data ?? [];
 }
 
 export async function getInvoicesForConstruction(constructionId: string) {
@@ -368,24 +369,37 @@ function toLocalDateString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function errMessage(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string") {
+    return (e as { message: string }).message;
+  }
+  return fallback;
+}
+
 /** 指定月（YYYY-MM）の締日ベースで、対象工事の月次請求書を一括生成する */
 export async function generateMonthlyInvoicesForMonth(month: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  if (!user) throw new Error("ログインが必要です");
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-  if (!profile) throw new Error("Profile not found");
+  if (!profile) throw new Error("プロフィールが見つかりません");
 
-  const [y, m] = month.split("-").map(Number);
-  if (!y || !m) throw new Error("対象月の形式が不正です");
+  const match = /^(\d{4})-(\d{2})$/.exec(month.trim());
+  if (!match) throw new Error("対象月の形式が不正です（YYYY-MM）");
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  if (!y || m < 1 || m > 12) throw new Error("対象月の形式が不正です");
 
-  const { data: company } = await supabase
+  const { data: company, error: companyErr } = await supabase
     .from("companies")
     .select("settings")
     .eq("id", profile.company_id)
     .single();
+  if (companyErr) throw new Error(`会社設定の取得に失敗しました: ${companyErr.message}`);
+
   const closingDay = getClosingDay(company?.settings as Record<string, unknown>);
-  const period = getBillingPeriod(new Date(y, m - 1, 1), closingDay);
+  const period = getBillingPeriod(new Date(y, m - 1, 15), closingDay);
 
   const invoiceDate = toLocalDateString(period.end);
   // 支払期限は翌月末
@@ -394,68 +408,122 @@ export async function generateMonthlyInvoicesForMonth(month: string) {
   const monthStart = toLocalDateString(new Date(y, m - 1, 1));
   const monthEnd = toLocalDateString(new Date(y, m, 0));
 
-  const { data: constructions } = await supabase
+  const { data: constructions, error: conErr } = await supabase
     .from("constructions")
-    .select("id, title, customer_id, order_amount")
-    .in("status", ["in_progress", "completed"])
+    .select("id, title, customer_id, order_amount, start_date, end_date, status")
+    .eq("company_id", profile.company_id)
+    .in("status", ["preparing", "in_progress", "completed"])
     .gt("order_amount", 0);
+  if (conErr) throw new Error(`工事一覧の取得に失敗しました: ${conErr.message}`);
 
-  const { data: existingInvoices } = await supabase
+  // 対象月と工期が重なる工事のみ（工期未設定は金額があれば対象）
+  const inPeriod = (constructions ?? []).filter((c) => {
+    if (!c.start_date && !c.end_date) return true;
+    const start = c.start_date ?? "1900-01-01";
+    const end = c.end_date ?? "2999-12-31";
+    return start <= monthEnd && end >= monthStart;
+  });
+
+  const { data: existingInvoices, error: existErr } = await supabase
     .from("invoices")
-    .select("construction_id")
+    .select("construction_id, invoice_date")
+    .eq("company_id", profile.company_id)
     .gte("invoice_date", monthStart)
     .lte("invoice_date", monthEnd)
     .not("construction_id", "is", null);
+  if (existErr) throw new Error(`既存請求書の確認に失敗しました: ${existErr.message}`);
+
   const invoicedIds = new Set((existingInvoices ?? []).map((r) => r.construction_id as string));
+  const targets = inPeriod.filter((c) => !invoicedIds.has(c.id));
+  const skipped = inPeriod.length - targets.length;
 
-  const targets = (constructions ?? []).filter((c) => !invoicedIds.has(c.id));
-  const skipped = (constructions ?? []).length - targets.length;
+  const { count, error: countErr } = await supabase
+    .from("invoices")
+    .select("*", { count: "exact", head: true })
+    .eq("company_id", profile.company_id);
+  if (countErr) throw new Error(`請求番号の採番に失敗しました: ${countErr.message}`);
 
-  const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true });
   let seq = count || 0;
   let created = 0;
+  const failures: string[] = [];
 
   for (const con of targets) {
-    const subtotal = con.order_amount as number;
-    const tax = Math.floor(subtotal * 0.1);
-    seq += 1;
-    const invoiceNo = `INV-${String(seq).padStart(4, "0")}`;
+    try {
+      const orderAmount = Number(con.order_amount ?? 0);
+      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+        failures.push(`${con.title}: 受注金額が不正です`);
+        continue;
+      }
 
-    const { data: invoice, error } = await supabase
-      .from("invoices")
-      .insert({
+      // 工期がある場合は月割、なければ受注額を当月分として計上
+      let subtotal = orderAmount;
+      if (con.start_date && con.end_date) {
+        const monthCount = monthsBetween(con.start_date, con.end_date);
+        const monthly = Math.floor(orderAmount / monthCount);
+        // 最終月は端数調整（対象月が工期最終月のとき）
+        const endMonth = (con.end_date as string).slice(0, 7);
+        subtotal = endMonth === month ? orderAmount - monthly * (monthCount - 1) : monthly;
+      }
+      subtotal = Math.max(0, Math.round(subtotal));
+      const tax = Math.floor(subtotal * 0.1);
+      seq += 1;
+      const invoiceNo = `INV-${y}-${String(seq).padStart(3, "0")}`;
+
+      const { data: invoice, error } = await supabase
+        .from("invoices")
+        .insert({
+          company_id: profile.company_id,
+          invoice_no: invoiceNo,
+          construction_id: con.id,
+          customer_id: con.customer_id,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          payment_terms: closingDay === "20" ? "20日締め翌月末払い" : "月末締め翌月末払い",
+          subtotal,
+          tax,
+          total: subtotal + tax,
+          status: "draft",
+          notes: `${period.label} 分（月次一括生成）`,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+      if (error || !invoice) {
+        throw new Error(error?.message ?? "請求書の作成に失敗しました");
+      }
+
+      const { error: itemErr } = await supabase.from("invoice_items").insert({
         company_id: profile.company_id,
-        invoice_no: invoiceNo,
-        construction_id: con.id,
-        customer_id: con.customer_id,
-        invoice_date: invoiceDate,
-        due_date: dueDate,
-        payment_terms: closingDay === "20" ? "20日締め翌月末払い" : "月末締め翌月末払い",
-        subtotal,
-        tax,
-        total: subtotal + tax,
-        status: "draft",
-        notes: `${period.label} 分（月次一括生成）`,
-        created_by: user.id,
-      })
-      .select()
-      .single();
-    if (error) throw error;
+        invoice_id: invoice.id,
+        description: `${con.title ?? "工事"}（${period.label}）`,
+        quantity: 1,
+        unit_price: subtotal,
+        amount: subtotal,
+        sort_order: 0,
+      });
+      if (itemErr) {
+        // 明細失敗時は請求ヘッダを巻き戻す
+        await supabase.from("invoices").delete().eq("id", invoice.id);
+        throw new Error(itemErr.message);
+      }
 
-    await supabase.from("invoice_items").insert({
-      company_id: profile.company_id,
-      invoice_id: invoice.id,
-      description: `${con.title}（${period.label}）`,
-      quantity: 1,
-      unit_price: subtotal,
-      amount: subtotal,
-      sort_order: 0,
-    });
-
-    created += 1;
+      created += 1;
+    } catch (e) {
+      failures.push(`${con.title ?? con.id}: ${errMessage(e, "作成失敗")}`);
+    }
   }
 
-  return { created, skipped };
+  if (created === 0 && failures.length > 0) {
+    throw new Error(`請求書を生成できませんでした。${failures.slice(0, 3).join(" / ")}`);
+  }
+
+  return {
+    created,
+    skipped,
+    failures,
+    invoiceDate,
+    periodLabel: period.label,
+  };
 }
 
 /** 請求書を顧客へメール送付し、送付済みステータスに更新する */

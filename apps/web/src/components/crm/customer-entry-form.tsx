@@ -38,6 +38,10 @@ type CustomerEntryFormProps = {
   onSaved?: (id: string) => void;
   showCard?: boolean;
   initialCustomer?: Customer;
+  initialProfiles?: { id: string; display_name: string }[];
+  initialTagMasters?: { id: string; label: string }[];
+  initialLeadSources?: { id: string; label: string }[];
+  initialDepartments?: string[];
 };
 
 type FormState = {
@@ -137,13 +141,23 @@ function formToPayload(form: FormState) {
   };
 }
 
-export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, initialCustomer }: CustomerEntryFormProps) {
+export function CustomerEntryForm({
+  customerId,
+  mode,
+  onSaved,
+  showCard = true,
+  initialCustomer,
+  initialProfiles,
+  initialTagMasters,
+  initialLeadSources,
+  initialDepartments,
+}: CustomerEntryFormProps) {
   const [loading, setLoading] = useState(mode === "edit" && !initialCustomer);
   const [saving, setSaving] = useState(false);
-  const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
-  const [tagMasters, setTagMasters] = useState<{ id: string; label: string }[]>([]);
-  const [leadSources, setLeadSources] = useState<{ id: string; label: string }[]>([]);
-  const [departments, setDepartments] = useState<string[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>(initialProfiles ?? []);
+  const [tagMasters, setTagMasters] = useState<{ id: string; label: string }[]>(initialTagMasters ?? []);
+  const [leadSources, setLeadSources] = useState<{ id: string; label: string }[]>(initialLeadSources ?? []);
+  const [departments, setDepartments] = useState<string[]>(initialDepartments ?? []);
   const [assignSuggesting, setAssignSuggesting] = useState(false);
   const [aiFieldSuggesting, setAiFieldSuggesting] = useState(false);
   const [assignCandidates, setAssignCandidates] = useState<Array<{
@@ -236,13 +250,24 @@ export function CustomerEntryForm({ customerId, mode, onSaved, showCard = true, 
   }, [initialCustomer]);
 
   useEffect(() => {
+    // SSR でマスターが渡っていれば追加 fetch しない
+    if (initialProfiles && initialTagMasters && initialLeadSources && initialDepartments) return;
     Promise.all([
-      getProfiles().then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name })))),
-      getCustomerTagMasters().then(setTagMasters),
-      getLeadSources().then(setLeadSources),
-      getBiDepartmentNames().then(setDepartments),
-    ]).catch(() => {});
-  }, []);
+      initialProfiles
+        ? Promise.resolve(initialProfiles)
+        : getProfiles().then((p) => p.map((x) => ({ id: x.id, display_name: x.display_name }))),
+      initialTagMasters ? Promise.resolve(initialTagMasters) : getCustomerTagMasters(),
+      initialLeadSources ? Promise.resolve(initialLeadSources) : getLeadSources(),
+      initialDepartments ? Promise.resolve(initialDepartments) : getBiDepartmentNames(),
+    ])
+      .then(([p, tags, sources, deps]) => {
+        setProfiles(p as { id: string; display_name: string }[]);
+        setTagMasters(tags as { id: string; label: string }[]);
+        setLeadSources(sources as { id: string; label: string }[]);
+        setDepartments(deps as string[]);
+      })
+      .catch(() => {});
+  }, [initialProfiles, initialTagMasters, initialLeadSources, initialDepartments]);
 
   useEffect(() => {
     if (mode !== "edit" || !customerId || initialCustomer) return;

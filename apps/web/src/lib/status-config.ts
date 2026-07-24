@@ -77,13 +77,32 @@ export function getStatusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
 
+/** payload.remand を厳密判定（文字列 "true" や JSON 由来の真偽も許容） */
+function isRemandFlagTrue(payload?: Record<string, unknown> | null): boolean {
+  if (!payload) return false;
+  const flag = payload.remand;
+  if (flag === true || flag === 1) return true;
+  if (typeof flag === "string" && flag.toLowerCase() === "true") return true;
+  return false;
+}
+
+/** 明示的な却下（No.48: remand: false） */
+function isRemandFlagFalse(payload?: Record<string, unknown> | null): boolean {
+  if (!payload) return false;
+  const flag = payload.remand;
+  if (flag === false || flag === 0) return true;
+  if (typeof flag === "string" && flag.toLowerCase() === "false") return true;
+  return false;
+}
+
 /** ワークフロー申請の表示用ラベル（差戻しと却下を区別） */
 export function getWorkflowStatusLabel(
   status: string,
   payload?: Record<string, unknown> | null,
 ): string {
-  // remand: true のみ差戻し。false / 未設定の rejected は却下（No.48 / 逆パターン対策）
-  if (status === "rejected" && payload?.remand === true) return "差戻し";
+  // 差戻し: remand === true。却下: remand === false / 未設定の rejected（No.48）
+  // 逆パターン対策: remanded_at があり明示却下でない場合も差戻しとみなす
+  if (isWorkflowRemanded(status, payload)) return "差戻し";
   if (status === "rejected") return "却下";
   return getStatusLabel(status);
 }
@@ -92,7 +111,14 @@ export function isWorkflowRemanded(
   status: string,
   payload?: Record<string, unknown> | null,
 ): boolean {
-  return status === "rejected" && payload?.remand === true;
+  if (status !== "rejected") return false;
+  if (isRemandFlagFalse(payload)) return false;
+  if (isRemandFlagTrue(payload)) return true;
+  // 差戻し処理は書いたが boolean が欠落したケースのフォールバック
+  if (typeof payload?.remanded_at === "string" && payload.remanded_at.trim()) {
+    return true;
+  }
+  return false;
 }
 
 export function getStatusOption(

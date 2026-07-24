@@ -49,8 +49,22 @@ export function EstimateApprovalActions({
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    getEstimateMarginThreshold(estimateId).then(setMarginInfo).catch(() => {});
+    const loadMargin = () => {
+      getEstimateMarginThreshold(estimateId).then(setMarginInfo).catch(() => {});
+    };
+    loadMargin();
     getProfiles().then((p) => setProfiles(p.map((x) => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
+
+    // 差戻し後に戻ってきたとき、マウント済みでも再申請ボタンへ切り替える
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadMargin();
+    };
+    window.addEventListener("focus", loadMargin);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", loadMargin);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [estimateId]);
 
   const threshold = marginInfo?.threshold

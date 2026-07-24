@@ -12,7 +12,8 @@ import {
   ChevronLeft,
   Check,
   CheckCheck,
-} from "lucide-react";import { cn } from "@/lib/utils";
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import {
@@ -25,7 +26,7 @@ import {
   type InternalMessage,
 } from "@/lib/actions/internal-messages";
 import { useAuth } from "@/hooks/use-auth";
-import { useInternalChat } from "@/contexts/chat-panel-context";
+import { useInternalChat, type InternalChatSeed } from "@/contexts/chat-panel-context";
 
 type Contact = Awaited<ReturnType<typeof getChatContacts>>[number];
 type ConversationView = { type: "list" } | { type: "chat"; contact: Contact };
@@ -36,6 +37,8 @@ export const INTERNAL_CHAT_WIDTH = 360;
 interface InternalChatPanelProps {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  seed?: InternalChatSeed | null;
+  onSeedConsumed?: () => void;
 }
 
 function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
@@ -52,7 +55,12 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
   );
 }
 
-export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps) {
+export function InternalChatPanel({
+  open,
+  onOpenChange,
+  seed = null,
+  onSeedConsumed,
+}: InternalChatPanelProps) {
   const { profile } = useAuth();
   const { internalChatRefreshKey } = useInternalChat();
   const [view, setView] = useState<ConversationView>({ type: "list" });
@@ -65,6 +73,8 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const hasContactsRef = useRef(false);
+  const seedGen = useRef(0);
 
   const refreshContacts = useCallback(async () => {
     try {
@@ -76,6 +86,8 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
       setContacts(c);
       setLatestConvs(latest);
       setUnreadCount(count);
+      hasContactsRef.current = c.length > 0;
+      return c;
     } finally {
       setLoadingContacts(false);
     }
@@ -83,26 +95,62 @@ export function InternalChatPanel({ open, onOpenChange }: InternalChatPanelProps
 
   useEffect(() => {
     if (!open) return;
-    setLoadingContacts(true);
-    refreshContacts();
+    // 再オープン時は前回の連絡先を残したまま裏で更新（真っ白待ちを避ける）
+    if (!hasContactsRef.current) setLoadingContacts(true);
+    void refreshContacts();
   }, [open, internalChatRefreshKey, refreshContacts]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const openChat = async (contact: Contact) => {
+  const openChat = useCallback(async (contact: Contact) => {
     setView({ type: "chat", contact });
+    setMessages([]);
     setLoadingMessages(true);
     try {
       const msgs = await getConversation(contact.id);
       setMessages(msgs);
-      await markConversationAsRead(contact.id);
       setUnreadCount(prev => Math.max(0, prev - 1));
+      void markConversationAsRead(contact.id);
     } finally {
       setLoadingMessages(false);
     }
-  };
+  }, []);
+
+  /** 外部からのシード（担当者指定で会話を開く／送信） */
+  useEffect(() => {
+    if (!open || !seed?.userId) return;
+    const gen = ++seedGen.current;
+    const current = seed;
+
+    void (async () => {
+      try {
+        const list = (await refreshContacts()) ?? [];
+        if (seedGen.current !== gen) return;
+        const contact = list.find((c) => c.id === current.userId);
+        if (!contact) return;
+        await openChat(contact);
+        if (seedGen.current !== gen) return;
+        if (current.message && current.autoSend) {
+          setSending(true);
+          try {
+            const msg = await sendChatMessage(contact.id, current.message);
+            if (seedGen.current === gen) {
+              setMessages((prev) => [...prev, msg]);
+              void refreshContacts();
+            }
+          } finally {
+            if (seedGen.current === gen) setSending(false);
+          }
+        } else if (current.message) {
+          setInput(current.message);
+        }
+      } finally {
+        if (seedGen.current === gen) onSeedConsumed?.();
+      }
+    })();
+  }, [open, seed, openChat, refreshContacts, onSeedConsumed]);
 
   const handleSend = async () => {
     if (view.type !== "chat" || !input.trim() || sending) return;

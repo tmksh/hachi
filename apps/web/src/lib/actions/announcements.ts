@@ -21,7 +21,7 @@ export async function getAnnouncements() {
     .select("*, author:profiles!announcements_author_id_fkey(id, display_name)")
     .order("pinned", { ascending: false })
     .order("published_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 
   // クライアント側でロールターゲティングを適用（target_type='roles' のみ絞り込み）
   return (data || []).filter((a) => {
@@ -39,34 +39,52 @@ export async function getAnnouncements() {
 
 export async function getAnnouncement(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("announcements")
-    .select("*, author:profiles!announcements_author_id_fkey(id, display_name)")
-    .eq("id", id)
-    .single();
-  if (error) throw error;
+  const [announcementRes, commentsRes, authRes] = await Promise.all([
+    supabase
+      .from("announcements")
+      .select("*, author:profiles!announcements_author_id_fkey(id, display_name)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("announcement_comments")
+      .select("*, user:profiles!announcement_comments_user_id_fkey(id, display_name)")
+      .eq("announcement_id", id)
+      .order("created_at"),
+    supabase.auth.getUser(),
+  ]);
+  if (announcementRes.error) throw new Error(announcementRes.error.message);
 
-  const { data: comments } = await supabase
-    .from("announcement_comments")
-    .select("*, user:profiles!announcement_comments_user_id_fkey(id, display_name)")
-    .eq("announcement_id", id)
-    .order("created_at");
-
-  // Mark as read
-  const { data: { user } } = await supabase.auth.getUser();
+  // 既読は表示をブロックしない
+  const user = authRes.data.user;
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-    if (profile) {
+    void (async () => {
+      const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+      if (!profile) return;
       await supabase.from("announcement_reads").upsert({
         company_id: profile.company_id,
         announcement_id: id,
         user_id: user.id,
         read_at: new Date().toISOString(),
       }, { onConflict: "company_id,announcement_id,user_id" });
-    }
+    })();
   }
 
-  return { ...data, comments: comments || [] };
+  return { ...announcementRes.data, comments: commentsRes.data || [] };
+}
+
+function isAnnouncementSchemaMismatch(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false;
+  const code = error.code ?? "";
+  // 23514 = check_violation, 42703 = undefined_column
+  if (code === "23514" || code === "42703" || code === "PGRST204") return true;
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    msg.includes("target_type")
+    || msg.includes("target_roles")
+    || msg.includes("check constraint")
+    || msg.includes("does not exist")
+    || msg.includes("schema cache")
+  );
 }
 
 export async function createAnnouncement(input: {
@@ -85,38 +103,116 @@ export async function createAnnouncement(input: {
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
+  const roles = input.target_roles?.length ? input.target_roles : [];
   const target_type = input.target_type || "all";
   // roles を指定した時は target_type='roles' に自動補正
   const effectiveTargetType =
-    input.target_roles && input.target_roles.length > 0 && target_type === "all"
-      ? "roles"
-      : target_type;
+    roles.length > 0 && target_type === "all" ? "roles" : target_type;
+
+  const base = {
+    company_id: profile.company_id,
+    author_id: user.id,
+    title: input.title,
+    body: input.body,
+    pinned: input.pinned || false,
+    is_urgent: input.is_urgent || false,
+    due_date: input.due_date || null,
+  };
+
+  const publish = (data: Announcement) => {
+    void dispatchWebhook(profile.company_id, "announcement.published", {
+      id: data.id,
+      title: data.title,
+      is_urgent: data.is_urgent,
+    });
+    return data;
+  };
+
+  // ロール指定: target_type='roles' を試行。未マイグレーション時は個人指定へフォールバック
+  if (effectiveTargetType === "roles" && roles.length > 0) {
+    const { data, error } = await supabase
+      .from("announcements")
+      .insert({
+        ...base,
+        target_type: "roles",
+        target_roles: roles,
+        target_departments: input.target_departments || [],
+      })
+      .select()
+      .single();
+
+    if (!error && data) return publish(data as Announcement);
+
+    if (error && !isAnnouncementSchemaMismatch(error)) {
+      throw new Error(error.message || "投稿に失敗しました");
+    }
+
+    const { data: targets, error: profileErr } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id", profile.company_id)
+      .in("role", roles);
+
+    if (profileErr) {
+      throw new Error(profileErr.message || error?.message || "投稿に失敗しました");
+    }
+
+    const target_user_ids = (targets ?? []).map((p) => p.id);
+    if (target_user_ids.length === 0) {
+      throw new Error(
+        "選択したロールに該当するユーザーがいません。"
+          + (error?.message ? `（${error.message}）` : ""),
+      );
+    }
+
+    // target_roles カラム未適用でも動くよう individuals のみで再試行
+    const retry = await supabase
+      .from("announcements")
+      .insert({
+        ...base,
+        target_type: "individuals",
+        target_user_ids,
+        target_departments: [],
+      })
+      .select()
+      .single();
+
+    if (retry.error) {
+      throw new Error(retry.error.message || error?.message || "投稿に失敗しました");
+    }
+    return publish(retry.data as Announcement);
+  }
 
   const { data, error } = await supabase
     .from("announcements")
     .insert({
-      company_id: profile.company_id,
-      author_id: user.id,
-      title: input.title,
-      body: input.body,
-      pinned: input.pinned || false,
-      is_urgent: input.is_urgent || false,
+      ...base,
       target_type: effectiveTargetType,
-      target_roles: input.target_roles || [],
+      target_roles: roles,
       target_departments: input.target_departments || [],
-      due_date: input.due_date || null,
     })
     .select()
     .single();
-  if (error) throw error;
 
-  void dispatchWebhook(profile.company_id, "announcement.published", {
-    id: data.id,
-    title: data.title,
-    is_urgent: data.is_urgent,
-  });
+  if (error) {
+    // target_roles カラム未適用時は当該カラムを除いて再試行
+    if (isAnnouncementSchemaMismatch(error) && roles.length === 0) {
+      const retry = await supabase
+        .from("announcements")
+        .insert({
+          ...base,
+          target_type: effectiveTargetType === "roles" ? "all" : effectiveTargetType,
+          target_departments: input.target_departments || [],
+        })
+        .select()
+        .single();
+      if (retry.error) throw new Error(retry.error.message);
+      return publish(retry.data as Announcement);
+    }
+    throw new Error(error.message);
+  }
 
-  return data as Announcement;
+  return publish(data as Announcement);
 }
 
 export async function updateAnnouncement(id: string, input: {
@@ -133,13 +229,13 @@ export async function updateAnnouncement(id: string, input: {
     .from("announcements")
     .update(input)
     .eq("id", id);
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteAnnouncement(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("announcements").delete().eq("id", id);
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 }
 
 export async function addAnnouncementComment(announcementId: string, message: string) {
@@ -159,6 +255,6 @@ export async function addAnnouncementComment(announcementId: string, message: st
     })
     .select("*, user:profiles!announcement_comments_user_id_fkey(id, display_name)")
     .single();
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return data;
 }

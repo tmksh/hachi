@@ -4,20 +4,30 @@ import { useState, useCallback, useMemo, Suspense, type CSSProperties } from "re
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { ChatPanelProvider } from "@/contexts/chat-panel-context";
+import {
+  ChatPanelProvider,
+  type BridgeSeed,
+  type InternalChatSeed,
+  type OpenBridgeChatOptions,
+  type OpenInternalChatOptions,
+} from "@/contexts/chat-panel-context";
 import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
+import { NavigationProgress } from "./navigation-progress";
+import { Sidebar } from "./sidebar";
 import { BLUE_PAGE_BG } from "@/lib/blue-theme";
 import { TEAL_PAGE_BG } from "@/lib/teal-theme";
+import { useBrandColor } from "@/hooks/use-brand-color";
 
-const Sidebar = dynamic(
-  () => import("./sidebar").then((m) => m.Sidebar),
-  { loading: () => <aside className="fixed left-3 top-3 z-40 hidden md:block w-[68px] h-[calc(100vh-24px)]" aria-hidden /> },
-);
+/** ブランド色適用専用（親レイアウトの再レンダーを起こさない） */
+function BrandColorBootstrap() {
+  useBrandColor();
+  return null;
+}
 
 const BRIDGE_AI_PANEL_WIDTH = 400;
 const INTERNAL_CHAT_WIDTH = 360;
-const SIDEBAR_EXPANDED_PAD = 220 + 12 + 12;
+const SIDEBAR_EXPANDED_PAD = 196 + 12 + 12;
 const SIDEBAR_COLLAPSED_PAD = 68 + 12 + 12;
 
 const BridgeAiChat = dynamic(
@@ -38,14 +48,37 @@ export function MainLayout({ children }: MainLayoutProps) {
   const { profile, signOut } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [bridgeSeed, setBridgeSeed] = useState<BridgeSeed | null>(null);
+  const [internalChatSeed, setInternalChatSeed] = useState<InternalChatSeed | null>(null);
   const [internalChatOpen, setInternalChatOpen] = useState(false);
   const pathname = usePathname();
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
   const pageBg = pathname?.startsWith("/dashboard2") ? BLUE_PAGE_BG : TEAL_PAGE_BG;
 
-  const openInternalChat = useCallback(() => setInternalChatOpen(true), []);
-  const openBridgeChat = useCallback(() => setChatOpen(true), []);
+  const openInternalChat = useCallback((opts?: OpenInternalChatOptions) => {
+    if (opts?.userId) {
+      setInternalChatSeed({
+        userId: opts.userId,
+        message: opts.message?.trim() || undefined,
+        autoSend: opts.autoSend,
+      });
+    }
+    setInternalChatOpen(true);
+  }, []);
+  const openBridgeChat = useCallback((opts?: OpenBridgeChatOptions) => {
+    const prompt = opts?.prompt?.trim();
+    if (prompt) {
+      setBridgeSeed({
+        prompt,
+        displayText: opts?.displayText?.trim() || undefined,
+        allowForward: opts?.allowForward,
+      });
+    }
+    setChatOpen(true);
+  }, []);
+  const clearBridgeSeed = useCallback(() => setBridgeSeed(null), []);
+  const clearInternalChatSeed = useCallback(() => setInternalChatSeed(null), []);
 
   const mainStyle = useMemo(
     () =>
@@ -78,6 +111,10 @@ export function MainLayout({ children }: MainLayoutProps) {
   return (
     <ChatPanelProvider open={chatOpen} internalChatOpen={internalChatOpen} openBridgeChat={openBridgeChat} openInternalChat={openInternalChat}>
       <div className="min-h-screen" style={{ backgroundColor: pageBg, ...mainStyle }}>
+        <BrandColorBootstrap />
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <Sidebar
           profile={profile}
           onSignOut={signOut}
@@ -89,9 +126,20 @@ export function MainLayout({ children }: MainLayoutProps) {
         <main className="w-full min-w-0 pb-32 md:pb-0 md:pl-[var(--main-pl)] md:pr-[var(--main-pr)] transition-[padding] duration-300 ease-out">
           {children}
         </main>
-        <BridgeAiChat open={chatOpen} onOpenChange={setChatOpen} />
+        {/* FAB（右下ボタン）は閉じているときも必要なので常時マウント */}
+        <BridgeAiChat
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+          seed={bridgeSeed}
+          onSeedConsumed={clearBridgeSeed}
+        />
         {internalChatOpen && (
-          <InternalChatPanel open={internalChatOpen} onOpenChange={setInternalChatOpen} />
+          <InternalChatPanel
+            open={internalChatOpen}
+            onOpenChange={setInternalChatOpen}
+            seed={internalChatSeed}
+            onSeedConsumed={clearInternalChatSeed}
+          />
         )}
       </div>
     </ChatPanelProvider>

@@ -12,24 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { CrmMasterTab, type CrmMasterInitialData } from "@/components/settings/crm-master-tab";
+import { CraftsmenMasterTab, type CraftsmenMasterInitialData } from "@/components/settings/craftsmen-master-tab";
+import { IntegrationsTab } from "@/components/settings/integrations-tab";
+import { AppIntegrationsTab, type AppIntegrationsInitialData } from "@/components/settings/app-integrations-tab";
+
 const tabSkeleton = () => <Skeleton className="h-48 w-full rounded-xl" />;
 
-const CrmMasterTab = dynamic(
-  () => import("@/components/settings/crm-master-tab").then((m) => m.CrmMasterTab),
-  { loading: tabSkeleton },
-);
-const CraftsmenMasterTab = dynamic(
-  () => import("@/components/settings/craftsmen-master-tab").then((m) => m.CraftsmenMasterTab),
-  { loading: tabSkeleton },
-);
-const IntegrationsTab = dynamic(
-  () => import("@/components/settings/integrations-tab").then((m) => m.IntegrationsTab),
-  { loading: tabSkeleton },
-);
-const AppIntegrationsTab = dynamic(
-  () => import("@/components/settings/app-integrations-tab").then((m) => m.AppIntegrationsTab),
-  { loading: tabSkeleton },
-);
+// 使用頻度が低いタブだけ code-split（メイン4タブは静的 import で切替即時）
 const WorkflowTypesTab = dynamic(
   () => import("@/components/settings/workflow-types-tab").then((m) => m.WorkflowTypesTab),
   { loading: tabSkeleton },
@@ -102,7 +92,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Profile } from "@/lib/database.types";
 import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, ASSIGNABLE_TEAM_ROLES, SYSTEM_PERMISSION_ROLES, type Role } from "@/lib/constants";
-import { useCompanyPermissions, type CustomRole, type RolePermissions, DEFAULT_PERMISSIONS } from "@/hooks/use-company-permissions";
+import { useCompanyPermissions, type CustomRole, type RolePermissions } from "@/hooks/use-company-permissions";
+import { mergeRolePermissions, withPermissionsSchema } from "@/lib/role-permissions";
 import { FontSizeSelector } from "@/components/settings/font-size-selector";
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
@@ -176,9 +167,9 @@ function companyFormState(c: Company | null) {
     attLeaveTypes: Array.isArray(att?.leave_types)
       ? (att.leave_types as string[])
       : ["有給休暇", "夏季休暇", "慶弔休暇", "特別休暇", "産前産後休暇", "育児休暇", "介護休暇", "病気休暇", "代休", "振替休日", "半日休暇（午前）", "半日休暇（午後）"],
-    rolePerms: s.role_permissions
-      ? { ...DEFAULT_PERMISSIONS, ...(s.role_permissions as RolePermissions) }
-      : DEFAULT_PERMISSIONS,
+    rolePerms: mergeRolePermissions(
+      s.role_permissions ? (s.role_permissions as RolePermissions) : null,
+    ),
     customRoles: Array.isArray(s.custom_roles) ? (s.custom_roles as CustomRole[]) : [],
   };
 }
@@ -187,10 +178,16 @@ export function SettingsClient({
   initialCompany,
   initialSignature,
   initialMembers,
+  initialCrmMaster,
+  initialCraftsmenMaster,
+  initialAppIntegrations,
 }: {
   initialCompany: Company | null;
   initialSignature: string;
   initialMembers: Profile[];
+  initialCrmMaster?: CrmMasterInitialData;
+  initialCraftsmenMaster?: CraftsmenMasterInitialData;
+  initialAppIntegrations?: AppIntegrationsInitialData;
 }) {
   const { profile, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
@@ -198,10 +195,20 @@ export function SettingsClient({
   const personalTabs = new Set(["profile", "security", "notifications", "mail_signature", "pdf_builder"]);
   const [mainTab, setMainTab] = useState("personal");
   const [subTab, setSubTab] = useState(personalTabs.has(initInnerTab) ? initInnerTab : "profile");
+  /** 一度開いた大タブは unmount しない（再取得・再マウント待ちを防ぐ） */
+  const [visitedMain, setVisitedMain] = useState<Set<string>>(() => new Set(["personal"]));
+  /** 権限マトリクスは重いのでメンバー一覧の後に描画 */
+  const [permsReady, setPermsReady] = useState(false);
 
   const handleMainTabChange = (next: string) => {
     setMainTab(next);
     setSubTab(MAIN_DEFAULT_SUB[next] ?? "profile");
+    setVisitedMain((prev) => {
+      if (prev.has(next)) return prev;
+      const n = new Set(prev);
+      n.add(next);
+      return n;
+    });
   };
   const formDefaults = companyFormState(initialCompany);
   const [saving, setSaving] = useState(false);
@@ -319,6 +326,24 @@ export function SettingsClient({
     getBiCompanyConfig().then(setBiConfig).catch(() => {});
   }, [canEditCompany]);
 
+  // 組織タブの権限表はメインスレッドを塞ぐため、表示後に遅延マウント
+  useEffect(() => {
+    if (mainTab !== "organization" || subTab !== "members") return;
+    if (permsReady) return;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const show = () => setPermsReady(true);
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(show, { timeout: 120 });
+    } else {
+      timeoutId = setTimeout(show, 0);
+    }
+    return () => {
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, [mainTab, subTab, permsReady]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -378,16 +403,12 @@ export function SettingsClient({
   const handleSaveRoleSettings = async () => {
     setSavingRolePerms(true);
     try {
-      // owner 列は常に全許可のため保存しない（読み取り専用）
-      const permsToSave: RolePermissions = {};
-      Object.entries(rolePerms).forEach(([key, roles]) => {
-        permsToSave[key] = [...roles];
-      });
+      const permsToSave = withPermissionsSchema(rolePerms);
       await updateCompany({ role_permissions: permsToSave, custom_roles: customRoles });
-      // localStorage も更新してサイドバーに即反映
+      // localStorage も更新してサイドバーに即反映（マージ済みを書く）
       localStorage.setItem("bridge_role_permissions", JSON.stringify(permsToSave));
       localStorage.setItem("bridge_custom_roles", JSON.stringify(customRoles));
-      await refreshPerms();
+      await refreshPerms(true);
       toast.success("ロール・権限設定を保存しました");
     } catch (e) {
       toast.error("保存に失敗しました", { description: e instanceof Error ? e.message : undefined });
@@ -584,21 +605,15 @@ export function SettingsClient({
     : (company?.settings as Record<string, string>)?.plan === "enterprise" ? "Enterprise"
     : "Free";
 
-  if (authLoading) {
-    return (
-      <div className="p-4 md:p-6 space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-96" />
-      </div>
-    );
-  }
-
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">設定</h1>
         <p className="text-sm text-muted-foreground mt-1">アカウント・組織・各機能の設定</p>
       </div>
+      {authLoading && !profile && (
+        <Skeleton className="h-10 w-full max-w-md rounded-xl" />
+      )}
 
       {/* ── 大項目タブ（上部ナビ） ─── */}
       <Tabs value={mainTab} onValueChange={handleMainTabChange} className="w-full">
@@ -672,7 +687,7 @@ export function SettingsClient({
         </div>
 
         {/* ── 個人グループ ─── */}
-        <TabsContent value="personal" className="mt-0">
+        <TabsContent value="personal" forceMount className="mt-0 data-[state=inactive]:hidden">
         {subTab === "profile" && (
         <div className="space-y-4">
           {/* 個人プロフィール */}
@@ -1022,8 +1037,8 @@ export function SettingsClient({
     </TabsContent> {/* ── personal outer group ── */}
 
     {/* ── 組織グループ ─── */}
-    {canManageMembers && (
-      <TabsContent value="organization" className="mt-0">
+    {canManageMembers && visitedMain.has("organization") && (
+      <TabsContent value="organization" forceMount className="mt-0 data-[state=inactive]:hidden">
           {subTab === "members" && (
           <div className="space-y-4">
             <Card>
@@ -1145,7 +1160,21 @@ export function SettingsClient({
               </CardContent>
             </Card>
 
-            {/* ロール・権限設定 */}
+            {/* ロール・権限設定（重いのでメンバー一覧の後に描画） */}
+            {!permsReady ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-primary" />
+                    ロール・権限設定
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-40 w-full" />
+                </CardContent>
+              </Card>
+            ) : (
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex flex-row items-start justify-between gap-4 w-full">
@@ -1248,6 +1277,7 @@ export function SettingsClient({
                 <p className="text-xs text-muted-foreground mt-2">✓ = アクセス可能（クリックで切替）　— = アクセス不可</p>
               </CardContent>
             </Card>
+            )}
 
             {/* カスタムロール追加/編集ダイアログ */}
             <Dialog open={addRoleOpen} onOpenChange={(o) => { if (!o) { setAddRoleOpen(false); setEditingRole(null); } }}>
@@ -1463,17 +1493,17 @@ export function SettingsClient({
     )}
 
     {/* ── マスタグループ ─── */}
-    {canManageMembers && (
-      <TabsContent value="master" className="mt-0">
-          {subTab === "crm_master" && <CrmMasterTab />}
-          {subTab === "craftsmen_master" && <CraftsmenMasterTab />}
+    {canManageMembers && visitedMain.has("master") && (
+      <TabsContent value="master" forceMount className="mt-0 data-[state=inactive]:hidden">
+          {subTab === "crm_master" && <CrmMasterTab initialData={initialCrmMaster} />}
+          {subTab === "craftsmen_master" && <CraftsmenMasterTab initialData={initialCraftsmenMaster} />}
       </TabsContent>
     )}
 
     {/* ── 連携グループ ─── */}
-    {canManageMembers && (
-      <TabsContent value="integrations_group" className="mt-0">
-          {subTab === "app_integrations" && <AppIntegrationsTab />}
+    {canManageMembers && visitedMain.has("integrations_group") && (
+      <TabsContent value="integrations_group" forceMount className="mt-0 data-[state=inactive]:hidden">
+          {subTab === "app_integrations" && <AppIntegrationsTab initialData={initialAppIntegrations} />}
           {subTab === "integrations" && <IntegrationsTab />}
       </TabsContent>
     )}

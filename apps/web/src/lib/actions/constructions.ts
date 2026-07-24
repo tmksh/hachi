@@ -66,11 +66,38 @@ export async function getConstructions() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("constructions")
-    .select("*, customer:customers(id, name, company_name), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
+    .select(
+      "id, company_id, construction_no, title, status, customer_id, contract_id, estimate_id, assigned_to, department_name, order_amount, order_cost, budget_cost, actual_cost, payment_date, payment_amount, worker_count, progress, start_date, end_date, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!constructions_assigned_to_fkey(id, display_name)",
+    )
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;
-  return data;
+  return (data ?? []) as unknown as Array<{
+    id: string;
+    company_id: string;
+    construction_no: string;
+    title: string;
+    status: "preparing" | "in_progress" | "completed" | "suspended" | "delayed";
+    customer_id: string | null;
+    contract_id: string | null;
+    estimate_id: string | null;
+    assigned_to: string | null;
+    department_name: string | null;
+    order_amount: number;
+    order_cost: number;
+    budget_cost: number;
+    actual_cost: number;
+    payment_date: string | null;
+    payment_amount: number;
+    worker_count: number;
+    progress: number;
+    start_date: string | null;
+    end_date: string | null;
+    created_at: string;
+    updated_at: string;
+    customer: { id: string; name: string; company_name: string | null } | null;
+    assignee: { id: string; display_name: string } | null;
+  }>;
 }
 
 /** 工事に紐づく見積を顧客横断で取得（工事管理の見積一覧用） */
@@ -291,25 +318,61 @@ export async function createConstruction(input: {
   });
 
   if (input.assigned_to) {
-    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
-    await notifySalesFlowUser(supabase, profile.company_id, input.assigned_to, {
-      title: `現場担当アサイン: ${data.title}`,
-      description: `工事 ${data.construction_no} の現場担当に割り当てられました`,
-      href: `/constructions/${data.id}`,
-      customerId: input.customer_id,
-      dealId: input.deal_id,
-      urgent: true,
-    }, user.id);
+    try {
+      await notifyConstructionAssignee(supabase, {
+        companyId: profile.company_id,
+        fromUserId: user.id,
+        assigneeId: input.assigned_to,
+        constructionId: data.id,
+        constructionNo: data.construction_no,
+        title: data.title,
+        customerId: input.customer_id ?? (data as { customer_id?: string | null }).customer_id,
+        dealId: input.deal_id ?? (data as { deal_id?: string | null }).deal_id,
+      });
+    } catch (e) {
+      // 工事登録は成功扱い。通知失敗はログに残し呼び出し側で検知可能にする
+      console.error("[createConstruction] assignee notify failed", e);
+      throw new Error(
+        "工事は登録されましたが、現場担当への通知（バナー・お知らせ・ToDo）に失敗しました。担当者へ直接連絡するか、担当者を再設定してください。",
+      );
+    }
   }
 
   return data as Construction;
 }
 
+/** 現場担当アサインの3経路通知（バナー / お知らせ / ToDoフラグ）— No.18 */
+async function notifyConstructionAssignee(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: {
+    companyId: string;
+    fromUserId: string;
+    assigneeId: string;
+    constructionId: string;
+    constructionNo: string;
+    title: string;
+    customerId?: string | null;
+    dealId?: string | null;
+  },
+) {
+  const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+  await notifySalesFlowUser(supabase, input.companyId, input.assigneeId, {
+    title: `現場担当アサイン: ${input.title}`,
+    description: `工事 ${input.constructionNo} の現場担当に割り当てられました。内容を確認してください。`,
+    href: `/constructions/${input.constructionId}`,
+    customerId: input.customerId ?? undefined,
+    dealId: input.dealId ?? undefined,
+    urgent: true,
+    extraTags: ["construction", "construction_assign"],
+  }, input.fromUserId);
+}
+
 export async function updateConstruction(id: string, input: Partial<Omit<Construction, "id" | "company_id" | "construction_no" | "created_at" | "updated_at">>) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   const { data: before } = await supabase
     .from("constructions")
-    .select("status, company_id, title, construction_no, order_amount")
+    .select("status, company_id, title, construction_no, order_amount, assigned_to, customer_id, deal_id")
     .eq("id", id)
     .single();
   const { data, error } = await supabase.from("constructions").update(input).eq("id", id).select().single();
@@ -331,6 +394,33 @@ export async function updateConstruction(id: string, input: Partial<Omit<Constru
         title: data.title,
         order_amount: data.order_amount,
       });
+    }
+  }
+
+  // 担当者変更時もアサイン通知（登録後の付け替えで未着信になるケースを防ぐ）
+  const nextAssignee = input.assigned_to;
+  if (
+    user
+    && typeof nextAssignee === "string"
+    && nextAssignee
+    && nextAssignee !== before?.assigned_to
+  ) {
+    try {
+      await notifyConstructionAssignee(supabase, {
+        companyId: data.company_id,
+        fromUserId: user.id,
+        assigneeId: nextAssignee,
+        constructionId: data.id,
+        constructionNo: data.construction_no,
+        title: data.title,
+        customerId: data.customer_id,
+        dealId: (data as { deal_id?: string | null }).deal_id,
+      });
+    } catch (e) {
+      console.error("[updateConstruction] assignee notify failed", e);
+      throw new Error(
+        "担当者は更新されましたが、通知（バナー・お知らせ・ToDo）に失敗しました。",
+      );
     }
   }
 

@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation";
 import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, ROLE_LABELS } from "@/lib/constants";
-import { useKpiColor } from "@/hooks/use-kpi-color";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -19,10 +18,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   LayoutDashboard,
   Users,
@@ -66,15 +65,6 @@ import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
-/** hex カラーにアルファ値を付与した rgba 文字列を返す */
-function hexAlpha(hex: string, alpha: number): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 const GROUP_ICONS = {
   dashboard: LayoutDashboard,
   lead: Users,
@@ -94,7 +84,20 @@ interface SidebarProps {
 export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInternalChatOpen }: SidebarProps) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  /** 折りたたみ時: 選択中グループの詳細メニュー */
+  const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    setFlyoutGroup(null);
+  }, [pathname]);
+
+  // ダッシュボードの ToDo バナーなどから通知パネルを開く
+  useEffect(() => {
+    const open = () => setNotifOpen(true);
+    window.addEventListener("bridge:open-notifications", open);
+    return () => window.removeEventListener("bridge:open-notifications", open);
+  }, []);
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -110,7 +113,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     const fetchUnread = async () => {
       try {
         const count = await getUnreadMessageCount();
-        setChatUnreadCount(count);
+        setChatUnreadCount((prev) => (prev === count ? prev : count));
         // 未読チャットが10件以上溜まったら爆弾アラートを発動（1日1回・セッション1回）
         if (count >= BOMB_THRESHOLD && !chatBombFired.current) {
           const today = new Date().toDateString();
@@ -168,27 +171,44 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     };
   }, []);
 
-  // ログイン時の爆弾チェック（1日1回、緊急通知が10件以上で発火）
+  // ログイン時の爆弾チェック（1日1回）。初期遷移と競合しないよう遅延実行
   useEffect(() => {
     if (bombChecked.current) return;
     bombChecked.current = true;
     const today = new Date().toDateString();
     const lastCheck = localStorage.getItem("hachi_bomb_check");
     if (lastCheck === today) return;
-    fetchNotifications().then((notifs) => {
-      let dismissed: string[] = [];
-      try {
-        dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-      } catch { /* ignore */ }
-      const filtered = notifs.filter((n) => !dismissed.includes(n.id));
-      setNotifications(filtered);
-      const urgentCount = filtered.filter((n) => n.is_urgent).length;
-      if (urgentCount >= BOMB_THRESHOLD) {
-        localStorage.setItem("hachi_bomb_check", today);
-        setBombUrgentCount(urgentCount);
-        setShowBombAlert(true);
-      }
-    }).catch(() => {});
+
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const run = () => {
+      fetchNotifications().then((notifs) => {
+        let dismissed: string[] = [];
+        try {
+          dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
+        } catch { /* ignore */ }
+        const filtered = notifs.filter((n) => !dismissed.includes(n.id));
+        setNotifications(filtered);
+        const urgentCount = filtered.filter((n) => n.is_urgent).length;
+        if (urgentCount >= BOMB_THRESHOLD) {
+          localStorage.setItem("hachi_bomb_check", today);
+          setBombUrgentCount(urgentCount);
+          setShowBombAlert(true);
+        }
+      }).catch(() => {});
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(run, { timeout: 8000 });
+    } else {
+      timeoutId = setTimeout(run, 4000);
+    }
+
+    return () => {
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
@@ -237,7 +257,6 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     return group?.items.some((item) => isActive(item.href)) ?? false;
   };
 
-  const { color: kpiColor } = useKpiColor();
   const { canAccess } = useCompanyPermissions();
 
   /** 権限マトリクスでフィルタされたナビグループ（正本は会社の role_permissions） */
@@ -269,7 +288,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   return (
     <>
       <aside
-        style={{ width: expanded ? 220 : 68 }}
+        style={{ width: expanded ? 196 : 68 }}
         className={cn(
           "fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl transition-[width] duration-300 ease-out",
           false && "sidebar-theme-blue",
@@ -288,7 +307,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
               aria-label="BRIDGE Linq"
               className="h-10 flex items-center px-1 transition-transform hover:scale-[1.03] shrink-0 rounded-xl sidebar-nav-hover animate-in fade-in slide-in-from-left-2 duration-150"
             >
-              <BrandLogo />
+              <BrandLogo compact />
             </button>
           ) : (
             <button
@@ -369,29 +388,32 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                         </div>
                       )}
                   </div>
-                ) : (
-                  /* 折りたたみ時: アイコンのみ + ホバーでメニュー表示 */
-                  <HoverCard openDelay={200} closeDelay={100}>
-                    <HoverCardTrigger asChild>
+                ) : active ? (
+                  /* 折りたたみ＋選択中: 再クリックで詳細メニュー */
+                  <Popover
+                    open={flyoutGroup === group.key}
+                    onOpenChange={(open) => setFlyoutGroup(open ? group.key : null)}
+                  >
+                    <PopoverTrigger asChild>
                       <button
+                        type="button"
+                        aria-label={group.label}
                         className={cn(
                           "relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover",
-                          active ? sidebarActiveItem : "text-muted-foreground",
+                          sidebarActiveItem,
                         )}
-                        style={active ? sidebarActiveStyle : undefined}
+                        style={sidebarActiveStyle}
                       >
                         {Icon && <Icon className="h-5 w-5" />}
-                        {active && (
-                          <div
-                            className={cn(
-                              "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full",
-                              sidebarActiveIndicator,
-                            )}
-                          />
-                        )}
+                        <div
+                          className={cn(
+                            "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full",
+                            sidebarActiveIndicator,
+                          )}
+                        />
                       </button>
-                    </HoverCardTrigger>
-                    <HoverCardContent side="right" align="start" sideOffset={8} className="w-52 p-2">
+                    </PopoverTrigger>
+                    <PopoverContent side="right" align="start" sideOffset={8} className="w-52 p-2">
                       <p className="px-2 pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         {group.label}
                       </p>
@@ -400,6 +422,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                           <Link
                             key={item.key}
                             href={item.href}
+                            onClick={() => setFlyoutGroup(null)}
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block sidebar-nav-hover",
                               isActive(item.href) ? sidebarActiveSubItem : "text-foreground",
@@ -410,8 +433,17 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                           </Link>
                         ))}
                       </div>
-                    </HoverCardContent>
-                  </HoverCard>
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  /* 折りたたみ＋未選択: 先頭ページへ遷移のみ */
+                  <Link
+                    href={group.items[0]?.href ?? "#"}
+                    aria-label={group.label}
+                    className="relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover text-muted-foreground"
+                  >
+                    {Icon && <Icon className="h-5 w-5" />}
+                  </Link>
                 )}
               </div>
             );
@@ -699,7 +731,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                     className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
                   >
                     <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : ""}`}
-                      style={(!n.type || (n.type !== "workflow" && n.type !== "calendar" && !n.is_urgent)) ? { backgroundColor: hexAlpha(kpiColor, 0.12) } : undefined}
+                      style={(!n.type || (n.type !== "workflow" && n.type !== "calendar" && !n.is_urgent)) ? { backgroundColor: "rgba(var(--brand-dark-rgb), 0.12)" } : undefined}
                     >
                       {n.type === "workflow" ? (
                         <FileText className={`h-4 w-4 text-amber-600`} />
@@ -707,7 +739,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                         <CalendarDays className="h-4 w-4 text-sky-600" />
                       ) : (
                         <Megaphone className={`h-4 w-4 ${n.is_urgent ? "text-rose-500" : ""}`}
-                          style={!n.is_urgent ? { color: kpiColor } : undefined}
+                          style={!n.is_urgent ? { color: "var(--brand-dark)" } : undefined}
                         />
                       )}
                     </div>

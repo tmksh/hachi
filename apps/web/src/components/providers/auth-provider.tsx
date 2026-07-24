@@ -15,6 +15,7 @@ import { type Role } from "@/lib/constants";
 import { applyFontSize, isFontSize } from "@/lib/font-size";
 import {
   canAccessPathWithPermissions,
+  mergeRolePermissions,
   type RolePermissions,
 } from "@/lib/role-permissions";
 
@@ -63,27 +64,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const fontMeta = authUser.user_metadata?.font_size;
       if (isFontSize(fontMeta)) applyFontSize(fontMeta);
+
       const { data } = await supabase
         .from("profiles")
         .select("id, company_id, display_name, email, role, avatar_url, department, position, phone")
         .eq("id", authUser.id)
         .single();
-      setProfile(data as Profile | null);
 
-      if (data?.company_id) {
-        const { data: company } = await supabase
-          .from("companies")
-          .select("settings")
-          .eq("id", data.company_id)
-          .maybeSingle();
-        const settings = (company?.settings ?? null) as Record<string, unknown> | null;
-        const rp = settings?.role_permissions;
-        setRolePermissions(
-          rp && typeof rp === "object" ? (rp as RolePermissions) : null,
-        );
-      } else {
+      // 内容が同じなら setState しない（Auth 購読者全体の再レンダー防止）
+      setProfile((prev) => {
+        const next = (data as Profile | null) ?? null;
+        if (
+          prev
+          && next
+          && prev.id === next.id
+          && prev.role === next.role
+          && prev.display_name === next.display_name
+          && prev.avatar_url === next.avatar_url
+          && prev.company_id === next.company_id
+          && prev.email === next.email
+          && prev.department === next.department
+          && prev.position === next.position
+          && prev.phone === next.phone
+        ) {
+          return prev;
+        }
+        return next;
+      });
+
+      if (!data?.company_id) {
         setRolePermissions(null);
+        return;
       }
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("settings")
+        .eq("id", data.company_id)
+        .maybeSingle();
+      const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+      const rp = settings?.role_permissions;
+      const nextPerms =
+        rp && typeof rp === "object"
+          ? mergeRolePermissions(rp as RolePermissions)
+          : null;
+      setRolePermissions((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(nextPerms)) return prev;
+        return nextPerms;
+      });
     },
     [supabase],
   );
@@ -98,23 +126,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authUser = session?.user ?? null;
       if (!mounted) return;
       setUser(authUser);
-      await loadProfile(authUser);
-      if (mounted) setLoading(false);
+      // セッション確定時点でシェル描画を解放し、profile は裏で読む
+      setLoading(false);
+      if (authUser) await loadProfile(authUser);
     };
 
     void init();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // トークン更新・初期セッションではプロフィール再取得しない（全体再レンダーの主因）
+      if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") return;
+
       const nextUser = session?.user ?? null;
-      setUser(nextUser);
+      setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser));
       if (!nextUser) {
         setProfile(null);
+        setRolePermissions(null);
         setLoading(false);
         return;
       }
-      void loadProfile(nextUser);
+      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        void loadProfile(nextUser);
+      }
     });
 
     return () => {

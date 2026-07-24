@@ -569,13 +569,10 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
   const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
   const { start, end } = fiscalYearRange(year, fiscalMonthStart);
 
-  // 工事は年度外でも請求書との紐付け計算（粗利率の解決・二重計上除外）に必要なため
-  // 全件取得のまま。商談・契約は集計時に年度外レコードが必ず除外されるため、
-  // 「日付なし or 年度内」の条件で DB 側に絞り込みを寄せて転送量を削減する。
-  const [{ data: constructions }, { data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }] = await Promise.all([
-    supabase
-      .from("constructions")
-      .select("id, department_name, status, order_amount, actual_cost, budget_cost, end_date, start_date"),
+  // 商談・契約・請求は年度で絞る。工事は「年度重複 + 当年請求に紐づくID」だけに限定して全件取得を避ける。
+  const constructionSelect =
+    "id, department_name, status, order_amount, actual_cost, budget_cost, end_date, start_date";
+  const [{ data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }, { data: constructionsInYear }] = await Promise.all([
     supabase
       .from("deals")
       .select("id, department_name, stage, value, expected_close_date")
@@ -599,10 +596,34 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
       .select("field_name, old_value, new_value, effective_from")
       .eq("fiscal_year", year)
       .order("effective_from", { ascending: true }),
+    supabase
+      .from("constructions")
+      .select(constructionSelect)
+      .or(
+        `and(start_date.lte.${end},end_date.gte.${start}),and(start_date.gte.${start},start_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end}),start_date.is.null,end_date.is.null`,
+      ),
   ]);
 
+  const invoiceConstructionIds = [
+    ...new Set(
+      (invoices ?? [])
+        .map((inv) => inv.construction_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  const yearIds = new Set((constructionsInYear ?? []).map((c) => c.id));
+  const missingIds = invoiceConstructionIds.filter((id) => !yearIds.has(id));
+  const { data: constructionsLinked } = missingIds.length > 0
+    ? await supabase.from("constructions").select(constructionSelect).in("id", missingIds)
+    : { data: [] as typeof constructionsInYear };
+
+  const constructionsMap = new Map<string, NonNullable<typeof constructionsInYear>[number]>();
+  for (const c of constructionsInYear ?? []) constructionsMap.set(c.id, c);
+  for (const c of constructionsLinked ?? []) constructionsMap.set(c.id, c);
+  const constructions = Array.from(constructionsMap.values());
+
   const constructionById = new Map(
-    (constructions ?? []).map((c) => [c.id, c])
+    constructions.map((c) => [c.id, c])
   );
 
   const dataBundle = {

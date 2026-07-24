@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { format, differenceInDays } from "date-fns";
 import { ja } from "date-fns/locale";
 import { PageHeader } from "@/components/shared/page-header";
@@ -60,12 +61,27 @@ export function CrmClient({
   initialDealSummaries,
 }: CrmClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState("all");
   const [view, setView] = useState<ViewMode>("list");
   const [addDealOpen, setAddDealOpen] = useState(false);
+
+  const prefetchPipeline = useCallback(() => {
+    void import("@/components/deals/deals-pipeline-view");
+    void queryClient.prefetchQuery({
+      queryKey: ["deals", "pipeline"],
+      queryFn: () => import("@/lib/actions/deals").then((m) => m.getDeals()),
+      staleTime: 60_000,
+    });
+    void queryClient.prefetchQuery({
+      queryKey: ["deal-stages"],
+      queryFn: () => import("@/lib/actions/deals").then((m) => m.getDealStages()),
+      staleTime: 5 * 60_000,
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -169,6 +185,8 @@ export function CrmClient({
               key={key}
               type="button"
               onClick={() => setView(key)}
+              onMouseEnter={key === "pipeline" ? prefetchPipeline : undefined}
+              onFocus={key === "pipeline" ? prefetchPipeline : undefined}
               className={cn(
                 "segmented-control-btn",
                 view === key && "segmented-control-btn-active",

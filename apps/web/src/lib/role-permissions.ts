@@ -4,6 +4,27 @@ import { NAV_ITEM_ROLES, ROUTE_ROLES, SYSTEM_PERMISSION_ROLES, type Role } from 
 export type RolePermissions = Record<string, string[]>;
 
 /**
+ * 保存マトリクスのスキーマ版。
+ * 上げると、旧保存データに対してデフォルト権限の欠落ロールを一度だけ補完する。
+ * （明示的に外した設定は、保存時に _v が最新になっていれば尊重される）
+ */
+export const ROLE_PERMISSIONS_SCHEMA_VERSION = 2;
+
+const SCHEMA_KEY = "_v";
+
+/** 旧データ補完の対象キー（営業・経営層のリード系アクセス） */
+const HEAL_FEATURE_KEYS = [
+  "crm",
+  "deals",
+  "quotes",
+  "craftsmen",
+  "contracts",
+  "bi",
+  "bi2",
+  "budget",
+] as const;
+
+/**
  * ルート prefix → 権限マトリクスの機能キー。
  * 長い prefix を先にマッチさせる。
  */
@@ -57,11 +78,57 @@ export function buildDefaultRolePermissions(): RolePermissions {
 
 export const DEFAULT_ROLE_PERMISSIONS = buildDefaultRolePermissions();
 
+function readSchemaVersion(saved: RolePermissions): number {
+  const raw = (saved as Record<string, unknown>)[SCHEMA_KEY];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+}
+
+/** 保存用にスキーマ版を付与（UI のロール配列とは分離） */
+export function withPermissionsSchema(perms: RolePermissions): RolePermissions {
+  const cleaned: RolePermissions = {};
+  for (const [key, roles] of Object.entries(perms)) {
+    if (key === SCHEMA_KEY) continue;
+    if (Array.isArray(roles)) cleaned[key] = [...roles];
+  }
+  (cleaned as Record<string, unknown>)[SCHEMA_KEY] = ROLE_PERMISSIONS_SCHEMA_VERSION;
+  return cleaned;
+}
+
+/**
+ * 保存済みマトリクスとデフォルトをマージ。
+ * 旧スキーマの保存データはリード系キーについてデフォルト権限をユニオン補完する。
+ */
 export function mergeRolePermissions(
   saved?: RolePermissions | null,
 ): RolePermissions {
   if (!saved) return { ...DEFAULT_ROLE_PERMISSIONS };
-  return { ...DEFAULT_ROLE_PERMISSIONS, ...saved };
+
+  const version = readSchemaVersion(saved);
+  const result: RolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
+  for (const [key, roles] of Object.entries(saved)) {
+    if (key === SCHEMA_KEY) continue;
+    if (Array.isArray(roles)) result[key] = roles;
+  }
+
+  // キー自体が欠落している場合の安全弁
+  const salesFlowKeys = ["crm", "deals", "quotes", "contracts", "workflow"] as const;
+  for (const key of salesFlowKeys) {
+    if (!(key in saved) && DEFAULT_ROLE_PERMISSIONS[key]?.includes("sales")) {
+      result[key] = [...DEFAULT_ROLE_PERMISSIONS[key]];
+    }
+  }
+
+  // 旧保存（_v 未設定 or 古い）は営業・経営層などのデフォルト追加分を補完
+  if (version < ROLE_PERMISSIONS_SCHEMA_VERSION) {
+    for (const key of HEAL_FEATURE_KEYS) {
+      const def = DEFAULT_ROLE_PERMISSIONS[key];
+      if (!def) continue;
+      const cur = result[key] ?? [];
+      result[key] = Array.from(new Set([...cur, ...def]));
+    }
+  }
+
+  return result;
 }
 
 /** 機能キーに対するアクセス可否（マトリクス正本） */
@@ -99,10 +166,13 @@ export function canAccessPathWithPermissions(
 ): boolean {
   const featureKey = featureKeyForPath(pathname);
 
-  // マトリクスに対応する機能キーがある場合はマトリクスを正本にする
+  // 完全に未保存（null/undefined）のときのみ ROUTE_ROLES にフォールバック
+  const hasSavedMatrix =
+    !!permissions
+    && Object.keys(permissions).some((k) => k !== SCHEMA_KEY && Array.isArray(permissions[k]));
+
   if (featureKey) {
-    // 未保存時のみ従来の ROUTE_ROLES にフォールバック
-    if (!permissions) {
+    if (!hasSavedMatrix) {
       const matchedRoute = matchRoutePrefix(pathname);
       if (matchedRoute) {
         const allowed = ROUTE_ROLES[matchedRoute];

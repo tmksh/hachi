@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
@@ -23,7 +23,8 @@ import { ContractWorkflowTab } from "@/components/contracts/contract-workflow-ta
 import {
   getContractEstimates, sendContractCloudSign, generateContractEsignMessage,
   createEmptyEstimateForContract, copyEstimateForContract,
-  getContractWorkflowRequests, submitContractWorkflow,
+  getContractApprovalWorkflowTypes, getContractWorkflowRequests, submitContractWorkflow,
+  type ContractApprovalWorkflowType,
 } from "@/lib/actions/contract-features";
 import { getEstimate } from "@/lib/actions/estimates";
 import { Calendar, FileText, RefreshCw, Download, Loader2, RotateCcw, FolderOpen, CheckCircle2, Sparkles, Lock } from "lucide-react";
@@ -49,6 +50,12 @@ import { buildContractPrintHtml } from "@/lib/contract-pdf";
 
 const VALID_TABS = ["customer", "messaging", "documents", "workflow", "esign", "files", "estimates"] as const;
 
+/** 社内承認完了後（または契約進行中）は電子契約タブを開放（仕様 Step18 / No.88） */
+function isEsignUnlockedByContractStatus(status: string | null | undefined): boolean {
+  const s = (status ?? "").toLowerCase();
+  return s === "contracted" || s === "executing" || s === "completed";
+}
+
 export function ContractDetailTabs({
   data,
   contractId,
@@ -65,7 +72,23 @@ export function ContractDetailTabs({
     : "customer";
 
   const [activeTab, setActiveTab] = useState<string>(defaultTab);
-  const [esignEnabled, setEsignEnabled] = useState(false);
+  const [, startTransition] = useTransition();
+  /** WF承認済みフラグ（非同期）。ステータス開放とは OR で合成する */
+  const [wfApproved, setWfApproved] = useState(false);
+  const [wfPending, setWfPending] = useState(false);
+
+  const statusUnlocksEsign = isEsignUnlockedByContractStatus(data.status);
+  const cloudsignUnlocksEsign = Boolean(
+    (data as { cloudsign_document_id?: string | null }).cloudsign_document_id
+    || (data as { cloudsign_status?: string | null }).cloudsign_status,
+  );
+  // ステータスは同期で即判定。WF取得失敗でロックし直さない（No.88 / No.90 ブロック解消）
+  const esignEnabled = statusUnlocksEsign || cloudsignUnlocksEsign || wfApproved;
+  const esignLockReason = esignEnabled
+    ? null
+    : wfPending
+      ? "社内承認が完了するまで電子契約タブはロックされています。"
+      : "社内承認ワークフローを完了すると、電子契約タブが利用できるようになります。";
 
   useEffect(() => {
     if (initialTab && VALID_TABS.includes(initialTab as typeof VALID_TABS[number])) {
@@ -74,16 +97,28 @@ export function ContractDetailTabs({
   }, [initialTab]);
 
   useEffect(() => {
+    let cancelled = false;
     getContractWorkflowRequests(contractId)
       .then((rows) => {
-        const approved = rows.some((r) => r.status === "approved");
-        setEsignEnabled(approved);
+        if (cancelled) return;
+        setWfApproved(rows.some((r) => r.status === "approved"));
+        setWfPending(rows.some((r) => r.status === "submitted"));
       })
-      .catch(() => setEsignEnabled(false));
-  }, [contractId, data.updated_at]);
+      .catch(() => {
+        if (cancelled) return;
+        setWfApproved(false);
+        setWfPending(false);
+      });
+    return () => { cancelled = true; };
+  }, [contractId, data.updated_at, data.status]);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs
+      value={activeTab}
+      onValueChange={(v) => {
+        startTransition(() => setActiveTab(v));
+      }}
+    >
       <TabsList className="flex w-full overflow-x-auto h-auto flex-wrap gap-0.5">
         <TabsTrigger value="customer" className="text-xs">顧客情報</TabsTrigger>
         <TabsTrigger value="messaging" className="text-xs">やり取り管理</TabsTrigger>
@@ -92,7 +127,6 @@ export function ContractDetailTabs({
         <TabsTrigger
           value="esign"
           className={cn("text-xs gap-1", !esignEnabled && "opacity-60")}
-          disabled={!esignEnabled}
         >
           {!esignEnabled && <Lock className="h-3 w-3" />}
           電子契約
@@ -110,16 +144,31 @@ export function ContractDetailTabs({
         <DocumentsTab contractId={contractId} data={data} onRefresh={onRefresh} />
       </TabsContent>
       <TabsContent value="workflow" className="mt-4">
-        <ContractWorkflowTab contractId={contractId} data={data} onRefresh={onRefresh} onEsignEnabled={() => setEsignEnabled(true)} />
+        <ContractWorkflowTab
+          contractId={contractId}
+          data={data}
+          onRefresh={onRefresh}
+          onEsignEnabled={() => setWfApproved(true)}
+        />
       </TabsContent>
       <TabsContent value="esign" className="mt-4">
         {esignEnabled
           ? <EsignTab contractId={contractId} customerEmail={data.customer?.email} customerName={data.customer?.name} contractTitle={data.title} />
           : (
             <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-2">
-                <Lock className="h-4 w-4 shrink-0" />
-                社内承認ワークフローが完了すると、電子契約タブが利用できるようになります。
+              <CardContent className="p-6 text-sm text-muted-foreground space-y-3">
+                <p className="flex items-center gap-2">
+                  <Lock className="h-4 w-4 shrink-0" />
+                  {esignLockReason}
+                </p>
+                <p className="text-xs pl-6">
+                  承認WFタブから申請し、全ステップの承認が完了すると送信フォーム（テンプレート／Linq自動生成／手動入力）が利用できます。
+                </p>
+                <div className="pl-6">
+                  <Button size="sm" variant="outline" onClick={() => setActiveTab("workflow")}>
+                    承認WFタブを開く
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -391,6 +440,10 @@ function DocumentsTab({
   const [confirming, setConfirming] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submittingWorkflow, setSubmittingWorkflow] = useState(false);
+  const [wfTypes, setWfTypes] = useState<ContractApprovalWorkflowType[]>([]);
+  const [selectedTypeId, setSelectedTypeId] = useState("");
+
+  const selectedWfType = wfTypes.find((t) => t.id === selectedTypeId) ?? wfTypes[0] ?? null;
 
   const fillCtx: FillContext = useMemo(() => ({
     constructionTitle: data.title ?? null,
@@ -423,6 +476,15 @@ function DocumentsTab({
 
   useEffect(() => {
     getPdfFormTemplates().then(setFormTemplates).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getContractApprovalWorkflowTypes()
+      .then((types) => {
+        setWfTypes(types);
+        setSelectedTypeId((prev) => prev || types[0]?.id || "");
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -497,10 +559,19 @@ function DocumentsTab({
   };
 
   const handleSubmitWorkflow = async () => {
+    if (!selectedTypeId && wfTypes.length > 0) {
+      toast.error("承認ワークフロー種別を選択してください");
+      return;
+    }
     setSubmittingWorkflow(true);
     try {
-      const req = await submitContractWorkflow(contractId, data.title);
-      toast.success("承認ワークフローに申請しました");
+      const req = await submitContractWorkflow(contractId, data.title, selectedTypeId || undefined);
+      const steps = selectedWfType?.approvalSteps.length ?? 0;
+      toast.success(
+        steps > 1
+          ? `承認ワークフローに申請しました（${steps}段階）`
+          : "承認ワークフローに申請しました",
+      );
       setConfirmOpen(false);
       onRefresh?.();
       router.push(`/workflow/${req.id}`);
@@ -616,12 +687,59 @@ function DocumentsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>社内承認を取りますか？</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>契約書の内容を確定し、社内承認ワークフローに申請できます。後で対応する場合は下書きのまま一覧に戻れます。</p>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>契約書の内容を確定し、ポータルで設定した承認ルートどおりに申請できます。後で対応する場合は下書きのまま一覧に戻れます。</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>テンプレート: {tpl.name}</li>
                   <li>工事名称: {String(form.work_name ?? data.title)}</li>
                 </ul>
+                {wfTypes.length > 0 ? (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs font-medium text-foreground">承認ワークフロー種別</p>
+                    <Select value={selectedWfType?.id ?? ""} onValueChange={setSelectedTypeId}>
+                      <SelectTrigger className="h-9 bg-background">
+                        <SelectValue placeholder="種別を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wfTypes.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                            {t.approvalSteps.length > 0
+                              ? `（${t.approvalSteps.length}段階）`
+                              : "（ルート未設定）"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedWfType && selectedWfType.approvalSteps.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <ol className="rounded-md border bg-background px-3 py-2 space-y-1 text-xs text-foreground">
+                          {selectedWfType.approvalSteps.map((s) => (
+                            <li key={`${s.stepOrder}-${s.approverId}`}>
+                              Step {s.stepOrder}: {s.displayName}
+                              {s.isAdministration && (
+                                <span className="ml-1 text-teal-700">（総務・追記可）</span>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                        {!selectedWfType.hasAdministrationApprover && (
+                          <p className="text-[11px] text-teal-800">
+                            ルートに総務がいません。申請時に総務ロールを最終ステップへ自動追加します。
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-700">
+                        承認ルートが未設定です。設定＞組織＞ワークフローで追加してください。
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700">
+                    契約書用のワークフロー種別がありません。設定＞組織＞ワークフローで作成してください。
+                  </p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -635,7 +753,7 @@ function DocumentsTab({
               後で対応する
             </Button>
             <AlertDialogAction
-              disabled={submittingWorkflow}
+              disabled={submittingWorkflow || !selectedWfType || selectedWfType.approvalSteps.length === 0}
               onClick={(e) => { e.preventDefault(); void handleSubmitWorkflow(); }}
             >
               {submittingWorkflow ? "申請中..." : "承認ワークフローに申請"}
@@ -702,13 +820,15 @@ function EsignTab({
   return (
     <Card>
       <CardContent className="p-4 space-y-4">
-        <p className="text-sm text-muted-foreground">クラウドサイン連携（ワークフロー承認後に送信）</p>
+        <p className="text-sm text-muted-foreground">
+          クラウドサイン連携 — 送信メッセージはテンプレート／Linq自動生成／手動入力のいずれでも作成できます
+        </p>
 
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">送信メッセージの生成方法</Label>
           <div className="flex flex-wrap gap-2">
             {([
-              { value: "template", label: "テンプレ" },
+              { value: "template", label: "テンプレート" },
               { value: "linq", label: "Linq自動生成" },
               { value: "manual", label: "手動入力" },
             ] as const).map((opt) => (
@@ -728,6 +848,11 @@ function EsignTab({
               </Button>
             ))}
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            {genMethod === "template" && "定型文を件名・本文に反映しています。編集すると手動入力に切り替わります。"}
+            {genMethod === "linq" && "Linq AI が契約内容に合わせて件名・本文を生成します。"}
+            {genMethod === "manual" && "件名・本文を自由に編集できます。"}
+          </p>
         </div>
 
         <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="メールアドレス" />
@@ -735,16 +860,12 @@ function EsignTab({
           value={subject}
           onChange={(e) => { setSubject(e.target.value); setGenMethod("manual"); }}
           placeholder="件名"
-          readOnly={genMethod !== "manual"}
-          className={genMethod !== "manual" ? "bg-muted/40" : undefined}
         />
         <Textarea
           value={message}
           onChange={(e) => { setMessage(e.target.value); setGenMethod("manual"); }}
           rows={5}
           placeholder="本文"
-          readOnly={genMethod !== "manual"}
-          className={genMethod !== "manual" ? "bg-muted/40" : undefined}
         />
         {customerName && contractTitle && (
           <p className="text-xs text-muted-foreground">

@@ -92,20 +92,16 @@ export async function getEmailThreads(folder?: string) {
 
 export async function getEmailThread(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("email_threads")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (error) throw error;
-
-  const { data: messages } = await supabase
-    .from("email_messages")
-    .select("*")
-    .eq("thread_id", id)
-    .order("received_at");
-
-  return { ...data, messages: messages || [] };
+  const [threadRes, messagesRes] = await Promise.all([
+    supabase.from("email_threads").select("*").eq("id", id).single(),
+    supabase
+      .from("email_messages")
+      .select("*")
+      .eq("thread_id", id)
+      .order("received_at"),
+  ]);
+  if (threadRes.error) throw threadRes.error;
+  return { ...threadRes.data, messages: messagesRes.data || [] };
 }
 
 export async function markThreadRead(id: string) {

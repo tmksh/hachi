@@ -6,7 +6,6 @@ export const NAV_GROUPS = [
     items: [
       { key: "dashboard", label: "ダッシュボード", href: "/dashboard" },
       { key: "bi", label: "BIダッシュボード", href: "/bi" },
-      { key: "bi2", label: "BIデザイン案", href: "/bi2" },
     ],
   },
   {
@@ -97,13 +96,15 @@ export const ADMIN_ROLES: Role[] = ["hq_admin", "admin"];
  * ミドルウェアとクライアントで共有する。
  */
 export const ROUTE_ROLES: Record<string, Role[]> = {
-  "/bi":          ["hq_admin", "contractor_admin"],
-  "/bi2":         ["hq_admin", "contractor_admin"],
-  "/crm":         ["hq_admin", "contractor_admin"],
-  "/deals":       ["hq_admin", "contractor_admin"],
-  "/quotes":      ["hq_admin", "contractor_admin"],
-  "/craftsmen":   ["hq_admin", "contractor_admin"],
-  "/contracts":   ["hq_admin", "contractor_admin", "admin", "sales"],
+  "/bi":          ["hq_admin", "contractor_admin", "admin", "executive"],
+  "/bi2":         ["hq_admin", "contractor_admin", "admin", "executive"],
+  // 営業・経営層はリード系（顧客/商談/見積/職人）にアクセス可能
+  "/crm":         ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  "/deals":       ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  "/quotes":      ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  "/craftsmen":   ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  "/contracts":   ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  "/workflow":    ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive", "employee", "designer"],
   "/marketing":   [],
 };
 
@@ -123,15 +124,16 @@ export const CSV_ROLE_LABELS: Record<string, string> = {
 
 /** ナビ項目キー → 許可するロール一覧 (未定義 = 全ロール許可) */
 export const NAV_ITEM_ROLES: Record<string, Role[]> = {
-  bi:                 ["hq_admin", "contractor_admin"],
-  crm:                ["hq_admin", "contractor_admin"],
-  deals:              ["hq_admin", "contractor_admin"],
-  quotes:             ["hq_admin", "contractor_admin"],
-  craftsmen:          ["hq_admin", "contractor_admin"],
-  contracts:          ["hq_admin", "contractor_admin", "admin", "sales"],
-  constructions:      ["hq_admin", "contractor_admin", "admin", "sales", "field_manager"],
-  invoices:           ["hq_admin", "contractor_admin", "admin", "administration"],
+  bi:                 ["hq_admin", "contractor_admin", "admin", "executive"],
+  crm:                ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  deals:              ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  quotes:             ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  craftsmen:          ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  contracts:          ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  constructions:      ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "executive"],
+  invoices:           ["hq_admin", "contractor_admin", "admin", "administration", "executive"],
   budget:             ["hq_admin", "contractor_admin", "admin", "executive"],
+  workflow:           ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive", "employee", "designer"],
   "marketing-email":  ["hq_admin"],
   "marketing-sns":    ["hq_admin"],
   "marketing-roi":    ["hq_admin"],

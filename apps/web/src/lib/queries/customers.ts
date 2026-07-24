@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Customer } from "@/lib/database.types";
 
 const CUSTOMER_LIST_SELECT =
-  "*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
+  "id, company_id, name, company_name, email, phone, customer_type, status, source, assigned_to, address, department, prospect_grade, inquiry_category, inquiry_date, created_at, updated_at, deleted_at, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
 
 export type CustomerListItem = Customer & {
   assigned_to_profile: { id: string; display_name: string } | null;
@@ -44,7 +44,7 @@ export async function fetchCustomers(options?: {
   if (error) throw error;
 
   return {
-    customers: (data ?? []) as CustomerListItem[],
+    customers: (data ?? []) as unknown as CustomerListItem[],
     total: count ?? 0,
     page,
     limit,

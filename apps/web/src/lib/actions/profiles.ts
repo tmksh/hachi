@@ -1,5 +1,7 @@
 "use server";
 
+import { cache } from "react";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import type { Profile, Company } from "@/lib/database.types";
@@ -8,7 +10,7 @@ export async function getProfiles() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, company_id, display_name, email, role, avatar_url, department, position, phone")
     .order("display_name");
   if (error) throw error;
   return data as Profile[];
@@ -57,8 +59,7 @@ export async function getCompany() {
   return data as Company;
 }
 
-/** 会社の settings のみを取得する軽量版（権限・会計設定の参照用） */
-export async function getCompanySettings(): Promise<Record<string, unknown> | null> {
+const loadCompanySettings = cache(async (): Promise<Record<string, unknown> | null> => {
   const supabase = await createClient();
   const user = await getAuthUser();
   if (!user) return null;
@@ -72,6 +73,11 @@ export async function getCompanySettings(): Promise<Record<string, unknown> | nu
     .eq("id", profile.company_id)
     .maybeSingle();
   return (data?.settings as Record<string, unknown> | null) ?? null;
+});
+
+/** 会社の settings のみを取得する軽量版（権限・会計設定の参照用） */
+export async function getCompanySettings(): Promise<Record<string, unknown> | null> {
+  return loadCompanySettings();
 }
 
 /**
@@ -141,5 +147,12 @@ export async function updateCompany(input: {
     .select()
     .single();
   if (error) throw error;
+
+  // middleware の権限キャッシュを破棄（次リクエストで再取得）
+  if (input.role_permissions !== undefined) {
+    const jar = await cookies();
+    jar.set("bl_az", "", { path: "/", maxAge: 0 });
+  }
+
   return data as Company;
 }

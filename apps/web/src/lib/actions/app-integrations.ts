@@ -254,8 +254,8 @@ export async function testAppIntegration(provider: AppIntegrationProvider) {
   );
 }
 
+/** カタログ定義のみ（秘密情報なし）— 認証待ち不要でタブ表示を速くする */
 export async function getProviderDefinitionsForClient() {
-  await getAdminContext();
   const { PROVIDER_DEFINITIONS } = await import("@/lib/app-integrations/providers/registry");
   return PROVIDER_DEFINITIONS.map(({ provider, name, description, color, connectHint, fields, settingsFields }) => ({
     provider,

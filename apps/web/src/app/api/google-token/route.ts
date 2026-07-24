@@ -19,8 +19,9 @@ export async function GET() {
     .eq("id", user.id)
     .single();
 
+  // 未連携は正常系（404 にするとコンソールが赤くなり、再取得ループにも見える）
   if (!profile?.google_access_token) {
-    return NextResponse.json({ error: "No Google token" }, { status: 404 });
+    return NextResponse.json({ access_token: null, connected: false });
   }
 
   const expiresAt = profile.google_token_expires_at

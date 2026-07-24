@@ -62,23 +62,25 @@ export function TimeSelect({ value, onChange, disabled, className }: TimeSelectP
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "h-9 w-full flex items-center justify-between gap-2 px-3 rounded-lg text-sm",
-          "bg-white/50 backdrop-blur-sm border border-white/50",
-          "hover:bg-white/70 transition-all duration-200",
-          "focus-visible:outline-none focus-visible:border-ring/60 focus-visible:ring-[3px] focus-visible:ring-ring/40",
+          "h-9 w-full flex items-center justify-between gap-2 px-3 rounded-xl text-sm font-normal",
+          "bg-white text-foreground border border-[rgba(0,0,0,0.10)]",
+          "shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+          "hover:bg-gray-50 hover:border-[rgba(0,0,0,0.18)]",
+          "focus-visible:outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
           "disabled:opacity-50 disabled:cursor-not-allowed",
+          "dark:bg-white/8 dark:border-white/8 dark:hover:bg-white/14 dark:hover:border-white/14",
         )}
       >
         <span className="tabular-nums">{toJa(value || "00:00")}</span>
         <ChevronDown
-          className={cn("h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-150", open && "rotate-180")}
+          className={cn("h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-70 transition-transform duration-150", open && "rotate-180")}
         />
       </button>
 
       {open && (
         <ul
           ref={listRef}
-          className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-white/60 bg-white/92 backdrop-blur-md shadow-xl py-1"
+          className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-[rgba(0,0,0,0.10)] bg-white shadow-md py-1 dark:bg-[#1F2937] dark:border-white/12"
         >
           {TIMES.map((t) => (
             <li

@@ -23,29 +23,29 @@ export async function getWorkflowRequests(status?: string) {
 
 export async function getWorkflowRequest(id: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("workflow_requests")
-    .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
-    .eq("id", id)
-    .single();
-  if (error) throw error;
-
-  const { data: steps } = await supabase
-    .from("workflow_steps")
-    .select("*, approver:profiles!workflow_steps_approver_id_fkey(id, display_name)")
-    .eq("request_id", id)
-    .order("step_order");
-
-  const { data: comments } = await supabase
-    .from("workflow_comments")
-    .select("*, user:profiles!workflow_comments_user_id_fkey(id, display_name)")
-    .eq("request_id", id)
-    .order("created_at");
+  const [requestRes, stepsRes, commentsRes] = await Promise.all([
+    supabase
+      .from("workflow_requests")
+      .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("workflow_steps")
+      .select("*, approver:profiles!workflow_steps_approver_id_fkey(id, display_name, role)")
+      .eq("request_id", id)
+      .order("step_order"),
+    supabase
+      .from("workflow_comments")
+      .select("*, user:profiles!workflow_comments_user_id_fkey(id, display_name)")
+      .eq("request_id", id)
+      .order("created_at"),
+  ]);
+  if (requestRes.error) throw requestRes.error;
 
   return {
-    ...data,
-    steps: steps || [],
-    comments: (comments || []).map((c) => ({
+    ...requestRes.data,
+    steps: stepsRes.data || [],
+    comments: (commentsRes.data || []).map((c) => ({
       ...c,
       body: (c as { message?: string }).message ?? "",
     })),
@@ -177,15 +177,20 @@ async function approveWorkflowStepInternal(
   conditional = false,
 ) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
 
   // 順次承認: 前ステップが未完了なら拒否（No.85）
   const { data: currentStep } = await supabase
     .from("workflow_steps")
-    .select("id, request_id, step_order, status")
+    .select("id, request_id, step_order, status, approver_id")
     .eq("id", stepId)
     .single();
   if (!currentStep) throw new Error("承認ステップが見つかりません");
   if (currentStep.status !== "pending") throw new Error("このステップは既に処理済みです");
+  if (currentStep.approver_id !== user.id) {
+    throw new Error("このステップの承認者ではありません");
+  }
 
   const { data: earlierPending } = await supabase
     .from("workflow_steps")
@@ -196,6 +201,33 @@ async function approveWorkflowStepInternal(
     .limit(1);
   if (earlierPending && earlierPending.length > 0) {
     throw new Error("前の承認ステップが完了していません。順番に承認してください");
+  }
+
+  // 契約書×総務: 必要事項追記後のみ承認可（No.86 / Step17）
+  const { data: requestForGate } = await supabase
+    .from("workflow_requests")
+    .select("payload")
+    .eq("id", currentStep.request_id)
+    .single();
+  const gatePayload = (requestForGate?.payload ?? {}) as Record<string, unknown>;
+  if (gatePayload.contract_id) {
+    const { data: approverProfile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if (approverProfile?.role === "administration") {
+      const supplemented = Boolean(gatePayload.admin_supplemented_at)
+        || (
+          typeof gatePayload.payment_terms === "string"
+          && gatePayload.payment_terms.trim()
+          && typeof gatePayload.bank_account === "string"
+          && gatePayload.bank_account.trim()
+        );
+      if (!supplemented) {
+        throw new Error("総務追記（支払条件・振込口座）を保存してから承認してください");
+      }
+    }
   }
 
   const { error } = await supabase
@@ -215,10 +247,18 @@ async function approveWorkflowStepInternal(
       .order("step_order", { ascending: true });
 
     if (!pendingSteps || pendingSteps.length === 0) {
-      await supabase
+      const decidedAt = new Date().toISOString();
+      const { data: approvedReq, error: approveErr } = await supabase
         .from("workflow_requests")
-        .update({ status: "approved", decided_at: new Date().toISOString() })
-        .eq("id", step.request_id);
+        .update({ status: "approved", decided_at: decidedAt, updated_at: decidedAt })
+        .eq("id", step.request_id)
+        .select("id, status")
+        .maybeSingle();
+      if (approveErr || !approvedReq || approvedReq.status !== "approved") {
+        throw new Error(
+          `承認完了ステータスの更新に失敗しました: ${approveErr?.message ?? "更新が反映されませんでした"}`,
+        );
+      }
 
       const { data: request } = await supabase
         .from("workflow_requests")
@@ -245,23 +285,34 @@ async function approveWorkflowStepInternal(
 
         const contractId = (request.payload as Record<string, unknown> | undefined)?.contract_id as string | undefined;
         if (contractId) {
-          const { data: contract } = await supabase
+          // 電子契約タブ活性化のため契約ステータスを確実に contracted へ（Step18）
+          const { data: contracted, error: contractErr } = await supabase
             .from("contracts")
-            .select("assigned_to, title")
+            .update({ status: "contracted", updated_at: new Date().toISOString() })
             .eq("id", contractId)
-            .single();
+            .select("id, status, assigned_to, title")
+            .maybeSingle();
+          if (contractErr || !contracted) {
+            console.error("[approveWorkflowStep] contract status update failed", contractErr);
+          }
 
           const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
           const notifyIds = new Set<string>();
           if (request.requester_id) notifyIds.add(request.requester_id);
-          if (contract?.assigned_to) notifyIds.add(contract.assigned_to);
+          if (contracted?.assigned_to) notifyIds.add(contracted.assigned_to);
 
           for (const userId of notifyIds) {
-            await notifySalesFlowUser(supabase, request.company_id, userId, {
-              title: `契約承認完了: ${contract?.title ?? request.title}`,
-              description: "電子契約タブからクラウドサインで送信できます",
-              href: `/contracts/${contractId}?tab=esign`,
-            }, request.requester_id);
+            try {
+              await notifySalesFlowUser(supabase, request.company_id, userId, {
+                title: `契約承認完了: ${contracted?.title ?? request.title}`,
+                description: "電子契約タブが利用可能になりました。クラウドサインで送信できます",
+                href: `/contracts/${contractId}?tab=esign`,
+                urgent: true,
+                extraTags: ["contract", "esign_unlocked"],
+              }, request.requester_id);
+            } catch (e) {
+              console.error("[approveWorkflowStep] notify failed", e);
+            }
           }
         }
 
@@ -312,45 +363,71 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
     .eq("id", stepId);
   if (error) throw error;
 
-  const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
-  if (step) {
-    // 却下時は差戻しフラグを明示的にクリア（No.48: 却下→差戻し誤表示の再発防止）
-    const { data: existing } = await supabase
-      .from("workflow_requests")
-      .select("payload")
-      .eq("id", step.request_id)
-      .single();
-    const prev = (existing?.payload ?? {}) as Record<string, unknown>;
-    const { remand: _r, remand_comment: _c, remanded_at: _a, ...rest } = prev;
-    const payload = {
-      ...rest,
-      remand: false,
-      reject_comment: comment ?? null,
-      rejected_at: new Date().toISOString(),
-    };
+  const { data: step, error: stepErr } = await supabase
+    .from("workflow_steps")
+    .select("request_id")
+    .eq("id", stepId)
+    .single();
+  if (stepErr || !step) throw stepErr ?? new Error("承認ステップが見つかりません");
 
+  // 却下時は差戻しフラグを明示的にクリア（No.48: 却下→差戻し誤表示の再発防止）
+  const { data: existing, error: existingErr } = await supabase
+    .from("workflow_requests")
+    .select("payload")
+    .eq("id", step.request_id)
+    .single();
+  if (existingErr) throw existingErr;
+
+  const prev = (existing?.payload ?? {}) as Record<string, unknown>;
+  const { remand: _r, remand_comment: _c, remanded_at: _a, ...rest } = prev;
+  const payload = {
+    ...rest,
+    remand: false,
+    reject_comment: comment ?? null,
+    rejected_at: new Date().toISOString(),
+  };
+
+  const decidedAt = new Date().toISOString();
+  const { data: updatedReq, error: reqErr } = await supabase
+    .from("workflow_requests")
+    .update({
+      status: "rejected",
+      decided_at: decidedAt,
+      payload,
+      updated_at: decidedAt,
+    })
+    .eq("id", step.request_id)
+    .select("id, status")
+    .maybeSingle();
+  if (reqErr || !updatedReq || updatedReq.status !== "rejected") {
     await supabase
-      .from("workflow_requests")
-      .update({
-        status: "rejected",
-        decided_at: new Date().toISOString(),
-        payload,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", step.request_id);
+      .from("workflow_steps")
+      .update({ status: "pending", comment: null, decided_at: null })
+      .eq("id", stepId);
+    throw new Error(`却下に失敗しました: ${reqErr?.message ?? "更新が反映されませんでした"}`);
+  }
 
-    const { data: request } = await supabase
-      .from("workflow_requests")
-      .select("company_id, title")
-      .eq("id", step.request_id)
-      .single();
-    if (request) {
-      void dispatchWebhook(request.company_id, "workflow.rejected", {
-        id: step.request_id,
-        title: request.title,
-      });
-      await syncWorkflowPayloadSideEffects(supabase, step.request_id, "rejected");
-    }
+  await supabase
+    .from("workflow_steps")
+    .update({ status: "skipped", decided_at: decidedAt })
+    .eq("request_id", step.request_id)
+    .eq("status", "pending");
+
+  const { data: request } = await supabase
+    .from("workflow_requests")
+    .select("company_id, title")
+    .eq("id", step.request_id)
+    .single();
+  if (request) {
+    void dispatchWebhook(request.company_id, "workflow.rejected", {
+      id: step.request_id,
+      title: request.title,
+    });
+  }
+  try {
+    await syncWorkflowPayloadSideEffects(supabase, step.request_id, "rejected");
+  } catch (e) {
+    console.error("[rejectWorkflowStep] side effects failed", e);
   }
 }
 
@@ -359,62 +436,127 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { error } = await supabase
+  const { data: stepped, error } = await supabase
     .from("workflow_steps")
     .update({ status: "rejected", comment: comment || null, decided_at: new Date().toISOString() })
-    .eq("id", stepId);
-  if (error) throw error;
+    .eq("id", stepId)
+    .select("id, request_id")
+    .single();
+  if (error || !stepped) throw error ?? new Error("承認ステップの更新に失敗しました");
 
-  const { data: step } = await supabase.from("workflow_steps").select("request_id").eq("id", stepId).single();
-  if (step) {
-    const { data: existing } = await supabase
-      .from("workflow_requests")
-      .select("payload")
-      .eq("id", step.request_id)
-      .single();
+  const requestId = stepped.request_id;
 
-    const payload = {
-      ...((existing?.payload ?? {}) as Record<string, unknown>),
+  const { data: existing, error: existingErr } = await supabase
+    .from("workflow_requests")
+    .select("payload")
+    .eq("id", requestId)
+    .single();
+  if (existingErr) throw existingErr;
+
+  const prev = (existing?.payload ?? {}) as Record<string, unknown>;
+  // 差戻し時は却下系フィールドを除去し、remand を必ず true で書き込む（差戻し→却下誤表示対策）
+  const { reject_comment: _rc, rejected_at: _ra, ...rest } = prev;
+  const payload = {
+    ...rest,
+    remand: true,
+    remand_comment: comment ?? null,
+    remanded_at: new Date().toISOString(),
+  };
+
+  // RLS で 0 件更新でも error にならないため .select().single() で実更新を検証（申請中のまま残る不具合対策）
+  const decidedAt = new Date().toISOString();
+  let { data: updatedReq, error: reqErr } = await supabase
+    .from("workflow_requests")
+    .update({
+      status: "rejected",
+      decided_at: decidedAt,
+      payload,
+      updated_at: decidedAt,
+    })
+    .eq("id", requestId)
+    .select("id, status, payload")
+    .maybeSingle();
+
+  // 巨大 payload で失敗した場合はステータス＋差戻しフラグのみで再試行
+  if (reqErr || !updatedReq || updatedReq.status !== "rejected") {
+    const lightPayload = {
+      contract_id: prev.contract_id ?? null,
+      estimate_id: prev.estimate_id ?? null,
+      workflow_type_key: prev.workflow_type_key ?? null,
+      workflow_type_name: prev.workflow_type_name ?? null,
       remand: true,
       remand_comment: comment ?? null,
-      remanded_at: new Date().toISOString(),
+      remanded_at: decidedAt,
     };
-
-    await supabase
+    const retry = await supabase
       .from("workflow_requests")
       .update({
         status: "rejected",
-        decided_at: new Date().toISOString(),
-        payload,
-        updated_at: new Date().toISOString(),
+        decided_at: decidedAt,
+        payload: lightPayload,
+        updated_at: decidedAt,
       })
-      .eq("id", step.request_id);
+      .eq("id", requestId)
+      .select("id, status, payload")
+      .maybeSingle();
+    updatedReq = retry.data;
+    reqErr = retry.error;
+  }
 
-    await syncWorkflowPayloadSideEffects(supabase, step.request_id, "returned");
+  if (reqErr || !updatedReq || updatedReq.status !== "rejected") {
+    await supabase
+      .from("workflow_steps")
+      .update({ status: "pending", comment: null, decided_at: null })
+      .eq("id", stepId);
+    throw new Error(
+      `差戻しに失敗しました（ステータスが申請中のままです）: ${reqErr?.message ?? "更新が反映されませんでした"}`,
+    );
+  }
 
-    const { data: request } = await supabase
-      .from("workflow_requests")
-      .select("company_id, requester_id, title, payload")
-      .eq("id", step.request_id)
-      .single();
+  // 後続の承認待ちステップをスキップし、申請中のように見えないようにする
+  await supabase
+    .from("workflow_steps")
+    .update({ status: "skipped", decided_at: decidedAt })
+    .eq("request_id", requestId)
+    .eq("status", "pending");
 
-    if (request) {
-      const payload = (request.payload ?? {}) as Record<string, unknown>;
-      const contractId = payload.contract_id as string | undefined;
-      const estimateId = payload.estimate_id as string | undefined;
-      const href = estimateId
-        ? `/quotes/${estimateId}`
-        : contractId
-          ? `/contracts/${contractId}?tab=documents`
-          : `/workflow/${step.request_id}`;
+  try {
+    await syncWorkflowPayloadSideEffects(supabase, requestId, "returned");
+  } catch (e) {
+    console.error("[remandWorkflowStep] side effects failed", e);
+  }
 
+  const { data: request } = await supabase
+    .from("workflow_requests")
+    .select("company_id, requester_id, title, payload")
+    .eq("id", requestId)
+    .single();
+
+  if (request?.requester_id) {
+    const reqPayload = (request.payload ?? {}) as Record<string, unknown>;
+    const contractId = reqPayload.contract_id as string | undefined;
+    const estimateId = reqPayload.estimate_id as string | undefined;
+    const href = estimateId
+      ? `/quotes/${estimateId}`
+      : contractId
+        ? `/contracts/${contractId}?tab=documents`
+        : `/workflow/${requestId}`;
+    const description = [
+      comment?.trim() || "内容を修正のうえ再申請してください",
+      contractId ? "書類作成タブで修正できます。" : null,
+    ].filter(Boolean).join("\n");
+
+    try {
       const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
       await notifySalesFlowUser(supabase, request.company_id, request.requester_id, {
         title: `差戻しされました: ${request.title}`,
-        description: comment?.trim() || "内容を修正のうえ再申請してください",
+        description,
         href,
         urgent: true,
+        extraTags: ["workflow_remand", contractId ? "contract" : "estimate"].filter(Boolean) as string[],
       }, user.id);
+    } catch (e) {
+      console.error("[remandWorkflowStep] notify failed", e);
     }
   }
 }

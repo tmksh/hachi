@@ -13,16 +13,12 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Save, Users } from "lucide-react";
 import { createAnnouncement } from "@/lib/actions/announcements";
-import { ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
+import { ASSIGNABLE_TEAM_ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 type TargetType = "all" | "roles";
 
-const ROLE_ORDER: Role[] = [
-  ROLES.HQ_ADMIN,
-  ROLES.CONTRACTOR_ADMIN,
-  ROLES.EMPLOYEE,
-];
+const ROLE_ORDER: Role[] = [...ASSIGNABLE_TEAM_ROLES];
 
 const ROLE_DESCRIPTIONS: Partial<Record<Role, string>> = {
   hq_admin: "本社スタッフ（本部管理者）",
@@ -86,8 +82,9 @@ export default function CirculationNewPage() {
           : `${targetRoles.size}ロールに通知を送信しました`
       );
       router.push("/circulation");
-    } catch {
-      toast.error("投稿に失敗");
+    } catch (e) {
+      const message = e instanceof Error && e.message ? e.message : "投稿に失敗しました";
+      toast.error(message);
     } finally {
       setSaving(false);
     }

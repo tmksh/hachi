@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   canAccessPathWithPermissions,
   featureKeyForPath,
+  mergeRolePermissions,
   type RolePermissions,
 } from "@/lib/role-permissions";
 
@@ -236,24 +237,57 @@ export async function updateSession(request: NextRequest) {
       || LEGACY_ROUTE_PREFIXES.some((p) => pathname.startsWith(p));
 
     if (needsRoleCheck) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role, company_id")
-        .eq("id", user.id)
-        .single();
+      // 壊れた旧 cookie（bl_rp）は毎回消す
+      if (request.cookies.has(LEGACY_ROLE_PERM_COOKIE)) {
+        supabaseResponse.cookies.set(LEGACY_ROLE_PERM_COOKIE, "", { path: "/", maxAge: 0 });
+      }
 
-      const role = profile?.role as string | undefined;
+      let role: string | undefined;
       let permissions: RolePermissions | null = null;
 
-      if (profile?.company_id) {
-        const { data: company } = await supabase
-          .from("companies")
-          .select("settings")
-          .eq("id", profile.company_id)
-          .maybeSingle();
-        const settings = (company?.settings ?? null) as Record<string, unknown> | null;
-        if (settings?.role_permissions && typeof settings.role_permissions === "object") {
-          permissions = settings.role_permissions as RolePermissions;
+      const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
+      if (cached && cached.u === user.id) {
+        role = cached.r;
+        // キャッシュ済みでも旧スキーマ補完を適用（メニューとルート判定を一致させる）
+        permissions = cached.p ? mergeRolePermissions(cached.p) : null;
+      } else {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role, company_id")
+          .eq("id", user.id)
+          .single();
+
+        role = profile?.role as string | undefined;
+
+        if (profile?.company_id) {
+          const { data: company } = await supabase
+            .from("companies")
+            .select("settings")
+            .eq("id", profile.company_id)
+            .maybeSingle();
+          const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+          if (settings?.role_permissions && typeof settings.role_permissions === "object") {
+            // 旧スキーマは merge で営業・経営層などを補完してから判定
+            permissions = mergeRolePermissions(settings.role_permissions as RolePermissions);
+          }
+        }
+
+        if (role) {
+          try {
+            const encoded = encodeAuthz({ u: user.id, r: role, p: permissions });
+            // Cookie 上限対策（大きすぎる場合はキャッシュしない）
+            if (encoded.length < 3500) {
+              supabaseResponse.cookies.set(AUTHZ_COOKIE, encoded, {
+                path: "/",
+                httpOnly: true,
+                sameSite: "lax",
+                secure: process.env.NODE_ENV === "production",
+                maxAge: AUTHZ_MAX_AGE_SEC,
+              });
+            }
+          } catch {
+            // ignore encode errors
+          }
         }
       }
 
@@ -266,4 +300,39 @@ export async function updateSession(request: NextRequest) {
   }
 
   return supabaseResponse;
+}
+
+/** 旧実装の肥大 cookie（誤拒否の原因） */
+const LEGACY_ROLE_PERM_COOKIE = "bl_rp";
+/** role + 権限マトリクスの短命キャッシュ（毎リクエストの DB 2回を避ける） */
+const AUTHZ_COOKIE = "bl_az";
+const AUTHZ_MAX_AGE_SEC = 300;
+
+type AuthzCache = {
+  u: string;
+  r: string;
+  p: RolePermissions | null;
+};
+
+function encodeAuthz(data: AuthzCache): string {
+  const json = JSON.stringify(data);
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeAuthz(raw: string): AuthzCache | null {
+  try {
+    const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const bin = atob(b64 + pad);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const data = JSON.parse(new TextDecoder().decode(bytes)) as AuthzCache;
+    if (!data?.u || typeof data.r !== "string") return null;
+    return data;
+  } catch {
+    return null;
+  }
 }

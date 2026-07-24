@@ -184,6 +184,8 @@ export function CalendarClient({
   );
   const skippedInitialEventsFetch = useRef(true);
   const skippedInitialMembersFetch = useRef(true);
+  /** undefined=未確認 / null=未連携確定 / string=トークン */
+  const googleTokenRef = useRef<string | null | undefined>(undefined);
   const [memberEvents, setMemberEvents] = useState<Record<string, MappedGoogleEvent[]>>({});
 
   const openEvent = useCallback((ev: AnyEv) => {
@@ -209,10 +211,10 @@ export function CalendarClient({
     }
     if (view === "week") {
       const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const pad = 7; // 週ビュー横スクロール用に前後1週間分のイベントも取得
+      // 表示週のみ取得（前後パッドは DOM/通信コストが大きい）
       return {
-        rangeStart: addDays(ws, -pad),
-        rangeEnd: addDays(ws, 6 + pad),
+        rangeStart: startOfDay(ws),
+        rangeEnd: endOfDay(addDays(ws, 6)),
       };
     }
     const ms = startOfMonth(currentDate);
@@ -229,19 +231,24 @@ export function CalendarClient({
       skippedInitialEventsFetch.current = false;
       return;
     }
-    setLoading(true);
+    // 前のイベントを残したまま裏で更新（月切替で setLoading(true) して画面を消さない）
     getCalendarEvents({ start: rangeStart.toISOString(), end: rangeEnd.toISOString() })
       .then(setEvents)
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [rangeStart, rangeEnd, reloadKey]);
 
-  /* Google Calendar イベント取得 */
+  /* Google Calendar — 初回ペイント後に idle で取得（表示をブロックしない） */
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      let token: string | null = session?.provider_token ?? null;
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
+    const resolveToken = async (): Promise<string | null> => {
+      if (googleTokenRef.current !== undefined) return googleTokenRef.current;
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      let token: string | null = session?.provider_token ?? null;
       if (!token) {
         try {
           const res = await fetch("/api/google-token");
@@ -253,52 +260,99 @@ export function CalendarClient({
           // ignore
         }
       }
+      googleTokenRef.current = token;
+      return token;
+    };
 
-      if (!token) {
-        setGoogleConnected(false);
-        setGoogleToken(null);
-        setGoogleEvents([]);
-        return;
-      }
+    const run = () => {
+      void (async () => {
+        const token = await resolveToken();
+        if (cancelled) return;
+        if (!token) {
+          setGoogleConnected((prev) => (prev ? false : prev));
+          setGoogleToken((prev) => (prev == null ? prev : null));
+          setGoogleEvents((prev) => (prev.length === 0 ? prev : []));
+          return;
+        }
+        setGoogleConnected((prev) => (prev ? prev : true));
+        setGoogleToken((prev) => (prev === token ? prev : token));
+        const gEvs = await fetchGoogleCalendarEvents(
+          token,
+          rangeStart.toISOString(),
+          rangeEnd.toISOString(),
+        );
+        if (!cancelled) setGoogleEvents(gEvs.map(mapGoogleEvent));
+      })();
+    };
 
-      setGoogleConnected(true);
-      setGoogleToken(token);
-      fetchGoogleCalendarEvents(
-        token,
-        rangeStart.toISOString(),
-        rangeEnd.toISOString(),
-      ).then((gEvs) => setGoogleEvents(gEvs.map(mapGoogleEvent)));
-    });
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(run, { timeout: 2000 });
+    } else {
+      timeoutId = setTimeout(run, 400);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
   }, [rangeStart, rangeEnd, reloadKey]);
 
-  /* 連携している Google アカウントのメール取得 */
+  /* 連携している Google アカウントのメール取得（idle） */
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const googleIdentity = user?.identities?.find((i) => i.provider === "google");
-      const email =
-        (googleIdentity?.identity_data?.email as string | undefined) ??
-        (user?.user_metadata?.email as string | undefined) ??
-        null;
-      setGoogleAccountEmail(email);
-    });
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      const supabase = createClient();
+      void supabase.auth.getUser().then(({ data: { user } }) => {
+        const googleIdentity = user?.identities?.find((i) => i.provider === "google");
+        const email =
+          (googleIdentity?.identity_data?.email as string | undefined) ??
+          (user?.user_metadata?.email as string | undefined) ??
+          null;
+        setGoogleAccountEmail((prev) => (prev === email ? prev : email));
+      });
+    };
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(run, { timeout: 3000 });
+    } else {
+      timeoutId = setTimeout(run, 600);
+    }
+    return () => {
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
   }, [reloadKey]);
 
-  /* Google Calendar連携しているチームメンバーを取得 */
+  /* チームメンバーは SSR で取らないため、初回も idle で取得 */
   useEffect(() => {
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      void getCompanyMembersWithCalendar().then((members) => {
+        setMemberCalendars(
+          members.map((m, i) => ({
+            ...m,
+            color: MEMBER_COLORS[i % MEMBER_COLORS.length],
+            checked: false,
+          })),
+        );
+      });
+    };
     if (skippedInitialMembersFetch.current && reloadKey === 0) {
       skippedInitialMembersFetch.current = false;
-      return;
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        idleId = window.requestIdleCallback(run, { timeout: 2500 });
+      } else {
+        timeoutId = setTimeout(run, 500);
+      }
+      return () => {
+        if (idleId !== undefined) window.cancelIdleCallback(idleId);
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+      };
     }
-    getCompanyMembersWithCalendar().then((members) => {
-      setMemberCalendars(
-        members.map((m, i) => ({
-          ...m,
-          color: MEMBER_COLORS[i % MEMBER_COLORS.length],
-          checked: false,
-        }))
-      );
-    });
+    run();
+    return undefined;
   }, [reloadKey]);
 
   /* メンバーのGoogleカレンダーイベントを取得 */
@@ -377,6 +431,8 @@ export function CalendarClient({
     setDisconnectingGoogle(true);
     try {
       await disconnectGoogleCalendar();
+      googleTokenRef.current = null;
+      setGoogleToken(null);
       setGoogleConnected(false);
       setGoogleEvents([]);
       setGoogleAccountEmail(null);
@@ -719,6 +775,7 @@ export function CalendarClient({
         </div>
       </div>
 
+      {activeEvent && (
       <EventDialog
         event={activeEvent}
         googleToken={googleToken}
@@ -734,6 +791,7 @@ export function CalendarClient({
           refreshEvents();
         }}
       />
+      )}
     </div>
   );
 }
@@ -1083,10 +1141,10 @@ function MonthView({
   );
 }
 
-/* ──────────────────── Week View (Google Calendar style, horizontal scroll) ──────────────────── */
-const WEEK_VISIBLE_DAYS = 7; // ビューポートに常に収める日数
-const WEEK_SCROLL_PAD_DAYS = 7; // 前後に追加する日数（横スクロール用）
+/* ──────────────────── Week View (Google Calendar style) ──────────────────── */
+const WEEK_VISIBLE_DAYS = 7;
 const TIME_W = 52; // px for time label gutter
+const HOUR_GRID_BG = `linear-gradient(to bottom, transparent calc(${HOUR_H / 2}px - 1px), rgba(148,163,184,0.25) calc(${HOUR_H / 2}px - 1px), rgba(148,163,184,0.25) ${HOUR_H / 2}px, transparent ${HOUR_H / 2}px), linear-gradient(to bottom, rgba(148,163,184,0.55) 0, rgba(148,163,184,0.55) 1px, transparent 1px)`;
 
 function WeekView({
   date,
@@ -1105,23 +1163,45 @@ function WeekView({
   onRefresh: () => void;
   onCreateAt: (d: Date, hhmm?: string) => void;
 }) {
-  // 週ビュー: 表示週の前後も含めて横スクロール可能にする
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-  const scrollRangeStart = addDays(weekStart, -WEEK_SCROLL_PAD_DAYS);
-  const scrollRangeEnd = addDays(weekStart, 6 + WEEK_SCROLL_PAD_DAYS);
-  const days = eachDayOfInterval({ start: scrollRangeStart, end: scrollRangeEnd });
+  const days = useMemo(
+    () => eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) }),
+    // weekStart は date 由来
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [date],
+  );
+
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, AnyEv[]>();
+    for (const e of events) {
+      if (e.all_day) continue;
+      const key = format(parseISO(e.start_at), "yyyy-MM-dd");
+      const list = map.get(key);
+      if (list) list.push(e);
+      else map.set(key, [e]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.start_at.localeCompare(b.start_at));
+    }
+    return map;
+  }, [events]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef   = useRef<HTMLDivElement>(null);
+  const daysRef = useRef(days);
+  daysRef.current = days;
 
-  /* 列幅 — ビューポートに常に7日分が収まる幅（横スクロール時も1日=この幅でスナップ） */
+  /* 列幅 — ビューポートに常に7日分が収まる幅 */
   const [colW, setColW] = useState(120);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const calc = () => {
       const available = el.clientWidth - TIME_W;
-      setColW(Math.max(80, Math.floor(available / WEEK_VISIBLE_DAYS)));
+      setColW((prev) => {
+        const next = Math.max(80, Math.floor(available / WEEK_VISIBLE_DAYS));
+        return prev === next ? prev : next;
+      });
     };
     calc();
     const ro = new ResizeObserver(calc);
@@ -1132,13 +1212,14 @@ function WeekView({
 
   const [dragging, setDragging] = useState<DragInfo | null>(null);
   const dragRef = useRef<DragInfo | null>(null);
+  const dragRafRef = useRef<number | null>(null);
 
-  /* 週変更時: 縦は8:00付近、横は表示中の週の先頭へ */
+  /* 週変更時: 縦は8:00付近へ */
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || DAY_COL_W_DYN <= 0) return;
     el.scrollTop = 7.5 * HOUR_H;
-    el.scrollLeft = WEEK_SCROLL_PAD_DAYS * DAY_COL_W_DYN;
+    el.scrollLeft = 0;
   }, [date, DAY_COL_W_DYN]);
 
   /* Current time indicator */
@@ -1159,12 +1240,13 @@ function WeekView({
 
   const getDayFromX = useCallback((clientX: number): Date => {
     const scroll = scrollRef.current;
-    if (!scroll) return days[0];
+    const dayList = daysRef.current;
+    if (!scroll || dayList.length === 0) return dayList[0] ?? new Date();
     const rect = scroll.getBoundingClientRect();
     const x = clientX - rect.left + scroll.scrollLeft - TIME_W;
-    const idx = Math.max(0, Math.min(days.length - 1, Math.floor(x / DAY_COL_W_DYN)));
-    return days[idx];
-  }, [days, DAY_COL_W_DYN]);
+    const idx = Math.max(0, Math.min(dayList.length - 1, Math.floor(x / DAY_COL_W_DYN)));
+    return dayList[idx]!;
+  }, [DAY_COL_W_DYN]);
 
   /* Start drag */
   const startDrag = useCallback((
@@ -1194,7 +1276,7 @@ function WeekView({
     setDragging({ ...info });
   }, [getMinFromY]);
 
-  /* Global mouse handlers during drag */
+  /* Global mouse handlers during drag（rAF で再レンダー間引き） */
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const info = dragRef.current;
@@ -1210,13 +1292,22 @@ function WeekView({
         updated = { ...info, currentEnd: newEnd };
       }
       dragRef.current = updated;
-      setDragging({ ...updated });
+      if (dragRafRef.current != null) return;
+      dragRafRef.current = requestAnimationFrame(() => {
+        dragRafRef.current = null;
+        const latest = dragRef.current;
+        if (latest) setDragging({ ...latest });
+      });
     };
 
     const onUp = async () => {
       const info = dragRef.current;
       if (!info) return;
       dragRef.current = null;
+      if (dragRafRef.current != null) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
+      }
       setDragging(null);
 
       const origDay = parseISO(info.ev.start_at);
@@ -1251,6 +1342,7 @@ function WeekView({
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      if (dragRafRef.current != null) cancelAnimationFrame(dragRafRef.current);
     };
   }, [getMinFromY, getDayFromX, onRefresh]);
 
@@ -1345,18 +1437,30 @@ function WeekView({
             >
               {days.map((d) => {
                 const today = isToday(d);
-
-                const colEvents = events.filter((e) => {
-                  if (e.all_day) return false;
-                  if (dragging?.ev.id === e.id) return isSameDay(dragging!.currentDay, d);
-                  return isSameDay(parseISO(e.start_at), d);
-                }).sort((a, b) => a.start_at.localeCompare(b.start_at));
+                const dayKey = format(d, "yyyy-MM-dd");
+                let colEvents = eventsByDay.get(dayKey) ?? [];
+                if (dragging) {
+                  const dragId = dragging.ev.id;
+                  const onThisDay = isSameDay(dragging.currentDay, d);
+                  colEvents = [
+                    ...colEvents.filter((e) => e.id !== dragId),
+                    ...(onThisDay ? [dragging.ev] : []),
+                  ];
+                }
 
                 return (
                   <div
-                    key={d.toISOString()}
+                    key={dayKey}
                     className="relative border-r last:border-r-0 cursor-pointer"
-                    style={{ width: DAY_COL_W_DYN, flexShrink: 0, height: 24 * HOUR_H, scrollSnapAlign: "start" }}
+                    style={{
+                      width: DAY_COL_W_DYN,
+                      flexShrink: 0,
+                      height: 24 * HOUR_H,
+                      scrollSnapAlign: "start",
+                      backgroundImage: HOUR_GRID_BG,
+                      backgroundSize: `100% ${HOUR_H}px`,
+                      backgroundRepeat: "repeat-y",
+                    }}
                     title="クリックで予定を追加"
                     onClick={(e) => {
                       if (isDraggingRef.current || dragRef.current) return;
@@ -1369,14 +1473,6 @@ function WeekView({
                       onCreateAt(d, `${hh}:${mm}`);
                     }}
                   >
-                    {/* Hour / half-hour lines */}
-                    {hours.map((h) => (
-                      <div key={h}>
-                        <div className="absolute w-full border-t border-slate-300/70" style={{ top: h * HOUR_H }} />
-                        <div className="absolute w-full border-t border-slate-200/40 border-dashed" style={{ top: h * HOUR_H + HOUR_H / 2 }} />
-                      </div>
-                    ))}
-
                     {/* Current time indicator */}
                     {today && (
                       <div
@@ -1774,31 +1870,27 @@ function EventDialog({
                 終日
               </Label>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className={cn("grid gap-3", allDay ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
+              <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs">開始日 *</Label>
                 <DatePicker value={startDate} onChange={setStartDate} placeholder="開始日を選択" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">開始時刻</Label>
-                <TimeSelect
-                  value={startTime}
-                  disabled={allDay}
-                  onChange={setStartTime}
-                />
-              </div>
-              <div className="space-y-1.5">
+              {!allDay && (
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-xs">開始時刻</Label>
+                  <TimeSelect value={startTime} onChange={setStartTime} />
+                </div>
+              )}
+              <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs">終了日</Label>
                 <DatePicker value={endDate} onChange={setEndDate} placeholder="終了日を選択" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">終了時刻</Label>
-                <TimeSelect
-                  value={endTime}
-                  disabled={allDay}
-                  onChange={setEndTime}
-                />
-              </div>
+              {!allDay && (
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-xs">終了時刻</Label>
+                  <TimeSelect value={endTime} onChange={setEndTime} />
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

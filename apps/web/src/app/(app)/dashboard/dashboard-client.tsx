@@ -825,9 +825,13 @@ export function DashboardClient({
               期限が今日（または優先）のToDoが <span className="font-bold">{urgentCount}件</span> あります。今日のフォーカスを確認してください。
             </p>
           </div>
-          <Link href="#ai-focus" className="text-xs font-medium text-rose-700 hover:underline shrink-0">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("bridge:open-notifications"))}
+            className="text-xs font-medium text-rose-700 hover:underline shrink-0"
+          >
             確認する
-          </Link>
+          </button>
         </div>
       )}
 

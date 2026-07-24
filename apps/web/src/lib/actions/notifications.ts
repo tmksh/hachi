@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
+import { selectAnnouncementsForNotifications } from "@/lib/announcement-select";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -27,7 +28,7 @@ export async function getNotifications(): Promise<Notification[]> {
   const [
     { data: selfProfile },
     { data: readRecords },
-    { data: announcements },
+    announcements,
     { data: pendingSteps },
     { data: upcomingEvents },
     { data: decidedRequests },
@@ -36,11 +37,7 @@ export async function getNotifications(): Promise<Notification[]> {
   ] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", user.id).single(),
     supabase.from("announcement_reads").select("announcement_id").eq("user_id", user.id),
-    supabase
-      .from("announcements")
-      .select("id, title, body, is_urgent, published_at, target_type, target_roles, target_user_ids")
-      .order("published_at", { ascending: false })
-      .limit(30),
+    selectAnnouncementsForNotifications(supabase, 30),
     supabase
       .from("workflow_steps")
       .select("id, request_id, workflow_requests!inner(id, title, created_at)")
@@ -84,15 +81,15 @@ export async function getNotifications(): Promise<Notification[]> {
   const selfRole: string | null = selfProfile?.role ?? null;
   const readIdSet = new Set((readRecords || []).map((r) => r.announcement_id));
 
-  const announcementNotifs: Notification[] = (announcements || [])
+  const announcementNotifs: Notification[] = announcements
     .filter((a) => !readIdSet.has(a.id))
     .filter((a) => {
       if (a.target_type === "individuals") {
-        const targets: string[] = (a.target_user_ids as string[] | null) ?? [];
+        const targets: string[] = a.target_user_ids ?? [];
         return targets.length === 0 || targets.includes(user.id);
       }
       if (a.target_type !== "roles") return true;
-      const targets: string[] = (a.target_roles as string[] | null) ?? [];
+      const targets: string[] = a.target_roles ?? [];
       if (targets.length === 0) return true;
       return selfRole ? targets.includes(selfRole) : false;
     })
@@ -100,10 +97,10 @@ export async function getNotifications(): Promise<Notification[]> {
       id: `ann_${a.id}`,
       type: "announcement" as const,
       title: a.title,
-      body: a.body,
+      body: a.body ?? undefined,
       href: `/circulation/${a.id}`,
       created_at: a.published_at,
-      is_urgent: a.is_urgent,
+      is_urgent: a.is_urgent ?? undefined,
     }));
 
   type PendingStep = {
@@ -187,15 +184,20 @@ export async function getNotifications(): Promise<Notification[]> {
       };
     });
 
-  const salesFlowNotifs: Notification[] = (urgentSalesTodos ?? []).map((t) => ({
-    id: `sf_${t.id}`,
-    type: "sales_flow" as const,
-    title: t.title,
-    body: t.description ?? undefined,
-    href: t.customer_id ? `/crm/${t.customer_id}` : "/dashboard",
-    created_at: t.created_at,
-    is_urgent: true,
-  }));
+  const salesFlowNotifs: Notification[] = (urgentSalesTodos ?? []).map((t) => {
+    const hrefMatch = t.description?.match(/詳細:\s*(\/\S+)/);
+    const href = hrefMatch?.[1]
+      ?? (t.customer_id ? `/crm/${t.customer_id}` : "/dashboard");
+    return {
+      id: `sf_${t.id}`,
+      type: "sales_flow" as const,
+      title: t.title,
+      body: t.description ?? undefined,
+      href,
+      created_at: t.created_at,
+      is_urgent: true,
+    };
+  });
 
   return [
     ...announcementNotifs,

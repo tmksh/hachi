@@ -35,6 +35,10 @@ function isSameDay(a: Date, b: Date) {
   );
 }
 
+const MONTH_LABELS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"] as const;
+
+type CalendarPanel = "days" | "months" | "years";
+
 /** BRIDGE Linq 独自カレンダー（ライブラリ非依存） */
 export function BrandCalendar({
   selected,
@@ -49,8 +53,16 @@ export function BrandCalendar({
   const base = selected ?? today;
   const [viewYear, setViewYear] = useState(base.getFullYear());
   const [viewMonth, setViewMonth] = useState(base.getMonth());
+  const [panel, setPanel] = useState<CalendarPanel>("days");
 
   const days = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
+
+  /** 年グリッドの先頭（12年分） */
+  const yearStart = Math.floor(viewYear / 12) * 12;
+  const yearOptions = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => yearStart + i),
+    [yearStart],
+  );
 
   const moveMonth = (delta: number) => {
     const d = new Date(viewYear, viewMonth + delta, 1);
@@ -58,76 +70,179 @@ export function BrandCalendar({
     setViewMonth(d.getMonth());
   };
 
+  const headerLabel =
+    panel === "days"
+      ? `${viewYear}年${viewMonth + 1}月`
+      : panel === "months"
+        ? `${viewYear}年`
+        : `${yearStart}年 – ${yearStart + 11}年`;
+
+  const onHeaderClick = () => {
+    if (panel === "days") setPanel("months");
+    else if (panel === "months") setPanel("years");
+  };
+
+  const onPrev = () => {
+    if (panel === "days") moveMonth(-1);
+    else if (panel === "months") setViewYear((y) => y - 1);
+    else setViewYear((y) => y - 12);
+  };
+
+  const onNext = () => {
+    if (panel === "days") moveMonth(1);
+    else if (panel === "months") setViewYear((y) => y + 1);
+    else setViewYear((y) => y + 12);
+  };
+
   return (
     <div className={cn("w-[272px] p-3 select-none", className)}>
-      {/* ヘッダー: 月移動 */}
+      {/* ヘッダー: 月/年移動。中央クリックで月→年選択へ */}
       <div className="flex items-center justify-between px-1">
         <button
           type="button"
-          onClick={() => moveMonth(-1)}
-          aria-label="前の月"
+          onClick={onPrev}
+          aria-label={panel === "years" ? "前の年代" : panel === "months" ? "前の年" : "前の月"}
           className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-500 transition-colors hover:bg-[rgba(var(--brand-accent-rgb),0.6)] hover:text-slate-800"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <p className="text-sm font-bold tracking-wide text-slate-900">
-          {viewYear}年{viewMonth + 1}月
-        </p>
         <button
           type="button"
-          onClick={() => moveMonth(1)}
-          aria-label="次の月"
+          onClick={onHeaderClick}
+          disabled={panel === "years"}
+          className={cn(
+            "px-2 py-1 rounded-lg text-sm font-bold tracking-wide text-slate-900 transition-colors",
+            panel !== "years" && "hover:bg-[rgba(var(--brand-accent-rgb),0.6)] cursor-pointer",
+            panel === "years" && "cursor-default",
+          )}
+          title={panel === "days" ? "月を選択" : panel === "months" ? "年を選択" : undefined}
+        >
+          {headerLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          aria-label={panel === "years" ? "次の年代" : panel === "months" ? "次の年" : "次の月"}
           className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-500 transition-colors hover:bg-[rgba(var(--brand-accent-rgb),0.6)] hover:text-slate-800"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
-      {/* 曜日ヘッダー */}
-      <div className="mt-2 grid grid-cols-7">
-        {WEEKDAYS.map((w, i) => (
-          <span
-            key={w}
-            className={cn(
-              "h-8 flex items-center justify-center text-[11px] font-semibold",
-              i === 0 ? "text-rose-500" : i === 6 ? "text-sky-500" : "text-slate-500",
-            )}
-          >
-            {w}
-          </span>
-        ))}
-      </div>
+      {panel === "years" && (
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {yearOptions.map((year) => {
+            const isSelected = year === viewYear;
+            const isCurrent = year === today.getFullYear();
+            return (
+              <button
+                key={year}
+                type="button"
+                onClick={() => {
+                  setViewYear(year);
+                  setPanel("months");
+                }}
+                className={cn(
+                  "h-10 rounded-lg text-sm font-medium tabular-nums transition-colors",
+                  !isSelected && "text-slate-700 hover:bg-[rgba(var(--brand-accent-rgb),0.7)]",
+                  isCurrent && !isSelected && "ring-1 ring-inset font-bold",
+                  isSelected && "text-white font-bold shadow-sm",
+                )}
+                style={{
+                  ...(isSelected ? { background: "var(--brand-gradient)" } : {}),
+                  ...(isCurrent && !isSelected
+                    ? { ["--tw-ring-color" as string]: "var(--brand-dark)", color: "var(--brand-dark)" }
+                    : {}),
+                }}
+              >
+                {year}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {/* 日グリッド */}
-      <div className="grid grid-cols-7 gap-y-0.5">
-        {days.map(({ date, inMonth }) => {
-          const isSelected = selected != null && isSameDay(date, selected);
-          const isToday = isSameDay(date, today);
-          const dow = date.getDay();
-          return (
-            <button
-              key={date.toISOString()}
-              type="button"
-              onClick={() => onSelect(date)}
-              className={cn(
-                "h-8 w-8 mx-auto rounded-full text-sm tabular-nums flex items-center justify-center transition-colors",
-                !isSelected && "hover:bg-[rgba(var(--brand-accent-rgb),0.7)]",
-                !inMonth && "text-slate-300",
-                inMonth && !isSelected && (dow === 0 ? "text-rose-500" : dow === 6 ? "text-sky-500" : "text-slate-700"),
-                isToday && !isSelected && "ring-1 ring-inset font-bold",
-                isSelected && "text-white font-bold shadow-sm",
-              )}
-              style={{
-                ...(isSelected ? { background: "var(--brand-gradient)" } : {}),
-                ...(isToday && !isSelected ? { ["--tw-ring-color" as string]: "var(--brand-dark)", color: "var(--brand-dark)" } : {}),
-              }}
-            >
-              {date.getDate()}
-            </button>
-          );
-        })}
-      </div>
+      {panel === "months" && (
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {MONTH_LABELS.map((label, month) => {
+            const isCurrent = viewYear === today.getFullYear() && month === today.getMonth();
+            const activeMonth = month === viewMonth;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  setViewMonth(month);
+                  setPanel("days");
+                }}
+                className={cn(
+                  "h-10 rounded-lg text-sm font-medium transition-colors",
+                  !activeMonth && "text-slate-700 hover:bg-[rgba(var(--brand-accent-rgb),0.7)]",
+                  isCurrent && !activeMonth && "ring-1 ring-inset font-bold",
+                  activeMonth && "text-white font-bold shadow-sm",
+                )}
+                style={{
+                  ...(activeMonth ? { background: "var(--brand-gradient)" } : {}),
+                  ...(isCurrent && !activeMonth
+                    ? { ["--tw-ring-color" as string]: "var(--brand-dark)", color: "var(--brand-dark)" }
+                    : {}),
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
+      {panel === "days" && (
+        <>
+          {/* 曜日ヘッダー */}
+          <div className="mt-2 grid grid-cols-7">
+            {WEEKDAYS.map((w, i) => (
+              <span
+                key={w}
+                className={cn(
+                  "h-8 flex items-center justify-center text-[11px] font-semibold",
+                  i === 0 ? "text-rose-500" : i === 6 ? "text-sky-500" : "text-slate-500",
+                )}
+              >
+                {w}
+              </span>
+            ))}
+          </div>
+
+          {/* 日グリッド */}
+          <div className="grid grid-cols-7 gap-y-0.5">
+            {days.map(({ date, inMonth }) => {
+              const isSelected = selected != null && isSameDay(date, selected);
+              const isToday = isSameDay(date, today);
+              const dow = date.getDay();
+              return (
+                <button
+                  key={date.toISOString()}
+                  type="button"
+                  onClick={() => onSelect(date)}
+                  className={cn(
+                    "h-8 w-8 mx-auto rounded-full text-sm tabular-nums flex items-center justify-center transition-colors",
+                    !isSelected && "hover:bg-[rgba(var(--brand-accent-rgb),0.7)]",
+                    !inMonth && "text-slate-300",
+                    inMonth && !isSelected && (dow === 0 ? "text-rose-500" : dow === 6 ? "text-sky-500" : "text-slate-700"),
+                    isToday && !isSelected && "ring-1 ring-inset font-bold",
+                    isSelected && "text-white font-bold shadow-sm",
+                  )}
+                  style={{
+                    ...(isSelected ? { background: "var(--brand-gradient)" } : {}),
+                    ...(isToday && !isSelected ? { ["--tw-ring-color" as string]: "var(--brand-dark)", color: "var(--brand-dark)" } : {}),
+                  }}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

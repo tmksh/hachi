@@ -96,13 +96,20 @@ export function MailClient({
     }
     if (error) {
       const msgs: Record<string, string> = {
-        access_denied: "アクセスが拒否されました",
+        access_denied: "アクセスが拒否されました（同意画面で拒否、またはテストユーザー未追加）",
         token_exchange: "認証トークンの取得に失敗しました",
         db_error: "アカウント情報の保存に失敗しました",
         unknown: "不明なエラーが発生しました",
         profile_not_found: "プロフィールが見つかりません",
+        oauth_not_configured:
+          "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が未設定です。ホスティングの環境変数を設定してください",
+        oauth_placeholder: "Google OAuth の環境変数がプレースホルダのままです",
+        oauth_bad_format:
+          "GOOGLE_CLIENT_ID の形式が不正です（*.apps.googleusercontent.com である必要があります）",
+        invalid_client:
+          "Google OAuth クライアントが無効です（401: invalid_client）。テストユーザーではなく、GCPの「ウェブアプリケーション」クライアントID/SecretとリダイレクトURIを確認してください",
       };
-      toast.error(msgs[error] ?? `エラー: ${error}`);
+      toast.error(msgs[error] ?? `エラー: ${error}`, { duration: 8000 });
     }
   }, [searchParams]);
 
@@ -175,12 +182,17 @@ export function MailClient({
         }
         return;
       }
+      // クリック直後にヘッダを出して体感遅延を消す（本文は後から差し替え）
+      setSelected({
+        ...t,
+        messages: [],
+      } as unknown as ThreadDetail);
+      if (!t.is_read) {
+        setThreads((prev) => prev.map((x) => (x.id === t.id ? { ...x, is_read: true } : x)));
+        void markThreadRead(t.id);
+      }
       const detail = await getEmailThread(t.id);
       setSelected(detail as ThreadDetail);
-      if (!t.is_read) {
-        await markThreadRead(t.id);
-        setThreads((prev) => prev.map((x) => (x.id === t.id ? { ...x, is_read: true } : x)));
-      }
     } catch {
       toast.error("読み込みに失敗");
     }

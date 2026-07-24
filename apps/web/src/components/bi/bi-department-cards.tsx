@@ -93,24 +93,6 @@ function SortableDeptCard({
       ? Math.max(0, Math.round(dept.target - dept.revenue))
       : null;
 
-  const statusClass =
-    status.tone === "good"
-      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-      : status.tone === "warn"
-        ? "bg-amber-50 text-amber-900 border-amber-200"
-        : status.tone === "bad"
-          ? "bg-rose-50 text-rose-800 border-rose-200"
-          : "bg-muted/50 text-muted-foreground border-border";
-
-  const barColor =
-    status.tone === "good"
-      ? "#059669"
-      : status.tone === "warn"
-        ? "#d97706"
-        : status.tone === "bad"
-          ? "#e11d48"
-          : "var(--brand-dark)";
-
   const YoyIcon =
     yoy.tone === "good" ? TrendingUp : yoy.tone === "bad" ? TrendingDown : Minus;
 
@@ -127,12 +109,12 @@ function SortableDeptCard({
         isDragging && "opacity-60 shadow-lg",
       )}
     >
-      {/* 部門名 + 評価バッジ */}
+      {/* 部門名 + 評価 */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className="w-3 h-3 rounded-full shrink-0"
-            style={{ backgroundColor: dept.color }}
+            className="w-2.5 h-2.5 rounded-full shrink-0 bg-[var(--brand-dark)]"
+            style={dept.color ? { backgroundColor: dept.color } : undefined}
           />
           <div className="min-w-0">
             <p className="font-bold text-base text-foreground truncate leading-tight">{dept.name}</p>
@@ -140,12 +122,7 @@ function SortableDeptCard({
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold",
-              statusClass,
-            )}
-          >
+          <span className="inline-flex items-center rounded-md bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             {status.label}
           </span>
           <button
@@ -163,7 +140,7 @@ function SortableDeptCard({
       {/* いちばん大事：売上と達成 */}
       <div>
         <p className="text-xs text-muted-foreground">いまの売上</p>
-        <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5 leading-none">
+        <p className="text-2xl font-bold tabular-nums tracking-tight mt-0.5 leading-none text-foreground">
           {fmtMan(dept.revenue)}
         </p>
         <p className="text-xs text-muted-foreground mt-1.5">
@@ -175,61 +152,51 @@ function SortableDeptCard({
             <span className="ml-1.5">（あと {fmtMan(remain)}）</span>
           )}
           {remain === 0 && hasTarget && (
-            <span className="ml-1.5 text-emerald-700 font-medium">目標クリア</span>
+            <span className="ml-1.5 font-medium text-foreground">目標クリア</span>
           )}
         </p>
       </div>
 
-      {/* 達成バー */}
+      {/* 達成バー（ブランド色のみ） */}
       <div className="space-y-1.5">
         <div className="flex items-end justify-between gap-2">
           <span className="text-xs text-muted-foreground">目標達成まで</span>
           <span
             className={cn(
               "text-xl font-bold tabular-nums leading-none",
-              status.tone === "good" && "text-emerald-700",
-              status.tone === "warn" && "text-amber-700",
-              status.tone === "bad" && "text-rose-600",
-              status.tone === "muted" && "text-muted-foreground",
+              rate == null ? "text-muted-foreground" : "text-[var(--brand-dark)]",
             )}
           >
             {rate != null ? `${rate}%` : "—"}
           </span>
         </div>
-        <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-2 w-full rounded-full bg-muted/70 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{
               width: `${Math.min(rate ?? 0, 100)}%`,
-              backgroundColor: barColor,
+              background: "var(--brand-gradient)",
             }}
           />
         </div>
       </div>
 
-      {/* 前年比較（平易な言い方） */}
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs",
-          yoy.tone === "good" && "bg-emerald-50/80 text-emerald-900",
-          yoy.tone === "bad" && "bg-rose-50/80 text-rose-900",
-          yoy.tone === "muted" && "bg-muted/40 text-muted-foreground",
-        )}
-      >
-        <YoyIcon className="h-3.5 w-3.5 shrink-0" />
+      {/* 前年比較 */}
+      <div className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs bg-muted/40 text-foreground/80">
+        <YoyIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
-          <p className="font-semibold">{yoy.text}</p>
-          <p className="text-[10px] opacity-80 mt-0.5">
+          <p className="font-medium">{yoy.text}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
             前年の売上 {fmtMan(dept.prevRevenue)}
           </p>
         </div>
       </div>
 
-      {/* 粗利（シンプル） */}
+      {/* 粗利 */}
       <div className="flex items-baseline justify-between gap-2 pt-0.5">
         <div>
           <p className="text-xs text-muted-foreground">粗利（もうけ）</p>
-          <p className="text-base font-bold tabular-nums mt-0.5">{fmtMan(dept.grossProfit)}</p>
+          <p className="text-base font-bold tabular-nums mt-0.5 text-foreground">{fmtMan(dept.grossProfit)}</p>
         </div>
         <p className="text-sm tabular-nums text-muted-foreground">
           粗利率 <span className="font-semibold text-foreground">{dept.gpRate}%</span>
@@ -243,18 +210,13 @@ function SortableDeptCard({
           </p>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">販管費の目安</span>
-            <span className="font-medium tabular-nums text-rose-600">
-              −{fmtMan(dept.deptSga)}
+            <span className="font-medium tabular-nums text-foreground">
+              {fmtMan(dept.deptSga)}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">営業利益の目安</span>
-            <span
-              className={cn(
-                "font-bold tabular-nums",
-                dept.deptOp < 0 ? "text-rose-600" : "text-emerald-700",
-              )}
-            >
+            <span className="font-bold tabular-nums text-foreground">
               {fmtSigned(dept.deptOp)}
             </span>
           </div>
@@ -335,7 +297,7 @@ export function BiDepartmentCards({
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={order} strategy={rectSortingStrategy}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {ordered.map((dept) => (
               <SortableDeptCard
                 key={dept.id}

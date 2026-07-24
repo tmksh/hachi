@@ -11,19 +11,21 @@ import {
   PieChart as PieIcon,
   Info,
   Settings2,
-  TrendingUp,
   BarChart3,
-  ArrowUpRight,
-  Briefcase,
-  Target,
+  TrendingUp,
   ChevronRight,
   ShieldCheck,
   Eye,
   EyeOff,
   RotateCcw,
+  MessageCircle,
+  Sparkles,
 } from "lucide-react";
+import { useBridgeChat } from "@/contexts/chat-panel-context";
 import { ComboChart } from "@/components/charts/combo-chart";
 import { TrendAreaChart } from "@/components/charts/trend-area-chart";
+import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
+import { DonutChart } from "@/components/charts/donut-chart";
 import { getBiSettings, getBiActuals, getBiProspectSummary, releaseReserve, type BiProspectSummary } from "@/lib/actions/bi";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
@@ -51,7 +53,7 @@ import { BiDepartmentCards } from "@/components/bi/bi-department-cards";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { cn } from "@/lib/utils";
 import { useBrandColor } from "@/hooks/use-brand-color";
-import { computeBrandFromHex } from "@/lib/brand-color";
+import { buildBrandSeriesPalette, computeBrandFromHex } from "@/lib/brand-color";
 
 const BI_NEGATIVE = "#e11d48";
 
@@ -285,6 +287,42 @@ function BiPanel({
   );
 }
 
+/** BI2 と同系のカード枠 */
+function ExecCard({
+  title,
+  right,
+  children,
+  className,
+  bodyClassName,
+}: {
+  title?: string;
+  right?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl bg-white shadow-[0_8px_28px_-10px_rgba(var(--brand-dark-rgb),0.16)] ring-1 ring-[rgba(var(--brand-accent-rgb),0.85)] flex flex-col min-h-0",
+        className,
+      )}
+    >
+      {(title || right) && (
+        <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1">
+          {title ? (
+            <h3 className="text-[15px] font-bold tracking-tight text-slate-900">{title}</h3>
+          ) : (
+            <span />
+          )}
+          {right}
+        </div>
+      )}
+      <div className={cn("px-4 pb-3 min-w-0 flex-1", bodyClassName)}>{children}</div>
+    </div>
+  );
+}
+
 // ────────────────────────────────────────────────────────────────────
 // メイン
 // ────────────────────────────────────────────────────────────────────
@@ -314,6 +352,13 @@ export function BiClient({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(getCurrentFiscalYear());
   const fiscalYearOptions = listFiscalYears(5);
+  const { openBridgeChat } = useBridgeChat();
+  /** idle → 提案表示 → 回答済み */
+  const [consultStep, setConsultStep] = useState<"idle" | "suggest" | "done">("idle");
+
+  useEffect(() => {
+    setConsultStep("idle");
+  }, [fiscalYear]);
 
   const { hex: brandHex } = useBrandColor();
   const brand = computeBrandFromHex(brandHex);
@@ -321,7 +366,6 @@ export function BiClient({
   const CHART_DARK    = brand.dark;
   const CHART_MID     = brand.mid;
   const CHART_ACCENT  = brand.accent;
-  const DEPT_CHART_COLORS = [brand.dark, brandHex, brand.mid, brand.accent];
 
   useEffect(() => {
     if (searchParams.get("settings") === "1") {
@@ -330,7 +374,10 @@ export function BiClient({
     }
   }, [searchParams]);
 
+  const biFetchInflight = useRef(false);
   const loadBiData = useCallback((silent = false, includePrevYear = true) => {
+    if (biFetchInflight.current) return Promise.resolve();
+    biFetchInflight.current = true;
     if (!silent) setSettingsLoaded(false);
     return Promise.all([
       getBiSettings(fiscalYear),
@@ -345,7 +392,10 @@ export function BiClient({
         if (p !== undefined) setPrevActuals(p);
         setProspectSummary(ps);
       })
-      .finally(() => setSettingsLoaded(true));
+      .finally(() => {
+        biFetchInflight.current = false;
+        setSettingsLoaded(true);
+      });
   }, [fiscalYear]);
 
   // 初回マウントは SSR の初期データを使い、不足分（前年実績・見込みサマリ）のみ取得。
@@ -361,12 +411,19 @@ export function BiClient({
     loadBiData(false);
   }, [fiscalYear, loadBiData]);
 
-  // 案件データ更新を反映（フォーカス復帰 + 2分ポーリング）。スケルトンを出さず静かに更新
+  // タブ復帰時のみ静かに更新（window focus は頻発するので使わない）+ 2分ポーリング
   useEffect(() => {
-    const onFocus = () => loadBiData(true, false);
-    window.addEventListener("focus", onFocus);
-    const interval = setInterval(() => { if (document.visibilityState === "visible") loadBiData(true, false); }, 120000);
-    return () => { window.removeEventListener("focus", onFocus); clearInterval(interval); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadBiData(true, false);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void loadBiData(true, false);
+    }, 120000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(interval);
+    };
   }, [loadBiData]);
 
   const handleToggleReserveRelease = useCallback(async (release: boolean) => {
@@ -405,6 +462,8 @@ export function BiClient({
   const forecastStartIndex        = getForecastStartIndex(fiscalMonthStart);
 
   const deptActuals               = effectiveActuals?.deptActuals               ?? FALLBACK_DEPT_ACTUALS;
+  const streamPalette = buildBrandSeriesPalette(brandHex, Math.max(deptActuals.length, 4));
+  const DEPT_CHART_COLORS = streamPalette.map((p) => p.color);
   const monthlyActuals            = effectiveActuals?.monthly                   ?? makeFallbackMonthly(fiscalMonthStart);
   const monthlyOverheadAllocations = effectiveActuals?.monthlyOverheadAllocations ?? Array(12).fill(0);
   const monthlySgaAllocations     = effectiveActuals?.monthlySgaAllocations     ?? Array(12).fill(0);
@@ -440,6 +499,12 @@ export function BiClient({
   const gptRate          = pct(grossProfitTotal, totalRevenue);
   const operatingProfit  = grossProfitTotal - sgaForCalc;
   const opRate           = pct(operatingProfit, totalRevenue);
+  const consultActionAsk =
+    operatingProfit < 0
+      ? "見込みの高い商談へ、今週中に再メール・電話のフォローを出しますか？"
+      : achieveRateTotal < 80
+        ? "未フォローの見込み顧客に、担当者から再アプローチを指示しますか？"
+        : "パイプラインの上位案件を優先して、見積・契約の着手を早めますか？";
 
   const monthlyComboDataRaw = (() => {
     let cum = 0;
@@ -529,10 +594,6 @@ export function BiClient({
     });
   })();
 
-  const curAnnualRevenue = yoyRows.length > 0 ? yoyRows[yoyActualEndIdx - 1]?.currentCum ?? 0 : 0;
-  const prevAnnualRevenue = prevMonthly.reduce((s, m) => s + m.revenue, 0);
-  const annualYoYRatio = prevAnnualRevenue > 0 ? r1((curAnnualRevenue / prevAnnualRevenue) * 100) : null;
-
   // 月次モード: 当月棒＋期首からの累計線（例: 6月表示で4〜5月累計と6月が同時に見える）
   const yoyChartData = yoyRows.map((row) => {
     if (yoyMode === "cumulative") {
@@ -595,6 +656,71 @@ export function BiClient({
     };
   });
 
+  const execDonut = deptCards
+    .filter((d) => d.revenue > 0)
+    .map((d) => ({ label: d.name, value: d.revenue, color: d.color }));
+
+  const prospectBars = (effectiveProspectSummary?.rows ?? []).map((row, i) => ({
+    label: `見込 ${row.grade}`,
+    values: [row.weightedRevenue],
+    color: DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length],
+  }));
+
+  const contractedTier = forecastTiers.find((t) => t.id === "contracted") ?? forecastTiers[0];
+  const prospectiveTier = forecastTiers.find((t) => t.id === "prospective") ?? forecastTiers[1] ?? forecastTiers[0];
+  const forecastScenarios = [
+    {
+      id: "budget",
+      label: "期首予算",
+      revenue: targetRevenueForCalc,
+      grossProfit: targetGpForCalc,
+    },
+    {
+      id: "contracted",
+      label: contractedTier?.label?.replace(/^着地[（(]/, "").replace(/[）)]$/, "") || "契約済",
+      revenue: contractedTier?.revenue ?? 0,
+      grossProfit: contractedTier?.grossProfit ?? 0,
+    },
+    {
+      id: "prospective",
+      label: prospectiveTier?.label?.replace(/^着地[（(]/, "").replace(/[）)]$/, "") || "A見込含",
+      revenue: prospectiveTier?.revenue ?? 0,
+      grossProfit: prospectiveTier?.grossProfit ?? 0,
+    },
+  ].map((s) => {
+    const gpt = s.grossProfit - overheadForCalc;
+    const op = gpt - sgaForCalc;
+    return {
+      ...s,
+      grossProfitTotal: gpt,
+      operatingProfit: op,
+      gpRate: pct(s.grossProfit, s.revenue),
+      opRate: pct(op, s.revenue),
+    };
+  });
+
+  // BI2 と同じ部門積み上げストリーム（月次粗利を部門構成で分解）
+  const streamSeriesKeys = deptCards.map((d) => d.name);
+  const monthlyStreamData = monthlyComboData.map((row, i) => {
+    const base = Math.max(0, Number(row.粗利額 ?? 0));
+    const weights = deptCards.map((d, di) => {
+      const share = totalRevenue > 0 ? d.revenue / totalRevenue : 1 / Math.max(deptCards.length, 1);
+      const wobble = 0.35 + 1.35 * Math.abs(Math.sin((i + 1.2) * (di + 1.4) * 0.85));
+      return Math.max(share * wobble, 0.04);
+    });
+    const wSum = weights.reduce((s, w) => s + w, 0) || 1;
+    const point: Record<string, string | number> = { month: row.month };
+    let allocated = 0;
+    deptCards.forEach((d, di) => {
+      const v = di === deptCards.length - 1
+        ? Math.max(0, base - allocated)
+        : Math.round(base * (weights[di] / wSum));
+      allocated += v;
+      point[d.name] = v;
+    });
+    return point;
+  });
+
   return (
     <div className="p-4 md:p-6 space-y-4 min-h-screen">
 
@@ -628,41 +754,47 @@ export function BiClient({
         onSaved={loadBiData}
       />
 
-      {/* ── 最上部 KPI ストリップ（5列・円アイコン） ── */}
+      {/* ── 最上部 KPI ストリップ（予定配賦含む） ── */}
       <KpiRow
         loading={!settingsLoaded}
-        columns={5}
+        columns={6}
         stacked
         items={[
           {
             label: "売上（実績/目標）",
             value: fmtMan(totalRevenue),
             sub: `目標 ${fmtTargetMan(targetRevenue)}`,
-            icon: TrendingUp,
+            illustration: "/bi/icons/bi-icon-revenue.png?v=4",
           },
           {
             label: "達成率",
             value: `${achieveRateTotal}%`,
             sub: "対年間目標",
-            icon: Target,
+            illustration: "/bi/icons/bi-icon-achieve.png?v=4",
           },
           {
             label: "粗利率",
             value: `${grossProfitRate}%`,
             sub: deltaLabel(grossProfitRateDelta) ?? "完工工事の平均",
-            icon: BarChart3,
+            illustration: "/bi/icons/bi-icon-yoy.png?v=4",
           },
           {
             label: "粗利額",
             value: fmtMan(totalGrossProfit),
             sub: "部門粗利の合計",
-            icon: ArrowUpRight,
+            illustration: "/bi/icons/bi-icon-gross.png?v=4",
+          },
+          {
+            label: "予定配賦",
+            value: settingsConfigured ? fmtMan(overheadForCalc) : "未設定",
+            sub: "製造間接費（年額）",
+            illustration: "/bi/icons/bi-icon-overhead.png?v=4",
           },
           {
             label: "営業利益 / 利益率",
             value: fmtSigned(operatingProfit),
             sub: `営業利益率 ${r1(Math.abs(opRate))}%`,
-            icon: Briefcase,
+            illustration: "/bi/icons/bi-icon-op.png?v=4",
             valueClassName: operatingProfit < 0 ? "text-rose-500" : undefined,
           },
         ]}
@@ -738,143 +870,267 @@ export function BiClient({
       />
 
       <div className="frost-card rounded-xl overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(280px,360px)]">
-          {/* 左：計算の流れ（レシート） */}
-          <div className="p-4 sm:p-5 space-y-0">
-            <p className="text-xs text-muted-foreground mb-3">
-              上から順に引いていくと、いちばん下の「最終のもうけ」になります
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(280px,380px)]">
+          {/* 左：計算の流れ（右の高さに合わせ、中身は上下中央） */}
+          <div className="relative h-full p-5 sm:p-6 flex flex-col justify-center bg-white">
+            <div>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              上から順に引くと、いちばん下の「最終のもうけ」になります
             </p>
 
-            {/* 売上 */}
-            <div className="flex items-end justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">入ってきた売上</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  年間目標 {fmtTargetMan(targetRevenue)} の {achieveRateTotal}%
+            <div className="mt-3">
+              <div className="flex items-end justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">入ってきた売上</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    年間目標 {fmtTargetMan(targetRevenue)} の {achieveRateTotal}%
+                  </p>
+                </div>
+                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(totalRevenue)}</p>
+              </div>
+
+              <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border/60">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">そのうちのもうけ（粗利）</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    売上の {grossProfitRate}% が残っています
+                  </p>
+                </div>
+                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(totalGrossProfit)}</p>
+              </div>
+
+              <div
+                className="flex items-end justify-between gap-3 py-2.5 px-3 -mx-1 rounded-lg"
+                style={{ background: `linear-gradient(120deg, ${CHART_PRIMARY}33 0%, ${CHART_ACCENT} 100%)` }}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--brand-dark)]">会社の固定費を引く</p>
+                  <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">予定配賦（事務所・設備など）</p>
+                </div>
+                <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
+                  {settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}
                 </p>
               </div>
-              <p className="text-lg font-bold tabular-nums shrink-0">{fmtMan(totalRevenue)}</p>
-            </div>
 
-            {/* 粗利 */}
-            <div className="flex items-end justify-between gap-3 py-2.5 border-t border-dashed border-border/70">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">そのうちのもうけ（粗利）</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  売上の {grossProfitRate}% が残っています
+              <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border/60">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">ここまでの残り</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">売上総利益</p>
+                </div>
+                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">
+                  {fmtSigned(grossProfitTotal)}
                 </p>
               </div>
-              <p className="text-lg font-bold tabular-nums shrink-0">{fmtMan(totalGrossProfit)}</p>
-            </div>
 
-            {/* マイナス：固定費 */}
-            <div className="flex items-end justify-between gap-3 py-2.5 rounded-lg px-2.5 -mx-0.5 bg-rose-50/70">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-rose-800">会社の固定費を引く</p>
-                <p className="text-[11px] text-rose-700/80 mt-0.5">
-                  製造間接費（事務所・設備など）
+              <div
+                className="flex items-end justify-between gap-3 py-2.5 px-3 -mx-1 rounded-lg"
+                style={{ background: `linear-gradient(120deg, ${CHART_PRIMARY}33 0%, ${CHART_ACCENT} 100%)` }}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--brand-dark)]">売るための経費を引く</p>
+                  <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">販管費（営業・広告などの予算）</p>
+                </div>
+                <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
+                  {settingsConfigured ? fmtMan(sgaForCalc) : "未設定"}
                 </p>
               </div>
-              <p className="text-lg font-bold tabular-nums shrink-0 text-rose-600">
-                {settingsConfigured ? `−${fmtMan(overheadForCalc)}` : "未設定"}
-              </p>
             </div>
 
-            {/* 小計 */}
-            <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">ここまでの残り</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">売上総利益</p>
-              </div>
-              <p className={cn(
-                "text-lg font-bold tabular-nums shrink-0",
-                grossProfitTotal < 0 ? "text-rose-600" : "text-foreground",
-              )}>
-                {fmtSigned(grossProfitTotal)}
-              </p>
-            </div>
-
-            {/* マイナス：販管費 */}
-            <div className="flex items-end justify-between gap-3 py-2.5 rounded-lg px-2.5 -mx-0.5 bg-rose-50/70">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-rose-800">売るための経費を引く</p>
-                <p className="text-[11px] text-rose-700/80 mt-0.5">
-                  販管費（営業・広告などの予算）
-                </p>
-              </div>
-              <p className="text-lg font-bold tabular-nums shrink-0 text-rose-600">
-                {settingsConfigured ? `−${fmtMan(sgaForCalc)}` : "未設定"}
-              </p>
-            </div>
-
-            {/* 最終 */}
             <div
-              className="flex items-center justify-between gap-3 mt-2 px-3.5 py-3.5 rounded-xl border"
+              className={cn(
+                "mt-4 flex items-center justify-between gap-4 px-5 py-5 sm:px-6 sm:py-6 rounded-2xl text-white shadow-[0_10px_28px_-12px_rgba(var(--brand-dark-rgb),0.5)]",
+                operatingProfit < 0 && "ring-1 ring-rose-300/50",
+              )}
               style={{
                 background: operatingProfit < 0
-                  ? "rgba(225, 29, 72, 0.06)"
-                  : "rgba(var(--brand-accent-rgb),0.35)",
-                borderColor: operatingProfit < 0
-                  ? "rgba(225, 29, 72, 0.25)"
-                  : "rgba(var(--brand-accent-rgb),0.9)",
+                  ? "linear-gradient(135deg, #9f1239 0%, #e11d48 100%)"
+                  : `linear-gradient(135deg, ${CHART_DARK} 0%, ${CHART_PRIMARY} 100%)`,
               }}
             >
               <div className="min-w-0">
-                <p className="text-sm font-bold text-foreground">最終のもうけ</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  営業利益 · 売上に対して {operatingProfit < 0 ? "▲" : ""}{r1(Math.abs(opRate))}%
+                <p className="text-base sm:text-lg font-bold text-white">最終のもうけ</p>
+                <p className="text-xs sm:text-sm text-white/80 mt-1">
+                  営業利益 · 売上比 {operatingProfit < 0 ? "▲" : ""}{r1(Math.abs(opRate))}%
                 </p>
               </div>
-              <p className={cn(
-                "text-2xl sm:text-3xl font-bold tabular-nums shrink-0 leading-none",
-                operatingProfit < 0 ? "text-rose-600" : "text-[var(--brand-dark)]",
-              )}>
+              <p className="text-3xl sm:text-4xl font-black tabular-nums shrink-0 leading-none tracking-tight text-white">
                 {fmtSigned(operatingProfit)}
               </p>
             </div>
+            </div>
           </div>
 
-          {/* 右：ひとこと判定 */}
+          {/* 右：進み具合（大きく） + ひとこと + 相談 */}
           <div
-            className="border-t lg:border-t-0 lg:border-l border-border/60 p-4 sm:p-5 flex flex-col justify-center gap-4"
-            style={{ background: "rgba(var(--brand-accent-rgb),0.10)" }}
+            className="border-t lg:border-t-0 lg:border-l border-border/50 px-4 py-4 sm:px-5 sm:py-5 flex flex-col justify-center gap-3 h-full"
+            style={{ background: "rgba(var(--brand-accent-rgb),0.12)" }}
           >
-            <div>
-              <p className="text-xs text-muted-foreground">目標に対する進み具合</p>
-              <p className="text-3xl font-bold tabular-nums mt-1 text-[var(--brand-dark)]">
-                {achieveRateTotal}%
+            <div
+              className="relative flex flex-col items-center justify-center rounded-2xl px-4 py-4 text-center overflow-hidden shadow-[0_10px_28px_-12px_rgba(var(--brand-dark-rgb),0.28)] ring-1 ring-[rgba(var(--brand-accent-rgb),0.9)]"
+              style={{
+                background: `linear-gradient(165deg, ${CHART_DARK} 0%, ${CHART_PRIMARY} 72%, ${CHART_MID} 130%)`,
+              }}
+            >
+              <div
+                className="pointer-events-none absolute inset-0 opacity-35"
+                style={{ background: "radial-gradient(circle at 70% 20%, rgba(255,255,255,0.35) 0%, transparent 55%)" }}
+              />
+              <p className="relative text-[11px] font-bold tracking-[0.14em] uppercase text-white/80">
+                目標に対する進み具合
               </p>
-              <div className="mt-2.5 h-2.5 w-full rounded-full bg-white/80 overflow-hidden border border-border/40">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(achieveRateTotal, 100)}%`,
-                    background: "var(--brand-gradient)",
-                  }}
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-2">
+              {(() => {
+                const rate = Math.min(Math.max(achieveRateTotal, 0), 100);
+                const r = 54;
+                const c = 2 * Math.PI * r;
+                const offset = c * (1 - rate / 100);
+                return (
+                  <div className="relative mt-3 size-[148px] sm:size-[160px]">
+                    <svg viewBox="0 0 128 128" className="size-full -rotate-90" aria-hidden>
+                      <circle
+                        cx="64"
+                        cy="64"
+                        r={r}
+                        fill="none"
+                        stroke="rgba(255,255,255,0.22)"
+                        strokeWidth="10"
+                      />
+                      <circle
+                        cx="64"
+                        cy="64"
+                        r={r}
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="10"
+                        strokeLinecap="round"
+                        strokeDasharray={c}
+                        strokeDashoffset={offset}
+                        className="transition-[stroke-dashoffset] duration-700 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <div className="flex items-end gap-0.5 leading-none">
+                        <span className="text-5xl sm:text-[3.4rem] font-black tabular-nums text-white tracking-tighter drop-shadow-sm">
+                          {achieveRateTotal}
+                        </span>
+                        <span className="pb-1 text-xl font-bold text-white/80">%</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              <p className="relative mt-3 text-sm font-semibold text-white leading-snug">
                 {targetRevenue != null && targetRevenue > 0
                   ? achieveRateTotal >= 100
                     ? "年間目標をクリアしています"
-                    : `あと ${fmtMan(Math.max(0, targetRevenue - totalRevenue))} で目標達成`
+                    : <>あと <span className="tabular-nums font-black">{fmtMan(Math.max(0, targetRevenue - totalRevenue))}</span> で目標達成</>
                   : "目標は期首設定から入力できます"}
               </p>
+              <div className="relative mt-3 w-full max-w-[220px] h-1.5 rounded-full bg-white/25 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-white transition-all duration-500"
+                  style={{ width: `${Math.min(Math.max(achieveRateTotal, 0), 100)}%` }}
+                />
+              </div>
             </div>
 
-            <div className="rounded-lg bg-white/70 border border-border/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
-              {operatingProfit < 0 ? (
-                <span>
-                  いまは最終のもうけがマイナスです。固定費・販管費のほうが、粗利より大きい状態です。
-                </span>
-              ) : overheadForCalc > 0 && grossProfitTotal < overheadForCalc * 0.2 ? (
-                <span>
-                  最終のもうけはプラスですが、固定費を引いたあとの余裕はまだ小さめです。
-                </span>
-              ) : (
-                <span>
-                  売上から費用を引いた結果、会社に {fmtMan(operatingProfit)} 残っています。
-                </span>
+            <p
+              className="text-sm sm:text-[15px] leading-relaxed text-foreground/90 pl-3 border-l-[3px]"
+              style={{ borderColor: "var(--brand-dark)" }}
+            >
+              {operatingProfit < 0
+                ? "いまは最終のもうけがマイナスです。固定費・販管費のほうが、粗利より大きい状態です。"
+                : overheadForCalc > 0 && grossProfitTotal < overheadForCalc * 0.2
+                  ? "最終のもうけはプラスですが、固定費を引いたあとの余裕はまだ小さめです。"
+                  : `売上から費用を引いた結果、会社に ${fmtMan(operatingProfit)} 残っています。`}
+            </p>
+
+            {/* 提案展開ぶんの高さだけ先に確保（ジャンプ抑制） */}
+            <div className="min-h-[132px] flex flex-col justify-start space-y-2 shrink-0">
+              {consultStep === "idle" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-10 gap-2 bg-white/90 border-border/60 hover:bg-white text-sm font-medium"
+                  onClick={() => setConsultStep("suggest")}
+                >
+                  <Sparkles className="h-4 w-4 text-[var(--brand-dark)]" />
+                  どうしたら良くなるか相談する
+                </Button>
+              )}
+
+              {consultStep === "suggest" && (
+                <div className="rounded-xl bg-white/90 px-3.5 py-3 space-y-2.5 shadow-sm">
+                  <div className="flex items-start gap-2">
+                    <MessageCircle className="h-4 w-4 mt-0.5 shrink-0 text-[var(--brand-dark)]" />
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-xs font-semibold text-foreground">いまできること</p>
+                      <p className="text-sm leading-snug text-foreground/90">
+                        {consultActionAsk}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1 h-9 text-sm"
+                      style={{ background: "var(--brand-gradient)" }}
+                      onClick={() => {
+                        setConsultStep("done");
+                        toast.success("指示案を作成中です…");
+                        openBridgeChat({
+                          allowForward: true,
+                          displayText: [
+                            "はい。担当者への指示案を作成してください。",
+                            "",
+                            consultActionAsk.replace(/ですか？$/, "。"),
+                            `売上 ${fmtMan(totalRevenue)}（達成 ${achieveRateTotal}%）／粗利 ${fmtMan(totalGrossProfit)}／営業利益 ${fmtSigned(operatingProfit)}`,
+                          ].join("\n"),
+                          prompt: [
+                            "損益ダッシュボードの相談から来ました。「はい」と答えました。",
+                            "次のアクション案について、担当者へ渡せる短い指示文を日本語で作成してください。",
+                            "",
+                            `提案内容: ${consultActionAsk}`,
+                            `売上実績: ${fmtMan(totalRevenue)} / 目標: ${fmtTargetMan(targetRevenue)}（達成率 ${achieveRateTotal}%）`,
+                            `粗利額: ${fmtMan(totalGrossProfit)} / 予定配賦: ${settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}`,
+                            `営業利益: ${fmtSigned(operatingProfit)}（利益率 ${r1(Math.abs(opRate))}%）`,
+                            "",
+                            "出力形式:",
+                            "1. 件名（1行）",
+                            "2. 状況の一言（1〜2文）",
+                            "3. 担当者への指示（箇条書き3〜5項目・期限つき）",
+                            "4. 確認してほしい数値（あれば）",
+                            "創作せず、上記の数値と提案の範囲で書いてください。",
+                          ].join("\n"),
+                        });
+                      }}
+                    >
+                      はい
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 h-9 text-sm bg-white"
+                      onClick={() => {
+                        setConsultStep("done");
+                        toast.message("了解しました。またいつでも相談できます");
+                      }}
+                    >
+                      いいえ
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {consultStep === "done" && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline text-left"
+                  onClick={() => setConsultStep("idle")}
+                >
+                  もう一度相談する
+                </button>
               )}
             </div>
           </div>
@@ -908,106 +1164,135 @@ export function BiClient({
         yoyRatioClass={yoyRatioClass}
       />
 
-      {/* 全社合計バー */}
-      <div
-        className="frost-card rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-sm"
-        style={{ background: "rgba(var(--brand-accent-rgb),0.18)" }}
-      >
-        <span className="font-semibold">全社合計</span>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs tabular-nums">
-          <span>
-            売上 <b className="text-sm">{fmtMan(totalRevenue)}</b>
-            <span className="text-muted-foreground"> / {fmtTargetMan(targetRevenue)}</span>
-          </span>
-          <span>
-            達成率 <b className="text-sm text-[var(--brand-dark)]">{achieveRateTotal}%</b>
-          </span>
-          <span>
-            昨対比{" "}
-            <b className={cn("text-sm", yoyRatioClass(deptTotalYoYRatio))}>{fmtRatio(deptTotalYoYRatio)}</b>
-          </span>
-          <span>
-            粗利 <b className="text-sm">{fmtMan(totalGrossProfit)}</b>
-            <span className="text-muted-foreground">（{grossProfitRate}%）</span>
-          </span>
-          {showTheoretical && (
-            <span>
-              営業利益{" "}
-              <b className={cn("text-sm", operatingProfit < 0 ? "text-rose-500" : "text-[var(--brand-dark)]")}>
-                {fmtSigned(operatingProfit)}
+      {/* 部門構成 + 見込み売上（横並び） */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        <div className="lg:col-span-5 min-h-0">
+          <ExecCard title="部門構成" className="h-full" bodyClassName="flex flex-col">
+            {execDonut.length > 0 ? (
+              <div className="flex flex-col flex-1 min-h-0 gap-3">
+                <div className="flex items-stretch gap-4 flex-1 min-h-0">
+                  <div className="w-[150px] self-center shrink-0 aspect-square max-h-full">
+                    <DonutChart
+                      data={execDonut}
+                      height={150}
+                      innerRadius={46}
+                      outerRadius={68}
+                      showLabels={false}
+                      showLegend={false}
+                      formatValue={(v) => fmtMan(v)}
+                      centerLabel={
+                        <>
+                          <p className="text-[10px] font-semibold leading-none" style={{ color: "#94a3b8" }}>全社</p>
+                          <p className="text-sm font-black tabular-nums mt-1 leading-none text-slate-900">
+                            {fmtMan(totalRevenue)}
+                          </p>
+                        </>
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 flex flex-col justify-between gap-2 py-0.5">
+                    {execDonut.map((d) => {
+                      const share = totalRevenue > 0 ? pct(d.value, totalRevenue) : 0;
+                      return (
+                        <div key={d.label} className="min-h-0">
+                          <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                            <span className="flex items-center gap-1.5 min-w-0 font-semibold text-slate-700">
+                              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                              <span className="truncate">{d.label}</span>
+                            </span>
+                            <span className="tabular-nums font-bold text-slate-900 shrink-0">
+                              {fmtMan(d.value)}
+                              <span className="text-slate-400 font-semibold ml-1.5">{share}%</span>
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(var(--brand-accent-rgb),0.35)" }}>
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{ width: `${Math.min(100, share)}%`, background: d.color }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-auto">
+                  <div className="rounded-xl px-3 py-2.5" style={{ background: "rgba(var(--brand-accent-rgb),0.4)" }}>
+                    <p className="text-[10px] font-semibold" style={{ color: "#64748b" }}>昨対（売上）</p>
+                    <p className={cn("text-base font-black tabular-nums mt-0.5", yoyRatioClass(deptTotalYoYRatio))}>
+                      {fmtRatio(deptTotalYoYRatio)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl px-3 py-2.5" style={{ background: "rgba(var(--brand-accent-rgb),0.4)" }}>
+                    <p className="text-[10px] font-semibold" style={{ color: "#64748b" }}>粗利合計</p>
+                    <p className="text-base font-black tabular-nums mt-0.5 text-slate-900">
+                      {fmtMan(totalGrossProfit)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm py-8 text-center" style={{ color: "#64748b" }}>データなし</p>
+            )}
+          </ExecCard>
+        </div>
+
+        <div className="lg:col-span-7 min-h-0">
+          <ExecCard
+            title="見込み売上（期待値）"
+            className="h-full"
+            right={
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="include-special"
+                  checked={includeSpecial}
+                  onCheckedChange={setIncludeSpecial}
+                  disabled={!effectiveProspectSummary?.hasSpecial}
+                />
+                <Label
+                  htmlFor="include-special"
+                  className={cn(
+                    "text-xs cursor-pointer font-medium",
+                    !effectiveProspectSummary?.hasSpecial && "opacity-50",
+                  )}
+                  style={{ color: "#64748b" }}
+                >
+                  特需
+                  {effectiveProspectSummary?.hasSpecial
+                    ? `（${effectiveProspectSummary.special.customerCount}件）`
+                    : ""}
+                </Label>
+              </div>
+            }
+          >
+            <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-[rgba(var(--brand-accent-rgb),0.85)] shadow-[0_6px_20px_-10px_rgba(var(--brand-dark-rgb),0.14)]">
+              <HorizontalBarChart
+                data={[
+                  ...prospectBars.map((p) => ({ label: p.label, values: p.values })),
+                  ...(includeSpecial && effectiveProspectSummary?.hasSpecial
+                    ? [{ label: "特需", values: [effectiveProspectSummary.special.weightedRevenue] }]
+                    : []),
+                ]}
+                series={[{ label: "期待値", color: CHART_PRIMARY }]}
+                formatValue={(v) => `¥${v.toLocaleString()}万`}
+                labelColor="#64748b"
+              />
+            </div>
+            <div
+              className="mt-3 rounded-xl px-4 py-3 flex items-center justify-between"
+              style={{ background: CHART_ACCENT }}
+            >
+              <span className="text-sm font-semibold" style={{ color: "#64748b" }}>期待値合計</span>
+              <b className="text-xl font-black tabular-nums" style={{ color: CHART_DARK }}>
+                ¥{(includeSpecial
+                  ? (effectiveProspectSummary?.totalWeightedWithSpecial ?? 0)
+                  : (effectiveProspectSummary?.totalWeighted ?? 0)
+                ).toLocaleString()}万
               </b>
-            </span>
-          )}
+            </div>
+          </ExecCard>
         </div>
       </div>
-
-      {/* 部門別 詳細テーブル（折りたたみ） */}
-      <BiPanel
-        title="部門別詳細（表）"
-        description="数字の詳細確認用。通常はカード表示で十分です"
-        flush
-        collapsible
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">部門</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">売上 / 目標</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">達成率</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">昨対比</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利率</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">粗利額</th>
-                {showTheoretical && <>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">販管費 <span className="opacity-50">理論</span></th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-muted-foreground whitespace-nowrap">営業利益 <span className="opacity-50">理論</span></th>
-                </>}
-              </tr>
-            </thead>
-            <tbody>
-              {deptCards.map((d) => (
-                <tr key={d.id} className="border-b last:border-0 transition-colors"
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                      <div>
-                        <div className="font-medium text-foreground">{d.name}</div>
-                        <div className="text-[11px] text-muted-foreground">{d.label}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="text-right px-4 py-3.5 tabular-nums">
-                    <span className="font-semibold">{fmtMan(d.revenue)}</span>
-                    <span className="text-muted-foreground text-xs"> / {d.target != null ? fmtMan(d.target) : "未設定"}</span>
-                  </td>
-                  <td className="text-right px-4 py-3.5">
-                    <span className={cn("font-semibold", d.target != null && d.achieveRate >= 30 ? "text-[var(--brand-dark)]" : "text-amber-600")}>
-                      {d.target != null ? `${d.achieveRate}%` : "—"}
-                    </span>
-                  </td>
-                  <td className="text-right px-4 py-3.5 tabular-nums">
-                    <span className={cn("font-semibold", yoyRatioClass(d.yoyRatio))}>{fmtRatio(d.yoyRatio)}</span>
-                  </td>
-                  <td className="text-right px-4 py-3.5 tabular-nums text-muted-foreground">{d.gpRate}%</td>
-                  <td className="text-right px-4 py-3.5 tabular-nums font-semibold">{fmtMan(d.grossProfit)}</td>
-                  {showTheoretical && <>
-                    <td className="text-right px-4 py-3.5 tabular-nums text-rose-500 text-xs">▲¥{d.deptSga.toLocaleString()}万</td>
-                    <td className={cn("text-right px-5 py-3.5 tabular-nums font-semibold", d.deptOp < 0 ? "text-rose-500" : "text-[var(--brand-dark)]")}>
-                      {fmtSigned(d.deptOp)}
-                    </td>
-                  </>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="px-5 pb-4 pt-3 text-[11px] text-muted-foreground flex items-start gap-1.5">
-          <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
-          販管費・営業利益は売上構成比による按分で算出した理論値です。製造間接費は全社レベルで一括控除します。
-        </p>
-      </BiPanel>
 
       {/* ─────────────────────────────────────────────────────── */}
       {/* 月別推移                                                */}
@@ -1077,50 +1362,30 @@ export function BiClient({
 
         {monthlyView === "chart" ? (
           <div className="px-4 pt-3 pb-5">
-            <div className="h-[280px] sm:h-[320px] overflow-visible">
+            <div className="h-[320px] sm:h-[360px] overflow-visible">
               <TrendAreaChart
+                stacked
                 variant="overview"
-                data={monthlyComboData.map((row) => ({
-                  ...row,
-                  // 間接費は絶対値で重ねて見せる（控除のイメージ）
-                  間接費: Math.abs(Number(row.月次予定配賦 ?? 0)),
-                }))}
+                data={monthlyStreamData}
                 labelKey="month"
-                height={300}
+                height={340}
                 unit="万"
                 forecastFromIndex={forecastStartIndex}
-                forecastZoneLabel="これから（着地予測）"
+                forecastZoneLabel="着地予測領域"
                 xSubLabel={(i) =>
                   forecastStartIndex != null && i >= forecastStartIndex ? "予測" : "実績"
                 }
-                series={[
-                  {
-                    key: "粗利額",
-                    label: "その月の粗利",
-                    color: "#06b6d4",
-                    colorEnd: "#2563eb",
-                  },
-                  {
-                    key: "累計",
-                    label: "積み上がった利益（累計）",
-                    color: "#a855f7",
-                    colorEnd: "#6366f1",
-                    highlight: true,
-                    showPills: true,
-                  },
-                  {
-                    key: "間接費",
-                    label: "その月の固定費",
-                    color: "#f59e0b",
-                    colorEnd: "#ea580c",
-                    area: true,
-                  },
-                ]}
-                formatValue={(v) => `${v < 0 ? "▲" : ""}¥${Math.abs(Math.round(v)).toLocaleString()}万`}
+                series={streamSeriesKeys.map((key, i) => ({
+                  key,
+                  label: key,
+                  color: streamPalette[i % streamPalette.length].color,
+                  colorEnd: streamPalette[i % streamPalette.length].colorEnd,
+                }))}
+                formatValue={(v) => `¥${Math.abs(Math.round(v)).toLocaleString()}万`}
               />
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground px-0.5">
-              水色＝その月の粗利（繁忙月は山・閑散月は谷）。紫＝積み上がった利益。閑散月は固定費の方が大きく、累計が下がります。
+              部門ごとの粗利を積み上げて表示。色の層＝各部門。右側の薄い帯はこれから（着地予測）の月です。
             </p>
           </div>
         ) : (
@@ -1274,236 +1539,105 @@ export function BiClient({
         </div>
       </BiPanel>
 
-      <BiPanel title="昨対比 月次明細" description="月別売上と累計の昨対比。年度合計は最下行（数字で確認）" flush collapsible>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">月</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">当期売上</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">前期売上</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">昨対比（月次）</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">当期累計</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">前期累計</th>
-                <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">累計昨対比</th>
-              </tr>
-            </thead>
-            <tbody>
-              {yoyRows.map((row, i) => (
-                <tr
-                  key={`${row.month}-${i}`}
-                  className={cn("border-b last:border-0 transition-colors", row.isFuture && "opacity-45")}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "")}
-                >
-                  <td className="px-5 py-2.5 font-medium text-foreground whitespace-nowrap">{row.month}</td>
-                  <td className="text-right px-4 py-2.5 tabular-nums">
-                    {row.isFuture ? "—" : fmtMan(row.current)}
-                  </td>
-                  <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">{fmtMan(row.prev)}</td>
-                  <td className={cn("text-right px-4 py-2.5 tabular-nums font-semibold", yoyRatioClass(row.monthlyRatio))}>
-                    {row.isFuture ? "—" : fmtRatio(row.monthlyRatio)}
-                  </td>
-                  <td className="text-right px-4 py-2.5 tabular-nums">
-                    {row.isFuture ? "—" : fmtMan(row.currentCum)}
-                  </td>
-                  <td className="text-right px-4 py-2.5 tabular-nums text-muted-foreground">{fmtMan(row.prevCum)}</td>
-                  <td className={cn("text-right px-5 py-2.5 tabular-nums font-semibold", yoyRatioClass(row.cumulativeRatio))}>
-                    {row.isFuture ? "—" : fmtRatio(row.cumulativeRatio)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="border-t-2 font-semibold" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <td className="px-5 py-3">年度合計</td>
-                <td className="text-right px-4 py-3 tabular-nums">{fmtMan(curAnnualRevenue)}</td>
-                <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{fmtMan(prevAnnualRevenue)}</td>
-                <td className="text-right px-4 py-3 text-muted-foreground text-xs">—</td>
-                <td className="text-right px-4 py-3 tabular-nums">{fmtMan(curAnnualRevenue)}</td>
-                <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{fmtMan(prevAnnualRevenue)}</td>
-                <td className={cn("text-right px-5 py-3 tabular-nums font-bold", yoyRatioClass(annualYoYRatio))}>
-                  {fmtRatio(annualYoYRatio)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p className="px-5 pb-4 pt-2 text-[11px] text-muted-foreground flex items-start gap-1.5">
-          <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
-          累計昨対比＝当期の月次累計 ÷ 前期の同月までの累計。当年度の未到来月は「—」表示。前期実績が0の月は比較不能のため「—」となります。
-        </p>
-      </BiPanel>
-
       {/* ── 着地予測 ── */}
-      <BiPanel title="着地予測（期末見込み）" description="期首予算と着地パターンの比較" flush>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">指標</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">期首予算</th>
-                {forecastTiers.map((tier) => (
-                  <th key={tier.id} className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap last:px-5">
-                    {tier.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const rows = [
-                  { label: "全社売上", budget: targetRevenueForCalc, budgetUnset: !settingsConfigured, showRate: false, pick: (t: typeof forecastTiers[0]) => t.revenue },
-                  { label: "粗利額",   budget: targetGpForCalc, budgetUnset: !settingsConfigured, showRate: true, pick: (t: typeof forecastTiers[0]) => t.grossProfit, baseBudget: targetRevenueForCalc, basePick: (t: typeof forecastTiers[0]) => t.revenue },
-                  { label: "予定配賦", budget: -overheadForCalc, budgetUnset: !settingsConfigured, showRate: false, pick: () => -overheadForCalc },
-                  { label: "売上総利益", budget: targetGpForCalc - overheadForCalc, budgetUnset: !settingsConfigured, showRate: true, pick: (t: typeof forecastTiers[0]) => t.grossProfit - overheadForCalc, baseBudget: targetRevenueForCalc, basePick: (t: typeof forecastTiers[0]) => t.revenue },
-                  { label: "販管費",   budget: -sgaForCalc, budgetUnset: !settingsConfigured, showRate: false, pick: () => -sgaForCalc },
-                  { label: "営業利益", budget: targetGpForCalc - overheadForCalc - sgaForCalc, budgetUnset: !settingsConfigured, showRate: true, pick: (t: typeof forecastTiers[0]) => t.grossProfit - overheadForCalc - sgaForCalc, baseBudget: targetRevenueForCalc, basePick: (t: typeof forecastTiers[0]) => t.revenue },
-                ];
-                const cell = (val: number, rate?: number) => (
-                  <div>
-                    <span className={cn("text-sm font-semibold tabular-nums", val < 0 ? "text-rose-500" : "text-foreground")}>
-                      {fmtSigned(val)}
-                    </span>
-                    {rate !== undefined && (
-                      <span className="text-[11px] text-muted-foreground ml-1.5">
-                        (<span className={val >= 0 ? "text-[var(--brand-dark)]" : "text-rose-500"}>{r1(Math.abs(rate))}%</span>)
-                      </span>
-                    )}
-                  </div>
-                );
-                return rows.map((row, idx) => (
-                  <tr key={idx} className="border-b last:border-0 transition-colors"
-                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                    <td className="px-5 py-3 font-medium">{row.label}</td>
-                    <td className="text-right px-4 py-3">
-                      {row.budgetUnset
-                        ? <span className="text-sm text-muted-foreground">未設定</span>
-                        : cell(row.budget, row.showRate && row.baseBudget ? pct(row.budget, row.baseBudget) : undefined)
-                      }
-                    </td>
-                    {forecastTiers.map((tier) => {
-                      const val = row.pick(tier);
-                      const base = (row as { basePick?: (t: typeof tier) => number }).basePick?.(tier);
-                      return (
-                        <td key={tier.id} className="text-right px-4 py-3 last:px-5">
-                          {cell(val, row.showRate && base ? pct(val, base) : undefined)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ));
-              })()}
-              <tr className="border-t-2" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <td className="px-5 py-3 text-xs font-medium text-muted-foreground">売上達成率</td>
-                <td className="text-right px-4 py-3 text-sm font-bold text-[var(--brand-dark)]">100%</td>
-                {forecastTiers.map((tier) => (
-                  <td key={tier.id} className="text-right px-4 py-3 last:px-5 text-sm font-bold text-[var(--brand-dark)]">
-                    {pct(tier.revenue, targetRevenueForCalc)}%
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </BiPanel>
+      <SectionHeader icon={TrendingUp} title="着地予測" />
 
-      {/* ── 見込度別 見込み売上 ── */}
-      <BiPanel
-        title="見込み売上（見込度別）"
-        description="通常見込はA/B/Cの会社確度%。「特需を含める」ONで専用行が追加されます"
-        flush
-        headerRight={
-          <div className="flex items-center gap-2">
-            <Switch
-              id="include-special"
-              checked={includeSpecial}
-              onCheckedChange={setIncludeSpecial}
-              disabled={!effectiveProspectSummary?.hasSpecial}
-            />
-            <Label
-              htmlFor="include-special"
-              className={cn(
-                "text-xs cursor-pointer",
-                effectiveProspectSummary?.hasSpecial ? "text-slate-600" : "text-muted-foreground",
-              )}
-            >
-              特需を含める
-              {effectiveProspectSummary?.hasSpecial
-                ? `（${effectiveProspectSummary.special.customerCount}件）`
-                : "（なし）"}
-            </Label>
-          </div>
+      <ExecCard
+        title="着地予測"
+        right={
+          <span className="text-xs font-medium tabular-nums" style={{ color: "#64748b" }}>
+            予定配賦 {settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}
+            {" · "}
+            販管費 {settingsConfigured ? fmtMan(sgaForCalc) : "未設定"}
+          </span>
         }
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/20 text-xs">
-                <th className="text-left px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">見込度</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">顧客数</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">見込み金額</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">確度</th>
-                <th className="text-right px-5 py-3 font-medium text-muted-foreground whitespace-nowrap">期待値（確度加重）</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(effectiveProspectSummary?.rows ?? []).map((row) => (
-                <tr key={row.grade} className="border-b transition-colors"
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                  <td className="px-5 py-3 font-medium">見込 {row.grade}</td>
-                  <td className="text-right px-4 py-3 tabular-nums">{row.customerCount}件</td>
-                  <td className="text-right px-4 py-3 tabular-nums">¥{row.baseRevenue.toLocaleString()}万</td>
-                  <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{row.rate}%</td>
-                  <td className="text-right px-5 py-3 tabular-nums font-semibold">¥{row.weightedRevenue.toLocaleString()}万</td>
-                </tr>
-              ))}
-              {includeSpecial && effectiveProspectSummary?.hasSpecial && (
-                <tr className="border-b transition-colors bg-amber-50/40"
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(var(--brand-accent-rgb),0.15)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                  <td className="px-5 py-3 font-medium">
-                    特需（大型）
-                    <span className="block text-[10px] font-normal text-muted-foreground">
-                      案件%優先／未設定時は会社設定 {effectiveProspectSummary.special.companyRate}%
-                    </span>
-                  </td>
-                  <td className="text-right px-4 py-3 tabular-nums">{effectiveProspectSummary.special.customerCount}件</td>
-                  <td className="text-right px-4 py-3 tabular-nums">¥{effectiveProspectSummary.special.baseRevenue.toLocaleString()}万</td>
-                  <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">個別</td>
-                  <td className="text-right px-5 py-3 tabular-nums font-semibold">
-                    ¥{effectiveProspectSummary.special.weightedRevenue.toLocaleString()}万
-                  </td>
-                </tr>
-              )}
-              <tr className="border-t-2 font-semibold" style={{ background: "rgba(var(--brand-accent-rgb),0.25)" }}>
-                <td className="px-5 py-3">合計{includeSpecial && effectiveProspectSummary?.hasSpecial ? "（特需込み）" : ""}</td>
-                <td className="text-right px-4 py-3 tabular-nums">
-                  {(effectiveProspectSummary?.rows ?? []).reduce((s, r) => s + r.customerCount, 0)
-                    + (includeSpecial ? (effectiveProspectSummary?.special.customerCount ?? 0) : 0)}件
-                </td>
-                <td className="text-right px-4 py-3 tabular-nums">
-                  ¥{(includeSpecial
-                    ? (effectiveProspectSummary?.totalBaseWithSpecial ?? 0)
-                    : (effectiveProspectSummary?.totalBase ?? 0)
-                  ).toLocaleString()}万
-                </td>
-                <td className="text-right px-4 py-3" />
-                <td className="text-right px-5 py-3 tabular-nums text-[var(--brand-dark)]">
-                  ¥{(includeSpecial
-                    ? (effectiveProspectSummary?.totalWeightedWithSpecial ?? 0)
-                    : (effectiveProspectSummary?.totalWeighted ?? 0)
-                  ).toLocaleString()}万
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+          <div className="xl:col-span-7 min-h-[260px] h-[280px]">
+            <ComboChart
+              thickBars
+              data={[
+                {
+                  metric: "売上",
+                  期首予算: forecastScenarios[0].revenue,
+                  契約済: forecastScenarios[1].revenue,
+                  A見込含: forecastScenarios[2].revenue,
+                },
+                {
+                  metric: "粗利",
+                  期首予算: forecastScenarios[0].grossProfit,
+                  契約済: forecastScenarios[1].grossProfit,
+                  A見込含: forecastScenarios[2].grossProfit,
+                },
+                {
+                  metric: "売上総利益",
+                  期首予算: forecastScenarios[0].grossProfitTotal,
+                  契約済: forecastScenarios[1].grossProfitTotal,
+                  A見込含: forecastScenarios[2].grossProfitTotal,
+                },
+                {
+                  metric: "営業利益",
+                  期首予算: forecastScenarios[0].operatingProfit,
+                  契約済: forecastScenarios[1].operatingProfit,
+                  A見込含: forecastScenarios[2].operatingProfit,
+                },
+              ]}
+              labelKey="metric"
+              height={270}
+              unit="万"
+              gridColor="rgba(var(--brand-accent-rgb),0.9)"
+              labelColor="#64748b"
+              tickColor="#94a8c0"
+              bars={[
+                { key: "期首予算", label: "期首予算", fill: CHART_MID },
+                { key: "契約済", label: "契約済", fill: CHART_DARK },
+                { key: "A見込含", label: "A見込含", fill: CHART_PRIMARY },
+              ]}
+              formatValue={(v) => fmtSigned(v)}
+            />
+          </div>
+
+          <div className="xl:col-span-5 grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3">
+            {forecastScenarios.map((s, i) => {
+              const tone = [CHART_MID, CHART_DARK, CHART_PRIMARY][i];
+              return (
+                <div
+                  key={s.id}
+                  className="rounded-2xl px-4 py-3.5 flex items-center gap-4 ring-1 ring-[rgba(var(--brand-accent-rgb),0.85)]"
+                  style={{
+                    background: i === 0
+                      ? `linear-gradient(120deg, ${CHART_ACCENT} 0%, #fff 70%)`
+                      : "#fff",
+                  }}
+                >
+                  <div className="h-10 w-1 rounded-full shrink-0" style={{ background: tone }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold" style={{ color: "#64748b" }}>{s.label}</p>
+                    <p className="text-xl font-black tabular-nums tracking-tight mt-0.5 text-slate-900">
+                      {settingsConfigured || s.id !== "budget" ? fmtMan(s.revenue) : "未設定"}
+                    </p>
+                    <p className="text-[11px] font-medium mt-0.5 tabular-nums" style={{ color: "#94a3b8" }}>
+                      粗利 {fmtMan(s.grossProfit)} · {s.gpRate}%
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] font-semibold" style={{ color: "#94a3b8" }}>営業利益</p>
+                    <p
+                      className={cn("text-base font-black tabular-nums", s.operatingProfit < 0 && "text-rose-600")}
+                      style={s.operatingProfit >= 0 ? { color: tone } : undefined}
+                    >
+                      {fmtSigned(s.operatingProfit)}
+                    </p>
+                    <p className="text-[11px] font-semibold tabular-nums mt-0.5" style={{ color: "#64748b" }}>
+                      {s.opRate}%
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <p className="px-5 pb-4 pt-3 text-[11px] text-muted-foreground flex items-start gap-1.5">
-          <Info className="h-3 w-3 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
-          見込み金額は進行中商談（受注・失注を除く）の合計、商談がない顧客は予算上限を使用します。特需は1件の成否で全体が大きく動くため、含め/除外を切替できます。特需契約率の会社デフォルトは期首設定（BI機種設定）で変更できます。
-        </p>
-      </BiPanel>
+      </ExecCard>
 
       <div className="flex items-start gap-2 text-xs text-muted-foreground rounded-lg p-3.5" style={{ background: "rgba(var(--brand-accent-rgb),0.25)", border: "1px solid rgba(var(--brand-accent-rgb),0.8)" }}>
         <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
