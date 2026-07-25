@@ -37,7 +37,7 @@ export async function getDeals() {
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "id, company_id, customer_id, title, stage, value, priority, expected_close_date, assigned_to, department_name, tags, next_action, summary, days_in_stage, notes, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!deals_assigned_to_fkey(id, display_name)",
+      "id, company_id, customer_id, title, stage, value, priority, expected_close_date, assigned_to, department_name, tags, next_action, summary, days_in_stage, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!deals_assigned_to_fkey(id, display_name)",
     )
     .order("created_at", { ascending: false })
     .limit(500);

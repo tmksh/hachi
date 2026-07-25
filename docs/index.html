@@ -37,17 +37,35 @@
     .nav-links a:hover { color: var(--text); background: rgba(107,201,179,.08); border-radius: 4px 4px 0 0; }
     .nav-links a.active { color: var(--accent-dark); border-bottom-color: var(--accent); font-weight: 600; }
 
+    /* NAV JUMP DROPDOWN */
+    .nav-jump { margin-left: auto; flex-shrink: 0; }
+    .nav-jump select {
+      -webkit-appearance: none; appearance: none;
+      font-family: 'Noto Sans JP', sans-serif; font-size: .82rem; font-weight: 600;
+      color: var(--text); background-color: #fff;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      padding: .42rem 2.1rem .42rem .9rem; cursor: pointer;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%234aab96' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right .7rem center;
+      max-width: 220px; transition: border-color .15s, box-shadow .15s;
+    }
+    .nav-jump select:hover { border-color: var(--accent); }
+    .nav-jump select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(107,201,179,.2); }
+    @media (max-width: 860px) {
+      .nav-links a:not(.active) { display: none; }
+    }
+
     /* HERO */
     .hero { background: #fff; border-bottom: 1px solid var(--border); padding: 5rem 2rem 4.5rem; }
-    .hero-inner { max-width: 960px; margin: 0 auto; }
+    .hero-inner { max-width: 960px; margin: 0 auto; text-align: center; }
     .hero-eyebrow {
       font-size: .72rem; font-weight: 700; color: var(--accent-dark);
       letter-spacing: .14em; text-transform: uppercase; margin-bottom: 1.2rem;
     }
     .hero h1 { font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; line-height: 1.18; margin-bottom: 1rem; }
     .hero h1 em { font-style: normal; color: var(--accent-dark); }
-    .hero-desc { font-size: 1rem; color: var(--muted); max-width: 540px; margin-bottom: 2.2rem; line-height: 1.85; }
-    .hero-btns { display: flex; gap: .8rem; flex-wrap: wrap; }
+    .hero-desc { font-size: 1rem; color: var(--muted); max-width: 540px; margin: 0 auto 2.2rem; line-height: 1.85; }
+    .hero-btns { display: flex; gap: .8rem; flex-wrap: wrap; justify-content: center; }
     .btn {
       display: inline-flex; align-items: center; gap: .5rem;
       padding: .6rem 1.5rem; border-radius: 8px;
@@ -61,6 +79,8 @@
     /* LAYOUT */
     .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
     section { padding: 4rem 0; border-top: 1px solid var(--border); }
+    section, .feat-block { scroll-margin-top: 70px; }
+    html { scroll-behavior: smooth; }
     .section-label {
       font-size: .7rem; font-weight: 700; color: var(--accent-dark);
       letter-spacing: .14em; text-transform: uppercase; margin-bottom: .6rem;
@@ -543,6 +563,22 @@
     .howto ol li { margin-bottom: .45rem; line-height: 1.75; }
     .howto b { color: var(--text); }
 
+    /* 詳細操作ガイド（折りたたみ） */
+    .ops { border: 1px solid var(--border); border-radius: 10px; margin: .55rem 0; background: #fff; overflow: hidden; }
+    .ops summary { cursor: pointer; padding: .72rem 1rem; font-weight: 700; font-size: .87rem; list-style: none; display: flex; align-items: center; gap: .55rem; user-select: none; }
+    .ops summary::-webkit-details-marker { display: none; }
+    .ops summary::before { content: "▸"; color: var(--accent-dark); font-size: .8rem; transition: transform .15s; }
+    .ops[open] summary::before { transform: rotate(90deg); }
+    .ops summary:hover { background: var(--accent-light); }
+    .ops summary .ops-path { font-family: 'IBM Plex Mono', monospace; font-size: .7rem; font-weight: 500; color: var(--muted); margin-left: auto; }
+    .ops-body { padding: .2rem 1.15rem 1rem; font-size: .86rem; border-top: 1px dashed var(--border); }
+    .ops-body ol { margin: .6rem 0 .3rem 1.25rem; }
+    .ops-body ol li { margin-bottom: .4rem; line-height: 1.75; }
+    .ops-body ul { margin: .6rem 0 .3rem 1.15rem; }
+    .ops-body ul li { margin-bottom: .35rem; line-height: 1.7; }
+    .ops-body p { margin: .6rem 0 .2rem; line-height: 1.75; }
+    .ops-hint { margin-top: .5rem; font-size: .8rem; color: var(--muted); line-height: 1.65; }
+
   </style>
 </head>
 <body>
@@ -554,20 +590,47 @@
     <a href="index.html#getting-started">はじめに</a>
     <a href="index.html#menu">メニュー構成</a>
     <a href="index.html#features">機能詳細</a>
-    <a href="index.html#flows">業務フロー</a>
-    <a href="index.html#roles">権限</a>
-    <a href="index.html#architecture">アーキテクチャ</a>
-    <a href="features.html">機能一覧</a>
-    <a href="api.html">外部連携</a>
     <a href="index.html#kickoff-input">導入準備</a>
-    <a href="ai.html">BRIDGE AI</a>
+  </div>
+  <div class="nav-jump">
+    <select aria-label="セクションへ移動" onchange="if(this.value){location.href=this.value;this.selectedIndex=0;}">
+      <option value="">メニューから選ぶ…</option>
+      <optgroup label="このページ">
+        <option value="#getting-started">はじめに（ログインと画面の見方）</option>
+        <option value="#menu">メニュー構成</option>
+        <option value="#features">機能詳細（一覧）</option>
+        <option value="#feat-dashboard">　├ ダッシュボード</option>
+        <option value="#feat-bi">　├ BIダッシュボード</option>
+        <option value="#feat-crm">　├ 顧客・商談管理</option>
+        <option value="#feat-quotes">　├ 見積管理</option>
+        <option value="#feat-craftsmen">　├ 職人管理</option>
+        <option value="#feat-contracts">　├ 契約管理</option>
+        <option value="#feat-constructions">　├ 工事管理</option>
+        <option value="#feat-portal">　├ ポータル各機能</option>
+        <option value="#feat-settings">　└ 設定</option>
+        <option value="#flows">業務フロー</option>
+        <option value="#constructions">工事管理（8タブ）</option>
+        <option value="#cost">工事台帳（原価管理表）</option>
+        <option value="#roles">認証・ロール権限</option>
+        <option value="#subdomain">サブドメイン</option>
+        <option value="#architecture">アーキテクチャ</option>
+        <option value="#database">データベース設計</option>
+        <option value="#accounts">ログイン情報</option>
+        <option value="#kickoff-input">導入準備</option>
+      </optgroup>
+      <optgroup label="別ページ">
+        <option value="features.html">機能一覧</option>
+        <option value="api.html">外部連携</option>
+        <option value="ai.html">BRIDGE AI</option>
+      </optgroup>
+    </select>
   </div>
 </nav>
 
 <!-- HERO -->
 <div class="hero">
   <div class="hero-inner">
-    <div class="hero-eyebrow">System Specification — v2.1（2026/07/25 現行コード準拠・全画面スクリーンショット付き）</div>
+    <div class="hero-eyebrow">System Specification — v2.2（2026/07/25 現行コード準拠・フルページスクリーンショット＋詳細操作ガイド付き）</div>
     <h1>BRIDGE Linq<br><em>統合業務支援システム</em></h1>
     <p class="hero-desc">建設業・リフォーム業向けオールインワン業務管理プラットフォーム。この仕様書は<strong>はじめてのログインから各機能の使い方まで</strong>、実際の画面キャプチャ付きで解説します。加盟店は <strong>{slug}.bridge-linq.com</strong> の専用 URL で利用します。</p>
     <div class="hero-btns">
@@ -840,8 +903,8 @@
         <div class="howto">
           <div class="howto-title">使い方（顧客の登録〜商談の進行）</div>
           <ol>
-            <li>右上の<b>「＋顧客を追加」</b>から法人／個人を選んで登録します。担当者・獲得ソース・タグも設定できます。</li>
-            <li>上部タブで<b>すべて／法人／個人／未フォロー</b>を切替、右のアイコンで<b>一覧／カード／パイプライン</b>ビューを切替できます。</li>
+            <li>右上の<b>「新規顧客」</b>から法人／個人を選んで登録します。担当者・獲得ソース・タグも設定できます（商談はパイプラインの<b>「商談を追加」</b>から）。</li>
+            <li>検索ボックスとフィルタで絞り込み、右上の切替で<b>一覧／カード／パイプライン</b>ビューを変更できます。</li>
             <li>顧客の行（カード）をクリックすると<b>顧客詳細（7タブ）</b>が開きます。</li>
             <li>「記入画面」タブで<b>見込度 A/B/C</b> や特需を設定すると BI の期待値売上に反映されます。</li>
             <li>パイプラインビューでは商談カードを<b>ドラッグ＆ドロップ</b>でステージ移動。<b>「受注」へ移動すると受注確定ダイアログ</b>が開き、見積作成 or 工事登録へ進めます。</li>
@@ -864,6 +927,69 @@
             </tbody>
           </table>
         </div>
+        <h3 class="feat-h3">詳細操作ガイド（タブごとの使い方）</h3>
+        <details class="ops">
+          <summary>記入画面 — 顧客情報の入力・編集<span class="ops-path">/crm/[id] › 記入画面</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>顧客詳細の<b>「記入画面」タブ</b>を開きます。主な項目：電話番号（携帯）・メール・EIGHT-ID・<b>契約者氏名（必須）</b>・法人／個人・会社名・部門・年齢・住所・知ったきっかけ・問い合わせ分類／日・担当者・予算感（上限／下限）・問い合わせ内容・特需・独自確度%・<b>見込度 A/B/C</b>・ステータス・タグ・備考・LINE/Slack ID。</li>
+              <li>定型項目にない情報は<b>「項目を追加」</b>で独自項目を作成できます（AI による項目提案あり）。</li>
+              <li>入力後、下部の<b>「保存」</b>（新規登録時は「登録」）をクリックすると「保存しました」と表示されます。</li>
+            </ol>
+            <div class="ops-hint">見込度 A/B/C と特需・独自確度%は BI ダッシュボードの期待値売上に反映されます。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>商談 — 要約メモと AI ステージ提案<span class="ops-path">/crm/[id] › 商談</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>商談タイムラインで活動履歴を確認し、<b>商談要約</b>のテキスト欄にメモを入力して<b>「要約を保存」</b>をクリックします。</li>
+              <li>要約テキストを<b>ドラッグ選択</b>すると、その内容から ToDo を追加できます。</li>
+              <li>AI がステージ・見込度の変更を提案した場合は、提案カードの<b>適用ボタン</b>で反映できます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>録音・要約 — 商談録音と文字起こし<span class="ops-path">/crm/[id] › 録音・要約</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「録音開始」</b>をクリックすると録音中パネルが表示されます（マイク許可が必要）。</li>
+              <li>商談終了後に<b>「録音停止」</b>をクリックすると、音声がアップロードされ自動で文字起こし・要約が実行されます（voice_jobs）。</li>
+              <li>生成された要約は編集でき、<b>「保存」</b>で確定します。「顧客メールへ送信」にチェックすると要約をそのままメール送付できます。</li>
+              <li>処理に失敗した場合は<b>「リセット」</b>でやり直せます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>ToDo — タスクの追加・完了<span class="ops-path">/crm/[id] › ToDo</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>一覧右上の<b>「新規」</b>をクリックし、<b>タイトル・期限日・メモ</b>を入力して<b>「追加」</b>を押します（「ToDoを追加しました」と表示）。</li>
+              <li>各 ToDo の<b>チェックボックス</b>で完了／未完了を切り替えます。Today / Upcoming / All の3カラムで期限別に確認できます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>スケジューリング — 面談候補日の提案と確定<span class="ops-path">/crm/[id] › スケジューリング</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>面談区分</b>（対面／オンライン／電話）、<b>希望時間帯</b>、<b>所要時間</b>を選択します。</li>
+              <li><b>「候補日を提案」</b>または<b>「AIで最適化」</b>をクリックすると、カレンダーの空きから候補日が生成されます。</li>
+              <li>候補ごとの<b>「この日時で確定 → カレンダー登録」</b>で予定として登録します。</li>
+              <li><b>「候補日の案内メール文面を生成」</b>→<b>「顧客にメール送信」</b>で、候補日を顧客へ案内できます。最後に<b>「この内容で保存」</b>で確定します。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>ドキュメント一覧 — ファイルのアップロード<span class="ops-path">/crm/[id] › ドキュメント一覧</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「アップロード」</b>をクリックすると「文書をアップロード」ダイアログが開きます。</li>
+              <li><b>文書名（必須）</b>・カテゴリを入力し、<b>ファイル（必須）</b>を選択して<b>「アップロード」</b>を押します。</li>
+              <li>アップロードしたファイルは一覧から閲覧・ダウンロードできます。</li>
+            </ol>
+          </div>
+        </details>
         <h3 class="feat-h3">商談ステージ</h3>
         <ul class="feat-ul">
           <li>ステージは会社マスタ <span class="inline-code">deal_stages</span>（設定 › CRMマスタで CRUD・並び替え・受注/失注フラグ）</li>
@@ -885,14 +1011,47 @@
         <div class="howto">
           <div class="howto-title">使い方（見積の作成〜発行）</div>
           <ol>
-            <li>右上の<b>「＋新規見積」</b>をクリックし、顧客を選択します（商談カードの「見積を作成」からも顧客・金額を引き継いで開けます）。</li>
-            <li><b>大項目（カテゴリ）</b>を追加し、その下に<b>明細行</b>（品名・数量・単位・原価・売価）を入力します。粗利・粗利率は自動計算されます。</li>
-            <li>必要に応じて<b>予備費1（会社確保分）／予備費2（現場対応分）</b>を設定します。</li>
-            <li><b>PDFプレビュー</b>で「顧客向け」「原価内訳書」を確認し、印刷／PDF保存します。</li>
-            <li>粗利率が会社基準を下回る場合はステータス変更がロックされ、<b>ワークフロー承認</b>が必要です。</li>
-            <li>改訂するときは<b>コピー作成（版管理）</b>で新しいバージョンを作ります。</li>
+            <li>一覧右上の<b>「新規見積」</b>をクリックし、「見積を作成」ダイアログで顧客名を検索・選択します（商談カードの「見積を作成」からも顧客を引き継いで開けます）。</li>
+            <li>作成画面で<b>件名（必須）</b>を入力し、<b>「大項目を追加」</b>→各大項目の<b>「詳細追加」</b>で明細行（詳細項目・数量・単位・原価・単価）を入力します。粗利・粗利率は自動計算されます。</li>
+            <li>ヘッダーの<b>「保存」</b>で見積が作成され、詳細画面へ移動します。</li>
+            <li>詳細画面で<b>予備費（会社確保分）／予備予備費（現場対応分）</b>を金額入力します（未計上の場合は警告表示）。</li>
+            <li><b>「PDFプレビュー」</b>メニューから<b>見積書（顧客向け）</b>／<b>原価内訳書（社内・予備費含む）</b>を確認し、印刷／PDF保存します。</li>
+            <li>粗利率が会社基準以上なら<b>「確定する」</b>、下回る場合は<b>「上司への承認申請」</b>からワークフロー承認を取ります（下記の詳細操作ガイド参照）。</li>
           </ol>
         </div>
+        <h3 class="feat-h3">詳細操作ガイド</h3>
+        <details class="ops">
+          <summary>明細の編集 — 大項目と詳細行<span class="ops-path">/quotes/new・/quotes/[id]</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「大項目を追加」</b>で工事区分などのカテゴリ（例：仮設工事・木工事）を作ります。</li>
+              <li>大項目内の<b>「詳細追加」</b>で行を追加し、<b>詳細項目・数量・単位・原価・単価</b>を入力します。金額＝数量×単価、粗利＝売価−原価が自動計算されます。</li>
+              <li>行・大項目は削除アイコンで削除できます。改訂は<b>コピー作成（版管理）</b>で新版を作成します（version / parent で世代管理）。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>予備費の設定<span class="ops-path">/quotes/[id]（詳細画面）</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>見積詳細のサマリー付近にある<b>「予備費（会社確保分）」「予備予備費（現場対応分）」</b>の入力欄に金額を入力します。</li>
+              <li>入力欄からフォーカスを外す（別の場所をクリックする）と自動で更新されます。</li>
+              <li>予備費は<b>原価内訳書（社内向けPDF）にのみ</b>表示され、顧客向け見積書には出ません。</li>
+            </ol>
+            <div class="ops-hint">新規作成画面（/quotes/new）には予備費欄はありません。保存後の詳細画面で設定してください。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>粗利ゲート — 上長承認の申請<span class="ops-path">/quotes/[id]（詳細画面）</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>粗利率が会社基準（既定 50%＋予備費 10%）を下回ると、確定ボタンの代わりに<b>「上司への承認申請」</b>が表示されます。</li>
+              <li>クリックすると「見積の上長承認申請」ダイアログが開きます。<b>申請コメント（粗利率低下の理由・必須）</b>と<b>承認者（必須）</b>を選択します。</li>
+              <li><b>「申請する」</b>を押すと「上長への承認申請を送信しました」と表示され、承認者のワークフロー画面に届きます。承認待ちの間は WF 詳細へのリンクが表示されます。</li>
+              <li>基準を満たしている場合はそのまま<b>「確定する」</b>で確定できます。</li>
+            </ol>
+          </div>
+        </details>
         <h3 class="feat-h3">データ構造</h3>
         <ul class="feat-ul">
           <li><span class="inline-code">estimates</span> → <span class="inline-code">estimate_categories</span>（大項目）→ <span class="inline-code">estimate_items</span>（数量・原価・売価）</li>
@@ -968,6 +1127,38 @@
             </tbody>
           </table>
         </div>
+        <h3 class="feat-h3">詳細操作ガイド（タブごとの使い方）</h3>
+        <details class="ops">
+          <summary>書類作成 — 契約書テンプレートの選択と入力<span class="ops-path">/contracts/[id] › 書類作成</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>タブ上部のテンプレートバナーで<b>「テンプレートを変更」</b>をクリックし、「テンプレートを選択」ダイアログから使用するテンプレートを選びます（テンプレートは設定 › PDF編集で作成）。</li>
+              <li>契約書フォームの各項目を入力します。入力内容は<b>自動保存</b>され、「保存済み {時刻}」と表示されます（保存ボタンはありません）。</li>
+              <li>ツールバーの操作：<b>「同期」</b>＝契約・見積の最新データをフォームへ反映、<b>「PDFフォーム」</b>＝テンプレートPDF上の入力表示、<b>「PDF出力」</b>＝PDFダウンロード、<b>「確定する」</b>＝内容を確定。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>承認WF — 社内承認の申請<span class="ops-path">/contracts/[id] › 承認WF</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「承認ワークフローに申請」</b>をクリックすると「社内承認を取りますか？」の確認が表示されます。</li>
+              <li>申請種別（契約承認など）を選択して<b>「申請する」</b>を押すと、承認者のワークフローに起票されます。</li>
+              <li>承認者はワークフロー画面で<b>承認／条件付き承認／差戻し／却下</b>を選択します。差戻しされた場合は修正後に<b>「再申請する」</b>で再度申請できます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>電子契約 — CloudSign での送信<span class="ops-path">/contracts/[id] › 電子契約</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>電子契約タブは<b>社内承認の完了後に解放</b>されます（未承認の間はロック表示）。</li>
+              <li>送信する契約書の生成方法を<b>テンプレート／Linq自動生成／手動入力</b>から選択します。</li>
+              <li>送信先の<b>メールアドレス・件名・本文</b>を入力し、<b>「電子契約を送信」</b>をクリックすると CloudSign 経由で顧客へ送信されます。</li>
+            </ol>
+            <div class="ops-hint">CloudSign の API キーは設定 › 会社情報の「クラウドサイン連携」で登録します（管理者）。</div>
+          </div>
+        </details>
         <h3 class="feat-h3">ステータス</h3>
         <p>
           <span class="status-pill">preparing</span>
@@ -1000,6 +1191,52 @@
           </ol>
         </div>
         <figure class="shot"><img src="screenshots/construction-detail.png" alt="工事詳細 — 工程表タブ（/constructions/[id]）。ガントで工程を管理し、ここから日報を追加。" loading="lazy" /><figcaption class="shot-cap">工事詳細 — 工程表タブ（/constructions/[id]）。ガントで工程を管理し、ここから日報を追加。</figcaption></figure>
+        <h3 class="feat-h3">詳細操作ガイド（タブごとの使い方）</h3>
+        <details class="ops">
+          <summary>工程表 — 工程の追加・編集と日報<span class="ops-path">/constructions/[id] › 工程表</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>左上の<b>「工程追加」</b>をクリックすると「工程を追加」ダイアログが開きます。<b>工程名（必須）</b>・開始日・終了日・担当業者・<b>依存関係（先行工程）</b>・ステータス・メモを入力して<b>「追加する」</b>を押します。</li>
+              <li>既存の工程は<b>ガントバーまたは行をクリック</b>すると「工程を編集」が開き、修正して<b>「保存する」</b>で更新します。</li>
+              <li>表示は右上の<b>日／週／月</b>で切り替えられます。</li>
+              <li><b>「日報を追加」</b>をクリックすると日報作成画面（日付・タイトル・天候・作業内容・作業人数・進捗メモ・課題）へ移動します。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>追加変更 — 設計変更の登録と承認<span class="ops-path">/constructions/[id] › 追加変更</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「追加変更を登録」</b>をクリックすると「追加変更を作成」ダイアログが開きます。</li>
+              <li><b>変更名（必須）</b>・日付・<b>変更前の見積（必須）</b>・<b>変更後の見積（必須）</b>を選択して<b>「作成する」</b>を押します。差額は自動計算されます。</li>
+              <li>作成後は行のメニューから<b>プレビュー／承認申請／承認／差戻し／クラウドサイン送信</b>を実行できます（CloudSign 未設定時は PDF 出力で代替）。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>発注書・請書 — 下請業者への発注<span class="ops-path">/constructions/[id] › 発注書・請書</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「発注書を追加」</b>（または工事台帳の「発注」ボタン）をクリックすると「発注書を作成」ダイアログが開きます。</li>
+              <li><b>発注先業者</b>・発注日・工期・完了予定日・支払予定日・<b>支払回数（1回〜12回／その他）</b>・<b>金額（税抜・必須）</b>などを入力して<b>「作成する」</b>を押します。支払回数に応じて支払スケジュールが按分されます。</li>
+              <li>一覧の<b>「申請する」</b>から承認者を選択して社内承認を申請できます。</li>
+              <li><b>「見積から取得」</b>を使うと、見積明細から複数の発注書を一括作成できます。工事台帳では<b>「選択業者に一括発注」</b>も可能です。</li>
+            </ol>
+            <div class="ops-hint">発注先の職人・業者は「職人管理（/craftsmen）」で登録したマスタから選択します。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>工事台帳 — 原価入力（自動保存）<span class="ops-path">/constructions/[id] › 工事台帳</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「参照」</b>から見積もり／追加変更の明細を台帳へ転記できます（再参照時は「既存の工事台帳を置き換えますか？」の確認あり）。</li>
+              <li>表下部の<b>「行を追加」</b>で下請業者の行を追加し、白いセルをクリックして入力します。</li>
+              <li>変更は<b>自動保存</b>されます（「保存中...」→「自動保存済み」表示。保存ボタンはありません）。</li>
+              <li><b>「コメント」</b>モードに切り替えるとセルにコメントを付けられます。</li>
+            </ol>
+            <div class="ops-hint">列構成・計算式の詳細は「<a href="#cost">工事台帳（原価管理表）</a>」セクションを参照してください。</div>
+          </div>
+        </details>
         <h3 class="feat-h3">ステータス</h3>
         <p>
           <span class="status-pill">preparing</span>
@@ -1068,11 +1305,76 @@
           <ol>
             <li><b>勤怠：</b>ダッシュボードまたは勤怠画面の時計 UI で「出勤」「退勤」をクリック。休暇はプルダウンで種別を選択します。</li>
             <li><b>申請：</b>ワークフロー画面の「＋新規申請」で種別（経費／休暇／購入／その他）を選び、フォームに入力して提出。承認者に通知されます。</li>
-            <li><b>予定：</b>カレンダーの空き枠をダブルクリックして予定を作成。Google 連携済みなら双方向で同期されます。</li>
-            <li><b>回覧：</b>「＋新規投稿」でお知らせを作成。緊急フラグを付けると全員の画面にアラートが出ます。</li>
+            <li><b>予定：</b>カレンダー右上の「作成」から予定を追加。Google 連携済みなら双方向で同期されます。</li>
+            <li><b>回覧：</b>「新規作成」でお知らせを投稿。緊急フラグを付けると全員の画面にアラートが出ます。</li>
             <li><b>文書：</b>「アップロード」からファイルを追加し、カテゴリと顧客／工事への紐付けを設定します。</li>
           </ol>
         </div>
+        <h3 class="feat-h3">詳細操作ガイド（モジュールごとの使い方）</h3>
+        <details class="ops">
+          <summary>カレンダー — 予定の作成と Google 連携<span class="ops-path">/calendar</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>右上の<b>「作成」</b>をクリックすると「予定追加」画面（/calendar/new）が開きます。</li>
+              <li><b>タイトル（必須）・開始日（必須）</b>を入力し、必要に応じて終日・終了日時・カテゴリ（営業／工事／タスク／施設／機材）・場所・<b>メンバーに共有</b>・説明を設定して<b>「保存」</b>を押します（「予定を追加しました」と表示）。</li>
+              <li><b>Google Calendar 連携：</b>左サイドの「連携アカウント」で<b>「連携する」</b>をクリックし、Google アカウントを認可します。以後、予定は双方向で同期されます。トークン切れの際は<b>「再連携（トークン更新）」</b>、解除は<b>「連携を解除」</b>。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>メール — アカウント連携と送受信<span class="ops-path">/mail</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>初回は<b>「メールを連携」</b>をクリックし、「メールサービスを連携」ダイアログで <b>Gmail</b>（Google 認証）または <b>Xserver／その他</b>（IMAP）を選択します。</li>
+              <li>IMAP の場合は<b>メールアドレス・IMAPホスト・ユーザー名・パスワード</b>を入力して<b>「接続して連携」</b>を押します。</li>
+              <li>連携後はスレッドが同期され、既読・スター・作成（/mail/compose）・返信ができます。</li>
+              <li>本文末尾に自動挿入される<b>署名</b>は、設定 › 概要 › <b>メール署名</b>タブで登録します。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>勤怠 — 打刻と休暇の記録<span class="ops-path">/attendance</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>勤務区分</b>のプルダウンで「通常勤務」または休暇区分（設定 › 勤怠設定で登録したもの）を選択します。</li>
+              <li>通常勤務の場合は<b>「出勤」／「退勤」</b>ボタンで打刻します（ダッシュボードの勤怠ウィジェットからも可能）。</li>
+              <li>休暇区分を選択した場合は<b>「休暇として記録」</b>をクリックします。</li>
+              <li>管理者は一覧のチェック（承認）／×（却下）ボタンで各メンバーの記録を承認できます。月次サマリーも同画面で確認します。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>ワークフロー — 申請と承認<span class="ops-path">/workflow</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「新規申請」</b>をクリックし、申請種別（経費／休暇／購入／その他＋会社で追加した種別）を選択します。</li>
+              <li><b>件名（必須）</b>・金額・種別ごとのカスタム項目を入力して<b>「申請」</b>を押すと、承認ルートの承認者へ通知されます。</li>
+              <li>承認者は申請詳細で<b>承認／条件付き承認／差戻し／却下</b>のいずれかを選択します（各操作に確認ダイアログあり）。</li>
+              <li>差戻しされた申請は申請者が修正のうえ再申請できます。見積の粗利ゲート承認・契約承認もこの画面に届きます。</li>
+            </ol>
+            <div class="ops-hint">申請種別や承認ルートの追加・変更は 設定 › 組織 › ワークフロー で行います（下記「設定」参照）。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>回覧板 — お知らせの投稿<span class="ops-path">/circulation</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「新規作成」</b>をクリックすると「新規お知らせ」ダイアログが開きます。</li>
+              <li><b>タイトル（必須）・本文（必須）</b>を入力し、通知対象（<b>全員に通知</b>／<b>権限（ロール）で絞る</b>）・期限・ピン留め・<b>緊急</b>を設定して<b>「投稿」</b>を押します。</li>
+              <li>緊急のお知らせが未読の場合、対象者の画面に BombAlert（全画面アラート）が表示されます。既読状況は投稿ごとに管理されます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>文書管理 — アップロードとカテゴリ<span class="ops-path">/documents</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「アップロード」</b>をクリックし、<b>文書名（必須）</b>・カテゴリを入力して<b>ファイル（必須）</b>を選択し、<b>「アップロード」</b>を押します。</li>
+              <li>一覧／グリッド表示を切り替えて検索・ダウンロード・削除ができます。顧客・工事への紐付けも可能です。</li>
+              <li>カテゴリの追加・編集・削除は<b>「カテゴリ設定」</b>から行い、<b>「保存」</b>で確定します。</li>
+            </ol>
+          </div>
+        </details>
         <div class="shot-grid">
           <figure class="shot"><img src="screenshots/calendar.png" alt="カレンダー（/calendar）" loading="lazy" /><figcaption class="shot-cap">カレンダー（/calendar）</figcaption></figure>
           <figure class="shot"><img src="screenshots/mail.png" alt="メール（/mail)" loading="lazy" /><figcaption class="shot-cap">メール（/mail)</figcaption></figure>
@@ -1097,8 +1399,8 @@
           <div class="howto-title">使い方（管理者の初期セットアップ）</div>
           <ol>
             <li><b>概要 › 会社情報</b>で社名・住所・請求締日（20日／月末）・会計開始月・見込度%（A/B/C）・CloudSign を設定します。</li>
-            <li><b>組織 › メンバー管理</b>でメールアドレスを入力してメンバーを招待し、ロールを割り当てます。</li>
-            <li><b>組織 › 権限マトリクス</b>で、ロールごとに表示するメニューを ON/OFF します（カスタムロール追加可）。</li>
+            <li><b>組織 › メンバー管理</b>の「メンバー追加」でメンバーを招待し、ロールを割り当てます。</li>
+            <li>同じ画面の<b>「ロール・権限設定」</b>で、ロールごとに使える機能を ON/OFF します（カスタムロール追加可）。</li>
             <li><b>マスタ › CRMマスタ</b>で商談ステージ・失注理由・獲得ソース・タグを自社の運用に合わせて編集します。</li>
             <li><b>連携</b>タブで Slack などのアプリ連携、API キー・Webhook を設定します。</li>
           </ol>
@@ -1108,13 +1410,152 @@
             <thead><tr><th>大タブ</th><th>サブ</th></tr></thead>
             <tbody>
               <tr><td class="td-name">概要（個人）</td><td>プロフィール／セキュリティ／通知設定／メール署名／PDF編集（管理者）。会社情報もここに表示（管理者）</td></tr>
-              <tr><td class="td-name">組織</td><td>メンバー管理（招待・ロール・権限マトリクス）／勤怠設定／ワークフロー種別</td></tr>
+              <tr><td class="td-name">組織</td><td>メンバー管理（招待・ロール変更・ロール・権限設定）／勤怠設定／ワークフロー</td></tr>
               <tr><td class="td-name">マスタ</td><td>CRMマスタ（ステージ・失注理由・ソース・タグ）／職人マスタ</td></tr>
-              <tr><td class="td-name">連携</td><td>アプリ連携（Slack 等）／API・Webhook</td></tr>
+              <tr><td class="td-name">連携</td><td>アプリ連携（Chatwork / Slack / LINE WORKS / kintone）／API・Webhook</td></tr>
             </tbody>
           </table>
         </div>
-        <div class="feat-note">PDF ビルダー専用ルート: <span class="inline-code">/settings/pdf-builder</span>。権限マトリクスの機能キーはナビ各項目＋ settings_* ＋ reserve_fee。</div>
+        <h3 class="feat-h3">詳細操作ガイド（サブメニューごとの使い方）</h3>
+        <details class="ops">
+          <summary>プロフィール — 表示名・連絡先の編集<span class="ops-path">概要 › プロフィール</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>「プロフィール」カードで<b>表示名・電話・部署・役職</b>を編集します（メールアドレスと権限はここでは変更不可）。</li>
+              <li><b>文字サイズ</b>（小／中／大）は選択すると即時に画面へ反映されます。</li>
+              <li>右下の<b>「保存」</b>をクリックすると「プロフィールを更新しました」と表示されます。</li>
+            </ol>
+            <div class="ops-hint">本部管理者は同タブ下部の「会社情報」カードで会社名・代表者名・インボイス登録番号・請求締日（月末締め／20日締め）・会計年度の始まり月・見込度A/B/C%・クラウドサイン連携を編集し、「会社情報を保存」で確定します。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>セキュリティ — パスワード変更<span class="ops-path">概要 › セキュリティ</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>「パスワード変更」カードで<b>新しいパスワード（6文字以上）</b>と<b>確認用</b>を入力します（不一致の場合はボタンが無効になり「パスワードが一致しません」と表示）。</li>
+              <li><b>「パスワードを変更」</b>をクリックすると「パスワードを変更しました」と表示されます。</li>
+            </ol>
+            <div class="ops-hint">Google ログインを使用している場合、パスワード変更は不要です。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>通知設定 — 通知の ON/OFF<span class="ops-path">概要 › 通知設定</span></summary>
+          <div class="ops-body">
+            <ul>
+              <li>トグルは4種類：<b>メール通知／プッシュ通知／承認リマインダー／日報リマインダー</b>。</li>
+              <li>スイッチを切り替えると<b>即時保存</b>され、「{項目名}を有効／無効にしました」と表示されます（保存ボタンはありません）。</li>
+            </ul>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>メール署名 — 署名テンプレートの登録<span class="ops-path">概要 › メール署名</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>「署名」欄に会社名・氏名・連絡先などを入力します。</li>
+              <li><b>「署名を保存」</b>をクリックすると「署名を保存しました」と表示され、以後メール作成時に本文末尾へ自動挿入されます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>PDF編集 — 契約書テンプレートの作成・編集（管理者）<span class="ops-path">概要 › PDF編集 → /settings/pdf-builder</span></summary>
+          <div class="ops-body">
+            <p><b>テンプレート一覧：</b>「契約書テンプレート」の<b>「新規テンプレート」</b>で新規作成、既存カードの<b>鉛筆アイコン</b>で編集、<b>ゴミ箱アイコン</b>→「削除する」で削除します。</p>
+            <p><b>編集画面の手順：</b></p>
+            <ol>
+              <li>未インポートの場合、中央の<b>「PDFをインポートする」</b>をクリック（またはドラッグ＆ドロップ）して、ベースになる PDF（最大10MB）を読み込みます。</li>
+              <li>ヘッダーで<b>テンプレート名</b>と<b>文書種別</b>を設定します。</li>
+              <li>左パレットの項目を<b>クリックして追加</b>します。<b>自動入力項目</b>（顧客名・顧客住所・工事名・工事番号・受注金額（税抜／税込）・工期開始／終了・本日日付）は契約データから自動で埋まり、<b>自由項目</b>（テキスト入力・テキストエリア・チェックボックス・署名・固定テキスト）は作成時に入力する欄になります。</li>
+              <li>追加したフィールドは PDF 上で<b>ドラッグして位置調整</b>、<b>右下ハンドルでサイズ変更</b>します。右サイドパネルでラベル・データ連携・文字サイズを設定できます。</li>
+              <li>右上の<b>「保存」</b>をクリックすると「保存しました」と表示され、一覧に戻ります。作成したテンプレートは契約詳細の「書類作成」タブで選択できます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>メンバー管理 — 招待・ロール変更・削除（管理者）<span class="ops-path">組織 › メンバー管理</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>招待：</b>右上の<b>「メンバー追加」</b>→「メンバーを招待」ダイアログで<b>表示名・メールアドレス・ロール（すべて必須）</b>を入力し、<b>「招待メールを送信」</b>をクリックします。送信後は<b>「招待リンクをコピー」</b>で URL 共有、<b>「続けて招待する」</b>で連続登録もできます。</li>
+              <li><b>ロール変更：</b>一覧の各行にあるロールのプルダウンを変更すると即時反映されます（「ロールを変更しました」）。ロール：本部管理者／施工店管理者／社員／管理者／経営層／営業／現場担当／設計士／総務／外部協力業者。</li>
+              <li><b>再送：</b>送信アイコン →「再送信する」で招待メールを再送します。</li>
+              <li><b>削除：</b>ゴミ箱アイコン →「メンバーを削除しますか？」→<b>「削除する」</b>で削除します。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>ロール・権限設定 — 機能アクセスのマトリクス（管理者）<span class="ops-path">組織 › メンバー管理（画面下部）</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>メンバー管理画面の下部にある<b>「ロール・権限設定」</b>マトリクスを表示します（ロール×機能の表）。</li>
+              <li><b>セルをクリック</b>すると ✓（許可）／—（不可）が切り替わります。</li>
+              <li>独自ロールが必要な場合は<b>「ロールを追加」</b>→「カスタムロールを追加」で<b>ロール名（必須）・ベースロール・カラー</b>を設定して<b>「追加」</b>を押します。</li>
+              <li>最後に<b>「権限を保存」</b>をクリックすると「ロール・権限設定を保存しました」と表示され、サイドバーの表示項目に反映されます。</li>
+            </ol>
+            <div class="ops-hint">機能キーはサイドバー各項目＋ settings_* ＋ reserve_fee（BI の予備費表示）。未設定の会社はデフォルトのロール表が適用されます。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>勤怠設定 — 就業時間と休暇区分（管理者）<span class="ops-path">組織 › 勤怠設定</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>就業時間：</b>始業時刻・終業時刻・休憩時間（分）を入力すると所定労働時間が表示されます。</li>
+              <li><b>休暇区分：</b>入力欄に区分名（例：慶弔休暇）を入れて<b>「追加」</b>、チップの<b>×</b>で削除します。ここで登録した区分が勤怠画面の勤務区分プルダウンに表示されます。</li>
+              <li><b>「保存」</b>をクリックすると「勤怠設定を保存しました」と表示されます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>ワークフロー — 申請種別と承認ルート（管理者）<span class="ops-path">組織 › ワークフロー</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>「種別を追加」</b>をクリックすると「申請種別を追加」ダイアログが開きます。</li>
+              <li>基本情報：<b>種別名（必須）</b>・カテゴリ・承認期限（日）を設定します。</li>
+              <li>入力項目：<b>「追加」</b>で申請フォームの項目（ラベル・型・必須・選択肢）を定義します。</li>
+              <li>デフォルト承認ルート：<b>「承認者を追加...」</b>で承認者を順に設定します（契約系は「総務ロールをルート末尾に追加」も可能）。</li>
+              <li><b>「保存」</b>で確定します。既存種別は一覧クリックで編集、ゴミ箱で削除（確認あり）。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>CRMマスタ — 商談ステージ・失注理由・タグ（管理者）<span class="ops-path">マスタ › CRMマスタ</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>商談ステージ：</b>色を選び「新しいステージ名」を入力して<b>＋</b>で追加（「ステージを追加しました」）。<b>←→</b>で並び替え、<b>鉛筆</b>でラベル編集ができます。受注／失注フラグ付きステージはパイプラインの集計に使われます。</li>
+              <li><b>失注理由／紹介元区分／顧客タグ：</b>それぞれ入力欄＋<b>＋</b>で追加、チップの<b>×</b>で削除します。</li>
+            </ol>
+            <div class="ops-hint">ここで編集した選択肢が CRM の記入画面・パイプライン・BI 集計に反映されます。</div>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>職人マスタ — 職種・資格の選択肢（管理者）<span class="ops-path">マスタ › 職人マスタ</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>職種区分</b>（例：大工）と<b>資格・保有免許</b>（例：施工管理技士）をそれぞれ入力して<b>＋</b>で追加します。</li>
+              <li>チップにカーソルを合わせると削除できます。ここで登録した選択肢が職人管理（/craftsmen）の登録フォームに表示されます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>アプリ連携 — Chatwork / Slack / LINE WORKS / kintone（管理者）<span class="ops-path">連携 › アプリ連携</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>連携したいサービスのカードで<b>「連携する」</b>をクリックします。</li>
+              <li>必要情報を入力します：<b>Chatwork</b>＝API トークン →「ルームを読み込む」→ 通知ルーム選択、<b>Slack</b>＝Incoming Webhook URL、<b>LINE WORKS</b>＝Client ID / Secret / Bot ID / Channel ID、<b>kintone</b>＝サブドメイン / API トークン / アプリ ID。</li>
+              <li>通知するイベント（新規顧客・顧客更新・商談ステージ変更など）にチェックを入れ、<b>「連携を完了」</b>をクリックします。</li>
+              <li>連携後は<b>「テスト」</b>で疎通確認、<b>「設定」</b>で変更、<b>「解除」</b>で連携解除ができます。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>API / Webhook — 開発者向け連携（管理者）<span class="ops-path">連携 › API / Webhook</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li><b>API キー発行：</b>キー名を入力して<b>「キーを発行」</b>をクリックします。<b>生のキーは発行時に一度だけ表示</b>されるため必ず控えてください。不要になったキーは無効化できます。</li>
+              <li><b>Webhook 登録：</b>通知先 URL と対象イベント（カンマ区切り）を入力して<b>「Webhook を登録」</b>をクリックします。署名検証用のシークレットが表示されます。</li>
+              <li>配信結果は<b>「Webhook 配信ログ」</b>一覧で確認できます。</li>
+            </ol>
+          </div>
+        </details>
+        <div class="feat-note">PDF ビルダー専用ルート: <span class="inline-code">/settings/pdf-builder</span>。組織・マスタ・連携タブは管理者のみ表示されます。</div>
       </div>
     </div>
 
@@ -1237,11 +1678,12 @@
     <div class="howto">
       <div class="howto-title">使い方</div>
       <ol>
-        <li>工事詳細の<b>「工事台帳」タブ</b>を開き、「＋行を追加」で下請業者の行を追加します（「参照」から見積明細のインポートも可能）。</li>
+        <li>工事詳細の<b>「工事台帳」タブ</b>を開き、「行を追加」で下請業者の行を追加します（<b>「参照」</b>から見積もり／追加変更の明細を転記することも可能。再参照時は置き換え確認あり）。</li>
         <li><b>白いセル</b>をクリックして業者名・工種・実行予算・発注額・月次請求を入力します。Enter または別セルへの移動で確定します。</li>
         <li><b>緑のセル</b>（合計・確定額・予算残・請求残・粗利）は自動計算されます。</li>
-        <li>「発注済／未発注」バッジはクリックのたびに切り替わります。</li>
-        <li>入力後、右上の<b>「保存する」</b>をクリックすると DB に保存され、リロード後も保持されます。</li>
+        <li>「発注済／未発注」バッジはクリックのたびに切り替わります。行を選択して<b>「選択業者に一括発注」</b>を押すと発注書をまとめて作成できます。</li>
+        <li>入力内容は<b>自動保存</b>されます（「保存中...」→「自動保存済み」と表示。保存ボタンはありません）。</li>
+        <li><b>「コメント」</b>モードに切り替えるとセル単位でコメントを残せます。</li>
         <li>予算残・請求残が<b>マイナスになると赤字表示</b>されるので、超過にすぐ気付けます。</li>
       </ol>
     </div>
