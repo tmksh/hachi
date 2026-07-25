@@ -452,6 +452,97 @@
       .ki-progress-wrap { margin-left: 0; width: 100%; }
       .ki-card-head { flex-direction: column; align-items: flex-start; }
     }
+  
+    /* MENU MAP */
+    .menu-map { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 2rem; }
+    .menu-group { border-bottom: 1px solid var(--border); }
+    .menu-group:last-child { border-bottom: none; }
+    .menu-group-head {
+      display: flex; align-items: center; gap: .8rem;
+      padding: .9rem 1.4rem; background: var(--bg); border-bottom: 1px solid var(--border);
+    }
+    .menu-group-key {
+      font-family: 'IBM Plex Mono', monospace; font-size: .68rem; font-weight: 700;
+      color: var(--accent-dark); background: var(--accent-light); padding: 2px 8px; border-radius: 4px;
+    }
+    .menu-group-label { font-weight: 700; font-size: .95rem; }
+    .menu-item {
+      display: grid; grid-template-columns: 160px 120px 1fr;
+      gap: 1rem; padding: 1rem 1.4rem; border-bottom: 1px solid var(--border);
+      background: var(--card); align-items: start;
+    }
+    .menu-item:last-child { border-bottom: none; }
+    .menu-item-name { font-weight: 700; font-size: .9rem; }
+    .menu-item-name a { color: var(--text); text-decoration: none; border-bottom: 1.5px dashed var(--accent); padding-bottom: 1px; transition: color .15s; }
+    .menu-item-name a:hover { color: var(--accent-dark); }
+    .menu-item-path { font-family: 'IBM Plex Mono', monospace; font-size: .75rem; color: var(--muted); }
+    .menu-item-desc { font-size: .83rem; color: var(--muted); line-height: 1.65; }
+    .feat-block {
+      border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+      margin-bottom: 1.4rem; background: var(--card);
+    }
+    .feat-block-head {
+      padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
+    }
+    .feat-block-path {
+      font-family: 'IBM Plex Mono', monospace; font-size: .72rem; color: var(--accent-dark);
+      font-weight: 600; margin-bottom: .35rem;
+    }
+    .feat-block-title { font-size: 1.1rem; font-weight: 700; margin-bottom: .35rem; }
+    .feat-block-lead { font-size: .88rem; color: var(--muted); line-height: 1.7; }
+    .feat-block-body { padding: 1.3rem 1.5rem 1.5rem; }
+    .feat-h3 { font-size: .92rem; font-weight: 700; margin: 1.3rem 0 .7rem; }
+    .feat-h3:first-child { margin-top: 0; }
+    .feat-ul { margin: 0 0 .4rem 1.1rem; font-size: .86rem; color: var(--text); }
+    .feat-ul li { margin-bottom: .35rem; line-height: 1.65; }
+    .feat-note {
+      margin-top: 1rem; padding: .85rem 1.1rem; background: var(--accent-light);
+      border: 1px solid #b2e8d8; border-radius: 8px; font-size: .82rem;
+      color: var(--accent-dark); line-height: 1.65;
+    }
+    .feat-warn {
+      margin-top: 1rem; padding: .85rem 1.1rem; background: #fff7ed;
+      border: 1px solid #fed7aa; border-radius: 8px; font-size: .82rem;
+      color: #9a3412; line-height: 1.65;
+    }
+    .toc-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: .6rem; margin-bottom: .5rem;
+    }
+    .toc-link {
+      display: block; padding: .7rem .9rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 8px; text-decoration: none;
+      color: var(--text); font-size: .84rem; font-weight: 600; transition: all .15s;
+    }
+    .toc-link:hover { border-color: var(--accent); color: var(--accent-dark); background: var(--accent-light); }
+    .toc-link span { display: block; font-size: .72rem; font-weight: 500; color: var(--muted); margin-top: .2rem; }
+    .status-pill {
+      display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: .72rem;
+      padding: 2px 8px; border-radius: 4px; background: #f3f4f6; color: #374151; margin: 0 2px 2px 0;
+    }
+    .inline-code {
+      font-family: 'IBM Plex Mono', monospace; font-size: .78rem;
+      background: #f3f4f6; padding: 1px 6px; border-radius: 4px;
+    }
+    @media (max-width: 720px) {
+      .menu-item { grid-template-columns: 1fr; gap: .35rem; }
+      .nav-links { overflow-x: auto; }
+    }
+
+  
+    /* SCREENSHOTS INLINE */
+    .shot { margin: 1.2rem 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+    .shot img { width: 100%; display: block; }
+    .shot-cap { padding: .55rem 1rem; font-size: .78rem; color: var(--muted); border-top: 1px solid var(--border); background: var(--bg); }
+    .shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.2rem; margin-top: 1.2rem; }
+    .shot-grid .shot { margin: 0; }
+    .howto { margin-top: 1.1rem; padding: 1.1rem 1.3rem; background: #fafcff; border: 1px solid #dbeafe; border-radius: 10px; }
+    .howto-title { font-size: .8rem; font-weight: 700; color: #1d4ed8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: .55rem; }
+    .howto ol { margin: 0 0 0 1.3rem; font-size: .87rem; }
+    .howto ol li { margin-bottom: .45rem; line-height: 1.75; }
+    .howto b { color: var(--text); }
+
   </style>
 </head>
 <body>
@@ -459,13 +550,13 @@
 <nav>
   <span class="nav-logo">BRIDGE</span>
   <div class="nav-links">
-    <a href="index.html">仕様書</a>
+    <a href="index.html" class="active">仕様書</a>
+    <a href="index.html#getting-started">はじめに</a>
+    <a href="index.html#menu">メニュー構成</a>
+    <a href="index.html#features">機能詳細</a>
+    <a href="index.html#flows">業務フロー</a>
+    <a href="index.html#roles">権限</a>
     <a href="index.html#architecture">アーキテクチャ</a>
-    <a href="index.html#subdomain">サブドメイン</a>
-    <a href="index.html#lead-flow">リードフロー</a>
-          <a href="index.html#construction-flow">工事フロー</a>
-          <a href="index.html#constructions">工事管理（7タブ）</a>
-          <a href="index.html#cost">工事台帳</a>
     <a href="features.html">機能一覧</a>
     <a href="api.html">外部連携</a>
     <a href="index.html#kickoff-input">導入準備</a>
@@ -476,11 +567,12 @@
 <!-- HERO -->
 <div class="hero">
   <div class="hero-inner">
-    <div class="hero-eyebrow">System Specification — v1.2（2026/05/25 サブドメイン対応反映）</div>
-    <h1>BRIDGE<br><em>統合業務支援システム</em></h1>
-    <p class="hero-desc">建設業・リフォーム業向けに設計されたオールインワン業務管理プラットフォーム。顧客管理・7タブ構成の工事管理・勤怠・ワークフロー・文書管理を一つのシステムで管理します。各加盟店は <strong>{slug}.bridge-linq.com</strong> の専用 URL で利用します。マーケティング機能は v2 非公開（ルートブロック）です。</p>
+    <div class="hero-eyebrow">System Specification — v2.1（2026/07/25 現行コード準拠・全画面スクリーンショット付き）</div>
+    <h1>BRIDGE Linq<br><em>統合業務支援システム</em></h1>
+    <p class="hero-desc">建設業・リフォーム業向けオールインワン業務管理プラットフォーム。この仕様書は<strong>はじめてのログインから各機能の使い方まで</strong>、実際の画面キャプチャ付きで解説します。加盟店は <strong>{slug}.bridge-linq.com</strong> の専用 URL で利用します。</p>
     <div class="hero-btns">
-      <a href="features.html" class="btn btn-primary">機能一覧を見る</a>
+      <a href="#getting-started" class="btn btn-primary">使い方を見る</a>
+      <a href="#menu" class="btn btn-outline">メニュー構成</a>
     </div>
   </div>
 </div>
@@ -491,23 +583,689 @@
   <section>
     <div class="section-label">Overview</div>
     <h2>システム概要</h2>
-    <p class="section-desc">BRIDGEは建設業・リフォーム業の現場と経営をひとつのプラットフォームで繋ぎます。受注から施工完了まで、すべての業務フローをカバーします。</p>
+    <p class="section-desc">受注前の顧客・商談から、見積・契約・工事・社内ポータルまでを一つのテナントで管理します。表示メニューと権限は会社ごとのロール権限マトリクスで制御できます。</p>
     <div class="overview-grid">
       <div class="overview-item">
-        <div class="overview-num">20+</div>
-        <div class="overview-title">機能モジュール</div>
-        <div class="overview-desc">CRMから工事管理・社内ポータルまで幅広い業務をカバー</div>
+        <div class="overview-num">4</div>
+        <div class="overview-title">サイドバー大項目</div>
+        <div class="overview-desc">ダッシュボード／リード／生産／ポータル（マーケは v2 非公開）</div>
       </div>
       <div class="overview-item">
-        <div class="overview-num">3</div>
-        <div class="overview-title">ロール権限</div>
-        <div class="overview-desc">本部管理者・施工店管理者・社員の3段階制御（オーナーロール廃止）</div>
+        <div class="overview-num">9+</div>
+        <div class="overview-title">システムロール</div>
+        <div class="overview-desc">レガシー3＋CSVデフォルト6＋外部協力。会社別カスタムロール可</div>
       </div>
       <div class="overview-item">
-        <div class="overview-num">30+</div>
-        <div class="overview-title">DB テーブル</div>
-        <div class="overview-desc">RLSポリシーで行レベルのマルチテナント制御を実現</div>
+        <div class="overview-num">64</div>
+        <div class="overview-title">DB マイグレーション</div>
+        <div class="overview-desc">00001〜00064。RLS で company_id 単位のマルチテナント</div>
       </div>
+    </div>
+  </section>
+
+  <!-- TOC -->
+  <section id="toc">
+    <div class="section-label">Contents</div>
+    <h2>この仕様書の構成</h2>
+    <p class="section-desc">はじめての方は「はじめに」→「メニュー構成」→ 使いたい機能の順にお読みください。</p>
+    <div class="toc-grid">
+      <a class="toc-link" href="#getting-started">はじめに<span>ログインと画面の見方</span></a>
+      <a class="toc-link" href="#menu">メニュー構成<span>サイドバー大項目とルート</span></a>
+      <a class="toc-link" href="#features">機能詳細<span>各画面の仕様と使い方</span></a>
+      <a class="toc-link" href="#flows">業務フロー<span>リード〜工事〜お金</span></a>
+      <a class="toc-link" href="#constructions">工事管理 8タブ<span>工程・台帳・発注など</span></a>
+      <a class="toc-link" href="#cost">工事台帳<span>原価管理表の列と計算</span></a>
+      <a class="toc-link" href="#roles">認証・権限<span>ロールとマトリクス</span></a>
+      <a class="toc-link" href="#subdomain">サブドメイン<span>テナント分離</span></a>
+      <a class="toc-link" href="#architecture">アーキテクチャ<span>技術スタック・DB</span></a>
+      <a class="toc-link" href="#kickoff-input">導入準備<span>キックオフ入力</span></a>
+    </div>
+  </section>
+
+  <!-- GETTING STARTED -->
+  <section id="getting-started">
+    <div class="section-label">Getting Started</div>
+    <h2>はじめに｜ログインと画面の見方</h2>
+    <p class="section-desc">初めて使う方向けに、ログインから基本画面までを説明します。</p>
+
+    <figure class="shot"><img src="screenshots/login.png" alt="ログイン画面（{slug}.bridge-linq.com/login）。メールアドレスとパスワードでログインします。" loading="lazy" /><figcaption class="shot-cap">ログイン画面（{slug}.bridge-linq.com/login）。メールアドレスとパスワードでログインします。</figcaption></figure>
+
+    <div class="howto">
+      <div class="howto-title">ログイン手順</div>
+      <ol>
+        <li>ブラウザで自社専用 URL（<b>https://{自社slug}.bridge-linq.com</b>）を開きます。slug が未発行の場合は運営にお問い合わせください。</li>
+        <li><b>メールアドレス</b>と<b>パスワード</b>を入力して「ログイン」をクリックします。</li>
+        <li>ログインに成功すると<b>ダッシュボード</b>が表示されます。パスワードを忘れた場合はログイン画面の「パスワードをお忘れですか？」から再設定できます。</li>
+      </ol>
+    </div>
+
+    <h3 class="feat-h3">画面の基本構成</h3>
+    <ul class="feat-ul">
+      <li><strong>左サイドバー：</strong>大項目（ダッシュボード／リード／生産／ポータル）。クリックで展開してページ移動します。表示される項目はロール・権限設定によって変わります。</li>
+      <li><strong>サイドバー下部：</strong>グローバル検索・通知ベル・社内チャット・BRIDGE AI。</li>
+      <li><strong>右下 BRIDGE AI：</strong>どの画面からでも AI チャットを起動でき、開いている画面の内容を踏まえて回答します。</li>
+      <li><strong>ユーザーメニュー（左下アイコン）：</strong>設定（/settings）・ログアウト。</li>
+    </ul>
+    <div class="feat-note">検証用アカウントは本ページ下部「<a href="#accounts">ログイン情報</a>」を参照してください。</div>
+  </section>
+
+  <!-- MENU MAP -->
+  <section id="menu">
+    <div class="section-label">Navigation</div>
+    <h2>メニュー構成（サイドバー正本）</h2>
+    <p class="section-desc">アプリのサイドバーは <span class="inline-code">NAV_GROUPS</span>（<span class="inline-code">apps/web/src/lib/constants.ts</span>）が正本です。会社の権限マトリクス未設定時はデフォルトのロール表、設定済みの場合は会社設定が優先されます。各行のリンクからそのまま機能詳細へ飛べます。</p>
+
+    <div class="menu-map">
+      <div class="menu-group">
+        <div class="menu-group-head">
+          <span class="menu-group-key">dashboard</span>
+          <span class="menu-group-label">ダッシュボード</span>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-dashboard">ダッシュボード</a></div>
+          <div class="menu-item-path">/dashboard</div>
+          <div class="menu-item-desc">個人向け業務ハブ。KPI・勤怠・WF・商談/工事などのウィジェットを DnD で並べ替え。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-bi">BIダッシュボード</a></div>
+          <div class="menu-item-path">/bi</div>
+          <div class="menu-item-desc">経営向け売上・粗利・着地予測・部門別・見込度別期待値。期首設定あり。</div>
+        </div>
+      </div>
+      <div class="menu-group">
+        <div class="menu-group-head">
+          <span class="menu-group-key">lead</span>
+          <span class="menu-group-label">リード</span>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-crm">顧客・商談管理</a></div>
+          <div class="menu-item-path">/crm</div>
+          <div class="menu-item-desc">顧客マスタ＋商談パイプライン（一覧/カード/カンバン）。詳細は7タブ。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-quotes">見積管理</a></div>
+          <div class="menu-item-path">/quotes</div>
+          <div class="menu-item-desc">顧客別／全見積。大項目・明細・予備費・粗利ゲート・PDF（顧客向け／原価内訳）。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-craftsmen">職人管理</a></div>
+          <div class="menu-item-path">/craftsmen</div>
+          <div class="menu-item-desc">協力業者・職人の CRUD。専門／ランク／単価。マスタは設定画面。</div>
+        </div>
+      </div>
+      <div class="menu-group">
+        <div class="menu-group-head">
+          <span class="menu-group-key">production</span>
+          <span class="menu-group-label">生産</span>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-contracts">契約管理</a></div>
+          <div class="menu-item-path">/contracts</div>
+          <div class="menu-item-desc">契約ライフサイクル。詳細7タブ（顧客／やり取り／書類／承認WF／電子契約／ファイル／見積）。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-constructions">工事管理</a></div>
+          <div class="menu-item-path">/constructions</div>
+          <div class="menu-item-desc">工事案件。詳細8タブ＋工程表からの工事日報。原価・発注・追加変更を1画面で。</div>
+        </div>
+      </div>
+      <div class="menu-group">
+        <div class="menu-group-head">
+          <span class="menu-group-key">portal</span>
+          <span class="menu-group-label">ポータル</span>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-portal">カレンダー</a></div>
+          <div class="menu-item-path">/calendar</div>
+          <div class="menu-item-desc">日／週／月。Google Calendar 連携・メンバー予定重ね表示。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-portal">メール</a></div>
+          <div class="menu-item-path">/mail</div>
+          <div class="menu-item-desc">Gmail OAuth / IMAP。スレッド同期・作成／返信・スター。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-portal">勤怠</a></div>
+          <div class="menu-item-path">/attendance</div>
+          <div class="menu-item-desc">出退勤打刻・休暇区分・月次集計。始業終業は会社設定。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-portal">ワークフロー</a></div>
+          <div class="menu-item-path">/workflow</div>
+          <div class="menu-item-desc">経費／休暇／購入／その他。多段承認・差戻し。見積粗利・契約承認とも連携。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-portal">回覧</a></div>
+          <div class="menu-item-path">/circulation</div>
+          <div class="menu-item-desc">社内お知らせ。ピン／緊急／ロール宛。未読緊急は BombAlert。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-portal">文書管理</a></div>
+          <div class="menu-item-path">/documents</div>
+          <div class="menu-item-desc">カテゴリ付きファイル保管。顧客・工事への紐付けも可能。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feat-warn">
+      <strong>ナビ外だがルートあり：</strong>
+      設定 <span class="inline-code">/settings</span>（ユーザーメニュー）、運営管理 <span class="inline-code">/admin</span>、
+      BIデザイン案 <span class="inline-code">/bi2</span>、請求 <span class="inline-code">/invoices</span>・予算 <span class="inline-code">/budget</span>（サイドバー非表示）、
+      マーケティング <span class="inline-code">/marketing/*</span>（フェーズ2・全ロール遮断）。
+      グローバル：社内チャット・BRIDGE AI パネル（メインレイアウト常時マウント）。
+    </div>
+  </section>
+
+  <!-- FEATURE DETAILS -->
+  <section id="features">
+    <div class="section-label">Feature Specs</div>
+    <h2>機能詳細（大項目 → 画面仕様と使い方）</h2>
+    <p class="section-desc">各メニューで「何ができて、どう操作するか」を実画面のキャプチャ付きで説明します。実装の正本は <span class="inline-code">apps/web</span> です。</p>
+
+    <!-- DASHBOARD -->
+    <div class="feat-block" id="feat-dashboard">
+      <div class="feat-block-head">
+        <div class="feat-block-path">ダッシュボード › /dashboard</div>
+        <div class="feat-block-title">ダッシュボード</div>
+        <p class="feat-block-lead">ログイン後の個人ハブ。ウィジェットの表示・順序・サイズをユーザー単位で保存し、日々の業務導線を集約します。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/dashboard.png" alt="ダッシュボード（/dashboard）。KPI・勤怠打刻・商談パイプライン・お知らせ・今日のフォーカスをウィジェット表示。" loading="lazy" /><figcaption class="shot-cap">ダッシュボード（/dashboard）。KPI・勤怠打刻・商談パイプライン・お知らせ・今日のフォーカスをウィジェット表示。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方</div>
+          <ol>
+            <li>上部の <b>KPI カード</b>（受注額・パイプライン・顧客数・商談数・未入金・承認待ちなど）で今月の状況を確認します。</li>
+            <li><b>勤怠打刻ウィジェット</b>の「出勤」「退勤」ボタンでその場で打刻できます。</li>
+            <li>右上の<b>「表示設定」</b>からウィジェットの表示／非表示を切り替えます。</li>
+            <li>ウィジェットは<b>ドラッグ＆ドロップで並べ替え</b>、サイズ変更も可能。レイアウトは自動保存されます。</li>
+            <li>期限切れ ToDo がある場合は上部にアラートバーが表示されます。「確認する」から今日のフォーカスへ移動します。</li>
+          </ol>
+        </div>
+        <h3 class="feat-h3">主なウィジェット</h3>
+        <ul class="feat-ul">
+          <li><strong>AIフォーカス / 勤怠 / お知らせ / ワークフロー</strong></li>
+          <li><strong>KPI：</strong>受注額・パイプライン・顧客数・進行案件・商談数・未入金・承認待ち・進行中契約</li>
+          <li><strong>一覧系：</strong>売上トレンド・商談パイプライン・最近の見積／顧客・生産サマリー・進行中工事</li>
+          <li>未フォローアップ（デフォルト非表示）</li>
+        </ul>
+        <div class="feat-note">保存先は localStorage（<span class="inline-code">dashboard-widgets-v1</span>）と DB のダッシュボード設定の併用。</div>
+      </div>
+    </div>
+
+    <!-- BI -->
+    <div class="feat-block" id="feat-bi">
+      <div class="feat-block-head">
+        <div class="feat-block-path">ダッシュボード › /bi（実験UI: /bi2）</div>
+        <div class="feat-block-title">BIダッシュボード</div>
+        <p class="feat-block-lead">経営層向けの売上・粗利・着地予測。顧客の見込度 A/B/C と会社別確度%から期待値売上を算出します。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/bi.png" alt="BIダッシュボード（/bi）。売上→粗利→営業利益の流れと部門別進捗を表示。2026-07-25 撮影。" loading="lazy" /><figcaption class="shot-cap">BIダッシュボード（/bi）。売上→粗利→営業利益の流れと部門別進捗を表示。2026-07-25 撮影。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方</div>
+          <ol>
+            <li>右上の<b>年度セレクタ</b>で対象年度を選択します（会計開始月は設定 › 会社情報）。</li>
+            <li>初回は<b>「期首設定」</b>から年間目標・製造間接費・販管費・部門別目標を入力します。</li>
+            <li><b>「いま、会社にいくら残る？」</b>で売上 → 粗利 → 固定費 → 営業利益（最終のもうけ）の流れを確認します。</li>
+            <li><b>部門別カード</b>で各部門の目標達成率・昨対を確認。カードはドラッグで並べ替えできます。</li>
+            <li>見込度 A/B/C の確度%（既定 A80/B50/C20）は<b>設定 › 会社情報</b>で調整でき、期待値売上に反映されます。</li>
+            <li>右のパネルから <b>BRIDGE AI</b> に「どうしたら良くなるか相談する」ことができます。</li>
+          </ol>
+        </div>
+        <h3 class="feat-h3">主要指標</h3>
+        <ul class="feat-ul">
+          <li>売上／粗利／売上総利益（粗利−製造間接費）／営業利益（−販管費）</li>
+          <li>目標達成・昨対比・着地ティア（契約済・A見込含など）・部門別・見込度別</li>
+          <li>予備費バナー（決算戻し）・期首設定ダイアログ</li>
+        </ul>
+        <h3 class="feat-h3">設定項目（BI設定パネル）</h3>
+        <ul class="feat-ul">
+          <li>製造間接費・販管費予算、期中変更ログ、部門別目標</li>
+          <li>予備費率（権限キー <span class="inline-code">reserve_fee</span>）、実績ソース／着地ティアのフィルタ</li>
+          <li>粗利率フォールバック、全社間接費按分（equal / revenue_share）</li>
+        </ul>
+        <div class="feat-note">関連テーブル: <span class="inline-code">bi_company_config</span> / <span class="inline-code">bi_annual_settings</span> / <span class="inline-code">bi_budget_change_log</span> / <span class="inline-code">bi_overhead_items</span> / <span class="inline-code">bi_department_targets</span>。<span class="inline-code">/bi2</span> は同系統メトリクスのカードUI（DnD・ナビ非掲載）。</div>
+      </div>
+    </div>
+
+    <!-- CRM -->
+    <div class="feat-block" id="feat-crm">
+      <div class="feat-block-head">
+        <div class="feat-block-path">リード › /crm</div>
+        <div class="feat-block-title">顧客・商談管理</div>
+        <p class="feat-block-lead">顧客マスタと商談カンバンを一体化。旧 <span class="inline-code">/deals</span> は <span class="inline-code">/crm?view=pipeline</span> へリダイレクトします。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/crm-list.png" alt="顧客・商談管理 — 一覧（/crm）。法人／個人フィルタと3ビュー切替。" loading="lazy" /><figcaption class="shot-cap">顧客・商談管理 — 一覧（/crm）。法人／個人フィルタと3ビュー切替。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方（顧客の登録〜商談の進行）</div>
+          <ol>
+            <li>右上の<b>「＋顧客を追加」</b>から法人／個人を選んで登録します。担当者・獲得ソース・タグも設定できます。</li>
+            <li>上部タブで<b>すべて／法人／個人／未フォロー</b>を切替、右のアイコンで<b>一覧／カード／パイプライン</b>ビューを切替できます。</li>
+            <li>顧客の行（カード）をクリックすると<b>顧客詳細（7タブ）</b>が開きます。</li>
+            <li>「記入画面」タブで<b>見込度 A/B/C</b> や特需を設定すると BI の期待値売上に反映されます。</li>
+            <li>パイプラインビューでは商談カードを<b>ドラッグ＆ドロップ</b>でステージ移動。<b>「受注」へ移動すると受注確定ダイアログ</b>が開き、見積作成 or 工事登録へ進めます。</li>
+          </ol>
+        </div>
+        <figure class="shot"><img src="screenshots/crm-pipeline.png" alt="商談パイプライン（/crm?view=pipeline）。カンバン DnD でステージ変更、KPI バー付き。" loading="lazy" /><figcaption class="shot-cap">商談パイプライン（/crm?view=pipeline）。カンバン DnD でステージ変更、KPI バー付き。</figcaption></figure>
+        <figure class="shot"><img src="screenshots/crm-detail.png" alt="顧客詳細（/crm/[id]）。概要・記入画面・商談・録音・ToDo・スケジューリング・ドキュメントの7タブ。" loading="lazy" /><figcaption class="shot-cap">顧客詳細（/crm/[id]）。概要・記入画面・商談・録音・ToDo・スケジューリング・ドキュメントの7タブ。</figcaption></figure>
+        <h3 class="feat-h3">顧客詳細 7タブ（/crm/[id]）</h3>
+        <div class="table-wrap" style="margin-bottom:1rem">
+          <table>
+            <thead><tr><th>タブ</th><th>内容</th></tr></thead>
+            <tbody>
+              <tr><td class="td-name">概要</td><td>商談・見積・契約・工事のサマリーと関連一覧</td></tr>
+              <tr><td class="td-name">記入画面</td><td>連絡先・予算感・問い合わせ分類・見込度 A/B/C・特需など</td></tr>
+              <tr><td class="td-name">商談</td><td>商談タイムライン、メモ、AI ステージ／見込度提案</td></tr>
+              <tr><td class="td-name">録音・要約</td><td>録音 UI・Whisper 文字起こし（voice_jobs）</td></tr>
+              <tr><td class="td-name">ToDo</td><td>Today / Upcoming / All の3カラム</td></tr>
+              <tr><td class="td-name">スケジューリング</td><td>候補日提案・メール文面生成</td></tr>
+              <tr><td class="td-name">ドキュメント一覧</td><td>顧客関連ファイルのアップロード・閲覧</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="feat-h3">商談ステージ</h3>
+        <ul class="feat-ul">
+          <li>ステージは会社マスタ <span class="inline-code">deal_stages</span>（設定 › CRMマスタで CRUD・並び替え・受注/失注フラグ）</li>
+          <li>失注理由・獲得ソース・顧客タグも同マスタ群で管理</li>
+        </ul>
+        <div class="feat-note">主要テーブル: <span class="inline-code">customers</span>（prospect_grade 等）, <span class="inline-code">deals</span>, <span class="inline-code">deal_activities</span>, <span class="inline-code">todos</span>, <span class="inline-code">voice_jobs</span>, <span class="inline-code">deal_stage_proposals</span>。</div>
+      </div>
+    </div>
+
+    <!-- QUOTES -->
+    <div class="feat-block" id="feat-quotes">
+      <div class="feat-block-head">
+        <div class="feat-block-path">リード › /quotes</div>
+        <div class="feat-block-title">見積管理</div>
+        <p class="feat-block-lead">見積の作成・版管理・粗利監視・PDF 出力。工事詳細／契約詳細からも紐付け可能です。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/quotes-list.png" alt="見積管理（/quotes）。顧客別／全見積の2ビュー。顧客カード→見積一覧→詳細へ。" loading="lazy" /><figcaption class="shot-cap">見積管理（/quotes）。顧客別／全見積の2ビュー。顧客カード→見積一覧→詳細へ。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方（見積の作成〜発行）</div>
+          <ol>
+            <li>右上の<b>「＋新規見積」</b>をクリックし、顧客を選択します（商談カードの「見積を作成」からも顧客・金額を引き継いで開けます）。</li>
+            <li><b>大項目（カテゴリ）</b>を追加し、その下に<b>明細行</b>（品名・数量・単位・原価・売価）を入力します。粗利・粗利率は自動計算されます。</li>
+            <li>必要に応じて<b>予備費1（会社確保分）／予備費2（現場対応分）</b>を設定します。</li>
+            <li><b>PDFプレビュー</b>で「顧客向け」「原価内訳書」を確認し、印刷／PDF保存します。</li>
+            <li>粗利率が会社基準を下回る場合はステータス変更がロックされ、<b>ワークフロー承認</b>が必要です。</li>
+            <li>改訂するときは<b>コピー作成（版管理）</b>で新しいバージョンを作ります。</li>
+          </ol>
+        </div>
+        <h3 class="feat-h3">データ構造</h3>
+        <ul class="feat-ul">
+          <li><span class="inline-code">estimates</span> → <span class="inline-code">estimate_categories</span>（大項目）→ <span class="inline-code">estimate_items</span>（数量・原価・売価）</li>
+          <li>ヘッダ: 見積番号・件名・小計／税／合計・原価合計・粗利／粗利率・有効期限・版（version / parent）</li>
+          <li>予備費: <span class="inline-code">reserve_fee_1_amount</span>（会社確保）／<span class="inline-code">reserve_fee_2_amount</span>（現場対応）。カテゴリ単位の率も可</li>
+        </ul>
+        <h3 class="feat-h3">ステータス</h3>
+        <p>
+          <span class="status-pill">draft</span>
+          <span class="status-pill">issued</span>
+          <span class="status-pill">sent</span>
+          <span class="status-pill">accepted</span>
+          <span class="status-pill">rejected</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- CRAFTSMEN -->
+    <div class="feat-block" id="feat-craftsmen">
+      <div class="feat-block-head">
+        <div class="feat-block-path">リード › /craftsmen</div>
+        <div class="feat-block-title">職人管理</div>
+        <p class="feat-block-lead">協力業者・職人マスタ。一覧／カード表示、専門フィルタ、詳細での単価・スキル管理。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/craftsmen.png" alt="職人管理（/craftsmen）。専門・ランク・連絡先を一覧管理。" loading="lazy" /><figcaption class="shot-cap">職人管理（/craftsmen）。専門・ランク・連絡先を一覧管理。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方</div>
+          <ol>
+            <li><b>「＋新規登録」</b>から職人・協力業者を登録します（氏名・会社名・連絡先・専門・ランク A/B/C）。</li>
+            <li>一覧では<b>専門分野フィルタ</b>と検索で絞り込みできます。</li>
+            <li>詳細画面で<b>スキル・対応エリア・契約単価・支払メモ</b>を管理します。</li>
+            <li>専門・資格の選択肢は<b>設定 › マスタ › 職人マスタ</b>で追加・編集できます。</li>
+            <li>登録した職人は工事詳細の<b>発注書・請書</b>で発注先として選択できます。</li>
+          </ol>
+        </div>
+        <div class="feat-note">作業履歴セクションは現状プレースホルダ（発注書との本連携は未完）。マスタ: <span class="inline-code">craftsmen_specialties</span> / <span class="inline-code">craftsmen_qualifications</span>。</div>
+      </div>
+    </div>
+
+    <!-- CONTRACTS -->
+    <div class="feat-block" id="feat-contracts">
+      <div class="feat-block-head">
+        <div class="feat-block-path">生産 › /contracts</div>
+        <div class="feat-block-title">契約管理</div>
+        <p class="feat-block-lead">受注後の契約ライフサイクル。書類作成・社内承認・CloudSign 電子契約までを7タブで管理します。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/contracts-list.png" alt="契約管理 — 一覧（/contracts）。ステータス・顧客・金額で契約を横断確認。" loading="lazy" /><figcaption class="shot-cap">契約管理 — 一覧（/contracts）。ステータス・顧客・金額で契約を横断確認。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方（契約書の作成〜締結）</div>
+          <ol>
+            <li>商談を「受注」にすると契約が<b>自動登録</b>されます（「＋新規契約」から手動作成も可能）。</li>
+            <li>契約をクリックして詳細を開き、<b>「書類作成」タブ</b>でテンプレートを選択して契約書 PDF を編集・プレビューします。</li>
+            <li><b>「承認WF」タブ</b>から社内承認を申請します。承認者はワークフロー画面で承認／却下／差戻しできます。</li>
+            <li>承認後、<b>「電子契約」タブ</b>から CloudSign で顧客へ送信します（未承認の間はロックされます）。</li>
+            <li><b>「見積もり」タブ</b>で見積の紐付け・閲覧、<b>「ドキュメント一覧」タブ</b>で関連ファイルを管理します。</li>
+          </ol>
+        </div>
+        <figure class="shot"><img src="screenshots/contract-detail.png" alt="契約詳細（/contracts/[id]）。顧客情報〜見積もりの7タブで契約を一元管理。" loading="lazy" /><figcaption class="shot-cap">契約詳細（/contracts/[id]）。顧客情報〜見積もりの7タブで契約を一元管理。</figcaption></figure>
+        <h3 class="feat-h3">詳細タブ（/contracts/[id]）</h3>
+        <div class="table-wrap" style="margin-bottom:1rem">
+          <table>
+            <thead><tr><th>タブ</th><th>キー</th><th>内容</th></tr></thead>
+            <tbody>
+              <tr><td class="td-name">顧客情報</td><td class="td-mono">customer</td><td>契約基本情報・顧客コンテキスト</td></tr>
+              <tr><td class="td-name">やり取り管理</td><td class="td-mono">messaging</td><td>顧客コミュニケーション・Linq メッセージ生成</td></tr>
+              <tr><td class="td-name">書類作成</td><td class="td-mono">documents</td><td>テンプレ選択・PDF フォーム編集</td></tr>
+              <tr><td class="td-name">承認WF</td><td class="td-mono">workflow</td><td>契約承認の起票・履歴</td></tr>
+              <tr><td class="td-name">電子契約</td><td class="td-mono">esign</td><td>CloudSign 送信（ロック条件あり）</td></tr>
+              <tr><td class="td-name">ドキュメント一覧</td><td class="td-mono">files</td><td>契約関連ファイル</td></tr>
+              <tr><td class="td-name">見積もり</td><td class="td-mono">estimates</td><td>紐付け見積の作成・閲覧</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="feat-h3">ステータス</h3>
+        <p>
+          <span class="status-pill">preparing</span>
+          <span class="status-pill">contracted</span>
+          <span class="status-pill">executing</span>
+          <span class="status-pill">completed</span>
+          <span class="status-pill">cancelled</span>
+        </p>
+        <div class="feat-note">電子契約タブの解放条件: 契約が contracted/executing/completed、または CloudSign 紐付け済、または WF approved。工事新規作成の対象は contracted/executing の契約。</div>
+      </div>
+    </div>
+
+    <!-- CONSTRUCTIONS -->
+    <div class="feat-block" id="feat-constructions">
+      <div class="feat-block-head">
+        <div class="feat-block-path">生産 › /constructions</div>
+        <div class="feat-block-title">工事管理</div>
+        <p class="feat-block-lead">現場の工程・原価・発注を1画面で管理。詳細は8タブ構成。日報は工程表から作成します。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/constructions-list.png" alt="工事管理 — 一覧（/constructions）。ステータス集計・担当者フィルタ・検索。" loading="lazy" /><figcaption class="shot-cap">工事管理 — 一覧（/constructions）。ステータス集計・担当者フィルタ・検索。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方（工事登録〜現場管理）</div>
+          <ol>
+            <li>受注確定後、<b>「＋新規工事」</b>で工事を登録します（契約から顧客・受注額が引き継がれます）。</li>
+            <li>一覧では<b>ステータス集計・担当者フィルタ・検索</b>で案件を絞り込みます。</li>
+            <li>工事をクリックし、<b>「工程表」タブ</b>でタスクを追加してガントチャートで期間・進捗を管理します。</li>
+            <li>工程表の<b>「日報を追加」</b>から工事日報（天候・作業内容・人数・課題）を記録します。</li>
+            <li>設計変更が出たら<b>「追加変更」タブ</b>、原価は<b>「工事台帳」タブ</b>、下請への発注は<b>「発注書・請書」タブ</b>で管理します。</li>
+          </ol>
+        </div>
+        <figure class="shot"><img src="screenshots/construction-detail.png" alt="工事詳細 — 工程表タブ（/constructions/[id]）。ガントで工程を管理し、ここから日報を追加。" loading="lazy" /><figcaption class="shot-cap">工事詳細 — 工程表タブ（/constructions/[id]）。ガントで工程を管理し、ここから日報を追加。</figcaption></figure>
+        <h3 class="feat-h3">ステータス</h3>
+        <p>
+          <span class="status-pill">preparing</span>
+          <span class="status-pill">in_progress</span>
+          <span class="status-pill">completed</span>
+          <span class="status-pill">suspended</span>
+          <span class="status-pill">delayed</span>
+        </p>
+        <h3 class="feat-h3">工事日報</h3>
+        <ul class="feat-ul">
+          <li>入口: 工程表タブ「日報を追加」→ <span class="inline-code">/constructions/[id]/reports/new</span></li>
+          <li>フィールド: 日付・タイトル・天候・内容・作業人数・進捗メモ・課題・記入者</li>
+          <li>テーブル: <span class="inline-code">construction_reports</span></li>
+        </ul>
+        <p style="margin-top:1rem;font-size:.88rem;">タブ詳細・工事台帳は下記「<a href="#constructions">工事管理（8タブ）</a>」「<a href="#cost">工事台帳</a>」セクションを参照。</p>
+      </div>
+    </div>
+
+    <!-- PORTAL -->
+    <div class="feat-block" id="feat-portal">
+      <div class="feat-block-head">
+        <div class="feat-block-path">ポータル</div>
+        <div class="feat-block-title">社内ポータル各機能</div>
+        <p class="feat-block-lead">現場以外の日常業務（予定・メール・勤怠・申請・回覧・文書）をカバーします。</p>
+      </div>
+      <div class="feat-block-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>メニュー</th><th>ルート</th><th>仕様サマリ</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="td-name">カレンダー</td>
+                <td class="td-mono">/calendar</td>
+                <td>日／週／月。予定作成、カテゴリ、Google Calendar 双方向同期、メンバー予定の重ね表示（共有設定あり）。</td>
+              </tr>
+              <tr>
+                <td class="td-name">メール</td>
+                <td class="td-mono">/mail</td>
+                <td>Gmail OAuth / IMAP(Xserver) / 手動フォワード。スレッド同期・既読・スター・作成（/mail/compose）。</td>
+              </tr>
+              <tr>
+                <td class="td-name">勤怠</td>
+                <td class="td-mono">/attendance</td>
+                <td>出退勤打刻、休暇種別（残業／休日／午前休／午後休など）、月次サマリー。始業終業は組織設定。</td>
+              </tr>
+              <tr>
+                <td class="td-name">ワークフロー</td>
+                <td class="td-mono">/workflow</td>
+                <td>種別: expense / leave / purchase / custom。ステータス draft→submitted→approved/rejected（差戻し可）。見積粗利・契約承認と連携。</td>
+              </tr>
+              <tr>
+                <td class="td-name">回覧</td>
+                <td class="td-mono">/circulation</td>
+                <td>お知らせ投稿、ピン／緊急、ロール宛、既読管理。未読緊急は BombAlert。</td>
+              </tr>
+              <tr>
+                <td class="td-name">文書管理</td>
+                <td class="td-mono">/documents</td>
+                <td>カテゴリ管理、Storage アップロード、一覧／グリッド、検索・DL・削除。顧客／工事紐付け可。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="howto">
+          <div class="howto-title">使い方（よく使う操作）</div>
+          <ol>
+            <li><b>勤怠：</b>ダッシュボードまたは勤怠画面の時計 UI で「出勤」「退勤」をクリック。休暇はプルダウンで種別を選択します。</li>
+            <li><b>申請：</b>ワークフロー画面の「＋新規申請」で種別（経費／休暇／購入／その他）を選び、フォームに入力して提出。承認者に通知されます。</li>
+            <li><b>予定：</b>カレンダーの空き枠をダブルクリックして予定を作成。Google 連携済みなら双方向で同期されます。</li>
+            <li><b>回覧：</b>「＋新規投稿」でお知らせを作成。緊急フラグを付けると全員の画面にアラートが出ます。</li>
+            <li><b>文書：</b>「アップロード」からファイルを追加し、カテゴリと顧客／工事への紐付けを設定します。</li>
+          </ol>
+        </div>
+        <div class="shot-grid">
+          <figure class="shot"><img src="screenshots/calendar.png" alt="カレンダー（/calendar）" loading="lazy" /><figcaption class="shot-cap">カレンダー（/calendar）</figcaption></figure>
+          <figure class="shot"><img src="screenshots/mail.png" alt="メール（/mail)" loading="lazy" /><figcaption class="shot-cap">メール（/mail)</figcaption></figure>
+          <figure class="shot"><img src="screenshots/attendance.png" alt="勤怠（/attendance）" loading="lazy" /><figcaption class="shot-cap">勤怠（/attendance）</figcaption></figure>
+          <figure class="shot"><img src="screenshots/workflow.png" alt="ワークフロー（/workflow）" loading="lazy" /><figcaption class="shot-cap">ワークフロー（/workflow）</figcaption></figure>
+          <figure class="shot"><img src="screenshots/circulation.png" alt="回覧（/circulation）" loading="lazy" /><figcaption class="shot-cap">回覧（/circulation）</figcaption></figure>
+          <figure class="shot"><img src="screenshots/documents.png" alt="文書管理（/documents）" loading="lazy" /><figcaption class="shot-cap">文書管理（/documents）</figcaption></figure>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="feat-block" id="feat-settings">
+      <div class="feat-block-head">
+        <div class="feat-block-path">ユーザーメニュー › /settings</div>
+        <div class="feat-block-title">設定</div>
+        <p class="feat-block-lead">個人設定と、管理者向けの組織・マスタ・外部連携を4つの大タブで構成します。</p>
+      </div>
+      <div class="feat-block-body">
+        <figure class="shot"><img src="screenshots/settings.png" alt="設定（/settings）。概要／組織／マスタ／連携の4大タブ。会社情報で締日・見込度%・CloudSign を設定。" loading="lazy" /><figcaption class="shot-cap">設定（/settings）。概要／組織／マスタ／連携の4大タブ。会社情報で締日・見込度%・CloudSign を設定。</figcaption></figure>
+        <div class="howto">
+          <div class="howto-title">使い方（管理者の初期セットアップ）</div>
+          <ol>
+            <li><b>概要 › 会社情報</b>で社名・住所・請求締日（20日／月末）・会計開始月・見込度%（A/B/C）・CloudSign を設定します。</li>
+            <li><b>組織 › メンバー管理</b>でメールアドレスを入力してメンバーを招待し、ロールを割り当てます。</li>
+            <li><b>組織 › 権限マトリクス</b>で、ロールごとに表示するメニューを ON/OFF します（カスタムロール追加可）。</li>
+            <li><b>マスタ › CRMマスタ</b>で商談ステージ・失注理由・獲得ソース・タグを自社の運用に合わせて編集します。</li>
+            <li><b>連携</b>タブで Slack などのアプリ連携、API キー・Webhook を設定します。</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>大タブ</th><th>サブ</th></tr></thead>
+            <tbody>
+              <tr><td class="td-name">概要（個人）</td><td>プロフィール／セキュリティ／通知設定／メール署名／PDF編集（管理者）。会社情報もここに表示（管理者）</td></tr>
+              <tr><td class="td-name">組織</td><td>メンバー管理（招待・ロール・権限マトリクス）／勤怠設定／ワークフロー種別</td></tr>
+              <tr><td class="td-name">マスタ</td><td>CRMマスタ（ステージ・失注理由・ソース・タグ）／職人マスタ</td></tr>
+              <tr><td class="td-name">連携</td><td>アプリ連携（Slack 等）／API・Webhook</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="feat-note">PDF ビルダー専用ルート: <span class="inline-code">/settings/pdf-builder</span>。権限マトリクスの機能キーはナビ各項目＋ settings_* ＋ reserve_fee。</div>
+      </div>
+    </div>
+
+    <!-- GLOBAL -->
+    <div class="feat-block" id="feat-global">
+      <div class="feat-block-head">
+        <div class="feat-block-path">グローバル UI</div>
+        <div class="feat-block-title">社内チャット / BRIDGE AI / 運営管理</div>
+        <p class="feat-block-lead">サイドバー付帯とプラットフォーム運営向け機能です。</p>
+      </div>
+      <div class="feat-block-body">
+        <ul class="feat-ul">
+          <li><strong>社内チャット:</strong> サイドバーから起動。<span class="inline-code">internal_messages</span> に永続化。未読≥10で BombAlert。AI から担当者へ転送可</li>
+          <li><strong>BRIDGE AI:</strong> 右サイドパネル。ページコンテキスト（dashboard/bi/crm/quotes 等）を付与して回答。詳細は <a href="ai.html">ai.html</a></li>
+          <li><strong>運営管理 /admin:</strong> 全国加盟店 BI、企業一覧（slug／プラン編集・Netlify ドメイン連携）、Linq AI プラットフォーム設定。ログインは super-admin 専用</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- HIDDEN -->
+    <div class="feat-block" id="feat-hidden">
+      <div class="feat-block-head">
+        <div class="feat-block-path">ナビ非表示ルート</div>
+        <div class="feat-block-title">請求・予算・マーケティング</div>
+        <p class="feat-block-lead">実装は残っていますが、現行サイドバーには出しません。</p>
+      </div>
+      <div class="feat-block-body">
+        <ul class="feat-ul">
+          <li><strong>/invoices</strong> — 顧客請求（draft/sent/paid/cancelled）。締日ベース月次一括生成。権限キーは残存</li>
+          <li><strong>/budget</strong> — 年度予算策定・実績対比（BI 期首設定とは別モジュール）</li>
+          <li><strong>/marketing/*</strong> — メール配信／SNS／ROI／クリエイティブ。フェーズ2予定。<span class="inline-code">ROUTE_ROLES["/marketing"]=[]</span> で全遮断</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLOWS -->
+  <section id="flows">
+    <div class="section-label">Business Flows</div>
+    <h2>業務フロー</h2>
+    <p class="section-desc">営業（リード）から工事・お金の流れです。各ステップはワンクリックで次画面へ遷移できます。</p>
+
+    <h3 class="feat-h3" style="margin-top:0" id="lead-flow">リード〜受注</h3>
+    <div class="auth-flow" style="margin-bottom:2rem;flex-wrap:wrap">
+      <div class="auth-step"><div class="auth-step-num">Step 1</div><div class="auth-step-title">顧客登録</div><div class="auth-step-desc">/crm で新規顧客</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step"><div class="auth-step-num">Step 2</div><div class="auth-step-title">商談追加</div><div class="auth-step-desc">パイプラインで作成</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step"><div class="auth-step-num">Step 3</div><div class="auth-step-title">見積作成</div><div class="auth-step-desc">商談／/quotes</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step"><div class="auth-step-num">Step 4</div><div class="auth-step-title">受注確定</div><div class="auth-step-desc">受注ステージへ DnD</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step step-last"><div class="auth-step-num">Step 5</div><div class="auth-step-title">契約・工事</div><div class="auth-step-desc">自動登録／引き継ぎ</div></div>
+    </div>
+
+    <div class="table-wrap" style="margin-bottom:2.5rem">
+      <table>
+        <thead><tr><th>操作</th><th>場所</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">商談を追加</td><td>パイプライン右上</td><td>顧客選択・商談名・金額・ステージを入力して DB 保存</td></tr>
+          <tr><td class="td-name">ステージ変更</td><td>カンバン</td><td>カード DnD で移動。自動で DB 更新。AI 見込度／ステージ提案あり</td></tr>
+          <tr><td class="td-name">見積を作成</td><td>商談カード／見積管理</td><td>顧客・金額を引き継ぎ。粗利ゲートあり</td></tr>
+          <tr><td class="td-name">受注確定</td><td>カンバン</td><td>受注ステージへドロップ → ダイアログで見積 or 工事へ</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="construction-flow">工事フロー（Notion 2-1〜2-5 対応）</h3>
+    <div class="auth-flow" style="margin-bottom:1.5rem;flex-wrap:wrap">
+      <div class="auth-step"><div class="auth-step-num">2-1</div><div class="auth-step-title">引き継ぎ〜工程表</div><div class="auth-step-desc">工事登録 → ガント</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step"><div class="auth-step-num">2-2</div><div class="auth-step-title">見積作成</div><div class="auth-step-desc">工事「見積もり」タブ</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step"><div class="auth-step-num">2-3</div><div class="auth-step-title">追加変更</div><div class="auth-step-desc">差額・CloudSign</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step"><div class="auth-step-num">2-4</div><div class="auth-step-title">工事台帳</div><div class="auth-step-desc">原価 DB 永続化</div></div>
+      <div class="auth-arrow">→</div>
+      <div class="auth-step step-last"><div class="auth-step-num">2-5</div><div class="auth-step-title">発注・請求</div><div class="auth-step-desc">発注書タブ＋/invoices</div></div>
+    </div>
+    <div class="feat-note" style="margin-bottom:0">
+      Notion 2-5 は「発注書・請求書」を1ステップにまとめています。現行 UI では下請への<strong>発注書・請書</strong>は工事詳細タブ、顧客向け<strong>請求書</strong>は <span class="inline-code">/invoices</span>（ナビ非表示）で横断管理します。
+    </div>
+  </section>
+
+  <!-- CONSTRUCTION TABS -->
+  <section id="constructions">
+    <div class="section-label">Feature Detail</div>
+    <h2>工事管理（8タブ構成）</h2>
+    <p class="section-desc">工事詳細ページ（<span class="inline-code">/constructions/[id]</span>）の現行タブ構成です。2026-07 時点で「顧客情報」が先頭に追加されています。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>タブ</th><th>キー</th><th>Notion</th><th>機能概要</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">顧客情報</td><td class="td-mono">customer</td><td>—</td><td>顧客・契約コンテキスト、関連連絡先の確認</td></tr>
+          <tr><td class="td-name">工程表</td><td class="td-mono">schedule</td><td>2-1</td><td>ガントで工程タスクの期間・進捗・依存関係を管理。ここから工事日報を追加</td></tr>
+          <tr><td class="td-name">見積もり</td><td class="td-mono">estimate</td><td>2-2</td><td>1工事に複数見積。版管理・改訂。予備費1/2</td></tr>
+          <tr><td class="td-name">契約書</td><td class="td-mono">contract</td><td>—</td><td>契約書 PDF のアップロード・管理</td></tr>
+          <tr><td class="td-name">追加変更</td><td class="td-mono">change</td><td>2-3</td><td>change_orders。明細差額・承認・CloudSign（未設定時 PDF 代替）</td></tr>
+          <tr><td class="td-name">工事台帳</td><td class="td-mono">budget</td><td>2-4</td><td>原価管理表。construction_cost_budgets へ永続化</td></tr>
+          <tr><td class="td-name">発注書・請書</td><td class="td-mono">orders</td><td>2-5</td><td>contractor_orders。支払回数 2/4/6/12 回の schedule 按分</td></tr>
+          <tr><td class="td-name">ドキュメント</td><td class="td-mono">documents</td><td>—</td><td>工事関連ファイルの一覧・カード・DL</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="shot"><img src="screenshots/construction-orders.png" alt="工事詳細 — 発注書・請書タブ。下請業者への発注を作成し、支払回数（2/4/6/12回）で按分。" loading="lazy" /><figcaption class="shot-cap">工事詳細 — 発注書・請書タブ。下請業者への発注を作成し、支払回数（2/4/6/12回）で按分。</figcaption></figure>
+    <div class="feat-note">
+      <strong>関連設定:</strong> CloudSign（会社情報 settings.cloudsign）／請求締日 invoice_closing_day（20 または月末）。
+      顧客請求の月次生成は /invoices。工事詳細の請求タブ UI はトリガー非表示（実装コードは一部残存）。
+    </div>
+  </section>
+
+  <!-- COST BUDGET -->
+  <section id="cost">
+    <div class="section-label">Feature Detail</div>
+    <h2>工事台帳（原価管理表）</h2>
+    <p class="section-desc">下請業者ごとに予算・発注・月次請求を管理し、粗利をリアルタイム把握。入力は <span class="inline-code">construction_cost_budgets</span> に永続化されます。</p>
+
+    <figure class="shot"><img src="screenshots/construction-budget.png" alt="工事詳細 — 工事台帳タブ。実行予算・発注・月次請求を入力すると粗利が自動計算されます。" loading="lazy" /><figcaption class="shot-cap">工事詳細 — 工事台帳タブ。実行予算・発注・月次請求を入力すると粗利が自動計算されます。</figcaption></figure>
+
+    <div class="howto">
+      <div class="howto-title">使い方</div>
+      <ol>
+        <li>工事詳細の<b>「工事台帳」タブ</b>を開き、「＋行を追加」で下請業者の行を追加します（「参照」から見積明細のインポートも可能）。</li>
+        <li><b>白いセル</b>をクリックして業者名・工種・実行予算・発注額・月次請求を入力します。Enter または別セルへの移動で確定します。</li>
+        <li><b>緑のセル</b>（合計・確定額・予算残・請求残・粗利）は自動計算されます。</li>
+        <li>「発注済／未発注」バッジはクリックのたびに切り替わります。</li>
+        <li>入力後、右上の<b>「保存する」</b>をクリックすると DB に保存され、リロード後も保持されます。</li>
+        <li>予算残・請求残が<b>マイナスになると赤字表示</b>されるので、超過にすぐ気付けます。</li>
+      </ol>
+    </div>
+
+    <div class="table-wrap" style="margin-bottom:1.5rem">
+      <table>
+        <thead><tr><th>グループ</th><th>列</th><th>種別</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">基本</td><td>発注ステータス／施工業者／工種／管理用予算</td><td>入力</td><td>発注済↔未発注トグル含む</td></tr>
+          <tr><td class="td-name">実行予算</td><td>実行予算／追加契約①②／追加含む実行予算</td><td>入力＋自動</td><td>追加含む = 実行＋追加①＋追加②</td></tr>
+          <tr><td class="td-name">発注</td><td>発注額／追加発注①②③／確定額／予算残</td><td>入力＋自動</td><td>確定額 = 発注＋追加発注合計。予算残 = 追加含む実行 − 確定額</td></tr>
+          <tr><td class="td-name">月次請求</td><td>〇月請求（12ヶ月）／請求残</td><td>入力＋自動</td><td>請求残 = 確定額 − 月次請求合計</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>サマリー</th><th>計算式</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">実行予算ベース（見込み）</td><td>工事粗利額 = 契約金額 − 実行予算合計　／　粗利率 = 粗利額 ÷ 契約金額 × 100</td></tr>
+          <tr><td class="td-name">確定額ベース（実績）</td><td>工事粗利額 = 契約金額 − 確定額合計　／　粗利率 = 粗利額 ÷ 契約金額 × 100</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
@@ -515,34 +1273,30 @@
   <section id="architecture">
     <div class="section-label">Architecture</div>
     <h2>システムアーキテクチャ</h2>
-    <p class="section-desc">3層構成。クライアント・サーバー・データ層が明確に分離されており、エッジでのロール保護とリアルタイム通信を実現しています。</p>
+    <p class="section-desc">クライアント・エッジ・データ層の3層。サブドメイン解決と RBAC をミドルウェアで実施します。</p>
     <div class="arch-diagram">
       <div class="arch-layer arch-client">
         <div class="arch-layer-label">クライアント層</div>
         <div class="arch-layer-title">Next.js App Router + React 19</div>
-        <div class="arch-layer-body">ブラウザ上で動作するフロントエンドアプリケーション。サーバーコンポーネントとクライアントコンポーネントを組み合わせ、初回表示速度と操作性を両立します。Tailwind CSS + Shadcn/UI によるニューモーフィズムデザイン。</div>
+        <div class="arch-layer-body">Server / Client Components を併用。Tailwind CSS 4 + Shadcn/UI（Radix）。ダッシュボード〜ポータル、設定、BRIDGE AI／社内チャット。</div>
         <div class="arch-tags">
-          <span class="arch-tag">ダッシュボード</span>
-          <span class="arch-tag">CRM / 商談</span>
-          <span class="arch-tag">工事管理</span>
-          <span class="arch-tag">勤怠</span>
-          <span class="arch-tag">ワークフロー</span>
-          <span class="arch-tag">クラウドサイン連携</span>
+          <span class="arch-tag">ダッシュボード / BI</span>
+          <span class="arch-tag">CRM / 見積 / 職人</span>
+          <span class="arch-tag">契約 / 工事</span>
+          <span class="arch-tag">ポータル</span>
           <span class="arch-tag">設定</span>
         </div>
       </div>
       <div class="arch-arrow">HTTPS / Supabase JS Client (REST + WebSocket)</div>
       <div class="arch-layer arch-server">
         <div class="arch-layer-label">サーバー・エッジ層</div>
-        <div class="arch-layer-title">Next.js Middleware + Server Actions（Netlify Edge）</div>
-        <div class="arch-layer-body">Netlify のエッジネットワーク上でミドルウェアが実行されます。認証チェック・ロールベースのルート保護に加え、<strong>サブドメイン（slug）からテナント（company_id）を解決</strong>します。権限のないユーザーを /unauthorized にリダイレクトします。</div>
+        <div class="arch-layer-title">Next.js Middleware + Server Actions（Netlify）</div>
+        <div class="arch-layer-body">認証・ロール保護に加え、<strong>サブドメイン（slug）からテナント（company_id）を解決</strong>。権限拒否時は /unauthorized。企業登録時に Netlify API でドメイン alias を自動追加。</div>
         <div class="arch-tags">
           <span class="arch-tag">middleware.ts（RBAC）</span>
           <span class="arch-tag">サブドメイン解決</span>
           <span class="arch-tag">Server Actions</span>
-          <span class="arch-tag">Netlify API（ドメイン自動追加）</span>
-          <span class="arch-tag">セッション更新</span>
-          <span class="arch-tag">ルート保護</span>
+          <span class="arch-tag">Netlify Domain API</span>
         </div>
       </div>
       <div class="arch-arrow">PostgreSQL クエリ / REST API / WebSocket (Realtime)</div>
@@ -550,869 +1304,253 @@
         <div class="arch-data-item">
           <div class="arch-data-label">Database</div>
           <div class="arch-data-name">Supabase DB</div>
-          <div class="arch-data-desc">PostgreSQL 15。RLS（行レベルセキュリティ）で company_id ごとにデータを分離</div>
+          <div class="arch-data-desc">PostgreSQL。RLS で company_id ごとに分離</div>
         </div>
         <div class="arch-data-item">
           <div class="arch-data-label">Auth</div>
           <div class="arch-data-name">Supabase Auth</div>
-          <div class="arch-data-desc">メール＋パスワード認証。JWT トークンをブラウザの Cookie に保存</div>
+          <div class="arch-data-desc">メール＋パスワード。JWT を Cookie に保存</div>
         </div>
         <div class="arch-data-item">
           <div class="arch-data-label">Storage</div>
           <div class="arch-data-name">Supabase Storage</div>
-          <div class="arch-data-desc">文書・クリエイティブファイルのクラウド保存。RLS で会社ごとに分離</div>
+          <div class="arch-data-desc">文書・添付。RLS で会社分離</div>
         </div>
         <div class="arch-data-item">
           <div class="arch-data-label">Realtime</div>
           <div class="arch-data-name">Supabase Realtime</div>
-          <div class="arch-data-desc">WebSocket による通知・勤怠状態のリアルタイム配信</div>
+          <div class="arch-data-desc">通知・チャット等のリアルタイム配信</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- SUBDOMAIN / MULTI-TENANT -->
+  <!-- SUBDOMAIN -->
   <section id="subdomain">
     <div class="section-label">Multi-Tenant</div>
     <h2>サブドメイン方式マルチテナント</h2>
-    <p class="section-desc">各加盟店（company）に slug を割り当て、<strong>{slug}.bridge-linq.com</strong> の専用 URL でアクセスします。apex ドメイン（bridge-linq.com）はプラットフォーム共通・運営管理用です。</p>
+    <p class="section-desc">各加盟店に slug を割り当て、<strong>{slug}.bridge-linq.com</strong> でアクセスします。apex（bridge-linq.com）はプラットフォーム共通・運営管理用です。</p>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">URL 構成</div>
-    <div class="table-wrap" style="margin-bottom:2rem;">
+    <div class="table-wrap" style="margin-bottom:1.6rem">
       <table>
-        <thead>
-          <tr><th>URL</th><th>用途</th><th>例</th></tr>
-        </thead>
+        <thead><tr><th>URL</th><th>用途</th><th>例</th></tr></thead>
         <tbody>
-          <tr>
-            <td class="td-mono">bridge-linq.com</td>
-            <td>プラットフォーム apex（共通入口）</td>
-            <td>運営管理・未設定時のフォールバック</td>
-          </tr>
-          <tr>
-            <td class="td-mono">{slug}.bridge-linq.com</td>
-            <td>加盟店専用 URL（テナント分離）</td>
-            <td><span class="td-mono">acme.bridge-linq.com/login</span></td>
-          </tr>
-          <tr>
-            <td class="td-mono">bridge-linq.com/admin</td>
-            <td>運営管理コンソール（Super Admin）</td>
-            <td>企業登録・slug 発行・Netlify ドメイン自動追加</td>
-          </tr>
+          <tr><td class="td-mono">bridge-linq.com</td><td>プラットフォーム apex</td><td>運営管理・フォールバック</td></tr>
+          <tr><td class="td-mono">{slug}.bridge-linq.com</td><td>加盟店専用 URL</td><td>acme.bridge-linq.com/login</td></tr>
+          <tr><td class="td-mono">bridge-linq.com/admin</td><td>運営管理コンソール</td><td>企業登録・slug 発行</td></tr>
         </tbody>
       </table>
     </div>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">リクエストフロー</div>
-    <div class="auth-flow" style="margin-bottom:2rem;">
-      <div class="auth-step">
-        <div class="auth-step-num">Step 1</div>
-        <div class="auth-step-title">Host 解析</div>
-        <div class="auth-step-desc">middleware が <span class="td-mono">{slug}.bridge-linq.com</span> から slug を抽出</div>
-      </div>
+    <div class="auth-flow" style="margin-bottom:1.6rem;flex-wrap:wrap">
+      <div class="auth-step"><div class="auth-step-num">1</div><div class="auth-step-title">Host 解析</div><div class="auth-step-desc">slug を抽出</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step">
-        <div class="auth-step-num">Step 2</div>
-        <div class="auth-step-title">テナント解決</div>
-        <div class="auth-step-desc">RPC <span class="td-mono">resolve_company_id_by_slug</span> で company_id を取得</div>
-      </div>
+      <div class="auth-step"><div class="auth-step-num">2</div><div class="auth-step-title">テナント解決</div><div class="auth-step-desc">resolve_company_id_by_slug</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step">
-        <div class="auth-step-num">Step 3</div>
-        <div class="auth-step-title">認証・RBAC</div>
-        <div class="auth-step-desc">未ログイン → /login、別テナント → 自社サブドメインへリダイレクト</div>
-      </div>
+      <div class="auth-step"><div class="auth-step-num">3</div><div class="auth-step-title">認証・RBAC</div><div class="auth-step-desc">別テナントは自社へ</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step step-last">
-        <div class="auth-step-num">Step 4</div>
-        <div class="auth-step-title">ヘッダー伝搬</div>
-        <div class="auth-step-desc"><span class="td-mono">x-tenant-slug</span> / <span class="td-mono">x-tenant-id</span> を Server Components へ</div>
-      </div>
+      <div class="auth-step step-last"><div class="auth-step-num">4</div><div class="auth-step-title">ヘッダー伝搬</div><div class="auth-step-desc">x-tenant-slug / id</div></div>
     </div>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">企業登録時の Netlify 自動連携</div>
-    <div class="table-wrap" style="margin-bottom:2rem;">
+    <div class="table-wrap" style="margin-bottom:1.6rem">
       <table>
-        <thead>
-          <tr><th>ステップ</th><th>処理</th><th>実装</th></tr>
-        </thead>
+        <thead><tr><th>環境変数</th><th>用途</th></tr></thead>
         <tbody>
-          <tr>
-            <td class="td-name">1. 企業登録</td>
-            <td>運営管理コンソールで企業名・slug・オーナーアカウントを入力</td>
-            <td class="td-mono">createAdminCompany</td>
-          </tr>
-          <tr>
-            <td class="td-name">2. DB 保存</td>
-            <td><span class="td-mono">companies.slug</span> に slug を保存</td>
-            <td class="td-mono">Supabase</td>
-          </tr>
-          <tr>
-            <td class="td-name">3. ドメイン追加</td>
-            <td>Netlify API で <span class="td-mono">{slug}.bridge-linq.com</span> を domain alias に追加</td>
-            <td class="td-mono">netlifyAddDomain</td>
-          </tr>
-          <tr>
-            <td class="td-name">4. 利用開始</td>
-            <td>数分後 SSL 込みでサブドメイン URL が利用可能</td>
-            <td class="td-mono">Netlify DNS + HTTPS</td>
-          </tr>
+          <tr><td class="td-mono">NEXT_PUBLIC_APP_DOMAIN</td><td>サブドメイン解決の基点（例: bridge-linq.com）</td></tr>
+          <tr><td class="td-mono">NETLIFY_TOKEN / NETLIFY_SITE_ID</td><td>ドメイン alias 追加 API</td></tr>
         </tbody>
       </table>
     </div>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">Netlify / DNS 設定</div>
-    <div class="table-wrap" style="margin-bottom:1.5rem;">
-      <table>
-        <thead>
-          <tr><th>種別</th><th>設定</th><th>備考</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><span class="td-chip">DNS</span></td>
-            <td class="td-mono">bridge-linq.com → Netlify DNS（nsone.net）</td>
-            <td>お名前.com でネームサーバー変更</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">DNS</span></td>
-            <td class="td-mono">* CNAME hachigreen.netlify.app</td>
-            <td>ワイルドカードで全サブドメインを Netlify へ</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">Domain</span></td>
-            <td class="td-mono">bridge-linq.com</td>
-            <td>Primary domain</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">Domain</span></td>
-            <td class="td-mono">{slug}.bridge-linq.com</td>
-            <td>企業登録時に API で自動追加（手動不要）</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">環境変数（Netlify）</div>
-    <div class="table-wrap" style="margin-bottom:1.5rem;">
-      <table>
-        <thead>
-          <tr><th>変数名</th><th>例</th><th>用途</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="td-mono">NEXT_PUBLIC_APP_DOMAIN</td>
-            <td class="td-mono">bridge-linq.com</td>
-            <td>サブドメイン解決の基点ドメイン（Builds + Functions 両方必要）</td>
-          </tr>
-          <tr>
-            <td class="td-mono">NETLIFY_TOKEN</td>
-            <td class="td-mono">nfp_…</td>
-            <td>Personal Access Token。ドメイン alias 追加 API 用</td>
-          </tr>
-          <tr>
-            <td class="td-mono">NETLIFY_SITE_ID</td>
-            <td class="td-mono">d8019260-…</td>
-            <td>hachigreen サイト ID（<span class="td-mono">SITE_ID</span> でも可）</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="db-note">
-      <strong>予約語 slug（使用不可）:</strong> www, app, admin, api, mail, ftp, smtp, pop, cdn, static, assets, status, help, support, docs<br>
-      <strong>slug 形式:</strong> 小文字英数字とハイフンのみ（2〜63 文字）。<span class="td-mono">00005_company_slug</span> / <span class="td-mono">00035_company_slug_lookup</span> マイグレーション参照。<br>
-      <strong>注意:</strong> Netlify はワイルドカード domain alias 非対応のため、サブドメインは企業ごとに API で個別追加します。
+    <div class="feat-note">
+      予約語 slug: www, app, admin, api, mail, ftp, smtp, pop, cdn, static, assets, status, help, support, docs。
+      slug 形式: 小文字英数字とハイフン（2〜63 文字）。Netlify はワイルドカード domain alias 非対応のため企業ごとに API 追加。
     </div>
   </section>
 
-  <!-- TECH STACK -->
-  <section>
+  <!-- TECH -->
+  <section id="tech">
     <div class="section-label">Tech Stack</div>
     <h2>技術スタック</h2>
-    <p class="section-desc">使用している主要技術とバージョン一覧です。</p>
     <div class="table-wrap">
       <table>
-        <thead>
-          <tr>
-            <th>カテゴリ</th>
-            <th>技術 / サービス</th>
-            <th>バージョン</th>
-            <th>用途・備考</th>
-          </tr>
-        </thead>
+        <thead><tr><th>カテゴリ</th><th>技術</th><th>バージョン</th><th>用途</th></tr></thead>
         <tbody>
-          <tr>
-            <td><span class="td-chip">フレームワーク</span></td>
-            <td class="td-name">Next.js</td>
-            <td class="td-mono">16.x</td>
-            <td>App Router、Server Components、Server Actions による SSR/SSG</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">UI ライブラリ</span></td>
-            <td class="td-name">React</td>
-            <td class="td-mono">19.x</td>
-            <td>Server / Client コンポーネント分離で高速レンダリング</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">言語</span></td>
-            <td class="td-name">TypeScript</td>
-            <td class="td-mono">5.x</td>
-            <td>型安全な開発。Supabase スキーマから型定義を自動生成</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">スタイリング</span></td>
-            <td class="td-name">Tailwind CSS</td>
-            <td class="td-mono">3.x</td>
-            <td>ユーティリティ CSS。CSS 変数でニューモーフィズムデザインを実装</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">UI コンポーネント</span></td>
-            <td class="td-name">Shadcn/UI</td>
-            <td class="td-mono">latest</td>
-            <td>Radix UI ベース。Card / Button / Dialog / Sheet / Tabs など</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">BaaS</span></td>
-            <td class="td-name">Supabase</td>
-            <td class="td-mono">2.x</td>
-            <td>DB / Auth / Storage / Realtime をワンプラットフォームで提供</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">データベース</span></td>
-            <td class="td-name">PostgreSQL</td>
-            <td class="td-mono">15.x</td>
-            <td>RLS（Row Level Security）ポリシーでマルチテナント実現</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">デプロイ</span></td>
-            <td class="td-name">Netlify</td>
-            <td class="td-mono">—</td>
-            <td>Git push で自動デプロイ。<strong>bridge-linq.com</strong> + 加盟店サブドメインを Netlify DNS / API で管理</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">パッケージ管理</span></td>
-            <td class="td-name">npm Workspaces</td>
-            <td class="td-mono">—</td>
-            <td>モノレポ構成。apps/web 配下にフロントエンドを配置</td>
-          </tr>
-          <tr>
-            <td><span class="td-chip">日付処理</span></td>
-            <td class="td-name">date-fns</td>
-            <td class="td-mono">3.x</td>
-            <td>日本語ロケール対応の日付フォーマット・計算</td>
-          </tr>
+          <tr><td>フレームワーク</td><td>Next.js</td><td>16.1.x</td><td>App Router / Server Actions</td></tr>
+          <tr><td>UI</td><td>React</td><td>19.2.x</td><td>Server / Client 分離</td></tr>
+          <tr><td>言語</td><td>TypeScript</td><td>5.x</td><td>型安全開発</td></tr>
+          <tr><td>スタイリング</td><td>Tailwind CSS</td><td>4.x</td><td>ユーティリティ CSS</td></tr>
+          <tr><td>UI 部品</td><td>Shadcn/UI + Radix</td><td>latest</td><td>Dialog / Tabs / Sheet 等</td></tr>
+          <tr><td>BaaS</td><td>Supabase</td><td>2.x</td><td>DB / Auth / Storage / Realtime</td></tr>
+          <tr><td>状態・表</td><td>TanStack Query / Table</td><td>5.x / 8.x</td><td>データ取得・テーブル</td></tr>
+          <tr><td>デプロイ</td><td>Netlify</td><td>—</td><td>bridge-linq.com + 加盟店サブドメイン</td></tr>
+          <tr><td>モノレポ</td><td>npm Workspaces</td><td>—</td><td>apps/web</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <!-- DATABASE -->
-  <section>
+  <section id="database">
     <div class="section-label">Database</div>
-    <h2>データベース設計</h2>
-    <p class="section-desc">PostgreSQL + Supabase RLS によるマルチテナント構成。全テーブルに company_id を持ち、ログインユーザーは自社データのみアクセス可能です。</p>
+    <h2>データベース設計（主要テーブル）</h2>
+    <p class="section-desc">全業務テーブルは company_id ＋ RLS。サブドメイン解決は SECURITY DEFINER の <span class="inline-code">resolve_company_id_by_slug</span> で id のみ公開取得します。マイグレーション <strong>00001〜00064</strong>。</p>
     <div class="db-grid">
-      <div class="db-item"><div class="db-item-name">companies</div><div class="db-item-desc">会社マスタ。slug カラムでサブドメイン紐付け</div></div>
-      <div class="db-item"><div class="db-item-name">profiles</div><div class="db-item-desc">ユーザープロフィール・ロール情報</div></div>
-      <div class="db-item"><div class="db-item-name">customers</div><div class="db-item-desc">顧客情報・タグ・担当者</div></div>
-      <div class="db-item"><div class="db-item-name">leads</div><div class="db-item-desc">リード・見込み客管理</div></div>
-      <div class="db-item"><div class="db-item-name">deals</div><div class="db-item-desc">商談・パイプライン</div></div>
-      <div class="db-item"><div class="db-item-name">estimates</div><div class="db-item-desc">見積書（工事紐付け・版管理・予備費率）</div></div>
-      <div class="db-item"><div class="db-item-name">estimate_items</div><div class="db-item-desc">見積書明細行</div></div>
-      <div class="db-item"><div class="db-item-name">contracts</div><div class="db-item-desc">工事契約</div></div>
-      <div class="db-item"><div class="db-item-name">constructions</div><div class="db-item-desc">工事案件・進捗・工程管理</div></div>
-      <div class="db-item"><div class="db-item-name">change_orders</div><div class="db-item-desc">追加変更工事（CloudSign連携）</div></div>
-      <div class="db-item"><div class="db-item-name">construction_cost_budgets</div><div class="db-item-desc">工事台帳（原価管理表）永続化</div></div>
-      <div class="db-item"><div class="db-item-name">contractor_orders</div><div class="db-item-desc">下請発注・支払スケジュール</div></div>
-      <div class="db-item"><div class="db-item-name">craftsmen</div><div class="db-item-desc">職人・協力業者</div></div>
-      <div class="db-item"><div class="db-item-name">invoices</div><div class="db-item-desc">請求書（締日ベース月次生成）</div></div>
-      <div class="db-item"><div class="db-item-name">budgets</div><div class="db-item-desc">年度予算・実績</div></div>
-      <div class="db-item"><div class="db-item-name">attendance_records</div><div class="db-item-desc">出退勤ログ</div></div>
-      <div class="db-item"><div class="db-item-name">workflow_requests</div><div class="db-item-desc">各種申請書</div></div>
-      <div class="db-item"><div class="db-item-name">announcements</div><div class="db-item-desc">社内回覧板</div></div>
-      <div class="db-item"><div class="db-item-name">documents</div><div class="db-item-desc">社内文書（顧客・工事紐付け）</div></div>
-      <div class="db-item"><div class="db-item-name">events</div><div class="db-item-desc">カレンダー予定</div></div>
-      <div class="db-item"><div class="db-item-name">app_integrations</div><div class="db-item-desc">Chatwork / Slack 等連携設定</div></div>
-    </div>
-    <div class="db-note">
-      全テーブルに <strong>company_id</strong> カラムを設け、RLS（Row Level Security）ポリシーを適用しています。ログインユーザーのトークンから company_id を取得し、自社データのみ参照・更新できます。サブドメイン解決は RLS をバイパスしないよう <strong>resolve_company_id_by_slug</strong>（SECURITY DEFINER）で id のみ公開取得します。マイグレーションは <strong>00001〜00035</strong>（最新: 00035_company_slug_lookup）。00034 で slug カラム修復、00035 で slug ルックアップ RPC を追加しています。
+      <div class="db-item"><div class="db-item-name">companies</div><div class="db-item-desc">会社マスタ・slug・settings</div></div>
+      <div class="db-item"><div class="db-item-name">profiles</div><div class="db-item-desc">ユーザー・ロール</div></div>
+      <div class="db-item"><div class="db-item-name">customers</div><div class="db-item-desc">顧客・見込度・特需</div></div>
+      <div class="db-item"><div class="db-item-name">deals / deal_stages</div><div class="db-item-desc">商談・ステージマスタ</div></div>
+      <div class="db-item"><div class="db-item-name">estimates*</div><div class="db-item-desc">見積・大項目・明細・予備費</div></div>
+      <div class="db-item"><div class="db-item-name">contracts</div><div class="db-item-desc">契約</div></div>
+      <div class="db-item"><div class="db-item-name">constructions</div><div class="db-item-desc">工事案件</div></div>
+      <div class="db-item"><div class="db-item-name">construction_tasks</div><div class="db-item-desc">工程タスク・依存</div></div>
+      <div class="db-item"><div class="db-item-name">construction_reports</div><div class="db-item-desc">工事日報</div></div>
+      <div class="db-item"><div class="db-item-name">change_orders</div><div class="db-item-desc">追加変更</div></div>
+      <div class="db-item"><div class="db-item-name">construction_cost_budgets</div><div class="db-item-desc">工事台帳</div></div>
+      <div class="db-item"><div class="db-item-name">contractor_orders</div><div class="db-item-desc">下請発注</div></div>
+      <div class="db-item"><div class="db-item-name">craftsmen</div><div class="db-item-desc">職人</div></div>
+      <div class="db-item"><div class="db-item-name">invoices / budgets</div><div class="db-item-desc">請求・年度予算（ナビ外）</div></div>
+      <div class="db-item"><div class="db-item-name">bi_*</div><div class="db-item-desc">BI 設定・間接費・部門目標</div></div>
+      <div class="db-item"><div class="db-item-name">attendance_*</div><div class="db-item-desc">勤怠</div></div>
+      <div class="db-item"><div class="db-item-name">workflow_*</div><div class="db-item-desc">申請・承認</div></div>
+      <div class="db-item"><div class="db-item-name">announcements</div><div class="db-item-desc">回覧</div></div>
+      <div class="db-item"><div class="db-item-name">documents</div><div class="db-item-desc">文書</div></div>
+      <div class="db-item"><div class="db-item-name">calendar_events</div><div class="db-item-desc">カレンダー</div></div>
+      <div class="db-item"><div class="db-item-name">email_*</div><div class="db-item-desc">メール連携</div></div>
+      <div class="db-item"><div class="db-item-name">internal_messages</div><div class="db-item-desc">社内チャット</div></div>
+      <div class="db-item"><div class="db-item-name">voice_jobs</div><div class="db-item-desc">録音・文字起こし</div></div>
+      <div class="db-item"><div class="db-item-name">app_integrations / api_keys / webhook_*</div><div class="db-item-desc">外部連携</div></div>
     </div>
   </section>
 
-  <!-- ROLE DESIGN -->
-  <section>
+  <!-- ROLES -->
+  <section id="roles">
     <div class="section-label">Access Control</div>
     <h2>認証・ロール設計</h2>
-    <p class="section-desc">3段階のロール体系でページアクセス・メニュー表示・データ閲覧を制御します。2026/04/16 設計レビューによりオーナーロール（owner）は廃止され、最上位は本部管理者（hq_admin）です。ミドルウェアとデータベース両方でアクセス制御を二重に実施しています。</p>
+    <p class="section-desc">オーナーロール（owner）は廃止済み。現行はレガシー3＋CSVデフォルト6＋外部協力、および会社カスタムロール。実行時のメニュー表示は会社の <span class="inline-code">settings.role_permissions</span>（スキーマ _v: 2）が正本です。</p>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ロール階層図</div>
     <div class="role-hierarchy">
       <div class="role-row role-indent-0">
         <div class="role-bar bar-l0"></div>
         <div>
-          <div class="role-info-name">本部管理者 <span class="role-info-id">hq_admin</span></div>
-          <div class="role-info-desc">最上位権限。予算管理・BI・全 CRM/工事機能・会社設定（CloudSign 連携含む）・メンバー管理にアクセス可能。本社スタッフが使用します。</div>
+          <div class="role-info-name">管理者系<span class="role-info-id">hq_admin / admin</span></div>
+          <div class="role-info-desc">メンバー管理・会社設定・権限マトリクス変更が可能（ADMIN_ROLES）。</div>
         </div>
       </div>
       <div class="role-row role-indent-1">
         <div class="role-bar bar-l1"></div>
         <div>
-          <div class="role-info-name">施工店管理者 <span class="role-info-id">contractor_admin</span></div>
-          <div class="role-info-desc">CRM・工事・請求管理にアクセス可能。予算管理は閲覧不可。施工店の責任者が使用します。</div>
+          <div class="role-info-name">経営・施工店管理<span class="role-info-id">executive / contractor_admin</span></div>
+          <div class="role-info-desc">BI・予算系へのアクセス（デフォルト）。経営判断向け。</div>
+        </div>
+      </div>
+      <div class="role-row role-indent-1">
+        <div class="role-bar bar-l1"></div>
+        <div>
+          <div class="role-info-name">営業<span class="role-info-id">sales</span></div>
+          <div class="role-info-desc">CRM・見積・契約・職人などリード／生産の営業機能。</div>
+        </div>
+      </div>
+      <div class="role-row role-indent-1">
+        <div class="role-bar bar-l1"></div>
+        <div>
+          <div class="role-info-name">現場担当<span class="role-info-id">field_manager</span></div>
+          <div class="role-info-desc">工事管理中心。WF も利用可。</div>
         </div>
       </div>
       <div class="role-row role-indent-2">
         <div class="role-bar bar-l2"></div>
         <div>
-          <div class="role-info-name">社員 <span class="role-info-id">employee</span></div>
-          <div class="role-info-desc">勤怠・ワークフロー・回覧・カレンダー・文書などポータル機能のみ利用可能。一般スタッフが使用します。</div>
+          <div class="role-info-name">設計・総務・社員<span class="role-info-id">designer / administration / employee</span></div>
+          <div class="role-info-desc">ポータル中心。administration は請求（ナビ外）など。</div>
+        </div>
+      </div>
+      <div class="role-row role-indent-3">
+        <div class="role-bar bar-l3"></div>
+        <div>
+          <div class="role-info-name">外部協力業者<span class="role-info-id">external_partner</span></div>
+          <div class="role-info-desc">/partner/[token] 想定（現状スタブ寄り）。ログイン不要 URL 経由。</div>
         </div>
       </div>
     </div>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">アクセス権限マトリクス</div>
-    <div class="perm-matrix">
+    <h3 class="feat-h3">デフォルト権限の目安（マトリクス未設定時）</h3>
+    <div class="table-wrap" style="margin-bottom:1.5rem">
       <table>
-        <thead>
-          <tr>
-            <th style="width:220px;">ページ / 機能</th>
-            <th style="text-align:center;">本部管理者</th>
-            <th style="text-align:center;">施工店管理者</th>
-            <th style="text-align:center;">社員</th>
-          </tr>
-        </thead>
+        <thead><tr><th>機能</th><th>主な許可ロール（デフォルト）</th></tr></thead>
         <tbody>
-          <tr>
-            <td>ダッシュボード / BI</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-          </tr>
-          <tr>
-            <td>顧客・商談管理 / CRM</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-          </tr>
-          <tr>
-            <td>商談 / 見積 / 契約</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-          </tr>
-          <tr>
-            <td>工事管理 / 職人管理</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-          </tr>
-          <tr>
-            <td>請求管理</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-          </tr>
-          <tr>
-            <td>予算管理</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-          </tr>
-          <tr>
-            <td>マーケティング（v2 非公開）</td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-            <td class="perm-cell"><span class="dot-no"></span></td>
-          </tr>
-          <tr>
-            <td>勤怠 / ワークフロー</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-          </tr>
-          <tr>
-            <td>回覧 / 文書 / カレンダー</td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-            <td class="perm-cell perm-yes"><span class="dot-yes"></span></td>
-          </tr>
+          <tr><td class="td-name">BI</td><td>hq_admin, contractor_admin, admin, executive</td></tr>
+          <tr><td class="td-name">CRM / 見積 / 職人 / 契約</td><td>上記 ＋ sales, executive</td></tr>
+          <tr><td class="td-name">工事</td><td>上記 ＋ field_manager</td></tr>
+          <tr><td class="td-name">請求（/invoices）</td><td>hq_admin, contractor_admin, admin, administration, executive</td></tr>
+          <tr><td class="td-name">ワークフロー</td><td>社内ロールほぼ全員</td></tr>
+          <tr><td class="td-name">マーケティング</td><td>全遮断（[]）</td></tr>
         </tbody>
       </table>
     </div>
 
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-top:2.5rem;margin-bottom:.8rem;">認証フロー</div>
-    <div class="auth-flow">
-      <div class="auth-step">
-        <div class="auth-step-num">Step 1</div>
-        <div class="auth-step-title">ログイン</div>
-        <div class="auth-step-desc">メール＋パスワード入力</div>
-      </div>
+    <div class="auth-flow" style="flex-wrap:wrap">
+      <div class="auth-step"><div class="auth-step-num">1</div><div class="auth-step-title">ログイン</div><div class="auth-step-desc">メール＋パスワード</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step">
-        <div class="auth-step-num">Step 2</div>
-        <div class="auth-step-title">JWT 発行</div>
-        <div class="auth-step-desc">Supabase Auth がトークン生成</div>
-      </div>
+      <div class="auth-step"><div class="auth-step-num">2</div><div class="auth-step-title">JWT 発行</div><div class="auth-step-desc">Supabase Auth</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step">
-        <div class="auth-step-num">Step 3</div>
-        <div class="auth-step-title">ロール取得</div>
-        <div class="auth-step-desc">profiles テーブルを参照</div>
-      </div>
+      <div class="auth-step"><div class="auth-step-num">3</div><div class="auth-step-title">ロール取得</div><div class="auth-step-desc">profiles</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step">
-        <div class="auth-step-num">Step 4</div>
-        <div class="auth-step-title">セッション保存</div>
-        <div class="auth-step-desc">Cookie にトークンを保存</div>
-      </div>
+      <div class="auth-step"><div class="auth-step-num">4</div><div class="auth-step-title">権限解決</div><div class="auth-step-desc">会社マトリクス or デフォルト</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step step-last">
-        <div class="auth-step-num">Step 5</div>
-        <div class="auth-step-title">ルート保護</div>
-        <div class="auth-step-desc">middleware.ts で毎リクエスト制御</div>
-      </div>
+      <div class="auth-step step-last"><div class="auth-step-num">5</div><div class="auth-step-title">ルート保護</div><div class="auth-step-desc">middleware 毎リクエスト</div></div>
     </div>
   </section>
 
-  <!-- LOGIN INFO -->
-  <section>
+  <!-- ACCOUNTS -->
+  <section id="accounts">
     <div class="section-label">Accounts</div>
     <h2>ログイン情報</h2>
-    <p class="section-desc">本番 URL は <strong>https://bridge-linq.com</strong>（Netlify: hachigreen）。加盟店は <strong>{slug}.bridge-linq.com</strong> でログインします。</p>
+    <p class="section-desc">本番 URL は <strong>https://bridge-linq.com</strong>。加盟店は <strong>{slug}.bridge-linq.com</strong> でログインします。</p>
     <div class="login-table">
       <div class="login-section-header">本番環境</div>
-      <div class="login-row main">
-        <div class="login-role">プラットフォーム URL</div>
+      <div class="login-row">
+        <div class="login-role">プラットフォーム</div>
         <div class="login-email">https://bridge-linq.com</div>
-        <div><span class="login-pass">—</span></div>
-        <div><span class="badge-full">Primary domain</span></div>
+        <div>—</div>
+        <div><span class="badge-limited">Primary</span></div>
       </div>
-      <div class="login-row main">
-        <div class="login-role">運営管理コンソール</div>
+      <div class="login-row">
+        <div class="login-role">運営管理</div>
         <div class="login-email">https://bridge-linq.com/admin/login</div>
-        <div><span class="login-pass">super-admin@example.com / admin2026</span></div>
-        <div><span class="badge-full">企業登録・slug 発行</span></div>
+        <div class="login-pass">super-admin@example.com / admin2026</div>
+        <div><span class="badge-full">Super Admin</span></div>
       </div>
-      <div class="login-section-header">実際に使用するアカウント</div>
+      <div class="login-section-header">検証用アカウント（demo_seed）</div>
       <div class="login-row main">
         <div class="login-role">管理者（メイン）</div>
         <div class="login-email">admin@example.com</div>
-        <div><span class="login-pass">admin2026</span></div>
-        <div><span class="badge-full">全機能アクセス</span></div>
+        <div class="login-pass">admin2026</div>
+        <div><span class="badge-full">全機能</span></div>
       </div>
-      <div class="login-section-header">ロール確認用（demo_seed 登録時）</div>
       <div class="login-row">
         <div class="login-role">本部管理者</div>
         <div class="login-email">hqadmin@bridge.test</div>
-        <div><span class="login-pass">admin2026</span></div>
-        <div><span class="badge-full">BI・予算含む</span></div>
+        <div class="login-pass">admin2026</div>
+        <div><span class="badge-full">BI含む</span></div>
       </div>
       <div class="login-row">
         <div class="login-role">施工店管理者</div>
         <div class="login-email">contractor@bridge.test</div>
-        <div><span class="login-pass">admin2026</span></div>
+        <div class="login-pass">admin2026</div>
         <div><span class="badge-limited">予算除く</span></div>
       </div>
       <div class="login-row">
         <div class="login-role">社員</div>
         <div class="login-email">employee@bridge.test</div>
-        <div><span class="login-pass">admin2026</span></div>
-        <div><span class="badge-limited">ポータルのみ</span></div>
+        <div class="login-pass">admin2026</div>
+        <div><span class="badge-limited">ポータル</span></div>
       </div>
     </div>
   </section>
 
-  <!-- LEAD FLOW -->
-  <section id="lead-flow">
-    <div class="section-label">Feature Detail</div>
-    <h2>リード〜受注フロー</h2>
-    <p class="section-desc">問い合わせから受注・工事着工までの一連の流れをシステムが連携してサポートします。各ステップで次のアクションへワンクリックで遷移できます。</p>
 
-    <!-- フロー図 -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ステップフロー</div>
-    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:2.5rem;overflow-x:auto;">
-      <!-- Step 1 -->
-      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-radius:12px 0 0 12px;padding:1.4rem 1.2rem;position:relative;">
-        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 1</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">顧客登録</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">顧客管理（/crm）から新規顧客を登録。氏名・連絡先・予算感・担当者を入力。</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
-      <!-- Step 2 -->
-      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 2</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">商談追加</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">顧客・商談管理（/crm）の「パイプライン」ビューで「＋商談を追加」から顧客を選択して商談を作成。ステージ・金額・クロージング日を設定。<code>/deals</code> は <code>/crm?view=pipeline</code> へリダイレクト。</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
-      <!-- Step 3 -->
-      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 3</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">見積作成</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">商談カードの「見積を作成」ボタン（見積提出ステージ以降で表示）から見積新規作成へ。顧客・金額が自動引き継ぎ。</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
-      <!-- Step 4 -->
-      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 4</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">受注確定</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">商談カードを「受注」ステージにドラッグすると受注ダイアログが表示。次のアクション（見積 or 工事）を選択。</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);font-size:1rem;flex-shrink:0;">▶</div>
-      <!-- Step 5 -->
-      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-left:none;border-radius:0 12px 12px 0;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent-dark);margin-bottom:.5rem;">Step 5</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">工事登録</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">工事管理（/constructions）で工事を登録。顧客・受注額が引き継がれた状態で新規作成フォームが開く。</div>
-      </div>
-    </div>
 
-    <!-- パイプライン操作 -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">パイプライン操作ガイド</div>
-    <div class="table-wrap" style="margin-bottom:2.5rem;">
-      <table>
-        <thead>
-          <tr><th style="width:200px;">操作</th><th style="width:180px;">場所</th><th>説明</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="td-name">商談を追加</td>
-            <td>パイプライン右上</td>
-            <td>「＋商談追加」ボタン → 顧客選択・商談名・金額・ステージを入力してDB保存</td>
-          </tr>
-          <tr>
-            <td class="td-name">ステージを変更</td>
-            <td>カンバン上</td>
-            <td>商談カードをドラッグ&amp;ドロップで別ステージへ移動。自動でDBを更新</td>
-          </tr>
-          <tr>
-            <td class="td-name">見積を作成</td>
-            <td>商談カード内</td>
-            <td>「見積提出」以降のステージで商談カード下部に表示されるボタン。顧客・金額を引き継いで見積新規作成ページへ遷移</td>
-          </tr>
-          <tr>
-            <td class="td-name">受注確定</td>
-            <td>カンバン上</td>
-            <td>「受注」ステージへドラッグすると受注ダイアログが表示。見積作成・工事登録のどちらかを選択して次へ進める</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
-    <!-- ステージ一覧 -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ステージ一覧</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
-      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">問い合わせ</div><div style="font-size:.76rem;color:var(--muted);">初回コンタクト・Webからの問合せ</div></div>
-      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">初回面談</div><div style="font-size:.76rem;color:var(--muted);">現地調査・ヒアリング実施</div></div>
-      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">資料送付</div><div style="font-size:.76rem;color:var(--muted);">会社案内・プラン資料の送付</div></div>
-      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">見積提出</div><div style="font-size:.76rem;color:var(--muted);">見積書の提出・説明</div></div>
-      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">交渉中</div><div style="font-size:.76rem;color:var(--muted);">価格・仕様の調整・交渉</div></div>
-      <div style="background:var(--card);padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;">クロージング</div><div style="font-size:.76rem;color:var(--muted);">最終確認・契約直前</div></div>
-      <div style="background:#f0fdf4;padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;color:#15803d;">受注</div><div style="font-size:.76rem;color:var(--muted);">契約成立。工事へ引き継ぎ</div></div>
-      <div style="background:#fef2f2;padding:1rem 1.2rem;"><div style="font-weight:700;font-size:.85rem;margin-bottom:.25rem;color:#dc2626;">失注</div><div style="font-size:.76rem;color:var(--muted);">競合他社への流出・キャンセル</div></div>
-    </div>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin:2.5rem 0 .8rem;">顧客詳細タブ（/crm/[id]）</div>
-    <div class="table-wrap" style="margin-bottom:1.5rem;">
-      <table>
-        <thead><tr><th>タブ</th><th>スプレッドシート</th><th>状態</th><th>概要</th></tr></thead>
-        <tbody>
-          <tr><td class="td-name">概要</td><td>—</td><td>実装済</td><td>商談・見積・契約・工事のサマリーと関連一覧</td></tr>
-          <tr><td class="td-name">記入画面</td><td>No.5</td><td>実装済</td><td>電話・メール・予算感・問い合わせ分類など。顧客カードクリックで展開</td></tr>
-          <tr><td class="td-name">商談</td><td>No.6</td><td>実装済</td><td>商談タイムライン、要約表示、メモ→ToDo化</td></tr>
-          <tr><td class="td-name">録音・要約</td><td>No.7〜9</td><td>部分実装</td><td>録音UIあり。AI文字起こし・履歴一覧は未着手</td></tr>
-          <tr><td class="td-name">ToDo</td><td>No.10〜11</td><td>部分実装</td><td>3カラム構成は実装済。録音からの自動追加は未着手</td></tr>
-          <tr><td class="td-name">スケジューリング</td><td>No.12〜14</td><td>部分実装</td><td>候補日提案フロー実装済。AI最適化は未着手</td></tr>
-          <tr><td class="td-name">ファイル</td><td>No.15,45</td><td>部分実装</td><td>アップロード対応。一覧/カード表示は未着手</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">契約詳細タブ（/contracts/[id]）</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>タブ</th><th>スプレッドシート</th><th>状態</th><th>概要</th></tr></thead>
-        <tbody>
-          <tr><td class="td-name">顧客情報</td><td>No.24</td><td>部分実装</td><td>契約基本情報・見積紐付け。横断共通化は未着手</td></tr>
-          <tr><td class="td-name">やり取り管理</td><td>No.25〜28</td><td>部分実装</td><td>名称変更済。LINE/Slack連携・クイック返信は未着手</td></tr>
-          <tr><td class="td-name">書類作成</td><td>No.29〜30</td><td>部分実装</td><td>テンプレ選択・PDFプレビュー。管理者テンプレ設定は未着手</td></tr>
-          <tr><td class="td-name">承認WF</td><td>No.31</td><td>部分実装</td><td>ワークフロー起票・履歴。ポータル完全連携は未着手</td></tr>
-          <tr><td class="td-name">電子契約</td><td>No.32</td><td>部分実装</td><td>CloudSign送信UI。APIキー設定時に利用可</td></tr>
-          <tr><td class="td-name">ドキュメント</td><td>No.33</td><td>部分実装</td><td>契約関連ファイル格納</td></tr>
-          <tr><td class="td-name">見積もり</td><td>No.20</td><td>実装済</td><td>契約画面からも見積作成・閲覧可能</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- CONSTRUCTION FLOW -->
-  <section id="construction-flow">
-    <div class="section-label">Feature Detail</div>
-    <h2>工事フロー（Notion 2-1〜2-5）</h2>
-    <p class="section-desc"><a href="https://scythe-aurora-978.notion.site/p/36c0fccb9ad48023b431f255937b2bab" target="_blank">Notion 運用フロー</a> の「工事フロー」と現行システムの対応です。営業フロー（1-6 受注確定）で契約・工事が自動登録された後、現場担当がこのフローで進めます。</p>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">ステップフロー</div>
-    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:2.5rem;overflow-x:auto;">
-      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-radius:12px 0 0 12px;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-1</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">引き継ぎ〜工程表</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">受注後の工事登録（/constructions/new）→ 工程表タブでガント作成</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
-      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-2</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">見積作成</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">工事詳細「見積もり」タブで版管理・改訂</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
-      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-3</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">追加変更</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">追加変更タブで差額・明細比較・CloudSign</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
-      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-4</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">工事台帳</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">原価管理表を DB 永続化（construction_cost_budgets）</div>
-      </div>
-      <div style="width:28px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent-dark);flex-shrink:0;">▶</div>
-      <div style="flex:1;min-width:150px;background:var(--card);border:1px solid var(--border);border-left:none;border-radius:0 12px 12px 0;padding:1.4rem 1.2rem;">
-        <div style="font-size:.65rem;font-weight:700;color:var(--accent-dark);margin-bottom:.5rem;">2-5</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">発注書・請求</div>
-        <div style="font-size:.78rem;color:var(--muted);line-height:1.6;">発注書・請書タブ + 請求管理（/invoices）で顧客請求</div>
-      </div>
-    </div>
-
-    <div class="db-note" style="margin-bottom:2.5rem;">
-      <strong>整合性メモ：</strong> Notion 2-5 は「発注書・請求書」を1ステップにまとめています。現行 UI では下請への<strong>発注書・請書</strong>は工事詳細タブ、顧客向け<strong>請求書</strong>はメニュー「請求管理」で横断管理しています（工事詳細に請求書タブはありません）。
-    </div>
-  </section>
-
-  <!-- CONSTRUCTION TABS -->
-  <section id="constructions">
-    <div class="section-label">Feature Detail</div>
-    <h2>工事管理（7タブ構成）</h2>
-    <p class="section-desc">工事詳細ページ（/constructions/[id]）の現行タブ構成です。受注から現場管理・原価管理までを1画面で完結できます。</p>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">タブ一覧（2026-06 時点）</div>
-    <div class="table-wrap" style="margin-bottom:2.5rem;">
-      <table>
-        <thead>
-          <tr><th style="width:120px;">タブ</th><th style="width:140px;">キー</th><th style="width:80px;">Notion</th><th>機能概要</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="td-name">工程表</td>
-            <td class="td-mono">schedule</td>
-            <td>2-1</td>
-            <td>ガントチャートで工程タスクの期間・進捗を管理。タスクの追加・編集・期間変更に対応。</td>
-          </tr>
-          <tr>
-            <td class="td-name">見積もり</td>
-            <td class="td-mono">estimate</td>
-            <td>2-2</td>
-            <td>1工事に複数見積を保持。版（version）管理・改訂（parent_estimate_id）に対応。予備費1（2%）・予備費2（3%）を設定可能。</td>
-          </tr>
-          <tr>
-            <td class="td-name">契約書</td>
-            <td class="td-mono">contract</td>
-            <td>—</td>
-            <td>契約書 PDF のアップロード・管理。顧客・工期・契約金額をコンテキストとして表示。</td>
-          </tr>
-          <tr>
-            <td class="td-name">追加変更</td>
-            <td class="td-mono">change</td>
-            <td>2-3</td>
-            <td>追加変更工事（change_orders）の作成・承認。変更前後の明細・差額を記録。CloudSign B案（未設定時は PDF 代替）。</td>
-          </tr>
-          <tr>
-            <td class="td-name">工事台帳</td>
-            <td class="td-mono">budget</td>
-            <td>2-4</td>
-            <td>原価管理表（実行予算・発注・月次請求・粗利）。<strong>construction_cost_budgets</strong> テーブルへ永続化。</td>
-          </tr>
-          <tr>
-            <td class="td-name">発注書・請書</td>
-            <td class="td-mono">orders</td>
-            <td>2-5</td>
-            <td>下請発注（contractor_orders）の作成・ステータス管理。支払回数 <strong>2/4/6/12回</strong> の payment_schedule 按分。</td>
-          </tr>
-          <tr>
-            <td class="td-name">ドキュメント一覧</td>
-            <td class="td-mono">documents</td>
-            <td>—</td>
-            <td>工事関連ファイルの一覧・カード表示・ダウンロード。顧客詳細のファイルタブと連携予定（No.45 未着手）。</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">関連設定</div>
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
-      <div style="background:var(--card);padding:1.2rem 1.6rem;">
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">CloudSign 連携（設定 &gt; 会社情報）</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">companies.settings.cloudsign に enabled / api_key を保存。追加変更タブから書類送信。顧客が別途 CloudSign 契約する B案。</div>
-      </div>
-      <div style="background:var(--card);padding:1.2rem 1.6rem;">
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">請求締日（設定 &gt; 会社情報）</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">invoice_closing_day（20 または月末）で月次請求の計上期間・支払条件を決定。工期に基づき未生成の月次請求を自動作成。</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- COST MANAGEMENT -->
-  <section id="cost">
-    <div class="section-label">Feature Detail</div>
-    <h2>工事台帳（原価管理表）</h2>
-    <p class="section-desc">工事詳細ページ「工事台帳」タブに搭載。1工事につき複数の下請け業者ごとに予算・発注・月次請求を管理し、粗利をリアルタイムで把握できます。入力データは <strong>construction_cost_budgets</strong> テーブルに永続化され、リロード後も保持されます。</p>
-
-    <!-- 何ができるか -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">何ができるか</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
-      <div style="background:var(--card);padding:1.4rem 1.6rem;">
-        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-dark);margin-bottom:.5rem;">Input</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">数値を直接入力</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">白いセルをクリックするだけで編集開始。業者名・工種・予算額・発注額・月次請求を入力できます。</div>
-      </div>
-      <div style="background:var(--card);padding:1.4rem 1.6rem;">
-        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-dark);margin-bottom:.5rem;">Auto Calc</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">緑セルは自動計算</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">実行予算合計・確定額・予算残・請求残・工事粗利額・粗利率がリアルタイムで自動更新されます。</div>
-      </div>
-      <div style="background:var(--card);padding:1.4rem 1.6rem;">
-        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-dark);margin-bottom:.5rem;">Alert</div>
-        <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">赤字でアラート</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.65;">予算残がマイナスになると赤く表示。請求残（未回収）も赤字で一目でわかります。</div>
-      </div>
-    </div>
-
-    <!-- 列の説明 -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">列の構成</div>
-    <div class="table-wrap" style="margin-bottom:2.5rem;">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:140px;">グループ</th>
-            <th style="width:160px;">列名</th>
-            <th style="width:80px;">種別</th>
-            <th>内容・説明</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td rowspan="4" style="vertical-align:top;font-weight:700;">基本情報</td>
-            <td class="td-name">発注ステータス</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>クリックで「発注済 ↔ 未発注」を切り替え</td>
-          </tr>
-          <tr>
-            <td class="td-name">施工業者名</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>下請け業者・職人の名称</td>
-          </tr>
-          <tr>
-            <td class="td-name">工種</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>外構工事・電気工事・塗装工事など</td>
-          </tr>
-          <tr>
-            <td class="td-name">管理用予算</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>社内管理用の上限予算（対外的な実行予算とは別管理）</td>
-          </tr>
-          <tr style="background:#fafafa;">
-            <td rowspan="3" style="vertical-align:top;font-weight:700;">実行予算・<br>追加契約</td>
-            <td class="td-name">実行予算</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>当初の発注予定金額</td>
-          </tr>
-          <tr style="background:#fafafa;">
-            <td class="td-name">追加契約①②</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>設計変更・追加工事が発生した場合の増額分</td>
-          </tr>
-          <tr style="background:#fafafa;">
-            <td class="td-name">追加含む実行予算</td>
-            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
-            <td><span class="td-mono" style="font-size:.8rem;">実行予算 + 追加契約① + 追加契約②</span></td>
-          </tr>
-          <tr>
-            <td rowspan="5" style="vertical-align:top;font-weight:700;">発注</td>
-            <td class="td-name">発注額</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>実際に発注した金額</td>
-          </tr>
-          <tr>
-            <td class="td-name">追加発注①②③</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>工事中に発生した追加発注</td>
-          </tr>
-          <tr>
-            <td class="td-name">確定額</td>
-            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
-            <td><span class="td-mono" style="font-size:.8rem;">発注額 + 追加発注① + 追加発注② + 追加発注③</span></td>
-          </tr>
-          <tr>
-            <td class="td-name">予算残</td>
-            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
-            <td><span class="td-mono" style="font-size:.8rem;">追加含む実行予算 − 確定額</span>（マイナスで赤字）</td>
-          </tr>
-          <tr>
-            <td class="td-name">〇月請求（12ヶ月）</td>
-            <td><span class="td-chip">入力</span></td>
-            <td>業者から届いた月次請求書の金額を月ごとに入力</td>
-          </tr>
-          <tr style="background:#fafafa;">
-            <td style="font-weight:700;">請求管理</td>
-            <td class="td-name">請求残</td>
-            <td style="color:var(--accent-dark);font-weight:700;">自動</td>
-            <td><span class="td-mono" style="font-size:.8rem;">確定額 − 月次請求の合計</span>（未払いがあると赤字）</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 計算式まとめ -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">サマリーの計算式</div>
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:2.5rem;">
-      <div style="background:var(--card);padding:1.2rem 1.6rem;">
-        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.5rem;">実行予算ベース（暫定）</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:.82rem;line-height:2;color:var(--text);">
-          工事粗利額 = 契約金額 − 実行予算合計<br>
-          工事粗利率 = 工事粗利額 ÷ 契約金額 × 100
-        </div>
-        <div style="font-size:.78rem;color:var(--muted);margin-top:.5rem;">発注確定前の見込み値。計画段階で利益を確認するために使います。</div>
-      </div>
-      <div style="background:var(--card);padding:1.2rem 1.6rem;">
-        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.5rem;">確定額ベース（実績）</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:.82rem;line-height:2;color:var(--text);">
-          工事粗利額 = 契約金額 − 確定額合計<br>
-          工事粗利率 = 工事粗利額 ÷ 契約金額 × 100
-        </div>
-        <div style="font-size:.78rem;color:var(--muted);margin-top:.5rem;">実際に発注した金額ベースの粗利。工事が進むにつれて精度が上がります。</div>
-      </div>
-    </div>
-
-    <!-- 操作方法 -->
-    <div style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.8rem;">操作方法</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>操作</th><th>方法</th></tr>
-        </thead>
-        <tbody>
-          <tr><td class="td-name">数値を入力する</td><td>白いセルをクリック → キーボードで入力 → Enter または別セルへ移動で確定</td></tr>
-          <tr><td class="td-name">発注ステータスを変える</td><td>「発注済」「未発注」バッジをクリックするたびに切り替わります</td></tr>
-          <tr><td class="td-name">業者行を追加する</td><td>表の下部「+ 行を追加」をクリック</td></tr>
-          <tr><td class="td-name">業者行を削除する</td><td>対象行にホバー → 右端のゴミ箱ボタンをクリック</td></tr>
-          <tr><td class="td-name">保存する</td><td>右上「保存する」ボタンをクリック（緑の「保存済み」に変わります）</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- KICKOFF INPUT (導入準備) -->
   <section id="kickoff-input">
     <div class="section-label">Kickoff Input</div>
     <h2>導入準備｜ご提供いただきたい情報</h2>
@@ -1956,70 +2094,7 @@
     </div>
   </section>
 
-  <!-- SCREENSHOTS -->
-  <section id="screenshots">
-    <div class="section-label">Screenshots</div>
-    <h2>画面スクリーンショット</h2>
-    <p class="section-desc"><code>admin@example.com</code> / <code>admin2026</code> でログインし、2026-06-07 時点の実画面をキャプチャしています。</p>
-    <div class="ss-grid">
-      <div class="ss-card">
-        <img src="screenshots/dashboard.png" alt="ダッシュボード" />
-        <div class="ss-info">
-          <div class="ss-title">ダッシュボード（/dashboard）</div>
-          <div class="ss-desc">受注額・商談数・進行案件などの KPI、勤怠打刻、今日のフォーカス（ToDo）、生産サマリーをウィジェット表示。D&amp;D で並べ替え可能。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/crm-list.png" alt="顧客管理" />
-        <div class="ss-info">
-          <div class="ss-title">顧客・商談管理 — 一覧（/crm）</div>
-          <div class="ss-desc">初期表示は「一覧」。法人／個人タブ、一覧・カード・パイプラインの3ビュー切替。スプレッドシート No.2〜3 の要件どおり実装済み。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/crm-pipeline.png" alt="商談パイプライン" />
-        <div class="ss-info">
-          <div class="ss-title">商談パイプライン（/crm?view=pipeline）</div>
-          <div class="ss-desc">独立画面は廃止。パイプライン／一覧の切替、KPI バー、受注確定フロー。旧 <code>/deals</code> はここへリダイレクト。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/crm-detail.png" alt="顧客詳細" />
-        <div class="ss-info">
-          <div class="ss-title">顧客詳細（/crm/[id]）</div>
-          <div class="ss-desc">概要・記入画面・商談・録音・ToDo・スケジューリング・ファイルの7タブ。商談→見積→契約→工事の関連データを横断表示。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/quotes-list.png" alt="見積管理" />
-        <div class="ss-info">
-          <div class="ss-title">見積管理（/quotes）</div>
-          <div class="ss-desc">顧客別／全見積の2タブで階層表示。顧客カード→見積一覧→詳細の遷移（No.16〜19）。大項目・詳細項目の階層明細に対応。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/contract-detail.png" alt="契約詳細" />
-        <div class="ss-info">
-          <div class="ss-title">契約詳細（/contracts/[id]）</div>
-          <div class="ss-desc">顧客情報・やり取り管理・書類作成・承認WF・電子契約・ドキュメント・見積もりの7タブ。受注確定で自動登録された案件を管理。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/constructions-list.png" alt="工事一覧" />
-        <div class="ss-info">
-          <div class="ss-title">工事管理 — 一覧（/constructions）</div>
-          <div class="ss-desc">着工前・施工中・完了のステータス集計、担当者フィルタ、工事名・顧客名検索。受注後の引き継ぎ先画面。</div>
-        </div>
-      </div>
-      <div class="ss-card">
-        <img src="screenshots/construction-detail.png" alt="工事詳細" />
-        <div class="ss-info">
-          <div class="ss-title">工事詳細 — 工程表（/constructions/[id]）</div>
-          <div class="ss-desc">Notion 工事フロー 2-1 に対応。ガントチャートで工程タスクを管理。7タブ（工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント一覧）。</div>
-        </div>
-      </div>
-    </div>
-  </section>
+
 
 </div><!-- /container -->
 
@@ -2763,3 +2838,5 @@ document.addEventListener('DOMContentLoaded', async () => {
 </script>
 </body>
 </html>
+
+

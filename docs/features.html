@@ -244,26 +244,32 @@
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">顧客・商談管理</div>
-      <div class="feat-desc">顧客の登録・編集・検索・削除。法人／個人タブ、<strong>一覧／カード／パイプライン</strong>の3ビュー切替（初期表示は一覧）。独立したパイプライン画面は廃止し、<code>/crm?view=pipeline</code> に統合。<code>/deals</code> は同画面へリダイレクト。担当者アサイン、獲得ソース・タグ管理、関連データ（商談・見積・契約・工事）参照に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">一覧・カード・パイプライン</span><span class="feat-tag">担当者アサイン</span><span class="feat-tag">獲得ソース管理</span><span class="feat-tag">関連データ参照</span></div></div>
+      <div class="feat-desc">顧客の登録・編集・検索・削除。法人／個人／未フォロー、<strong>一覧／カード／パイプライン</strong>の3ビュー（初期は一覧）。独立パイプラインは廃止し <code>/crm?view=pipeline</code> に統合。<code>/deals</code> は同画面へリダイレクト。見込度 A/B/C・特需、担当者・獲得ソース・タグ、関連データ（商談・見積・契約・工事）参照に対応。</div>
+      <div class="feat-tags"><span class="feat-tag">一覧・カード・パイプライン</span><span class="feat-tag">見込度 A/B/C</span><span class="feat-tag">獲得ソース管理</span><span class="feat-tag">関連データ参照</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">顧客詳細（7タブ）</div>
-      <div class="feat-desc">顧客詳細は概要／記入画面／商談／録音・要約／ToDo／スケジューリング／ファイルの7タブ構成。記入画面で電話・メール・予算感・問い合わせ分類などを管理。商談タブはタイムライン表示、ToDoは3カラム（Today／upcoming／All）、スケジューリングは面談区分・希望時間帯・所要時間から候補日を提案。</div>
-      <div class="feat-tags"><span class="feat-tag">記入画面</span><span class="feat-tag">商談タイムライン</span><span class="feat-tag">ToDo 3カラム</span><span class="feat-tag">候補日提案</span></div></div>
+      <div class="feat-desc">概要／記入画面／商談／録音・要約／ToDo／スケジューリング／ドキュメント一覧の7タブ。記入画面で連絡先・予算感・見込度・特需などを管理。商談はタイムライン＋AI見込度／ステージ提案。録音は Whisper 文字起こし。ToDoは3カラム、スケジューリングは候補日提案・メール文面生成。</div>
+      <div class="feat-tags"><span class="feat-tag">記入画面</span><span class="feat-tag">AI見込度提案</span><span class="feat-tag">録音・Whisper</span><span class="feat-tag">候補日提案</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">商談パイプライン</div>
-      <div class="feat-desc">顧客・商談管理画面の「パイプライン」ビューでカンバン／一覧を切替。ドラッグ&amp;Dでステージ変更、KPI（商談数・総額・受注率）表示。「受注」へ移動すると受注確定ダイアログが開き、契約・工事へ自動引き継ぎ。商談の追加・編集・削除に対応。</div>
-      <div class="feat-tags"><span class="feat-tag">カンバン D&amp;D</span><span class="feat-tag">受注率 KPI</span><span class="feat-tag">受注確定フロー</span><span class="feat-tag">担当者フィルタ</span></div></div>
+      <div class="feat-desc">「パイプライン」ビューでカンバン／一覧を切替。DnDでステージ変更（ステージは会社マスタ <code>deal_stages</code>）。KPI（商談数・総額・受注率）。受注ステージへ移動すると受注確定ダイアログが開き、契約・工事へ引き継ぎ。</div>
+      <div class="feat-tags"><span class="feat-tag">カンバン D&amp;D</span><span class="feat-tag">会社別ステージ</span><span class="feat-tag">受注確定フロー</span><span class="feat-tag">担当者フィルタ</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">見積管理</div>
-      <div class="feat-desc">見積の横断管理。<strong>顧客別</strong>タブで顧客→見積一覧→詳細の階層遷移、<strong>全見積</strong>タブで横断閲覧。大項目／詳細項目の階層明細、粗利・粗利率のリアルタイム計算、PDFプレビュー・コピー作成。作成時は顧客選択→情報取得→編集画面。工事詳細・契約詳細からも見積を紐付け可能。</div>
-      <div class="feat-tags"><span class="feat-tag">顧客別階層</span><span class="feat-tag">大項目・詳細項目</span><span class="feat-tag">PDFプレビュー</span><span class="feat-tag">版管理・改訂</span></div></div>
+      <div class="feat-desc">顧客別／全見積の2ビュー。大項目／明細の階層、予備費1・2、粗利・粗利率のリアルタイム計算と粗利ゲート（WF承認連携）。PDFは顧客向け／原価内訳書の2モード。版管理・コピー作成。工事・契約詳細からも紐付け可能。</div>
+      <div class="feat-tags"><span class="feat-tag">予備費1/2</span><span class="feat-tag">粗利ゲート</span><span class="feat-tag">原価内訳PDF</span><span class="feat-tag">版管理・改訂</span></div></div>
+
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-cat">CRM・リード / BI</div>
+      <div class="feat-title">BIダッシュボード</div>
+      <div class="feat-desc">経営向け売上・粗利・昨対・着地予測・部門別。顧客見込度 A/B/C × 会社別確度%で期待値売上を算出。期首設定（間接費・販管費・予備費・部門目標）。ナビは <code>/bi</code>（実験UI <code>/bi2</code> はナビ外）。</div>
+      <div class="feat-tags"><span class="feat-tag">着地予測</span><span class="feat-tag">見込度期待値</span><span class="feat-tag">期首設定</span><span class="feat-tag">部門別</span></div></div>
 
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
@@ -281,8 +287,8 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">工事管理</div>
-      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細は7タブ：工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント一覧。Notion「工事フロー」2-1〜2-5に対応。顧客請求は工事タブではなく<strong>請求管理（/invoices）</strong>で横断管理。</div>
-      <div class="feat-tags"><span class="feat-tag">7タブ構成</span><span class="feat-tag">ガント工程表</span><span class="feat-tag">工事台帳永続化</span><span class="feat-tag">発注書・請書</span></div></div>
+      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細は<strong>8タブ</strong>：顧客情報／工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント。工程表から工事日報を作成。Notion「工事フロー」2-1〜2-5に対応。顧客請求はナビ非表示の <code>/invoices</code> で横断管理。</div>
+      <div class="feat-tags"><span class="feat-tag">8タブ構成</span><span class="feat-tag">ガント工程表</span><span class="feat-tag">工事日報</span><span class="feat-tag">工事台帳永続化</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
@@ -304,15 +310,15 @@
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
-      <div class="feat-title">請求管理</div>
-      <div class="feat-desc">顧客向け請求書の作成・明細編集・消費税計算・ステータス管理（下書き／送付済み／入金済み／キャンセル）。会社設定の締日（20日締め／月末締め）に基づく月次請求の一括生成、入金サマリー・ブラウザ印刷に対応。<strong>メニューは現状維持</strong>（スプレッドシート No.35 で削除検討中）。</div>
-      <div class="feat-tags"><span class="feat-tag">締日ベース月次生成</span><span class="feat-tag">明細編集・消費税計算</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div></div>
+      <div class="feat-title">請求管理（ナビ非表示）</div>
+      <div class="feat-desc">顧客向け請求書の作成・明細編集・消費税計算・ステータス（draft／sent／paid／cancelled）。会社設定の締日（20日／月末）に基づく月次一括生成。<strong>サイドバー非表示</strong>（ルート <code>/invoices</code> と権限キーは残存）。原価の月次は工事台帳側でも管理。</div>
+      <div class="feat-tags"><span class="feat-tag">締日ベース月次生成</span><span class="feat-tag">ナビ非表示</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
-      <div class="feat-title">予算管理</div>
-      <div class="feat-desc">年度予算の策定・承認・削除。完了工事データから売上・粗利の実績を自動集計し、計画対実績を達成率で表示。複数年度の比較に対応。<strong>メニューは現状維持</strong>（スプレッドシート No.35 で削除検討中）。</div>
-      <div class="feat-tags"><span class="feat-tag">年度予算策定</span><span class="feat-tag">完了工事から実績集計</span><span class="feat-tag">達成率表示</span><span class="feat-tag">承認フロー</span></div></div>
+      <div class="feat-title">予算管理（ナビ非表示）</div>
+      <div class="feat-desc">年度予算の策定・承認。完了工事から売上・粗利実績を集計し計画対実績を表示。<strong>サイドバー非表示</strong>（ルート <code>/budget</code>）。経営の期首予算・間接費は BI 設定側で管理。</div>
+      <div class="feat-tags"><span class="feat-tag">年度予算策定</span><span class="feat-tag">ナビ非表示</span><span class="feat-tag">達成率表示</span><span class="feat-tag">BIと別モジュール</span></div></div>
 
     <!-- PORTAL -->
     <div class="feat-card" data-cat="portal">
@@ -367,14 +373,20 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">ロールベース権限管理</div>
-      <div class="feat-desc">レガシー3ロール（本部管理者・施工店管理者・社員）に加え、CSV定義のデフォルト6ロール（管理者・経営層・営業・現場担当・設計士・総務）と外部協力業者（URL経由）をサポート。Middleware + RLS で二重制御。マーケティングは v2 非公開。</div>
-      <div class="feat-tags"><span class="feat-tag">6+3ロール</span><span class="feat-tag">RLS + Middleware</span><span class="feat-tag">外部協力業者</span><span class="feat-tag">自由追加ロール</span></div></div>
+      <div class="feat-desc">レガシー3ロール＋CSVデフォルト6ロール＋外部協力業者。会社ごとの<strong>権限マトリクス</strong>（settings.role_permissions）でメニュー表示を制御。カスタムロール可。Middleware + RLS で二重制御。マーケティングは v2 非公開（全遮断）。</div>
+      <div class="feat-tags"><span class="feat-tag">権限マトリクス</span><span class="feat-tag">カスタムロール</span><span class="feat-tag">RLS + Middleware</span><span class="feat-tag">外部協力業者</span></div></div>
 
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">管理者設定・通知</div>
-      <div class="feat-desc">設定画面に<strong>管理者設定</strong>（PDFビルダー／アカウント管理／権限・ロール管理）を追加。PDFビルダーは項目パレットのドラッグ&amp;D配置に対応。ベル通知（60秒更新）、CloudSign・請求締日、メンバー招待、CRM／職人マスタ管理を提供。</div>
-      <div class="feat-tags"><span class="feat-tag">PDFビルダー</span><span class="feat-tag">ロール管理</span><span class="feat-tag">未読バッジ通知</span><span class="feat-tag">各種マスタ管理</span></div></div>
+      <div class="feat-desc">設定は個人／組織／マスタ／連携の4大タブ。PDFビルダー、メンバー招待、権限マトリクス、CloudSign・請求締日・見込度%、CRM／職人マスタ、API・Webhook。ベル通知、社内チャット（internal_messages）を提供。</div>
+      <div class="feat-tags"><span class="feat-tag">PDFビルダー</span><span class="feat-tag">権限マトリクス</span><span class="feat-tag">社内チャット</span><span class="feat-tag">各種マスタ管理</span></div></div>
+
+    <div class="feat-card" data-cat="system">
+      <div class="feat-cat">システム</div>
+      <div class="feat-title">社内チャット</div>
+      <div class="feat-desc">サイドバーから起動する社内メッセージ。DB（internal_messages）に永続化。未読が多い場合は BombAlert。BRIDGE AI から担当者への転送にも対応。</div>
+      <div class="feat-tags"><span class="feat-tag">internal_messages</span><span class="feat-tag">BombAlert</span><span class="feat-tag">AI転送</span></div></div>
 
     <!-- INTEGRATION -->
     <div class="feat-card" data-cat="integration">
@@ -392,7 +404,7 @@
     <div class="feat-card" data-cat="integration">
       <div class="feat-cat">外部連携</div>
       <div class="feat-title">Supabase Database</div>
-      <div class="feat-desc">PostgreSQL 15 をバックエンドとして使用。30 以上のテーブルに RLS ポリシーを適用し、company_id 単位でマルチテナントを実現。マイグレーション管理・リアルタイムサブスクリプションに対応。</div>
+      <div class="feat-desc">PostgreSQL をバックエンドとして使用。業務テーブルに RLS を適用し company_id 単位でマルチテナントを実現。マイグレーションは 00001〜00064。リアルタイムサブスクリプションに対応。</div>
       <div class="feat-tags"><span class="feat-tag">PostgreSQL 15</span><span class="feat-tag">RLS ポリシー</span><span class="feat-tag">リアルタイム同期</span></div></div>
 
     <div class="feat-card" data-cat="integration">
