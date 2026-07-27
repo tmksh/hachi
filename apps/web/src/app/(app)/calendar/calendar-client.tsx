@@ -446,7 +446,16 @@ export function CalendarClient({
 
   const visibleEvents = useMemo(() => {
     const local = events.filter((e) => !hiddenCats.has(e.category ?? ""));
-    const goog  = hiddenCats.has("google") ? [] : googleEvents;
+    // ローカルに google_event_id がある予定は Google 側コピーを除外（DnD 後の二重表示防止）
+    const localGoogleIds = new Set(
+      local
+        .map((e) => (e as Ev & { google_event_id?: string | null }).google_event_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const goog = (hiddenCats.has("google") ? [] : googleEvents).filter((g) => {
+      const rawId = g.id.startsWith("gcal_") ? g.id.slice(5) : g.id;
+      return !localGoogleIds.has(rawId) && !localGoogleIds.has(g.id);
+    });
     // チームメンバーのイベントをマージ（メンバー色を付与）
     const memberEvList: AnyEv[] = memberCalendars
       .filter((m) => m.checked)
@@ -763,6 +772,23 @@ export function CalendarClient({
               onEventClick={openEvent}
               onRefresh={refreshEvents}
               onCreateAt={createAtSlot}
+              googleToken={googleToken}
+              onEventTimeChange={(id, start_at, end_at, googleEventId) => {
+                setEvents((prev) =>
+                  prev.map((e) => (e.id === id ? { ...e, start_at, end_at } : e)),
+                );
+                if (googleEventId) {
+                  setGoogleEvents((prev) =>
+                    prev.map((e) => {
+                      const rawId = e.id.startsWith("gcal_") ? e.id.slice(5) : e.id;
+                      if (rawId === googleEventId || e.id === googleEventId) {
+                        return { ...e, start_at, end_at };
+                      }
+                      return e;
+                    }),
+                  );
+                }
+              }}
             />
           ) : (
             <DayView
@@ -1154,6 +1180,8 @@ function WeekView({
   onEventClick,
   onRefresh,
   onCreateAt,
+  googleToken,
+  onEventTimeChange,
 }: {
   date: Date;
   selected: Date;
@@ -1162,6 +1190,13 @@ function WeekView({
   onEventClick: (ev: AnyEv) => void;
   onRefresh: () => void;
   onCreateAt: (d: Date, hhmm?: string) => void;
+  googleToken: string | null;
+  onEventTimeChange: (
+    id: string,
+    start_at: string,
+    end_at: string,
+    googleEventId?: string | null,
+  ) => void;
 }) {
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
   const days = useMemo(
@@ -1213,6 +1248,7 @@ function WeekView({
   const [dragging, setDragging] = useState<DragInfo | null>(null);
   const dragRef = useRef<DragInfo | null>(null);
   const dragRafRef = useRef<number | null>(null);
+  const isDraggingRef = useRef(false);
 
   /* 週変更時: 縦は8:00付近へ */
   useEffect(() => {
@@ -1287,9 +1323,17 @@ function WeekView({
         const dur = info.originalEnd - info.originalStart;
         const newStart = snapTo(Math.max(0, Math.min(1440 - dur, clickMin - info.clickOffsetMin)));
         updated = { ...info, currentStart: newStart, currentEnd: newStart + dur, currentDay: getDayFromX(e.clientX) };
+        // 位置が変わったら click で古い時刻のダイアログが開かないようマーク
+        if (
+          updated.currentStart !== info.originalStart ||
+          !isSameDay(updated.currentDay, parseISO(info.ev.start_at))
+        ) {
+          isDraggingRef.current = true;
+        }
       } else {
         const newEnd = snapTo(Math.max(info.currentStart + 15, Math.min(1440, clickMin)));
         updated = { ...info, currentEnd: newEnd };
+        isDraggingRef.current = true;
       }
       dragRef.current = updated;
       if (dragRafRef.current != null) return;
@@ -1315,7 +1359,10 @@ function WeekView({
         info.currentStart === info.originalStart &&
         info.currentEnd   === info.originalEnd &&
         isSameDay(info.currentDay, origDay);
-      if (noChange) return;
+      if (noChange) {
+        // わずかな移動でなければ次の click を抑止済みのまま
+        return;
+      }
 
       const day = info.currentDay;
       const newStartDt = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
@@ -1326,13 +1373,25 @@ function WeekView({
       const newEndDt = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
         Math.floor(endMin / 60), endMin % 60, 0);
 
+      const start_at = format(newStartDt, "yyyy-MM-dd'T'HH:mm:ss");
+      const end_at = format(newEndDt, "yyyy-MM-dd'T'HH:mm:ss");
+      const gId = (info.ev as Ev & { google_event_id?: string | null }).google_event_id ?? null;
+
+      // 楽観更新（ドロップ直後に元位置へスナップバックしない）
+      onEventTimeChange(info.ev.id, start_at, end_at, gId);
+
       try {
-        await updateCalendarEvent(info.ev.id, {
-          start_at: format(newStartDt, "yyyy-MM-dd'T'HH:mm:ss"),
-          end_at:   format(newEndDt,   "yyyy-MM-dd'T'HH:mm:ss"),
-        });
+        await updateCalendarEvent(info.ev.id, { start_at, end_at });
+        if (googleToken && gId) {
+          await updateGoogleCalendarEvent(googleToken, gId, {
+            start_at,
+            end_at,
+            all_day: !!info.ev.all_day,
+          });
+        }
         onRefresh();
       } catch {
+        onRefresh(); // サーバー値へロールバック
         toast.error("更新に失敗しました");
       }
     };
@@ -1344,10 +1403,9 @@ function WeekView({
       window.removeEventListener("mouseup", onUp);
       if (dragRafRef.current != null) cancelAnimationFrame(dragRafRef.current);
     };
-  }, [getMinFromY, getDayFromX, onRefresh]);
+  }, [getMinFromY, getDayFromX, onRefresh, onEventTimeChange, googleToken]);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
-  const isDraggingRef = useRef(false);
   const innerW = TIME_W + days.length * DAY_COL_W_DYN;
 
   return (

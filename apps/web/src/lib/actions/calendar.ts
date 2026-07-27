@@ -193,7 +193,8 @@ export async function updateCalendarEvent(id: string, input: Partial<Omit<Calend
     void _omit;
     ({ data, error } = await supabase.from("calendar_events").update(rest).eq("id", id).select().single());
   }
-  if (error) throw error;
+  // PostgrestError を素 throw すると本番で Server Components エラーになる
+  if (error) throw new Error(error.message || "予定の更新に失敗しました");
 
   if (data && input.shared_with) {
     const added = input.shared_with.filter((m) => !previousShared.includes(m));

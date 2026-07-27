@@ -4,6 +4,19 @@ import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
 
+/** PostgrestError を素のまま throw すると本番で Server Components render エラーに化ける */
+function actionError(
+  error: { message?: string; code?: string; details?: string | null; hint?: string | null } | null | undefined,
+  fallback: string,
+): Error {
+  const msg = error?.message?.trim();
+  const detail = [error?.details, error?.hint, error?.code ? `code=${error.code}` : null]
+    .filter(Boolean)
+    .join(" / ");
+  if (msg && detail) return new Error(`${msg}（${detail}）`);
+  return new Error(msg || fallback);
+}
+
 export async function getWorkflowRequests(status?: string) {
   const supabase = await createClient();
   let query = supabase
@@ -17,7 +30,7 @@ export async function getWorkflowRequests(status?: string) {
   }
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) throw actionError(error, "ワークフロー一覧の取得に失敗しました");
   return data;
 }
 
@@ -40,7 +53,7 @@ export async function getWorkflowRequest(id: string) {
       .eq("request_id", id)
       .order("created_at"),
   ]);
-  if (requestRes.error) throw requestRes.error;
+  if (requestRes.error) throw actionError(requestRes.error, "ワークフロー詳細の取得に失敗しました");
 
   return {
     ...requestRes.data,
@@ -81,13 +94,13 @@ export async function createWorkflowRequest(input: {
       status: "submitted",
       submitted_at: new Date().toISOString(),
     })
-    .select()
+    .select("id, company_id, type_id, requester_id, title, status, amount, is_urgent, due_date, submitted_at, created_at")
     .single();
-  if (error) throw error;
+  if (error) throw actionError(error, "ワークフロー申請の作成に失敗しました");
 
   // Create approval steps
   if (input.approver_ids && input.approver_ids.length > 0) {
-    await supabase.from("workflow_steps").insert(
+    const { error: stepsError } = await supabase.from("workflow_steps").insert(
       input.approver_ids.map((approverId, i) => ({
         company_id: profile.company_id,
         request_id: data.id,
@@ -96,6 +109,11 @@ export async function createWorkflowRequest(input: {
         status: "pending" as const,
       }))
     );
+    if (stepsError) {
+      // 申請本体だけ残ると「申請中だが承認者がいない」状態になるためロールバック
+      await supabase.from("workflow_requests").delete().eq("id", data.id);
+      throw actionError(stepsError, "承認ステップの作成に失敗しました");
+    }
   }
 
   return data as WorkflowRequest;
@@ -234,7 +252,7 @@ async function approveWorkflowStepInternal(
     .from("workflow_steps")
     .update({ status, comment: comment || null, decided_at: new Date().toISOString() })
     .eq("id", stepId);
-  if (error) throw error;
+  if (error) throw actionError(error, "承認ステップの更新に失敗しました");
 
   // Check if all steps are approved
   const { data: step } = await supabase.from("workflow_steps").select("request_id, step_order").eq("id", stepId).single();
@@ -361,14 +379,14 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
     .from("workflow_steps")
     .update({ status: "rejected", comment: comment || null, decided_at: new Date().toISOString() })
     .eq("id", stepId);
-  if (error) throw error;
+  if (error) throw actionError(error, "却下処理に失敗しました");
 
   const { data: step, error: stepErr } = await supabase
     .from("workflow_steps")
     .select("request_id")
     .eq("id", stepId)
     .single();
-  if (stepErr || !step) throw stepErr ?? new Error("承認ステップが見つかりません");
+  if (stepErr || !step) throw actionError(stepErr, "承認ステップが見つかりません");
 
   // 却下時は差戻しフラグを明示的にクリア（No.48: 却下→差戻し誤表示の再発防止）
   const { data: existing, error: existingErr } = await supabase
@@ -376,7 +394,7 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
     .select("payload")
     .eq("id", step.request_id)
     .single();
-  if (existingErr) throw existingErr;
+  if (existingErr) throw actionError(existingErr, "申請の取得に失敗しました");
 
   const prev = (existing?.payload ?? {}) as Record<string, unknown>;
   const { remand: _r, remand_comment: _c, remanded_at: _a, ...rest } = prev;
@@ -442,7 +460,7 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
     .eq("id", stepId)
     .select("id, request_id")
     .single();
-  if (error || !stepped) throw error ?? new Error("承認ステップの更新に失敗しました");
+  if (error || !stepped) throw actionError(error, "承認ステップの更新に失敗しました");
 
   const requestId = stepped.request_id;
 
@@ -451,7 +469,7 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
     .select("payload")
     .eq("id", requestId)
     .single();
-  if (existingErr) throw existingErr;
+  if (existingErr) throw actionError(existingErr, "申請の取得に失敗しました");
 
   const prev = (existing?.payload ?? {}) as Record<string, unknown>;
   // 差戻し時は却下系フィールドを除去し、remand を必ず true で書き込む（差戻し→却下誤表示対策）
@@ -587,7 +605,7 @@ export async function updateWorkflowRequestStatus(
   }
 
   const { error } = await supabase.from("workflow_requests").update(patch).eq("id", id);
-  if (error) throw error;
+  if (error) throw actionError(error, "申請ステータスの更新に失敗しました");
 }
 
 export async function addWorkflowComment(requestId: string, body: string) {
@@ -603,7 +621,7 @@ export async function addWorkflowComment(requestId: string, body: string) {
     user_id: user.id,
     message: body,
   });
-  if (error) throw error;
+  if (error) throw actionError(error, "コメントの投稿に失敗しました");
 
   // コメント着信通知（No.43/44）
   const { data: request } = await supabase
@@ -700,7 +718,7 @@ export async function getWorkflowTypes() {
     .select("*")
     .order("sort_order")
     .order("created_at");
-  if (error) throw error;
+  if (error) throw actionError(error, "ワークフロー種別の取得に失敗しました");
   return data;
 }
 
@@ -733,7 +751,7 @@ export async function createWorkflowType(input: {
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw actionError(error, "ワークフロー種別の作成に失敗しました");
   return data;
 }
 
@@ -750,13 +768,13 @@ export async function updateWorkflowType(id: string, input: {
     .from("workflow_types")
     .update({ ...input, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) throw error;
+  if (error) throw actionError(error, "ワークフロー種別の更新に失敗しました");
 }
 
 export async function deleteWorkflowType(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("workflow_types").delete().eq("id", id);
-  if (error) throw error;
+  if (error) throw actionError(error, "ワークフロー種別の削除に失敗しました");
 }
 
 export type FieldDef = {

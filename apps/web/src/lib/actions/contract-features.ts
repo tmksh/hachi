@@ -821,10 +821,10 @@ export async function submitContractWorkflow(
   const computedAmount = excl > 0 ? excl + Math.floor(excl * taxRate / 100) : (contract.amount ?? null);
   const customerName = (contract.customer as { name?: string } | null)?.name;
 
+  // contract_draft 全体は巨大になり得るため payload には要約のみ（本体は contracts.notes に保持）
   const payload: Record<string, unknown> = {
     contract_id: contractId,
     template_id: draft?.template_id ?? null,
-    contract_draft: draft,
     契約書: template?.name ?? contract.title ?? title,
     発注者: form.kou_name ?? customerName ?? "",
     工事名称: form.work_name ?? contract.title ?? title,
@@ -898,7 +898,8 @@ export async function submitContractWorkflow(
     administration_auto_appended: ensured.appended,
   });
 
-  return request;
+  // 巨大な contract_draft を含む request 全体を返すとシリアライズ失敗の原因になるため id のみ
+  return { id: request.id };
 }
 
 /** 総務ロールが契約承認時に支払条件・口座等を追記（No.86 / Step17） */

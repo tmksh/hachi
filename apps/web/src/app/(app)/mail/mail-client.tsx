@@ -108,6 +108,8 @@ export function MailClient({
           "GOOGLE_CLIENT_ID の形式が不正です（*.apps.googleusercontent.com である必要があります）",
         invalid_client:
           "Google OAuth クライアントが無効です（401: invalid_client）。テストユーザーではなく、GCPの「ウェブアプリケーション」クライアントID/SecretとリダイレクトURIを確認してください",
+        redirect_uri_mismatch:
+          "リダイレクトURIが一致しません（400: redirect_uri_mismatch）。メール画面の連携診断に表示される redirectUri を Google Cloud Console の「承認済みのリダイレクト URI」に追加してください（例: https://bridge-linq.com/api/gmail/callback）",
       };
       toast.error(msgs[error] ?? `エラー: ${error}`, { duration: 8000 });
     }

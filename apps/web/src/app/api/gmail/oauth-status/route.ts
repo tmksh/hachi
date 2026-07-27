@@ -4,6 +4,7 @@ import { getRequestOrigin } from "@/lib/request-origin";
 import {
   gmailCallbackUri,
   readGoogleOAuthCredentials,
+  resolveOAuthRedirectOrigin,
   validateGoogleOAuthCredentials,
 } from "@/lib/google-oauth-config";
 
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
   }
 
   const origin = getRequestOrigin(request);
-  const redirectUri = gmailCallbackUri(origin);
+  const redirectUri = gmailCallbackUri(resolveOAuthRedirectOrigin(origin));
   const raw = readGoogleOAuthCredentials();
   const validated = validateGoogleOAuthCredentials(raw);
 

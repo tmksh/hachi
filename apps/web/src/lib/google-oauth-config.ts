@@ -56,6 +56,48 @@ export function gmailCallbackUri(origin: string): string {
   return `${origin.replace(/\/$/, "")}/api/gmail/callback`;
 }
 
+/**
+ * OAuth の redirect_uri に使う origin。
+ * サブドメイン（{slug}.bridge-linq.com）ごとに URI が変わると Google Console と不一致になるため、
+ * 本番では NEXT_PUBLIC_APP_URL（なければ https://{NEXT_PUBLIC_APP_DOMAIN}）を固定で使う。
+ */
+export function resolveOAuthRedirectOrigin(requestOrigin: string): string {
+  const configured = stripQuotes(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  if (configured && !/localhost|127\.0\.0\.1/i.test(configured)) {
+    return configured;
+  }
+  const domain = stripQuotes(process.env.NEXT_PUBLIC_APP_DOMAIN ?? "");
+  if (domain && !/localhost|127\.0\.0\.1/i.test(domain)) {
+    return `https://${domain.replace(/^https?:\/\//, "")}`;
+  }
+  return requestOrigin.replace(/\/$/, "");
+}
+
+export type GmailOAuthState = { uid: string; returnOrigin: string };
+
+export function encodeGmailOAuthState(state: GmailOAuthState): string {
+  return Buffer.from(JSON.stringify(state), "utf8").toString("base64url");
+}
+
+export function decodeGmailOAuthState(raw: string): GmailOAuthState | null {
+  try {
+    // 旧形式: 生の user_id
+    if (/^[0-9a-f-]{36}$/i.test(raw)) {
+      return { uid: raw, returnOrigin: "" };
+    }
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as GmailOAuthState;
+    if (parsed?.uid && typeof parsed.uid === "string") {
+      return {
+        uid: parsed.uid,
+        returnOrigin: typeof parsed.returnOrigin === "string" ? parsed.returnOrigin : "",
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function googleOAuthIssueToErrorCode(issue: GoogleOAuthIssue): string {
   switch (issue) {
     case "missing":

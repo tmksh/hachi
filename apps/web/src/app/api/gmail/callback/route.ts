@@ -3,28 +3,35 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestOrigin } from "@/lib/request-origin";
 import { encrypt } from "@/lib/crypto";
 import {
+  decodeGmailOAuthState,
   gmailCallbackUri,
+  resolveOAuthRedirectOrigin,
   validateGoogleOAuthCredentials,
 } from "@/lib/google-oauth-config";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const origin = getRequestOrigin(request);
+  const requestOrigin = getRequestOrigin(request);
+  const oauthOrigin = resolveOAuthRedirectOrigin(requestOrigin);
   const code = searchParams.get("code");
-  const state = searchParams.get("state"); // user_id
+  const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  if (error || !code || !state) {
-    return NextResponse.redirect(`${origin}/mail?gmail_error=access_denied`);
+  const decoded = state ? decodeGmailOAuthState(state) : null;
+  const returnOrigin = (decoded?.returnOrigin || requestOrigin).replace(/\/$/, "");
+  const userId = decoded?.uid;
+
+  if (error || !code || !userId) {
+    return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=access_denied`);
   }
 
   try {
     const validated = validateGoogleOAuthCredentials();
     if (!validated.ok) {
-      return NextResponse.redirect(`${origin}/mail?gmail_error=oauth_not_configured`);
+      return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=oauth_not_configured`);
     }
 
-    // Exchange code for tokens
+    // Exchange code for tokens（auth 時と同じ固定 redirect_uri を使う）
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -32,7 +39,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: validated.creds.clientId,
         client_secret: validated.creds.clientSecret,
-        redirect_uri: gmailCallbackUri(origin),
+        redirect_uri: gmailCallbackUri(oauthOrigin),
         grant_type: "authorization_code",
       }),
     });
@@ -42,9 +49,12 @@ export async function GET(request: NextRequest) {
       console.error("Gmail token exchange failed:", err);
       // client_id / secret 不一致は Google が invalid_client を返す
       if (/invalid_client/i.test(err)) {
-        return NextResponse.redirect(`${origin}/mail?gmail_error=invalid_client`);
+        return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=invalid_client`);
       }
-      return NextResponse.redirect(`${origin}/mail?gmail_error=token_exchange`);
+      if (/redirect_uri_mismatch/i.test(err)) {
+        return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=redirect_uri_mismatch`);
+      }
+      return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=token_exchange`);
     }
 
     const tokens = await tokenRes.json();
@@ -62,11 +72,11 @@ export async function GET(request: NextRequest) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("company_id")
-      .eq("id", state)
+      .eq("id", userId)
       .single();
 
     if (!profile) {
-      return NextResponse.redirect(`${origin}/mail?gmail_error=profile_not_found`);
+      return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=profile_not_found`);
     }
 
     const tokenExpiresAt = new Date(
@@ -84,7 +94,7 @@ export async function GET(request: NextRequest) {
       .upsert(
         {
           company_id: profile.company_id,
-          user_id: state,
+          user_id: userId,
           provider: "gmail",
           email_address: emailAddress,
           oauth_subject: userInfo.id,
@@ -101,12 +111,12 @@ export async function GET(request: NextRequest) {
 
     if (upsertError) {
       console.error("Email account upsert error:", upsertError);
-      return NextResponse.redirect(`${origin}/mail?gmail_error=db_error`);
+      return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=db_error`);
     }
 
-    return NextResponse.redirect(`${origin}/mail?gmail_connected=1`);
+    return NextResponse.redirect(`${returnOrigin}/mail?gmail_connected=1`);
   } catch (e) {
     console.error("Gmail callback error:", e);
-    return NextResponse.redirect(`${origin}/mail?gmail_error=unknown`);
+    return NextResponse.redirect(`${returnOrigin}/mail?gmail_error=unknown`);
   }
 }

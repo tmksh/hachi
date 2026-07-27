@@ -385,9 +385,19 @@ export async function submitEstimateApproval(input: {
   }
 
   const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
-  const approverIds = approvalRoute.length > 0
-    ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
-    : [input.approverId];
+  // ルート未設定時はダイアログで選んだ承認者を使う
+  const routeIds = approvalRoute.length > 0
+    ? approvalRoute
+      .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0))
+      .map((s) => s.approver_id)
+      .filter(Boolean)
+    : [];
+  const approverIds = routeIds.length > 0
+    ? routeIds
+    : [input.approverId].filter(Boolean);
+  if (approverIds.length === 0) {
+    throw new Error("承認者が設定されていません。承認者を選択するか、設定 › ワークフローでルートを登録してください");
+  }
 
   const customerLabel = (estimate.customer as { company_name?: string; name?: string })?.company_name
     ?? (estimate.customer as { name?: string })?.name
@@ -407,18 +417,24 @@ export async function submitEstimateApproval(input: {
     approver_ids: approverIds,
   });
 
-  await supabase.from("workflow_comments").insert({
+  const { error: commentErr } = await supabase.from("workflow_comments").insert({
     company_id,
     request_id: request.id,
     user_id,
     message: input.comment,
   });
+  if (commentErr) {
+    console.error("[submitEstimateApproval] comment insert failed", commentErr);
+  }
 
-  await supabase.from("estimates").update({
+  const { error: estErr } = await supabase.from("estimates").update({
     approval_status: "pending",
     workflow_request_id: request.id,
     updated_at: new Date().toISOString(),
   }).eq("id", input.estimateId);
+  if (estErr) {
+    throw new Error(`見積の承認状態更新に失敗しました: ${estErr.message}`);
+  }
 
   for (const approverId of approverIds.slice(0, 1)) {
     await notifyUser(supabase, company_id, approverId, {
