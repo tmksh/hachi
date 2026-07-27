@@ -128,25 +128,31 @@ export async function sendEmail(input: {
   if (!user) throw new Error("Not authenticated");
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, display_name")
     .eq("id", user.id)
     .single();
   if (!profile) throw new Error("Profile not found");
 
-  const { data: account } = await supabase
-    .from("email_accounts")
-    .select("id, email_address")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
+  if (!input.to.length || !input.to.some((t) => t.address.trim())) {
+    throw new Error("宛先を入力してください");
+  }
 
-  if (!account) throw new Error("No email account configured");
+  // 実Gmail API へ送信（DBへの擬似送信だけで「送信しました」にしない）
+  const { sendViaGmailAccount } = await import("@/lib/gmail-send");
+  const sent = await sendViaGmailAccount({
+    userId: user.id,
+    to: input.to,
+    cc: input.cc,
+    subject: input.subject,
+    bodyText: input.body_text,
+    bodyHtml: input.body_html,
+  });
 
   const { data: thread, error: threadError } = await supabase
     .from("email_threads")
     .insert({
       company_id: profile.company_id,
-      account_id: account.id,
+      account_id: sent.accountId,
       subject: input.subject,
       snippet: input.body_text.substring(0, 200),
       is_read: true,
@@ -154,22 +160,39 @@ export async function sendEmail(input: {
     })
     .select()
     .single();
-  if (threadError) throw threadError;
+  if (threadError) throw new Error(threadError.message || "送信履歴の保存に失敗しました");
 
   const { error: msgError } = await supabase.from("email_messages").insert({
     company_id: profile.company_id,
     thread_id: thread.id,
-    from_address: account.email_address,
-    from_name: profile.company_id,
+    from_address: sent.emailAddress,
+    from_name: profile.display_name ?? sent.emailAddress,
     to_addresses: input.to,
     cc_addresses: input.cc || [],
     subject: input.subject,
     body_text: input.body_text,
     body_html: input.body_html || null,
     direction: "outbound",
+    external_message_id: sent.gmailMessageId,
     received_at: new Date().toISOString(),
   });
-  if (msgError) throw msgError;
+  if (msgError) {
+    // カラム差で失敗しても送信自体は成功しているため握りつぶし気味に再試行
+    const { error: msgRetry } = await supabase.from("email_messages").insert({
+      company_id: profile.company_id,
+      thread_id: thread.id,
+      from_address: sent.emailAddress,
+      from_name: profile.display_name ?? sent.emailAddress,
+      to_addresses: input.to,
+      cc_addresses: input.cc || [],
+      subject: input.subject,
+      body_text: input.body_text,
+      body_html: input.body_html || null,
+      direction: "outbound",
+      received_at: new Date().toISOString(),
+    });
+    if (msgRetry) console.error("[sendEmail] message insert failed", msgError, msgRetry);
+  }
 
   return thread;
 }

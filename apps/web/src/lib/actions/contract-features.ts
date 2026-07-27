@@ -781,7 +781,9 @@ export async function getContractWorkflowRequests(contractId: string) {
       .eq("company_id", company_id)
       .contains("payload", { contract_id: contractId })
       .order("created_at", { ascending: false });
-    if (fallback.error) throw fallback.error;
+    if (fallback.error) {
+      throw new Error(fallback.error.message || "ワークフロー履歴の取得に失敗しました");
+    }
     return fallback.data ?? [];
   }
   return data ?? [];
@@ -853,41 +855,54 @@ export async function submitContractWorkflow(
 
   // 仕様 Step17: 総務ロールへ回付できるよう、ルートに総務が無ければ末尾へ自動配置
   const ensured = await ensureAdministrationInApprovers(supabase, company_id, approverIds);
-  approverIds = ensured.approverIds;
+  // 重複 approver は step 挿入で混乱するため除去（順序維持）
+  approverIds = [...new Set(ensured.approverIds.filter(Boolean))];
   if (!ensured.administrationId) {
     throw new Error(
       "総務ロールのメンバーがいません。設定＞組織＞メンバーで総務ロールを割り当ててから申請してください",
     );
   }
 
-  const request = await createWorkflowRequest({
-    type_id: type.id,
-    title: `契約承認: ${title}`,
-    amount: computedAmount ?? undefined,
-    payload: {
-      ...payload,
-      workflow_type_key: type.key,
-      workflow_type_name: type.name,
-      approval_step_count: approverIds.length,
-      administration_approver_id: ensured.administrationId,
-      administration_auto_appended: ensured.appended,
-      requires_admin_supplement: true,
-    },
-    approver_ids: approverIds,
-  });
+  let request: { id: string };
+  try {
+    request = await createWorkflowRequest({
+      type_id: type.id,
+      title: `契約承認: ${title}`,
+      amount: computedAmount ?? undefined,
+      payload: {
+        ...payload,
+        workflow_type_key: type.key,
+        workflow_type_name: type.name,
+        approval_step_count: approverIds.length,
+        administration_approver_id: ensured.administrationId,
+        administration_auto_appended: ensured.appended,
+        requires_admin_supplement: true,
+      },
+      approver_ids: approverIds,
+    });
+  } catch (e) {
+    if (e instanceof Error) throw e;
+    const msg = (e as { message?: string } | null)?.message;
+    throw new Error(msg || "ワークフロー申請の作成に失敗しました");
+  }
 
-  const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
-  // 順次承認: 最初の承認者のみに通知（No.85）
-  const firstApprover = approverIds[0];
-  if (firstApprover) {
-    await notifySalesFlowUser(supabase, company_id, firstApprover, {
-      title: `契約承認依頼: ${title}`,
-      description: approverIds.length > 1
-        ? `社内承認（Step 1 / ${approverIds.length}・${type.name}）をお願いします`
-        : `契約書の社内承認（${type.name}）をお願いします`,
-      href: `/workflow/${request.id}`,
-      urgent: true,
-    }, user_id);
+  try {
+    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+    // 順次承認: 最初の承認者のみに通知（No.85）
+    const firstApprover = approverIds[0];
+    if (firstApprover) {
+      await notifySalesFlowUser(supabase, company_id, firstApprover, {
+        title: `契約承認依頼: ${title}`,
+        description: approverIds.length > 1
+          ? `社内承認（Step 1 / ${approverIds.length}・${type.name}）をお願いします`
+          : `契約書の社内承認（${type.name}）をお願いします`,
+        href: `/workflow/${request.id}`,
+        urgent: true,
+      }, user_id);
+    }
+  } catch (e) {
+    // 申請自体は成功済み。通知失敗で Server Components エラーにしない
+    console.error("[submitContractWorkflow] notify failed", e);
   }
 
   void dispatchWebhook(company_id, "contract.workflow_submitted", {
@@ -940,10 +955,11 @@ export async function saveContractAdminSupplement(
   payload.admin_supplemented_at = new Date().toISOString();
   payload.admin_supplemented_by = user_id;
 
-  await supabase.from("workflow_requests").update({
+  const { error: updErr } = await supabase.from("workflow_requests").update({
     payload,
     updated_at: new Date().toISOString(),
   }).eq("id", requestId);
+  if (updErr) throw new Error(`総務追記の保存に失敗しました: ${updErr.message}`);
 
   const { data: contract } = await supabase
     .from("contracts")
@@ -963,10 +979,13 @@ export async function saveContractAdminSupplement(
     if (input.bank_account?.trim()) form.bank_account = input.bank_account.trim();
     notesObj.contract_draft = { ...draft, form };
     if (input.admin_notes?.trim()) notesObj.admin_notes = input.admin_notes.trim();
-    await supabase.from("contracts").update({
+    const { error: contractErr } = await supabase.from("contracts").update({
       notes: JSON.stringify(notesObj),
       updated_at: new Date().toISOString(),
     }).eq("id", contractId);
+    if (contractErr) {
+      console.error("[saveContractAdminSupplement] contract notes update failed", contractErr);
+    }
   }
 
   return { ok: true as const };

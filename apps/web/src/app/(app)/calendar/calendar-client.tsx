@@ -84,6 +84,7 @@ import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/google-calendar";
+import { tokyoWallTimeToISO } from "@/lib/tokyo-date";
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
 type AnyEv = (Ev | MappedGoogleEvent) & { _isGoogle?: true; _htmlLink?: string; _memberId?: string; _memberColor?: string };
 type View = "day" | "week" | "month";
@@ -1265,12 +1266,12 @@ function WeekView({
     return () => clearInterval(id);
   }, []);
 
-  /* Coordinate helpers — account for scroll offset */
+  /* 時間グリッド基準で Y→分換算（sticky ヘッダー分を scrollTop に含めない） */
   const getMinFromY = useCallback((clientY: number) => {
-    const scroll = scrollRef.current;
-    if (!scroll) return 0;
-    const rect = scroll.getBoundingClientRect();
-    const y = clientY - rect.top + scroll.scrollTop;
+    const grid = gridRef.current;
+    if (!grid) return 0;
+    const rect = grid.getBoundingClientRect();
+    const y = clientY - rect.top;
     return Math.max(0, Math.min(1439, Math.floor(y / PX_PER_MIN)));
   }, []);
 
@@ -1365,16 +1366,23 @@ function WeekView({
       }
 
       const day = info.currentDay;
-      const newStartDt = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
-        Math.floor(info.currentStart / 60), info.currentStart % 60, 0);
+      const dateStr = format(day, "yyyy-MM-dd");
+      const startH = Math.floor(info.currentStart / 60);
+      const startM = info.currentStart % 60;
       const endMin = info.type === "move"
         ? info.currentStart + (info.originalEnd - info.originalStart)
         : info.currentEnd;
-      const newEndDt = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
-        Math.floor(endMin / 60), endMin % 60, 0);
-
-      const start_at = format(newStartDt, "yyyy-MM-dd'T'HH:mm:ss");
-      const end_at = format(newEndDt, "yyyy-MM-dd'T'HH:mm:ss");
+      const endH = Math.floor(endMin / 60);
+      const endM = endMin % 60;
+      // オフセット無しだと TIMESTAMPTZ 再読込で別時間帯へ飛ぶ（No.33）
+      const start_at = tokyoWallTimeToISO(
+        dateStr,
+        `${String(startH).padStart(2, "0")}:${String(startM).padStart(2, "0")}`,
+      );
+      const end_at = tokyoWallTimeToISO(
+        dateStr,
+        `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`,
+      );
       const gId = (info.ev as Ev & { google_event_id?: string | null }).google_event_id ?? null;
 
       // 楽観更新（ドロップ直後に元位置へスナップバックしない）
@@ -1390,9 +1398,9 @@ function WeekView({
           });
         }
         onRefresh();
-      } catch {
+      } catch (e) {
         onRefresh(); // サーバー値へロールバック
-        toast.error("更新に失敗しました");
+        toast.error(e instanceof Error ? e.message : "更新に失敗しました");
       }
     };
 
@@ -1767,8 +1775,12 @@ function EventDialog({
     }
     setSaving(true);
     try {
-      const start_at = `${startDate}T${startTime}:00`;
-      const end_at = `${endDate || startDate}T${endTime}:00`;
+      const start_at = allDay
+        ? tokyoWallTimeToISO(startDate, "00:00")
+        : tokyoWallTimeToISO(startDate, startTime);
+      const end_at = allDay
+        ? tokyoWallTimeToISO(endDate || startDate, "00:00")
+        : tokyoWallTimeToISO(endDate || startDate, endTime);
 
       await updateCalendarEvent(event.id, {
         title: title.trim(),

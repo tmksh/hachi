@@ -403,19 +403,27 @@ export async function submitEstimateApproval(input: {
     ?? (estimate.customer as { name?: string })?.name
     ?? "";
 
-  const request = await createWorkflowRequest({
-    type_id: wfType.id,
-    title: `見積承認: ${estimate.estimate_no} ${estimate.title ?? ""}（粗利率 ${(estimate.gross_profit_rate ?? 0).toFixed(1)}%）`,
-    amount: Number(estimate.total ?? 0),
-    is_urgent: true,
-    payload: {
-      estimate_id: input.estimateId,
-      gross_profit_rate: estimate.gross_profit_rate,
-      application_comment: input.comment,
-      customer_name: customerLabel,
-    },
-    approver_ids: approverIds,
-  });
+  const uniqueApproverIds = [...new Set(approverIds.filter(Boolean))];
+  let request: { id: string };
+  try {
+    request = await createWorkflowRequest({
+      type_id: wfType.id,
+      title: `見積承認: ${estimate.estimate_no} ${estimate.title ?? ""}（粗利率 ${(estimate.gross_profit_rate ?? 0).toFixed(1)}%）`,
+      amount: Number(estimate.total ?? 0),
+      is_urgent: true,
+      payload: {
+        estimate_id: input.estimateId,
+        gross_profit_rate: estimate.gross_profit_rate,
+        application_comment: input.comment,
+        customer_name: customerLabel,
+      },
+      approver_ids: uniqueApproverIds,
+    });
+  } catch (e) {
+    if (e instanceof Error) throw e;
+    const msg = (e as { message?: string } | null)?.message;
+    throw new Error(msg || "見積承認ワークフローの作成に失敗しました");
+  }
 
   const { error: commentErr } = await supabase.from("workflow_comments").insert({
     company_id,
@@ -436,14 +444,18 @@ export async function submitEstimateApproval(input: {
     throw new Error(`見積の承認状態更新に失敗しました: ${estErr.message}`);
   }
 
-  for (const approverId of approverIds.slice(0, 1)) {
-    await notifyUser(supabase, company_id, approverId, {
-      title: `見積承認依頼: ${estimate.estimate_no}`,
-      description: input.comment,
-      href: `/workflow/${request.id}`,
-      customerId: estimate.customer_id ?? undefined,
-      urgent: true,
-    }, user_id);
+  for (const approverId of uniqueApproverIds.slice(0, 1)) {
+    try {
+      await notifyUser(supabase, company_id, approverId, {
+        title: `見積承認依頼: ${estimate.estimate_no}`,
+        description: input.comment,
+        href: `/workflow/${request.id}`,
+        customerId: estimate.customer_id ?? undefined,
+        urgent: true,
+      }, user_id);
+    } catch (e) {
+      console.error("[submitEstimateApproval] notify failed", e);
+    }
   }
 
   void dispatchWebhook(company_id, "estimate.approval_requested", {
@@ -675,19 +687,26 @@ export async function submitBudgetApproval(input: {
     ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
     : [input.approverId];
 
-  const request = await createWorkflowRequest({
-    type_id: wfType.id,
-    title: `実行予算承認: ${construction?.construction_no ?? ""} ${construction?.title ?? ""}（工事粗利率 ${input.grossProfitRate.toFixed(1)}%）`,
-    is_urgent: true,
-    payload: {
-      construction_id: input.constructionId,
-      gross_profit_rate: input.grossProfitRate,
-      base_threshold: baseThreshold,
-      reserve_percent: reservePercent,
-      application_comment: input.comment,
-    },
-    approver_ids: approverIds,
-  });
+  let request: { id: string };
+  try {
+    request = await createWorkflowRequest({
+      type_id: wfType.id,
+      title: `実行予算承認: ${construction?.construction_no ?? ""} ${construction?.title ?? ""}（工事粗利率 ${input.grossProfitRate.toFixed(1)}%）`,
+      is_urgent: true,
+      payload: {
+        construction_id: input.constructionId,
+        gross_profit_rate: input.grossProfitRate,
+        base_threshold: baseThreshold,
+        reserve_percent: reservePercent,
+        application_comment: input.comment,
+      },
+      approver_ids: [...new Set(approverIds.filter(Boolean))],
+    });
+  } catch (e) {
+    if (e instanceof Error) throw e;
+    const msg = (e as { message?: string } | null)?.message;
+    throw new Error(msg || "実行予算承認ワークフローの作成に失敗しました");
+  }
 
   await supabase.from("workflow_comments").insert({
     company_id,
@@ -705,14 +724,18 @@ export async function submitBudgetApproval(input: {
     updated_at: new Date().toISOString(),
   }, { onConflict: "construction_id" });
 
-  for (const approverId of approverIds.slice(0, 1)) {
-    await notifyUser(supabase, company_id, approverId, {
-      title: `実行予算承認依頼: ${construction?.construction_no ?? ""}`,
-      description: input.comment,
-      href: `/workflow/${request.id}`,
-      customerId: construction?.customer_id ?? undefined,
-      urgent: true,
-    }, user_id);
+  for (const approverId of [...new Set(approverIds.filter(Boolean))].slice(0, 1)) {
+    try {
+      await notifyUser(supabase, company_id, approverId, {
+        title: `実行予算承認依頼: ${construction?.construction_no ?? ""}`,
+        description: input.comment,
+        href: `/workflow/${request.id}`,
+        customerId: construction?.customer_id ?? undefined,
+        urgent: true,
+      }, user_id);
+    } catch (e) {
+      console.error("[submitBudgetMarginApproval] notify failed", e);
+    }
   }
 
   void dispatchWebhook(company_id, "budget.approval_requested", {

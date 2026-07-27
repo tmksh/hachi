@@ -98,10 +98,11 @@ export async function createWorkflowRequest(input: {
     .single();
   if (error) throw actionError(error, "ワークフロー申請の作成に失敗しました");
 
-  // Create approval steps
-  if (input.approver_ids && input.approver_ids.length > 0) {
+  // Create approval steps（重複 approver は順序維持で除去）
+  const approverIds = [...new Set((input.approver_ids ?? []).filter(Boolean))];
+  if (approverIds.length > 0) {
     const { error: stepsError } = await supabase.from("workflow_steps").insert(
-      input.approver_ids.map((approverId, i) => ({
+      approverIds.map((approverId, i) => ({
         company_id: profile.company_id,
         request_id: data.id,
         step_order: i + 1,
@@ -116,7 +117,8 @@ export async function createWorkflowRequest(input: {
     }
   }
 
-  return data as WorkflowRequest;
+  // 巨大 payload / 余分なフィールドを返さない（シリアライズ失敗→Server Components render error 対策）
+  return { id: data.id } as WorkflowRequest;
 }
 
 async function syncWorkflowPayloadSideEffects(
@@ -288,7 +290,11 @@ async function approveWorkflowStepInternal(
           id: step.request_id,
           title: request.title,
         });
-        await syncWorkflowPayloadSideEffects(supabase, step.request_id, "approved");
+        try {
+          await syncWorkflowPayloadSideEffects(supabase, step.request_id, "approved");
+        } catch (e) {
+          console.error("[approveWorkflowStep] side effects failed", e);
+        }
 
         // 条件付き承認の場合は見積 approval_status を上書き（No.46/52）
         if (conditional) {
@@ -337,17 +343,21 @@ async function approveWorkflowStepInternal(
         // 見積承認完了時も申請者へ通知
         const estimateId = (request.payload as Record<string, unknown> | undefined)?.estimate_id as string | undefined;
         if (estimateId && request.requester_id) {
-          const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
-          await notifySalesFlowUser(supabase, request.company_id, request.requester_id, {
-            title: conditional
-              ? `見積が条件付き承認されました: ${request.title}`
-              : `見積が承認されました: ${request.title}`,
-            description: conditional
-              ? "条件を確認のうえ、顧客へ提示してください"
-              : "見積が発行済みになりました。顧客へ提示できます",
-            href: `/quotes/${estimateId}`,
-            urgent: conditional,
-          });
+          try {
+            const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+            await notifySalesFlowUser(supabase, request.company_id, request.requester_id, {
+              title: conditional
+                ? `見積が条件付き承認されました: ${request.title}`
+                : `見積が承認されました: ${request.title}`,
+              description: conditional
+                ? "条件を確認のうえ、顧客へ提示してください"
+                : "見積が発行済みになりました。顧客へ提示できます",
+              href: `/quotes/${estimateId}`,
+              urgent: conditional,
+            });
+          } catch (e) {
+            console.error("[approveWorkflowStep] estimate notify failed", e);
+          }
         }
       }
     } else {
@@ -360,13 +370,17 @@ async function approveWorkflowStepInternal(
           .eq("id", step.request_id)
           .single();
         if (request) {
-          const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
-          await notifySalesFlowUser(supabase, request.company_id, next.approver_id, {
-            title: `契約承認依頼（次ステップ）: ${request.title}`,
-            description: `Step ${next.step_order} の承認をお願いします`,
-            href: `/workflow/${step.request_id}`,
-            urgent: true,
-          }, request.requester_id);
+          try {
+            const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+            await notifySalesFlowUser(supabase, request.company_id, next.approver_id, {
+              title: `契約承認依頼（次ステップ）: ${request.title}`,
+              description: `Step ${next.step_order} の承認をお願いします`,
+              href: `/workflow/${step.request_id}`,
+              urgent: true,
+            }, request.requester_id);
+          } catch (e) {
+            console.error("[approveWorkflowStep] next-step notify failed", e);
+          }
         }
       }
     }

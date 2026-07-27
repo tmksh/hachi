@@ -50,7 +50,7 @@ export async function createGoogleCalendarEvent(
   },
 ): Promise<string | null> {
   try {
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZone = "Asia/Tokyo";
     const body: Record<string, unknown> = {
       summary: event.title,
       description: event.description ?? undefined,
@@ -99,7 +99,7 @@ export async function updateGoogleCalendarEvent(
   },
 ): Promise<boolean> {
   try {
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZone = "Asia/Tokyo";
     const body: Record<string, unknown> = {};
     if (event.title !== undefined) body.summary = event.title;
     if (event.description !== undefined) body.description = event.description ?? undefined;

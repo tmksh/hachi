@@ -17,7 +17,7 @@ export async function disconnectGoogleCalendar() {
     })
     .eq("id", user.id);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message || "Googleカレンダー連携の解除に失敗しました");
 }
 
 /** 同じ企業内でGoogle Calendarを連携しているメンバー一覧（自分以外） */
@@ -54,7 +54,7 @@ export async function getCalendarEvents(params?: { start?: string; end?: string 
   if (params?.end) query = query.lte("end_at", params.end);
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) throw new Error(error.message || "予定の取得に失敗しました");
   return data;
 }
 
@@ -65,7 +65,7 @@ export async function getCalendarEvent(id: string) {
     .select("*, customer:customers(id, name)")
     .eq("id", id)
     .single();
-  if (error) throw error;
+  if (error) throw new Error(error.message || "予定の取得に失敗しました");
   return data;
 }
 
@@ -164,7 +164,7 @@ export async function createCalendarEvent(input: {
     // shared_with カラム未追加（migration 00057 未適用）の環境向けフォールバック
     ({ data, error } = await supabase.from("calendar_events").insert(base).select().single());
   }
-  if (error) throw error;
+  if (error) throw new Error(error.message || "予定の作成に失敗しました");
 
   if (data && sharedWith.length > 0) {
     await notifySharedMembers(supabase, profile.company_id, user.id, sharedWith, data);
@@ -211,5 +211,5 @@ export async function updateCalendarEvent(id: string, input: Partial<Omit<Calend
 export async function deleteCalendarEvent(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("calendar_events").delete().eq("id", id);
-  if (error) throw error;
+  if (error) throw new Error(error.message || "予定の削除に失敗しました");
 }

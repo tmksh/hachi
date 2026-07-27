@@ -16,6 +16,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { createCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
 import { createGoogleCalendarEvent } from "@/lib/google-calendar";
 import { MemberShareSelect } from "@/components/calendar/member-share-select";
+import { tokyoWallTimeToISO } from "@/lib/tokyo-date";
 import { cn } from "@/lib/utils";
 
 async function getGoogleToken(): Promise<string | null> {
@@ -64,8 +65,12 @@ function CalendarNewPageContent() {
     }
     setSaving(true);
     try {
-      const start_at = allDay ? `${startDate}T00:00:00` : `${startDate}T${startTime}:00`;
-      const end_at = allDay ? `${endDate || startDate}T00:00:00` : `${endDate || startDate}T${endTime}:00`;
+      const start_at = allDay
+        ? tokyoWallTimeToISO(startDate, "00:00")
+        : tokyoWallTimeToISO(startDate, startTime);
+      const end_at = allDay
+        ? tokyoWallTimeToISO(endDate || startDate, "00:00")
+        : tokyoWallTimeToISO(endDate || startDate, endTime);
 
       // ローカル DB に保存
       const localEvent = await createCalendarEvent({
