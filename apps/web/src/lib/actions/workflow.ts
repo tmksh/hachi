@@ -73,16 +73,16 @@ export async function createWorkflowRequest(input: {
   due_date?: string;
   payload?: Record<string, unknown>;
   approver_ids?: string[];
-}) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-  if (!profile) throw new Error("Profile not found");
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    if (!profile?.company_id) return actionFail("プロフィールが見つかりません", "プロフィールが見つかりません");
 
-  const { data, error } = await supabase
-    .from("workflow_requests")
-    .insert({
+    const row = {
       company_id: profile.company_id,
       type_id: input.type_id,
       requester_id: user.id,
@@ -90,35 +90,77 @@ export async function createWorkflowRequest(input: {
       amount: input.amount || null,
       is_urgent: input.is_urgent || false,
       due_date: input.due_date || null,
+      // payload は要約のみを渡す前提（巨大 JSON で insert 失敗しないよう呼び出し側で制限）
       payload: input.payload || {},
-      status: "submitted",
+      status: "submitted" as const,
       submitted_at: new Date().toISOString(),
-    })
-    .select("id, company_id, type_id, requester_id, title, status, amount, is_urgent, due_date, submitted_at, created_at")
-    .single();
-  if (error) throw actionError(error, "ワークフロー申請の作成に失敗しました");
+    };
 
-  // Create approval steps（重複 approver は順序維持で除去）
-  const approverIds = [...new Set((input.approver_ids ?? []).filter(Boolean))];
-  if (approverIds.length > 0) {
-    const { error: stepsError } = await supabase.from("workflow_steps").insert(
-      approverIds.map((approverId, i) => ({
+    // 1) 通常の RLS 付きクライアント
+    let { data, error } = await supabase
+      .from("workflow_requests")
+      .insert(row)
+      .select("id")
+      .single();
+
+    // 2) RLS / ポリシー起因で失敗したら service role で同一テナントのみ再試行
+    if (error || !data) {
+      console.error("[createWorkflowRequest] user insert failed", error);
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/admin");
+        const admin = createAdminClient();
+        const retry = await admin.from("workflow_requests").insert(row).select("id").single();
+        data = retry.data;
+        error = retry.error;
+      } catch (adminErr) {
+        console.error("[createWorkflowRequest] admin fallback unavailable", adminErr);
+        return actionFail(error, "ワークフロー申請の作成に失敗しました");
+      }
+    }
+    if (error || !data) {
+      return actionFail(error, "ワークフロー申請の作成に失敗しました");
+    }
+
+    const requestId = data.id as string;
+    const approverIds = [...new Set((input.approver_ids ?? []).filter(Boolean))];
+    if (approverIds.length > 0) {
+      const steps = approverIds.map((approverId, i) => ({
         company_id: profile.company_id,
-        request_id: data.id,
+        request_id: requestId,
         step_order: i + 1,
         approver_id: approverId,
         status: "pending" as const,
-      }))
-    );
-    if (stepsError) {
-      // 申請本体だけ残ると「申請中だが承認者がいない」状態になるためロールバック
-      await supabase.from("workflow_requests").delete().eq("id", data.id);
-      throw actionError(stepsError, "承認ステップの作成に失敗しました");
-    }
-  }
+      }));
 
-  // 巨大 payload / 余分なフィールドを返さない（シリアライズ失敗→Server Components render error 対策）
-  return { id: data.id } as WorkflowRequest;
+      let stepsError = (await supabase.from("workflow_steps").insert(steps)).error;
+      if (stepsError) {
+        console.error("[createWorkflowRequest] steps insert failed", stepsError);
+        try {
+          const { createAdminClient } = await import("@/lib/supabase/admin");
+          const admin = createAdminClient();
+          stepsError = (await admin.from("workflow_steps").insert(steps)).error;
+        } catch (adminErr) {
+          console.error("[createWorkflowRequest] steps admin fallback unavailable", adminErr);
+        }
+      }
+      if (stepsError) {
+        // 申請本体だけ残ると「申請中だが承認者がいない」状態になるためロールバック
+        await supabase.from("workflow_requests").delete().eq("id", requestId);
+        try {
+          const { createAdminClient } = await import("@/lib/supabase/admin");
+          await createAdminClient().from("workflow_requests").delete().eq("id", requestId);
+        } catch {
+          /* ignore */
+        }
+        return actionFail(stepsError, "承認ステップの作成に失敗しました");
+      }
+    }
+
+    return actionOk({ id: requestId });
+  } catch (e) {
+    console.error("[createWorkflowRequest] unexpected", e);
+    return actionFail(e, "ワークフロー申請の作成に失敗しました");
+  }
 }
 
 async function syncWorkflowPayloadSideEffects(

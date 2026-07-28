@@ -1010,6 +1010,8 @@ export function EstimateDetailView({
             grossProfitRate={grossRate}
             defaultGrossProfitRate={estimate.default_gross_profit_rate}
             estimateStatus={estimate.status}
+            reserveFee1Amount={reserve1Amount}
+            reserveFee2Amount={reserve2Amount}
             onConfirmed={() => {
               onEstimateChange({
                 ...estimate,

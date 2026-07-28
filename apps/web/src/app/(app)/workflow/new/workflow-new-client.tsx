@@ -70,7 +70,7 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
     setSaving(true);
     try {
       const payload: Record<string, unknown> = { ...dynamicValues };
-      await createWorkflowRequest({
+      const result = await createWorkflowRequest({
         type_id: typeId,
         title: title.trim(),
         amount: amount ? Number(amount) : undefined,
@@ -78,6 +78,10 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
         approver_ids: approverIds.length ? approverIds : undefined,
         payload,
       });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("申請しました");
       router.push("/workflow");
     } catch { toast.error("申請に失敗"); } finally { setSaving(false); }

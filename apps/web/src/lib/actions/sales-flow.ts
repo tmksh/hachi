@@ -420,24 +420,23 @@ export async function submitEstimateApproval(input: {
       ?? "";
 
     const uniqueApproverIds = [...new Set(approverIds.filter(Boolean))];
-    let request: { id: string };
-    try {
-      request = await createWorkflowRequest({
-        type_id: wfType.id,
-        title: `見積承認: ${estimate.estimate_no} ${estimate.title ?? ""}（粗利率 ${(estimate.gross_profit_rate ?? 0).toFixed(1)}%）`,
-        amount: Number(estimate.total ?? 0),
-        is_urgent: true,
-        payload: {
-          estimate_id: input.estimateId,
-          gross_profit_rate: estimate.gross_profit_rate,
-          application_comment: input.comment,
-          customer_name: customerLabel,
-        },
-        approver_ids: uniqueApproverIds,
-      });
-    } catch (e) {
-      return actionFail(e, "見積承認ワークフローの作成に失敗しました");
+    const created = await createWorkflowRequest({
+      type_id: wfType.id,
+      title: `見積承認: ${estimate.estimate_no} ${estimate.title ?? ""}（粗利率 ${(estimate.gross_profit_rate ?? 0).toFixed(1)}%）`,
+      amount: Number(estimate.total ?? 0),
+      is_urgent: true,
+      payload: {
+        estimate_id: input.estimateId,
+        gross_profit_rate: estimate.gross_profit_rate,
+        application_comment: input.comment,
+        customer_name: customerLabel,
+      },
+      approver_ids: uniqueApproverIds,
+    });
+    if (!created.ok) {
+      return actionFail(created.error, "見積承認ワークフローの作成に失敗しました");
     }
+    const request = { id: created.id };
 
     const { error: commentErr } = await supabase.from("workflow_comments").insert({
       company_id,
@@ -680,54 +679,57 @@ export async function submitBudgetApproval(input: {
   /** 画面で計算した工事粗利率（暫定, %） */
   grossProfitRate: number;
 }) {
-  const { supabase, company_id, user_id } = await getCompanyContext();
-
-  const baseThreshold = await getConstructionBaseThreshold(supabase, company_id, input.constructionId);
-  const reservePercent = await getCompanyReservePercent(supabase, company_id);
-  const threshold = baseThreshold + reservePercent;
-  if (input.grossProfitRate >= threshold) {
-    throw new Error(`工事粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`);
-  }
-
-  const { data: construction } = await supabase
-    .from("constructions")
-    .select("title, construction_no, customer_id")
-    .eq("id", input.constructionId)
-    .maybeSingle();
-
-  let { data: wfType } = await supabase
-    .from("workflow_types")
-    .select("id, approval_route")
-    .eq("company_id", company_id)
-    .eq("key", "budget_margin")
-    .maybeSingle();
-
-  if (!wfType) {
-    const { data: created } = await supabase
-      .from("workflow_types")
-      .insert({
-        company_id,
-        key: "budget_margin",
-        name: "規定粗利未達 実行予算承認",
-        description: "実行予算で会社指定粗利＋予備費に達しない場合の上長承認",
-        fields_schema: [],
-        approval_route: [],
-        sort_order: 0,
-      })
-      .select("id, approval_route")
-      .single();
-    if (!created) throw new Error("実行予算承認ワークフロー種別の自動作成に失敗しました");
-    wfType = created;
-  }
-
-  const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
-  const approverIds = approvalRoute.length > 0
-    ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
-    : [input.approverId];
-
-  let request: { id: string };
+  const { actionOk, actionFail } = await import("@/lib/action-result");
   try {
-    request = await createWorkflowRequest({
+    const { supabase, company_id, user_id } = await getCompanyContext();
+
+    const baseThreshold = await getConstructionBaseThreshold(supabase, company_id, input.constructionId);
+    const reservePercent = await getCompanyReservePercent(supabase, company_id);
+    const threshold = baseThreshold + reservePercent;
+    if (input.grossProfitRate >= threshold) {
+      return actionFail(
+        `工事粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
+        "承認申請は不要です",
+      );
+    }
+
+    const { data: construction } = await supabase
+      .from("constructions")
+      .select("title, construction_no, customer_id")
+      .eq("id", input.constructionId)
+      .maybeSingle();
+
+    let { data: wfType } = await supabase
+      .from("workflow_types")
+      .select("id, approval_route")
+      .eq("company_id", company_id)
+      .eq("key", "budget_margin")
+      .maybeSingle();
+
+    if (!wfType) {
+      const { data: created, error: createTypeErr } = await supabase
+        .from("workflow_types")
+        .insert({
+          company_id,
+          key: "budget_margin",
+          name: "規定粗利未達 実行予算承認",
+          description: "実行予算で会社指定粗利＋予備費に達しない場合の上長承認",
+          fields_schema: [],
+          approval_route: [],
+          sort_order: 0,
+        })
+        .select("id, approval_route")
+        .single();
+      if (!created) return actionFail(createTypeErr, "実行予算承認ワークフロー種別の自動作成に失敗しました");
+      wfType = created;
+    }
+
+    const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
+    const approverIds = approvalRoute.length > 0
+      ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
+      : [input.approverId];
+
+    const created = await createWorkflowRequest({
       type_id: wfType.id,
       title: `実行予算承認: ${construction?.construction_no ?? ""} ${construction?.title ?? ""}（工事粗利率 ${input.grossProfitRate.toFixed(1)}%）`,
       is_urgent: true,
@@ -740,49 +742,51 @@ export async function submitBudgetApproval(input: {
       },
       approver_ids: [...new Set(approverIds.filter(Boolean))],
     });
-  } catch (e) {
-    if (e instanceof Error) throw e;
-    const msg = (e as { message?: string } | null)?.message;
-    throw new Error(msg || "実行予算承認ワークフローの作成に失敗しました");
-  }
-
-  await supabase.from("workflow_comments").insert({
-    company_id,
-    request_id: request.id,
-    user_id,
-    message: input.comment,
-  });
-
-  // 実行予算に承認状態を保存（行が無ければ既定値で作成）
-  await supabase.from("construction_cost_budgets").upsert({
-    company_id,
-    construction_id: input.constructionId,
-    approval_status: "pending",
-    workflow_request_id: request.id,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "construction_id" });
-
-  for (const approverId of [...new Set(approverIds.filter(Boolean))].slice(0, 1)) {
-    try {
-      await notifyUser(supabase, company_id, approverId, {
-        title: `実行予算承認依頼: ${construction?.construction_no ?? ""}`,
-        description: input.comment,
-        href: `/workflow/${request.id}`,
-        customerId: construction?.customer_id ?? undefined,
-        urgent: true,
-      }, user_id);
-    } catch (e) {
-      console.error("[submitBudgetMarginApproval] notify failed", e);
+    if (!created.ok) {
+      return actionFail(created.error, "実行予算承認ワークフローの作成に失敗しました");
     }
+    const request = { id: created.id };
+
+    await supabase.from("workflow_comments").insert({
+      company_id,
+      request_id: request.id,
+      user_id,
+      message: input.comment,
+    });
+
+    await supabase.from("construction_cost_budgets").upsert({
+      company_id,
+      construction_id: input.constructionId,
+      approval_status: "pending",
+      workflow_request_id: request.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "construction_id" });
+
+    for (const approverId of [...new Set(approverIds.filter(Boolean))].slice(0, 1)) {
+      try {
+        await notifyUser(supabase, company_id, approverId, {
+          title: `実行予算承認依頼: ${construction?.construction_no ?? ""}`,
+          description: input.comment,
+          href: `/workflow/${request.id}`,
+          customerId: construction?.customer_id ?? undefined,
+          urgent: true,
+        }, user_id);
+      } catch (e) {
+        console.error("[submitBudgetMarginApproval] notify failed", e);
+      }
+    }
+
+    void dispatchWebhook(company_id, "budget.approval_requested", {
+      construction_id: input.constructionId,
+      workflow_request_id: request.id,
+      gross_profit_rate: input.grossProfitRate,
+    });
+
+    return actionOk({ workflowRequestId: request.id });
+  } catch (e) {
+    console.error("[submitBudgetApproval] unexpected", e);
+    return actionFail(e, "実行予算の承認申請に失敗しました");
   }
-
-  void dispatchWebhook(company_id, "budget.approval_requested", {
-    construction_id: input.constructionId,
-    workflow_request_id: request.id,
-    gross_profit_rate: input.grossProfitRate,
-  });
-
-  return { workflowRequestId: request.id };
 }
 
 // ---------------------------------------------------------------------------

@@ -872,26 +872,25 @@ export async function submitContractWorkflow(
       );
     }
 
-    let request: { id: string };
-    try {
-      request = await createWorkflowRequest({
-        type_id: type.id,
-        title: `契約承認: ${title}`,
-        amount: computedAmount ?? undefined,
-        payload: {
-          ...payload,
-          workflow_type_key: type.key,
-          workflow_type_name: type.name,
-          approval_step_count: approverIds.length,
-          administration_approver_id: ensured.administrationId,
-          administration_auto_appended: ensured.appended,
-          requires_admin_supplement: true,
-        },
-        approver_ids: approverIds,
-      });
-    } catch (e) {
-      return actionFail(e, "ワークフロー申請の作成に失敗しました");
+    const created = await createWorkflowRequest({
+      type_id: type.id,
+      title: `契約承認: ${title}`,
+      amount: computedAmount ?? undefined,
+      payload: {
+        ...payload,
+        workflow_type_key: type.key,
+        workflow_type_name: type.name,
+        approval_step_count: approverIds.length,
+        administration_approver_id: ensured.administrationId,
+        administration_auto_appended: ensured.appended,
+        requires_admin_supplement: true,
+      },
+      approver_ids: approverIds,
+    });
+    if (!created.ok) {
+      return actionFail(created.error, "ワークフロー申請の作成に失敗しました");
     }
+    const request = { id: created.id };
 
     try {
       const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");

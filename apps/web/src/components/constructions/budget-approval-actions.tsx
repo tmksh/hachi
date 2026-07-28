@@ -56,15 +56,19 @@ export function BudgetApprovalActions({ constructionId, grossProfitRate }: Props
     if (!approverId) { toast.error("承認者を選択してください"); return; }
     setSubmitting(true);
     try {
-      const { workflowRequestId } = await submitBudgetApproval({
+      const result = await submitBudgetApproval({
         constructionId,
         comment: comment.trim(),
         approverId,
         grossProfitRate,
       });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("上長への承認申請を送信しました");
       setDialogOpen(false);
-      setInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId } : prev);
+      setInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId: result.workflowRequestId } : prev);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "申請に失敗しました");
     } finally {

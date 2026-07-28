@@ -20,6 +20,7 @@ import {
 } from "@/lib/actions/sales-flow";
 import { getProfiles } from "@/lib/actions/profiles";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { humanizeClientError } from "@/lib/humanize-error";
 
 type Props = {
   estimateId: string;
@@ -27,6 +28,10 @@ type Props = {
   grossProfitRate: number;
   defaultGrossProfitRate?: number | null;
   estimateStatus?: string | null;
+  /** 予備費1（サマリー）。未計上だと申請不可 */
+  reserveFee1Amount?: number | null;
+  /** 予備費2（サマリー）。未計上だと申請不可 */
+  reserveFee2Amount?: number | null;
   onConfirmed?: () => void;
   /** 承認ステータスが変わったとき（親の差戻しバナー更新用） */
   onStatusChange?: () => void;
@@ -37,6 +42,8 @@ export function EstimateApprovalActions({
   grossProfitRate,
   defaultGrossProfitRate,
   estimateStatus,
+  reserveFee1Amount,
+  reserveFee2Amount,
   onConfirmed,
   onStatusChange,
 }: Props) {
@@ -53,9 +60,16 @@ export function EstimateApprovalActions({
       getEstimateMarginThreshold(estimateId).then(setMarginInfo).catch(() => {});
     };
     loadMargin();
-    getProfiles().then((p) => setProfiles(p.map((x) => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
+    getProfiles()
+      .then((p) =>
+        setProfiles(
+          p
+            .filter((x) => Boolean(x.id))
+            .map((x) => ({ id: x.id, display_name: x.display_name || x.email || "（名前未設定）" })),
+        ),
+      )
+      .catch(() => {});
 
-    // 差戻し後に戻ってきたとき、マウント済みでも再申請ボタンへ切り替える
     const onVisible = () => {
       if (document.visibilityState === "visible") loadMargin();
     };
@@ -78,6 +92,21 @@ export function EstimateApprovalActions({
     || estimateStatus === "accepted"
     || approvalStatus === "approved";
 
+  const reserveOk =
+    Number(reserveFee1Amount ?? 0) > 0 && Number(reserveFee2Amount ?? 0) > 0;
+
+  const openDialog = () => {
+    if (!reserveOk) {
+      toast.error("予備費・予備予備費をサマリー欄に計上してから申請してください");
+      return;
+    }
+    if (profiles.length === 0) {
+      toast.error("承認者一覧を取得できませんでした。画面を再読み込みしてください");
+      return;
+    }
+    setDialogOpen(true);
+  };
+
   const handleConfirm = async () => {
     setConfirming(true);
     try {
@@ -91,14 +120,17 @@ export function EstimateApprovalActions({
       onConfirmed?.();
       onStatusChange?.();
     } catch (e) {
-      // 予備費未計上・粗利未達などの業務ルール違反はすり抜けさせない
-      toast.error(e instanceof Error ? e.message : "確定に失敗しました");
+      toast.error(humanizeClientError(e, "確定に失敗しました。予備費の計上と粗利率を確認してください"));
     } finally {
       setConfirming(false);
     }
   };
 
   const handleSubmit = async () => {
+    if (!reserveOk) {
+      toast.error("予備費・予備予備費をサマリー欄に計上してから申請してください");
+      return;
+    }
     if (!comment.trim()) { toast.error("申請コメントを入力してください"); return; }
     if (!approverId) { toast.error("承認者を選択してください"); return; }
     setSubmitting(true);
@@ -118,7 +150,7 @@ export function EstimateApprovalActions({
       setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId: result.workflowRequestId, remandComment: null } : prev);
       onStatusChange?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "申請に失敗しました");
+      toast.error(humanizeClientError(e, "申請に失敗しました。予備費の計上と承認者選択を確認して再度お試しください"));
     } finally {
       setSubmitting(false);
     }
@@ -166,7 +198,7 @@ export function EstimateApprovalActions({
           variant="default"
           size="sm"
           className="bg-amber-600 hover:bg-amber-700"
-          onClick={() => setDialogOpen(true)}
+          onClick={openDialog}
         >
           {isReturned
             ? <CornerUpLeft className="h-4 w-4 mr-1" />
@@ -185,6 +217,11 @@ export function EstimateApprovalActions({
               粗利率 {grossProfitRate.toFixed(1)}% は基準 {threshold.toFixed(0)}% を下回っています。
               {canReapply ? "修正内容を踏まえ、申請理由を入力して再申請してください。" : "申請理由を入力し、承認者を選択してください。"}
             </p>
+            {!reserveOk && (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                予備費・予備予備費が未計上です。サマリー欄で計上してから申請してください。
+              </div>
+            )}
             {marginInfo?.remandComment && (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 <p className="text-xs font-medium text-amber-700 mb-0.5">差戻し指摘</p>
@@ -202,7 +239,7 @@ export function EstimateApprovalActions({
             </div>
             <div className="space-y-2">
               <Label>承認者</Label>
-              <Select value={approverId} onValueChange={setApproverId}>
+              <Select value={approverId || undefined} onValueChange={setApproverId}>
                 <SelectTrigger>
                   <SelectValue placeholder="上長を選択" />
                 </SelectTrigger>
@@ -216,7 +253,7 @@ export function EstimateApprovalActions({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={() => void handleSubmit()} disabled={submitting}>
+            <Button onClick={() => void handleSubmit()} disabled={submitting || !reserveOk}>
               {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
               {canReapply ? "再申請する" : "申請する"}
             </Button>
