@@ -11,6 +11,7 @@ export type AnnouncementNotifRow = {
   is_urgent: boolean | null;
   published_at: string;
   target_type: string | null;
+  author_id?: string | null;
   target_roles?: string[] | null;
   target_user_ids?: string[] | null;
 };
@@ -34,11 +35,11 @@ type MinimalSupabase = {
 };
 
 const SELECT_FULL =
-  "id, title, body, is_urgent, published_at, target_type, target_roles, target_user_ids";
+  "id, title, body, is_urgent, published_at, target_type, author_id, target_roles, target_user_ids";
 const SELECT_ROLES =
-  "id, title, body, is_urgent, published_at, target_type, target_roles";
+  "id, title, body, is_urgent, published_at, target_type, author_id, target_roles";
 const SELECT_BASIC =
-  "id, title, body, is_urgent, published_at, target_type";
+  "id, title, body, is_urgent, published_at, target_type, author_id";
 
 export async function selectAnnouncementsForNotifications(
   supabase: MinimalSupabase,

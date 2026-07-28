@@ -20,7 +20,6 @@ type CirculationClientProps = {
 };
 
 export function CirculationClient({ initialItems }: CirculationClientProps) {
-  const [items] = useState<Ann[]>(initialItems);
   const [keyword, setKeyword] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -29,7 +28,7 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
   const [showFilters, setShowFilters] = useState(false);
 
   const filtered = useMemo(() => {
-    return items.filter(a => {
+    return initialItems.filter(a => {
       if (keyword.trim()) {
         const kw = keyword.trim().toLowerCase();
         const hit = a.title.toLowerCase().includes(kw) || a.body.toLowerCase().includes(kw);
@@ -41,7 +40,7 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
       if (filterPinned && !a.pinned) return false;
       return true;
     });
-  }, [items, keyword, dateFrom, dateTo, filterUrgent, filterPinned]);
+  }, [initialItems, keyword, dateFrom, dateTo, filterUrgent, filterPinned]);
 
   const hasFilter = keyword || dateFrom || dateTo || filterUrgent || filterPinned;
 
@@ -133,7 +132,7 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {hasFilter ? `${filtered.length} 件 / 全 ${items.length} 件` : `全 ${items.length} 件`}
+        {hasFilter ? `${filtered.length} 件 / 全 ${initialItems.length} 件` : `全 ${initialItems.length} 件`}
       </p>
 
       {filtered.length === 0 ? (

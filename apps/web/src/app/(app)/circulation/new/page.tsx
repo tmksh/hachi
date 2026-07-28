@@ -82,6 +82,7 @@ export default function CirculationNewPage() {
           : `${targetRoles.size}ロールに通知を送信しました`
       );
       router.push("/circulation");
+      router.refresh();
     } catch (e) {
       const message = e instanceof Error && e.message ? e.message : "投稿に失敗しました";
       toast.error(message);

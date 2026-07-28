@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { selectAnnouncementsForNotifications } from "@/lib/announcement-select";
+import { canUserViewAnnouncement } from "@/lib/announcement-visibility";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -84,16 +85,8 @@ export async function fetchNotifications(): Promise<Notification[]> {
 
   const announcementNotifs: Notification[] = announcements
     .filter((a) => !readIdSet.has(a.id))
-    .filter((a) => {
-      if (a.target_type === "individuals") {
-        const targets: string[] = a.target_user_ids ?? [];
-        return targets.length === 0 || targets.includes(user.id);
-      }
-      if (a.target_type !== "roles") return true;
-      const targets: string[] = a.target_roles ?? [];
-      if (targets.length === 0) return true;
-      return selfRole ? targets.includes(selfRole) : false;
-    })
+    .filter((a) => a.author_id !== user.id)
+    .filter((a) => canUserViewAnnouncement(a, user.id, selfRole))
     .map((a) => ({
       id: `ann_${a.id}`,
       type: "announcement" as const,

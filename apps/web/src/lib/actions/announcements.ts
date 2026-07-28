@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { Announcement } from "@/lib/database.types";
+import { canUserViewAnnouncement } from "@/lib/announcement-visibility";
 
 export async function getAnnouncements() {
   const supabase = await createClient();
@@ -23,18 +24,8 @@ export async function getAnnouncements() {
     .order("published_at", { ascending: false });
   if (error) throw new Error(error.message);
 
-  // クライアント側でロールターゲティングを適用（target_type='roles' のみ絞り込み）
-  return (data || []).filter((a) => {
-    if (a.target_type === "individuals") {
-      const targets: string[] = (a.target_user_ids as string[] | null) ?? [];
-      return targets.length === 0 || targets.includes(user.id);
-    }
-    if (a.target_type !== "roles") return true;
-    if (!role) return false;
-    const targets: string[] = (a.target_roles as string[] | null) ?? [];
-    if (targets.length === 0) return true;
-    return targets.includes(role);
-  });
+  // ロールターゲティング（投稿者は常に自分の投稿を一覧に表示）
+  return (data || []).filter((a) => canUserViewAnnouncement(a, user.id, role));
 }
 
 export async function getAnnouncement(id: string) {
@@ -54,8 +45,16 @@ export async function getAnnouncement(id: string) {
   ]);
   if (announcementRes.error) throw new Error(announcementRes.error.message);
 
-  // 既読は表示をブロックしない
   const user = authRes.data.user;
+  if (user && announcementRes.data) {
+    const { data: profile } = await supabase.from("profiles").select("role, company_id").eq("id", user.id).single();
+    const role = profile?.role ?? null;
+    if (!canUserViewAnnouncement(announcementRes.data, user.id, role)) {
+      throw new Error("このお知らせを閲覧する権限がありません");
+    }
+  }
+
+  // 既読は表示をブロックしない
   if (user) {
     void (async () => {
       const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
@@ -157,7 +156,7 @@ export async function createAnnouncement(input: {
       throw new Error(profileErr.message || error?.message || "投稿に失敗しました");
     }
 
-    const target_user_ids = (targets ?? []).map((p) => p.id);
+    const target_user_ids = [...new Set([...(targets ?? []).map((p) => p.id), user.id])];
     if (target_user_ids.length === 0) {
       throw new Error(
         "選択したロールに該当するユーザーがいません。"
