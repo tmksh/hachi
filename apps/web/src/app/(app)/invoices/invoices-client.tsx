@@ -18,7 +18,8 @@ import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
 import { Plus, Receipt, FileText, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { getInvoices, updateInvoiceStatus, generateMonthlyInvoicesForMonth } from "@/lib/actions/invoices";
+import { getInvoices, updateInvoiceStatus } from "@/lib/actions/invoices";
+import { humanizeClientError } from "@/lib/humanize-error";
 import { getStatusOption } from "@/lib/status-config";
 
 function currentMonth(): string {
@@ -51,33 +52,41 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
     }
     setBulkGenerating(true);
     try {
-      const result = await generateMonthlyInvoicesForMonth(bulkMonth);
+      const res = await fetch("/api/invoices/bulk-monthly", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: bulkMonth }),
+      });
+      const result = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        created?: number;
+        skipped?: number;
+        failures?: string[];
+      };
+      if (!res.ok || !result.ok) {
+        throw new Error(result.error ?? "月次一括生成に失敗しました");
+      }
       const failNote = result.failures?.length
-        ? `（失敗${result.failures.length}件）`
+        ? `（失敗${result.failures.length}件: ${result.failures.slice(0, 2).join(" / ")}）`
         : "";
-      if (result.created === 0) {
+      if ((result.created ?? 0) === 0) {
         toast.message(
-          `新規作成はありませんでした（対象月の未生成工事なし / スキップ${result.skipped}件）${failNote}`,
+          `新規作成はありませんでした（対象月の未生成工事なし / スキップ${result.skipped ?? 0}件）${failNote}`,
         );
       } else {
         toast.success(
-          `${result.created}件の請求書を生成しました（スキップ${result.skipped}件）${failNote}`,
+          `${result.created}件の請求書を生成しました（スキップ${result.skipped ?? 0}件）${failNote}`,
         );
       }
       setBulkOpen(false);
       try {
         setInvoices(await getInvoices());
       } catch {
-        // 一覧再取得失敗でも生成自体は成功しているので refresh にフォールバック
         router.refresh();
       }
     } catch (e) {
-      const msg = e instanceof Error
-        ? e.message
-        : (typeof e === "object" && e && "message" in e && typeof (e as { message: unknown }).message === "string")
-          ? (e as { message: string }).message
-          : "月次一括生成に失敗しました";
-      toast.error(msg);
+      toast.error(humanizeClientError(e, "月次一括生成に失敗しました"));
     } finally {
       setBulkGenerating(false);
     }
