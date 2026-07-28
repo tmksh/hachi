@@ -14,7 +14,6 @@ import {
   updateEstimateItem,
   updateEstimateCategoryName,
   importCategoryFromReference,
-  bulkApplyMarginToEstimate,
   type EstimateItemUpdatePatch,
 } from "@/lib/actions/constructions";
 import {
@@ -39,6 +38,7 @@ import { getEstimates, getEstimate, updateEstimate } from "@/lib/actions/estimat
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { calcGrossProfitRatePercent, toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { humanizeClientError } from "@/lib/humanize-error";
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
 };
@@ -845,13 +845,30 @@ export function EstimateDetailView({
     }
     setBulkApplying(true);
     try {
-      const { items: newItems, totals } = await bulkApplyMarginToEstimate(estimate.id, mode, rate);
-      onEstimateChange({ ...estimate, items: newItems as EstimateItem[], ...(totals ?? {}) });
+      const res = await fetch(`/api/estimates/${estimate.id}/bulk-margin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, ratePercent: rate }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        items?: EstimateItem[];
+        totals?: EstimateTotalsPatch;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? "一括設定に失敗しました");
+      }
+      onEstimateChange({
+        ...estimate,
+        items: (data.items ?? []) as EstimateItem[],
+        ...(data.totals ?? {}),
+      });
       toast.success(mode === "cost" ? "原価を一括設定しました" : "見積金額を一括設定しました");
       if (mode === "cost") setBulkCostOpen(false);
       else setBulkSellOpen(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "一括設定に失敗しました");
+      toast.error(humanizeClientError(e, "一括設定に失敗しました。ページを再読み込みして再度お試しください"));
     } finally {
       setBulkApplying(false);
     }

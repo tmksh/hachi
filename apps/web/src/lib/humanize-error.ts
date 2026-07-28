@@ -12,6 +12,8 @@ export function humanizeClientError(error: unknown, fallback: string): string {
     || /Server Components render/i.test(trimmed)
     || /omitted in production/i.test(trimmed)
     || /digest property/i.test(trimmed)
+    || /was not found on the server/i.test(trimmed)
+    || /failed-to-find-server-action/i.test(trimmed)
   ) {
     return fallback;
   }
