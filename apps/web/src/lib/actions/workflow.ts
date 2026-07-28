@@ -181,13 +181,27 @@ async function syncWorkflowPayloadSideEffects(
 }
 
 export async function approveWorkflowStep(stepId: string, comment?: string) {
-  return approveWorkflowStepInternal(stepId, "approved", comment);
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    await approveWorkflowStepInternal(stepId, "approved", comment);
+    return actionOk({});
+  } catch (e) {
+    console.error("[approveWorkflowStep]", e);
+    return actionFail(e, "承認に失敗しました");
+  }
 }
 
 export async function approveWorkflowStepConditional(stepId: string, condition: string) {
-  const trimmed = condition.trim();
-  if (!trimmed) throw new Error("条件付き承認には条件コメントが必要です");
-  return approveWorkflowStepInternal(stepId, "approved", `【条件付き承認】${trimmed}`, true);
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const trimmed = condition.trim();
+    if (!trimmed) return actionFail("条件付き承認には条件コメントが必要です", "条件コメントが必要です");
+    await approveWorkflowStepInternal(stepId, "approved", `【条件付き承認】${trimmed}`, true);
+    return actionOk({});
+  } catch (e) {
+    console.error("[approveWorkflowStepConditional]", e);
+    return actionFail(e, "条件付き承認に失敗しました");
+  }
 }
 
 async function approveWorkflowStepInternal(
@@ -388,6 +402,17 @@ async function approveWorkflowStepInternal(
 }
 
 export async function rejectWorkflowStep(stepId: string, comment?: string) {
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    await rejectWorkflowStepUnsafe(stepId, comment);
+    return actionOk({});
+  } catch (e) {
+    console.error("[rejectWorkflowStep]", e);
+    return actionFail(e, "却下処理に失敗しました");
+  }
+}
+
+async function rejectWorkflowStepUnsafe(stepId: string, comment?: string) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("workflow_steps")
@@ -464,6 +489,17 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
 }
 
 export async function remandWorkflowStep(stepId: string, comment?: string) {
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    await remandWorkflowStepUnsafe(stepId, comment);
+    return actionOk({});
+  } catch (e) {
+    console.error("[remandWorkflowStep]", e);
+    return actionFail(e, "差戻し処理に失敗しました");
+  }
+}
+
+async function remandWorkflowStepUnsafe(stepId: string, comment?: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");

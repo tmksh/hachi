@@ -795,126 +795,136 @@ export async function submitContractWorkflow(
   /** ポータルで設定したWF種別ID。未指定時は契約系種別をスコアリングして自動選択 */
   workflowTypeId?: string,
 ) {
-  const { supabase, company_id, user_id } = await getCompanyContext();
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const { supabase, company_id, user_id } = await getCompanyContext();
 
-  const { data: contract } = await supabase
-    .from("contracts")
-    .select("notes, amount, title, customer:customers(name)")
-    .eq("id", contractId)
-    .eq("company_id", company_id)
-    .single();
-  if (!contract) throw new Error("契約が見つかりません");
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("notes, amount, title, customer:customers(name)")
+      .eq("id", contractId)
+      .eq("company_id", company_id)
+      .single();
+    if (!contract) return actionFail("契約が見つかりません", "契約が見つかりません");
 
-  type ContractDraft = { template_id: string; form: Record<string, string | number> };
-  let draft: ContractDraft | null = null;
-  if (contract.notes) {
+    type ContractDraft = { template_id: string; form: Record<string, string | number> };
+    let draft: ContractDraft | null = null;
+    if (contract.notes) {
+      try {
+        const parsed = JSON.parse(contract.notes) as { contract_draft?: ContractDraft };
+        draft = parsed.contract_draft ?? null;
+      } catch {
+        // plain text notes
+      }
+    }
+
+    const form = draft?.form ?? {};
+    const template = draft?.template_id ? findTemplate(draft.template_id) : null;
+    const excl = Number(form.amount_excl_tax) || 0;
+    const taxRate = Number(form.tax_rate) || 10;
+    const computedAmount = excl > 0 ? excl + Math.floor(excl * taxRate / 100) : (contract.amount ?? null);
+    const customerName = (contract.customer as { name?: string } | null)?.name;
+
+    // contract_draft 全体は巨大になり得るため payload には要約のみ（本体は contracts.notes に保持）
+    const payload: Record<string, unknown> = {
+      contract_id: contractId,
+      template_id: draft?.template_id ?? null,
+      契約書: template?.name ?? contract.title ?? title,
+      発注者: form.kou_name ?? customerName ?? "",
+      工事名称: form.work_name ?? contract.title ?? title,
+    };
+    if (form.start_date || form.end_date) {
+      payload.工期 = `${form.start_date ?? "—"} ～ ${form.end_date ?? "—"}`;
+    }
+    if (excl > 0) {
+      payload["契約金額（税抜）"] = `¥${excl.toLocaleString()}`;
+    }
+
+    // ポータルの承認ルートと一致させる（No.85: contract_08 固定だとカスタム種別の多段階が消える）
+    const type = await resolveContractWorkflowType(supabase, company_id, workflowTypeId);
+    if (!type) {
+      return actionFail(
+        "契約書用のワークフロー種別がありません。設定＞組織＞ワークフローで作成してください",
+        "ワークフロー種別がありません",
+      );
+    }
+
+    const approvalRoute = normalizeApprovalRoute(type.approval_route);
+    let approverIds = approvalRoute.length > 0
+      ? approvalRoute.map((s) => s.approver_id)
+      : await resolveDefaultApprovalApprovers(supabase, company_id);
+
+    if (approverIds.length === 0) {
+      return actionFail(
+        `「${type.name}」に承認ルートが設定されていません。設定＞組織＞ワークフローで Step を追加してください`,
+        "承認ルートが設定されていません",
+      );
+    }
+
+    // 仕様 Step17: 総務ロールへ回付できるよう、ルートに総務が無ければ末尾へ自動配置
+    const ensured = await ensureAdministrationInApprovers(supabase, company_id, approverIds);
+    // 重複 approver は step 挿入で混乱するため除去（順序維持）
+    approverIds = [...new Set(ensured.approverIds.filter(Boolean))];
+    if (!ensured.administrationId) {
+      return actionFail(
+        "総務ロールのメンバーがいません。設定＞組織＞メンバーで総務ロールを割り当ててから申請してください",
+        "総務ロールのメンバーがいません",
+      );
+    }
+
+    let request: { id: string };
     try {
-      const parsed = JSON.parse(contract.notes) as { contract_draft?: ContractDraft };
-      draft = parsed.contract_draft ?? null;
-    } catch {
-      // plain text notes
+      request = await createWorkflowRequest({
+        type_id: type.id,
+        title: `契約承認: ${title}`,
+        amount: computedAmount ?? undefined,
+        payload: {
+          ...payload,
+          workflow_type_key: type.key,
+          workflow_type_name: type.name,
+          approval_step_count: approverIds.length,
+          administration_approver_id: ensured.administrationId,
+          administration_auto_appended: ensured.appended,
+          requires_admin_supplement: true,
+        },
+        approver_ids: approverIds,
+      });
+    } catch (e) {
+      return actionFail(e, "ワークフロー申請の作成に失敗しました");
     }
-  }
 
-  const form = draft?.form ?? {};
-  const template = draft?.template_id ? findTemplate(draft.template_id) : null;
-  const excl = Number(form.amount_excl_tax) || 0;
-  const taxRate = Number(form.tax_rate) || 10;
-  const computedAmount = excl > 0 ? excl + Math.floor(excl * taxRate / 100) : (contract.amount ?? null);
-  const customerName = (contract.customer as { name?: string } | null)?.name;
+    try {
+      const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+      // 順次承認: 最初の承認者のみに通知（No.85）
+      const firstApprover = approverIds[0];
+      if (firstApprover) {
+        await notifySalesFlowUser(supabase, company_id, firstApprover, {
+          title: `契約承認依頼: ${title}`,
+          description: approverIds.length > 1
+            ? `社内承認（Step 1 / ${approverIds.length}・${type.name}）をお願いします`
+            : `契約書の社内承認（${type.name}）をお願いします`,
+          href: `/workflow/${request.id}`,
+          urgent: true,
+        }, user_id);
+      }
+    } catch (e) {
+      // 申請自体は成功済み。通知失敗で申請失敗にしない
+      console.error("[submitContractWorkflow] notify failed", e);
+    }
 
-  // contract_draft 全体は巨大になり得るため payload には要約のみ（本体は contracts.notes に保持）
-  const payload: Record<string, unknown> = {
-    contract_id: contractId,
-    template_id: draft?.template_id ?? null,
-    契約書: template?.name ?? contract.title ?? title,
-    発注者: form.kou_name ?? customerName ?? "",
-    工事名称: form.work_name ?? contract.title ?? title,
-  };
-  if (form.start_date || form.end_date) {
-    payload.工期 = `${form.start_date ?? "—"} ～ ${form.end_date ?? "—"}`;
-  }
-  if (excl > 0) {
-    payload["契約金額（税抜）"] = `¥${excl.toLocaleString()}`;
-  }
-
-  // ポータルの承認ルートと一致させる（No.85: contract_08 固定だとカスタム種別の多段階が消える）
-  const type = await resolveContractWorkflowType(supabase, company_id, workflowTypeId);
-  if (!type) throw new Error("契約書用のワークフロー種別がありません。設定＞組織＞ワークフローで作成してください");
-
-  const approvalRoute = normalizeApprovalRoute(type.approval_route);
-  let approverIds = approvalRoute.length > 0
-    ? approvalRoute.map((s) => s.approver_id)
-    : await resolveDefaultApprovalApprovers(supabase, company_id);
-
-  if (approverIds.length === 0) {
-    throw new Error(
-      `「${type.name}」に承認ルートが設定されていません。設定＞組織＞ワークフローで Step を追加してください`,
-    );
-  }
-
-  // 仕様 Step17: 総務ロールへ回付できるよう、ルートに総務が無ければ末尾へ自動配置
-  const ensured = await ensureAdministrationInApprovers(supabase, company_id, approverIds);
-  // 重複 approver は step 挿入で混乱するため除去（順序維持）
-  approverIds = [...new Set(ensured.approverIds.filter(Boolean))];
-  if (!ensured.administrationId) {
-    throw new Error(
-      "総務ロールのメンバーがいません。設定＞組織＞メンバーで総務ロールを割り当ててから申請してください",
-    );
-  }
-
-  let request: { id: string };
-  try {
-    request = await createWorkflowRequest({
-      type_id: type.id,
-      title: `契約承認: ${title}`,
-      amount: computedAmount ?? undefined,
-      payload: {
-        ...payload,
-        workflow_type_key: type.key,
-        workflow_type_name: type.name,
-        approval_step_count: approverIds.length,
-        administration_approver_id: ensured.administrationId,
-        administration_auto_appended: ensured.appended,
-        requires_admin_supplement: true,
-      },
-      approver_ids: approverIds,
+    void dispatchWebhook(company_id, "contract.workflow_submitted", {
+      contract_id: contractId,
+      workflow_request_id: request.id,
+      workflow_type_id: type.id,
+      approver_count: approverIds.length,
+      administration_auto_appended: ensured.appended,
     });
+
+    return actionOk({ id: request.id });
   } catch (e) {
-    if (e instanceof Error) throw e;
-    const msg = (e as { message?: string } | null)?.message;
-    throw new Error(msg || "ワークフロー申請の作成に失敗しました");
+    console.error("[submitContractWorkflow] unexpected", e);
+    return actionFail(e, "承認ワークフロー申請に失敗しました");
   }
-
-  try {
-    const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
-    // 順次承認: 最初の承認者のみに通知（No.85）
-    const firstApprover = approverIds[0];
-    if (firstApprover) {
-      await notifySalesFlowUser(supabase, company_id, firstApprover, {
-        title: `契約承認依頼: ${title}`,
-        description: approverIds.length > 1
-          ? `社内承認（Step 1 / ${approverIds.length}・${type.name}）をお願いします`
-          : `契約書の社内承認（${type.name}）をお願いします`,
-        href: `/workflow/${request.id}`,
-        urgent: true,
-      }, user_id);
-    }
-  } catch (e) {
-    // 申請自体は成功済み。通知失敗で Server Components エラーにしない
-    console.error("[submitContractWorkflow] notify failed", e);
-  }
-
-  void dispatchWebhook(company_id, "contract.workflow_submitted", {
-    contract_id: contractId,
-    workflow_request_id: request.id,
-    workflow_type_id: type.id,
-    approver_count: approverIds.length,
-    administration_auto_appended: ensured.appended,
-  });
-
-  // 巨大な contract_draft を含む request 全体を返すとシリアライズ失敗の原因になるため id のみ
-  return { id: request.id };
 }
 
 /** 総務ロールが契約承認時に支払条件・口座等を追記（No.86 / Step17） */
@@ -922,73 +932,79 @@ export async function saveContractAdminSupplement(
   requestId: string,
   input: { payment_terms?: string; bank_account?: string; admin_notes?: string },
 ) {
-  const { supabase, company_id, user_id } = await getCompanyContext();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user_id)
-    .single();
-  // 仕様: 総務のみ追記可能
-  if (profile?.role !== "administration") {
-    throw new Error("総務ロールのみ追記できます");
-  }
-
-  if (!input.payment_terms?.trim() || !input.bank_account?.trim()) {
-    throw new Error("支払条件と振込口座を入力してください");
-  }
-
-  const { data: request } = await supabase
-    .from("workflow_requests")
-    .select("payload, company_id")
-    .eq("id", requestId)
-    .eq("company_id", company_id)
-    .single();
-  if (!request) throw new Error("申請が見つかりません");
-
-  const payload = { ...((request.payload as Record<string, unknown> | null) ?? {}) };
-  const contractId = payload.contract_id as string | undefined;
-  if (!contractId) throw new Error("契約申請ではありません");
-
-  payload.payment_terms = input.payment_terms?.trim() ?? payload.payment_terms ?? "";
-  payload.bank_account = input.bank_account?.trim() ?? payload.bank_account ?? "";
-  payload.admin_notes = input.admin_notes?.trim() ?? payload.admin_notes ?? "";
-  payload.admin_supplemented_at = new Date().toISOString();
-  payload.admin_supplemented_by = user_id;
-
-  const { error: updErr } = await supabase.from("workflow_requests").update({
-    payload,
-    updated_at: new Date().toISOString(),
-  }).eq("id", requestId);
-  if (updErr) throw new Error(`総務追記の保存に失敗しました: ${updErr.message}`);
-
-  const { data: contract } = await supabase
-    .from("contracts")
-    .select("notes")
-    .eq("id", contractId)
-    .single();
-  if (contract) {
-    let notesObj: Record<string, unknown> = {};
-    try {
-      notesObj = contract.notes ? JSON.parse(contract.notes) as Record<string, unknown> : {};
-    } catch {
-      notesObj = {};
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const { supabase, company_id, user_id } = await getCompanyContext();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user_id)
+      .single();
+    // 仕様: 総務のみ追記可能
+    if (profile?.role !== "administration") {
+      return actionFail("総務ロールのみ追記できます", "総務ロールのみ追記できます");
     }
-    const draft = (notesObj.contract_draft as Record<string, unknown> | undefined) ?? {};
-    const form = { ...((draft.form as Record<string, unknown> | undefined) ?? {}) };
-    if (input.payment_terms?.trim()) form.payment_terms = input.payment_terms.trim();
-    if (input.bank_account?.trim()) form.bank_account = input.bank_account.trim();
-    notesObj.contract_draft = { ...draft, form };
-    if (input.admin_notes?.trim()) notesObj.admin_notes = input.admin_notes.trim();
-    const { error: contractErr } = await supabase.from("contracts").update({
-      notes: JSON.stringify(notesObj),
+
+    if (!input.payment_terms?.trim() || !input.bank_account?.trim()) {
+      return actionFail("支払条件と振込口座を入力してください", "支払条件と振込口座を入力してください");
+    }
+
+    const { data: request } = await supabase
+      .from("workflow_requests")
+      .select("payload, company_id")
+      .eq("id", requestId)
+      .eq("company_id", company_id)
+      .single();
+    if (!request) return actionFail("申請が見つかりません", "申請が見つかりません");
+
+    const payload = { ...((request.payload as Record<string, unknown> | null) ?? {}) };
+    const contractId = payload.contract_id as string | undefined;
+    if (!contractId) return actionFail("契約申請ではありません", "契約申請ではありません");
+
+    payload.payment_terms = input.payment_terms?.trim() ?? payload.payment_terms ?? "";
+    payload.bank_account = input.bank_account?.trim() ?? payload.bank_account ?? "";
+    payload.admin_notes = input.admin_notes?.trim() ?? payload.admin_notes ?? "";
+    payload.admin_supplemented_at = new Date().toISOString();
+    payload.admin_supplemented_by = user_id;
+
+    const { error: updErr } = await supabase.from("workflow_requests").update({
+      payload,
       updated_at: new Date().toISOString(),
-    }).eq("id", contractId);
-    if (contractErr) {
-      console.error("[saveContractAdminSupplement] contract notes update failed", contractErr);
-    }
-  }
+    }).eq("id", requestId);
+    if (updErr) return actionFail(updErr, "総務追記の保存に失敗しました");
 
-  return { ok: true as const };
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("notes")
+      .eq("id", contractId)
+      .single();
+    if (contract) {
+      let notesObj: Record<string, unknown> = {};
+      try {
+        notesObj = contract.notes ? JSON.parse(contract.notes) as Record<string, unknown> : {};
+      } catch {
+        notesObj = {};
+      }
+      const draft = (notesObj.contract_draft as Record<string, unknown> | undefined) ?? {};
+      const form = { ...((draft.form as Record<string, unknown> | undefined) ?? {}) };
+      if (input.payment_terms?.trim()) form.payment_terms = input.payment_terms.trim();
+      if (input.bank_account?.trim()) form.bank_account = input.bank_account.trim();
+      notesObj.contract_draft = { ...draft, form };
+      if (input.admin_notes?.trim()) notesObj.admin_notes = input.admin_notes.trim();
+      const { error: contractErr } = await supabase.from("contracts").update({
+        notes: JSON.stringify(notesObj),
+        updated_at: new Date().toISOString(),
+      }).eq("id", contractId);
+      if (contractErr) {
+        console.error("[saveContractAdminSupplement] contract notes update failed", contractErr);
+      }
+    }
+
+    return actionOk({});
+  } catch (e) {
+    console.error("[saveContractAdminSupplement] unexpected", e);
+    return actionFail(e, "総務追記の保存に失敗しました");
+  }
 }
 
 export async function generateContractEsignMessage(contractId: string) {

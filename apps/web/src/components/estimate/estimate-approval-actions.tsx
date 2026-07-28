@@ -81,7 +81,11 @@ export function EstimateApprovalActions({
   const handleConfirm = async () => {
     setConfirming(true);
     try {
-      await confirmEstimateIssued(estimateId);
+      const result = await confirmEstimateIssued(estimateId);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("見積を確定（発行済み）にしました");
       setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "approved", status: "issued" } : prev);
       onConfirmed?.();
@@ -99,15 +103,19 @@ export function EstimateApprovalActions({
     if (!approverId) { toast.error("承認者を選択してください"); return; }
     setSubmitting(true);
     try {
-      const { workflowRequestId } = await submitEstimateApproval({
+      const result = await submitEstimateApproval({
         estimateId,
         comment: comment.trim(),
         approverId,
       });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success(canReapply ? "再申請を送信しました" : "上長への承認申請を送信しました");
       setDialogOpen(false);
       setComment("");
-      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId, remandComment: null } : prev);
+      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId: result.workflowRequestId, remandComment: null } : prev);
       onStatusChange?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "申請に失敗しました");

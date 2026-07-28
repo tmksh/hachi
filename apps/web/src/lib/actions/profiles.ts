@@ -7,13 +7,22 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import type { Profile, Company } from "@/lib/database.types";
 
 export async function getProfiles() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, company_id, display_name, email, role, avatar_url, department, position, phone")
-    .order("display_name");
-  if (error) throw error;
-  return data as Profile[];
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, company_id, display_name, email, role, avatar_url, department, position, phone")
+      .order("display_name");
+    // 本番では throw すると Server Components render error に伏せられるため空配列で返す
+    if (error) {
+      console.error("[getProfiles]", error.message);
+      return [];
+    }
+    return (data ?? []) as Profile[];
+  } catch (e) {
+    console.error("[getProfiles] unexpected", e);
+    return [];
+  }
 }
 
 export async function getProfile(id: string) {

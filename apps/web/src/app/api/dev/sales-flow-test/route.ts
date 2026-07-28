@@ -105,8 +105,8 @@ export async function POST(request: Request) {
       comment: "Dev test approval",
       approverId: approverProfile?.id ?? profile.id,
     });
-    if (approval.workflowRequestId) pass(`submitEstimateApproval: ${approval.workflowRequestId.slice(0, 8)}`);
-    else fail("submitEstimateApproval: no workflow");
+    if (approval.ok && approval.workflowRequestId) pass(`submitEstimateApproval: ${approval.workflowRequestId.slice(0, 8)}`);
+    else fail(`submitEstimateApproval: ${approval.ok ? "no workflow" : approval.error}`);
   } catch (e) {
     fail(`1-4/1-5: ${e instanceof Error ? e.message : e}`);
   }

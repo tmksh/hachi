@@ -115,7 +115,11 @@ export function WorkflowDetailClient({
 
   const handleApprove = async (stepId: string) => {
     try {
-      await approveWorkflowStep(stepId);
+      const result = await approveWorkflowStep(stepId);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("承認しました");
       reload();
     } catch (e) {
@@ -135,13 +139,16 @@ export function WorkflowDetailClient({
     setActioning(true);
     try {
       if (actionDialog.type === "reject") {
-        await rejectWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
+        const result = await rejectWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
+        if (!result.ok) { toast.error(result.error); return; }
         toast.success("却下しました");
       } else if (actionDialog.type === "conditional") {
-        await approveWorkflowStepConditional(actionDialog.stepId, actionComment.trim());
+        const result = await approveWorkflowStepConditional(actionDialog.stepId, actionComment.trim());
+        if (!result.ok) { toast.error(result.error); return; }
         toast.success("条件付きで承認しました");
       } else {
-        await remandWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
+        const result = await remandWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
+        if (!result.ok) { toast.error(result.error); return; }
         toast.success("差戻しました。申請者へ通知しました");
       }
       setActionDialog(null);
@@ -441,11 +448,15 @@ export function WorkflowDetailClient({
                 if (!id) return;
                 setSavingAdmin(true);
                 try {
-                  await saveContractAdminSupplement(id as string, {
+                  const result = await saveContractAdminSupplement(id as string, {
                     payment_terms: paymentTerms,
                     bank_account: bankAccount,
                     admin_notes: adminNotes,
                   });
+                  if (!result.ok) {
+                    toast.error(result.error);
+                    return;
+                  }
                   toast.success("総務追記を保存しました");
                   reload();
                 } catch (e) {

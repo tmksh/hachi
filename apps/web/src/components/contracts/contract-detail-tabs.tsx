@@ -566,6 +566,10 @@ function DocumentsTab({
     setSubmittingWorkflow(true);
     try {
       const req = await submitContractWorkflow(contractId, data.title, selectedTypeId || undefined);
+      if (!req.ok) {
+        toast.error(req.error);
+        return;
+      }
       const steps = selectedWfType?.approvalSteps.length ?? 0;
       toast.success(
         steps > 1

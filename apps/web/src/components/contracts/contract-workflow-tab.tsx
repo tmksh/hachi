@@ -116,6 +116,10 @@ export function ContractWorkflowTab({
     setSubmitting(true);
     try {
       const req = await submitContractWorkflow(contractId, data.title, selectedTypeId || undefined);
+      if (!req.ok) {
+        toast.error(req.error);
+        return;
+      }
       const steps = selectedType?.approvalSteps.length ?? 0;
       toast.success(
         steps > 1

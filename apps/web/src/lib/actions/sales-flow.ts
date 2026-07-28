@@ -338,137 +338,162 @@ export async function submitEstimateApproval(input: {
   comment: string;
   approverId: string;
 }) {
-  const { supabase, company_id, user_id } = await getCompanyContext();
-
-  const { data: estimate, error } = await supabase
-    .from("estimates")
-    .select("*, customer:customers(name, company_name)")
-    .eq("id", input.estimateId)
-    .single();
-  if (error || !estimate) throw new Error("見積が見つかりません");
-
-  assertReserveFeesSecured(estimate);
-
-  const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
-    ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
-  const reservePercent = await getCompanyReservePercent(supabase, company_id);
-  // 会社指定粗利＋予備費を満たす必要がある
-  const threshold = baseThreshold + reservePercent;
-  if ((estimate.gross_profit_rate ?? 0) >= threshold) {
-    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`);
-  }
-
-  let { data: wfType } = await supabase
-    .from("workflow_types")
-    .select("id, approval_route")
-    .eq("company_id", company_id)
-    .eq("key", "estimate_margin")
-    .maybeSingle();
-
-  // 未設定の場合は自動作成する（既存会社向けフォールバック）
-  if (!wfType) {
-    const { data: created } = await supabase
-      .from("workflow_types")
-      .insert({
-        company_id,
-        key: "estimate_margin",
-        name: "見積承認（粗利率未達）",
-        description: "粗利率が基準を下回る見積を上長が承認するフロー",
-        fields_schema: [],
-        approval_route: [],
-        sort_order: 0,
-      })
-      .select("id, approval_route")
-      .single();
-    if (!created) throw new Error("見積承認ワークフロー種別の自動作成に失敗しました");
-    wfType = created;
-  }
-
-  const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
-  // ルート未設定時はダイアログで選んだ承認者を使う
-  const routeIds = approvalRoute.length > 0
-    ? approvalRoute
-      .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0))
-      .map((s) => s.approver_id)
-      .filter(Boolean)
-    : [];
-  const approverIds = routeIds.length > 0
-    ? routeIds
-    : [input.approverId].filter(Boolean);
-  if (approverIds.length === 0) {
-    throw new Error("承認者が設定されていません。承認者を選択するか、設定 › ワークフローでルートを登録してください");
-  }
-
-  const customerLabel = (estimate.customer as { company_name?: string; name?: string })?.company_name
-    ?? (estimate.customer as { name?: string })?.name
-    ?? "";
-
-  const uniqueApproverIds = [...new Set(approverIds.filter(Boolean))];
-  let request: { id: string };
+  const { actionOk, actionFail } = await import("@/lib/action-result");
   try {
-    request = await createWorkflowRequest({
-      type_id: wfType.id,
-      title: `見積承認: ${estimate.estimate_no} ${estimate.title ?? ""}（粗利率 ${(estimate.gross_profit_rate ?? 0).toFixed(1)}%）`,
-      amount: Number(estimate.total ?? 0),
-      is_urgent: true,
-      payload: {
-        estimate_id: input.estimateId,
-        gross_profit_rate: estimate.gross_profit_rate,
-        application_comment: input.comment,
-        customer_name: customerLabel,
-      },
-      approver_ids: uniqueApproverIds,
-    });
-  } catch (e) {
-    if (e instanceof Error) throw e;
-    const msg = (e as { message?: string } | null)?.message;
-    throw new Error(msg || "見積承認ワークフローの作成に失敗しました");
-  }
+    const { supabase, company_id, user_id } = await getCompanyContext();
 
-  const { error: commentErr } = await supabase.from("workflow_comments").insert({
-    company_id,
-    request_id: request.id,
-    user_id,
-    message: input.comment,
-  });
-  if (commentErr) {
-    console.error("[submitEstimateApproval] comment insert failed", commentErr);
-  }
-
-  const { error: estErr } = await supabase.from("estimates").update({
-    approval_status: "pending",
-    workflow_request_id: request.id,
-    updated_at: new Date().toISOString(),
-  }).eq("id", input.estimateId);
-  if (estErr) {
-    throw new Error(`見積の承認状態更新に失敗しました: ${estErr.message}`);
-  }
-
-  for (const approverId of uniqueApproverIds.slice(0, 1)) {
-    try {
-      await notifyUser(supabase, company_id, approverId, {
-        title: `見積承認依頼: ${estimate.estimate_no}`,
-        description: input.comment,
-        href: `/workflow/${request.id}`,
-        customerId: estimate.customer_id ?? undefined,
-        urgent: true,
-      }, user_id);
-    } catch (e) {
-      console.error("[submitEstimateApproval] notify failed", e);
+    const { data: estimate, error } = await supabase
+      .from("estimates")
+      .select("*, customer:customers(name, company_name)")
+      .eq("id", input.estimateId)
+      .single();
+    if (error || !estimate) {
+      return actionFail(error, "見積が見つかりません");
     }
+
+    try {
+      assertReserveFeesSecured(estimate);
+    } catch (e) {
+      return actionFail(e, "予備費を計上してから申請してください");
+    }
+
+    const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
+      ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+    const reservePercent = await getCompanyReservePercent(supabase, company_id);
+    // 会社指定粗利＋予備費を満たす必要がある
+    const threshold = baseThreshold + reservePercent;
+    if ((estimate.gross_profit_rate ?? 0) >= threshold) {
+      return actionFail(
+        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
+        "承認申請は不要です",
+      );
+    }
+
+    let { data: wfType } = await supabase
+      .from("workflow_types")
+      .select("id, approval_route")
+      .eq("company_id", company_id)
+      .eq("key", "estimate_margin")
+      .maybeSingle();
+
+    // 未設定の場合は自動作成する（既存会社向けフォールバック）
+    if (!wfType) {
+      const { data: created, error: createTypeErr } = await supabase
+        .from("workflow_types")
+        .insert({
+          company_id,
+          key: "estimate_margin",
+          name: "見積承認（粗利率未達）",
+          description: "粗利率が基準を下回る見積を上長が承認するフロー",
+          fields_schema: [],
+          approval_route: [],
+          sort_order: 0,
+        })
+        .select("id, approval_route")
+        .single();
+      if (!created) {
+        return actionFail(createTypeErr, "見積承認ワークフロー種別の自動作成に失敗しました");
+      }
+      wfType = created;
+    }
+
+    const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
+    // ルート未設定時はダイアログで選んだ承認者を使う
+    const routeIds = approvalRoute.length > 0
+      ? approvalRoute
+        .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0))
+        .map((s) => s.approver_id)
+        .filter(Boolean)
+      : [];
+    const approverIds = routeIds.length > 0
+      ? routeIds
+      : [input.approverId].filter(Boolean);
+    if (approverIds.length === 0) {
+      return actionFail(
+        "承認者が設定されていません。承認者を選択するか、設定 › ワークフローでルートを登録してください",
+        "承認者が設定されていません",
+      );
+    }
+
+    const customerLabel = (estimate.customer as { company_name?: string; name?: string })?.company_name
+      ?? (estimate.customer as { name?: string })?.name
+      ?? "";
+
+    const uniqueApproverIds = [...new Set(approverIds.filter(Boolean))];
+    let request: { id: string };
+    try {
+      request = await createWorkflowRequest({
+        type_id: wfType.id,
+        title: `見積承認: ${estimate.estimate_no} ${estimate.title ?? ""}（粗利率 ${(estimate.gross_profit_rate ?? 0).toFixed(1)}%）`,
+        amount: Number(estimate.total ?? 0),
+        is_urgent: true,
+        payload: {
+          estimate_id: input.estimateId,
+          gross_profit_rate: estimate.gross_profit_rate,
+          application_comment: input.comment,
+          customer_name: customerLabel,
+        },
+        approver_ids: uniqueApproverIds,
+      });
+    } catch (e) {
+      return actionFail(e, "見積承認ワークフローの作成に失敗しました");
+    }
+
+    const { error: commentErr } = await supabase.from("workflow_comments").insert({
+      company_id,
+      request_id: request.id,
+      user_id,
+      message: input.comment,
+    });
+    if (commentErr) {
+      console.error("[submitEstimateApproval] comment insert failed", commentErr);
+    }
+
+    const { error: estErr } = await supabase.from("estimates").update({
+      approval_status: "pending",
+      workflow_request_id: request.id,
+      updated_at: new Date().toISOString(),
+    }).eq("id", input.estimateId);
+    if (estErr) {
+      return actionFail(estErr, "見積の承認状態更新に失敗しました");
+    }
+
+    for (const approverId of uniqueApproverIds.slice(0, 1)) {
+      try {
+        await notifyUser(supabase, company_id, approverId, {
+          title: `見積承認依頼: ${estimate.estimate_no}`,
+          description: input.comment,
+          href: `/workflow/${request.id}`,
+          customerId: estimate.customer_id ?? undefined,
+          urgent: true,
+        }, user_id);
+      } catch (e) {
+        console.error("[submitEstimateApproval] notify failed", e);
+      }
+    }
+
+    void dispatchWebhook(company_id, "estimate.approval_requested", {
+      estimate_id: input.estimateId,
+      workflow_request_id: request.id,
+      gross_profit_rate: estimate.gross_profit_rate,
+    });
+
+    return actionOk({ workflowRequestId: request.id });
+  } catch (e) {
+    console.error("[submitEstimateApproval] unexpected", e);
+    return actionFail(e, "承認申請に失敗しました");
   }
-
-  void dispatchWebhook(company_id, "estimate.approval_requested", {
-    estimate_id: input.estimateId,
-    workflow_request_id: request.id,
-    gross_profit_rate: estimate.gross_profit_rate,
-  });
-
-  return { workflowRequestId: request.id };
 }
 
 export async function getEstimateMarginThreshold(estimateId: string) {
-  const { supabase, company_id } = await getCompanyContext();
+  let supabase: Awaited<ReturnType<typeof getCompanyContext>>["supabase"];
+  let company_id: string;
+  try {
+    ({ supabase, company_id } = await getCompanyContext());
+  } catch (e) {
+    console.error("[getEstimateMarginThreshold] auth", e);
+    return null;
+  }
   const { data } = await supabase
     .from("estimates")
     .select("gross_profit_rate, default_gross_profit_rate, approval_status, workflow_request_id, status")
@@ -551,42 +576,55 @@ function assertReserveFeesSecured(estimate: {
 }
 
 export async function confirmEstimateIssued(estimateId: string) {
-  const { supabase, company_id } = await getCompanyContext();
-  const { data: estimate, error } = await supabase
-    .from("estimates")
-    .select("gross_profit_rate, default_gross_profit_rate, status, reserve_fee_1_amount, reserve_fee_2_amount")
-    .eq("id", estimateId)
-    .single();
-  if (error || !estimate) throw new Error("見積が見つかりません");
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const { supabase, company_id } = await getCompanyContext();
+    const { data: estimate, error } = await supabase
+      .from("estimates")
+      .select("gross_profit_rate, default_gross_profit_rate, status, reserve_fee_1_amount, reserve_fee_2_amount")
+      .eq("id", estimateId)
+      .single();
+    if (error || !estimate) return actionFail(error, "見積が見つかりません");
 
-  assertReserveFeesSecured(estimate);
+    try {
+      assertReserveFeesSecured(estimate);
+    } catch (e) {
+      return actionFail(e, "予備費を計上してから確定してください");
+    }
 
-  // 明細から再計算して最新粗利率で判定（画面上の調整と一致させる）
-  const { data: items } = await supabase
-    .from("estimate_items")
-    .select("selling_amount, cost_amount")
-    .eq("estimate_id", estimateId);
-  const { calcGrossProfitRatePercent } = await import("@/lib/estimate-margin");
-  const liveRate = calcGrossProfitRatePercent(items ?? []);
-  const rate = liveRate > 0 ? liveRate : (estimate.gross_profit_rate ?? 0);
+    // 明細から再計算して最新粗利率で判定（画面上の調整と一致させる）
+    const { data: items } = await supabase
+      .from("estimate_items")
+      .select("selling_amount, cost_amount")
+      .eq("estimate_id", estimateId);
+    const { calcGrossProfitRatePercent } = await import("@/lib/estimate-margin");
+    const liveRate = calcGrossProfitRatePercent(items ?? []);
+    const rate = liveRate > 0 ? liveRate : (estimate.gross_profit_rate ?? 0);
 
-  const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
-    ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
-  const reservePercent = await getCompanyReservePercent(supabase, company_id);
-  const threshold = baseThreshold + reservePercent;
-  if (rate < threshold) {
-    throw new Error(`粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`);
+    const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
+      ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+    const reservePercent = await getCompanyReservePercent(supabase, company_id);
+    const threshold = baseThreshold + reservePercent;
+    if (rate < threshold) {
+      return actionFail(
+        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`,
+        "上長承認が必要です",
+      );
+    }
+
+    const { error: updErr } = await supabase.from("estimates").update({
+      status: "issued",
+      approval_status: "approved",
+      gross_profit_rate: rate,
+      updated_at: new Date().toISOString(),
+    }).eq("id", estimateId);
+    if (updErr) return actionFail(updErr, "見積の確定に失敗しました");
+
+    return actionOk({ status: "issued" as const });
+  } catch (e) {
+    console.error("[confirmEstimateIssued] unexpected", e);
+    return actionFail(e, "見積の確定に失敗しました");
   }
-
-  const { error: updErr } = await supabase.from("estimates").update({
-    status: "issued",
-    approval_status: "approved",
-    gross_profit_rate: rate,
-    updated_at: new Date().toISOString(),
-  }).eq("id", estimateId);
-  if (updErr) throw updErr;
-
-  return { status: "issued" as const };
 }
 
 // ---------------------------------------------------------------------------
