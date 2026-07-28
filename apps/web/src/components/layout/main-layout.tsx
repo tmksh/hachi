@@ -68,11 +68,12 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, []);
   const openBridgeChat = useCallback((opts?: OpenBridgeChatOptions) => {
     const prompt = opts?.prompt?.trim();
-    if (prompt) {
+    if (prompt || opts?.estimateDraft) {
       setBridgeSeed({
-        prompt,
+        prompt: prompt ?? "",
         displayText: opts?.displayText?.trim() || undefined,
         allowForward: opts?.allowForward,
+        estimateDraft: opts?.estimateDraft,
       });
     }
     setChatOpen(true);

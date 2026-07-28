@@ -414,24 +414,41 @@ JSONのみ: {"proposedStage":"ステージキー","confidence":0.0-1.0,"reason":
 // ---------------------------------------------------------------------------
 
 export async function generateEstimateDraft(
-  context: { customerName: string; recordings: string[]; inquiryContent?: string },
+  context: {
+    customerName: string;
+    recordings: string[];
+    inquiryContent?: string;
+    /** 工事見積タブからの追加工事指示（チャット入力） */
+    additionalPrompt?: string;
+    constructionTitle?: string;
+    existingEstimateTitle?: string;
+  },
   _config?: LinqAiConfig,
 ): Promise<EstimateDraftResult> {
   const ai = _config ?? await resolveLinqAiConfig();
-  const combined = [...context.recordings, context.inquiryContent ?? ""].join("\n");
+  const combined = [
+    ...context.recordings,
+    context.inquiryContent ?? "",
+    context.additionalPrompt ?? "",
+  ].join("\n");
 
   if (ai.enabled && combined.trim()) {
     const llm = await callLlm(
       `工務店・リフォーム会社の見積ドラフトを作成してください。
 顧客名: ${context.customerName}
-商談・問い合わせ内容: ${combined.slice(0, 3000)}
+${context.constructionTitle ? `工事件名: ${context.constructionTitle}` : ""}
+${context.existingEstimateTitle ? `見積件名: ${context.existingEstimateTitle}` : ""}
+商談・問い合わせ・追加工事の指示:
+${combined.slice(0, 3500)}
 
 JSONのみ返してください:
-{"title":"見積タイトル","items":[{"categoryName":"カテゴリ","name":"工事名","quantity":1,"unit":"式","costPrice":原価数値,"sellingPrice":販売価格数値,"specification":"仕様詳細（任意）"}],"notes":"備考"}
+{"title":"見積タイトル","items":[{"categoryName":"大項目名","name":"明細名","quantity":1,"unit":"式","costPrice":原価数値,"sellingPrice":販売価格数値,"specification":"仕様（任意）"}],"notes":"備考"}
 
-粗利率は概ね40〜55%を目安にしてください。`,
+・追加工事の指示があれば、その内容を反映した明細を複数行で出力すること
+・大項目（categoryName）は工事種別ごとに分ける（例: 内装工事、電気工事）
+・粗利率は概ね40〜55%を目安に costPrice / sellingPrice を設定`,
       ai,
-      "あなたは工務店・リフォーム会社の見積専門家です。",
+      "あなたは工務店・リフォーム会社の見積専門家です。必ず items 配列に具体的な明細を含めてください。",
     );
     if (llm) {
       const parsed = parseJsonBlock<{
@@ -457,6 +474,11 @@ JSONのみ返してください:
     items.push(
       { categoryName: "解体・撤去", name: "既存設備撤去", quantity: 1, unit: "式", costPrice: 200000, sellingPrice: 350000 },
       { categoryName: "内装工事", name: "クロス・床工事", quantity: 1, unit: "式", costPrice: 500000, sellingPrice: 850000 },
+    );
+  } else if (/キッチン|壁紙|クロス|照明|電気/.test(combined)) {
+    items.push(
+      { categoryName: "内装工事", name: "壁紙（クロス）張替え", quantity: 1, unit: "式", costPrice: 120000, sellingPrice: 220000 },
+      { categoryName: "電気工事", name: "照明器具交換・取付", quantity: 1, unit: "式", costPrice: 80000, sellingPrice: 150000 },
     );
   } else if (/新築|建築/.test(combined)) {
     items.push(

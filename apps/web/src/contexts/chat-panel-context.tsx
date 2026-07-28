@@ -9,12 +9,21 @@ export type OpenBridgeChatOptions = {
   displayText?: string;
   /** 応答後に社内チャット転送 UI を出す */
   allowForward?: boolean;
+  /** 工事見積 Linq 共同作成モード（入力を見積ドラフト生成に使う） */
+  estimateDraft?: {
+    estimateId: string;
+    onApplied?: (estimate: unknown) => void;
+  };
 };
 
 export type BridgeSeed = {
   prompt: string;
   displayText?: string;
   allowForward?: boolean;
+  estimateDraft?: {
+    estimateId: string;
+    onApplied?: (estimate: unknown) => void;
+  };
 };
 
 export type OpenInternalChatOptions = {

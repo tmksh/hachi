@@ -76,12 +76,14 @@ export function BridgeAiChat({
   onOpenChange,
   seed = null,
   onSeedConsumed,
+  onEstimateDraftApplied,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   /** 開いたとき自動送信するシード（1回消費） */
   seed?: BridgeSeed | null;
   onSeedConsumed?: () => void;
+  onEstimateDraftApplied?: (estimate: unknown) => void;
 }) {
   const pathname = usePathname();
   const { openInternalChat, refreshInternalChat, internalChatOpen } = useInternalChat();
@@ -93,8 +95,34 @@ export function BridgeAiChat({
   const [assigneeId, setAssigneeId] = useState<string>("");
   const [forwarding, setForwarding] = useState(false);
   const [forwarded, setForwarded] = useState(false);
+  const [estimateDraftMode, setEstimateDraftMode] = useState<BridgeSeed["estimateDraft"]>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
   const seedGen = useRef(0);
+
+  const applyEstimateDraft = async (estimateId: string, prompt: string) => {
+    const res = await fetch(`/api/estimates/${estimateId}/linq-draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = (await res.json()) as {
+      ok: boolean;
+      error?: string;
+      summary?: string;
+      estimate?: unknown;
+    };
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error ?? "見積ドラフトの生成に失敗しました");
+    }
+    if (data.estimate) {
+      estimateDraftMode?.onApplied?.(data.estimate);
+      onEstimateDraftApplied?.(data.estimate);
+      window.dispatchEvent(
+        new CustomEvent("bridge-estimate-draft-applied", { detail: { estimate: data.estimate } }),
+      );
+    }
+    return data.summary ?? "見積ドラフトを反映しました";
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -110,9 +138,10 @@ export function BridgeAiChat({
   }, [open, pathname, seed]);
 
   useEffect(() => {
-    if (!open || !seed?.prompt) return;
+    if (!open || !seed) return;
     const gen = ++seedGen.current;
-    const { prompt, displayText, allowForward: seedForward } = seed;
+    const { prompt, displayText, allowForward: seedForward, estimateDraft } = seed;
+    setEstimateDraftMode(estimateDraft ?? undefined);
     if (seedForward) {
       setAllowForward(true);
       setForwarded(false);
@@ -120,6 +149,25 @@ export function BridgeAiChat({
       void getChatContacts().then(setContacts).catch(() => setContacts([]));
     }
     const greeting = getGreeting(pathname ?? "");
+
+    // Linq 共同作成モード（プロンプトなし）: 入力待ちの案内のみ
+    if (estimateDraft?.estimateId && !prompt?.trim()) {
+      setMessages([
+        { role: "assistant", text: greeting },
+        {
+          role: "assistant",
+          text: "追加工事内容を入力してください。\n例: キッチンの壁紙張替えと照明交換の見積を作って\n\n入力後、大項目・明細・金額のドラフトをこの見積に自動反映します。",
+        },
+      ]);
+      onSeedConsumed?.();
+      return;
+    }
+
+    if (!prompt?.trim()) {
+      onSeedConsumed?.();
+      return;
+    }
+
     const nextMessages: ChatMessage[] = [
       { role: "assistant", text: greeting },
       { role: "user", text: prompt, displayText },
@@ -129,15 +177,26 @@ export function BridgeAiChat({
 
     void (async () => {
       try {
-        const { text } = await sendBridgeAiMessage(toApiHistory(nextMessages), pathname ?? "/");
+        let reply: string;
+        if (estimateDraft?.estimateId) {
+          reply = await applyEstimateDraft(estimateDraft.estimateId, prompt);
+        } else {
+          const result = await sendBridgeAiMessage(toApiHistory(nextMessages), pathname ?? "/");
+          reply = result.text;
+          if (result.estimate) {
+            estimateDraft?.onApplied?.(result.estimate);
+            onEstimateDraftApplied?.(result.estimate);
+            window.dispatchEvent(
+              new CustomEvent("bridge-estimate-draft-applied", { detail: { estimate: result.estimate } }),
+            );
+          }
+        }
         if (seedGen.current !== gen) return;
-        setMessages((m) => [...m, { role: "assistant", text }]);
-      } catch {
+        setMessages((m) => [...m, { role: "assistant", text: reply }]);
+      } catch (e) {
         if (seedGen.current !== gen) return;
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", text: "通信エラーが発生しました。もう一度お試しください。" },
-        ]);
+        const msg = e instanceof Error ? e.message : "通信エラーが発生しました。もう一度お試しください。";
+        setMessages((m) => [...m, { role: "assistant", text: msg }]);
       } finally {
         if (seedGen.current === gen) {
           setSending(false);
@@ -172,10 +231,24 @@ export function BridgeAiChat({
     setInput("");
     setSending(true);
     try {
-      const { text } = await sendBridgeAiMessage(toApiHistory(nextMessages), pathname ?? "/");
-      setMessages((m) => [...m, { role: "assistant", text }]);
-    } catch {
-      setMessages((m) => [...m, { role: "assistant", text: "通信エラーが発生しました。もう一度お試しください。" }]);
+      let reply: string;
+      if (estimateDraftMode?.estimateId) {
+        reply = await applyEstimateDraft(estimateDraftMode.estimateId, userMsg);
+      } else {
+        const result = await sendBridgeAiMessage(toApiHistory(nextMessages), pathname ?? "/");
+        reply = result.text;
+        if (result.estimate) {
+          estimateDraftMode?.onApplied?.(result.estimate);
+          onEstimateDraftApplied?.(result.estimate);
+          window.dispatchEvent(
+            new CustomEvent("bridge-estimate-draft-applied", { detail: { estimate: result.estimate } }),
+          );
+        }
+      }
+      setMessages((m) => [...m, { role: "assistant", text: reply }]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "通信エラーが発生しました。もう一度お試しください。";
+      setMessages((m) => [...m, { role: "assistant", text: msg }]);
     } finally {
       setSending(false);
     }

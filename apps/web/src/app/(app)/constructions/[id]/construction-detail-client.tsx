@@ -167,6 +167,12 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
 
   async function handleSelectEstimate(id: string) {
     setSelectedId(id);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "estimate");
+      url.searchParams.set("estimateId", id);
+      window.history.replaceState({}, "", url.toString());
+    }
     setLoadingEstimate(true);
     try {
       const est = await getConstructionEstimate(id);
@@ -182,8 +188,25 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSelectedId]);
 
+  useEffect(() => {
+    const onDraftApplied = (event: Event) => {
+      const est = (event as CustomEvent<{ estimate?: { id?: string } }>).detail?.estimate;
+      if (!est?.id || est.id !== selectedId) return;
+      onEstimateChange(est as Detail["estimate"]);
+      toast.success("Linq ドラフトを見積に反映しました");
+    };
+    window.addEventListener("bridge-estimate-draft-applied", onDraftApplied);
+    return () => window.removeEventListener("bridge-estimate-draft-applied", onDraftApplied);
+  }, [selectedId, onEstimateChange]);
+
   async function handleEstimateCreated(estimateId: string) {
     setCreateOpen(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "estimate");
+      url.searchParams.set("estimateId", estimateId);
+      window.history.replaceState({}, "", url.toString());
+    }
     setLoadingEstimate(true);
     try {
       const est = await getConstructionEstimate(estimateId);

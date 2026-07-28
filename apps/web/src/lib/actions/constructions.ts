@@ -1488,6 +1488,118 @@ export async function bulkApplyMarginToEstimate(
   return { items: updatedItems ?? [], totals };
 }
 
+/** Linq ドラフトの大項目・明細を既存見積に追加する */
+export async function applyEstimateDraftToEstimate(
+  estimateId: string,
+  draft: {
+    title?: string;
+    notes?: string;
+    items: Array<{
+      categoryName?: string;
+      name: string;
+      quantity?: number;
+      unit?: string;
+      costPrice?: number;
+      sellingPrice?: number;
+      specification?: string;
+    }>;
+  },
+) {
+  const { supabase, companyId } = await assertEstimateAccess(estimateId);
+
+  const { data: existingCats } = await supabase
+    .from("estimate_categories")
+    .select("id, name, sort_order")
+    .eq("estimate_id", estimateId);
+  const catByName = new Map((existingCats ?? []).map((c) => [c.name, c]));
+  let catSort =
+    (existingCats ?? []).reduce((max, c) => Math.max(max, c.sort_order ?? 0), -1) + 1;
+
+  const { count: itemCountStart } = await supabase
+    .from("estimate_items")
+    .select("*", { count: "exact", head: true })
+    .eq("estimate_id", estimateId);
+  let itemSort = itemCountStart ?? 0;
+
+  const grouped = new Map<string, typeof draft.items>();
+  for (const item of draft.items) {
+    const key = item.categoryName?.trim() || "追加工事";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(item);
+  }
+
+  for (const [catName, catItems] of grouped) {
+    let categoryId: string;
+    const existing = catByName.get(catName);
+    if (existing) {
+      categoryId = existing.id;
+    } else {
+      const { data: cat, error: catErr } = await supabase
+        .from("estimate_categories")
+        .insert({
+          company_id: companyId,
+          estimate_id: estimateId,
+          name: catName,
+          sort_order: catSort++,
+        })
+        .select("id")
+        .single();
+      throwIfSupabaseError(catErr);
+      categoryId = cat!.id;
+      catByName.set(catName, { id: categoryId, name: catName, sort_order: catSort - 1 });
+    }
+
+    const rows = catItems.map((item) => {
+      const qty = Number(item.quantity) || 1;
+      const costPrice = Number(item.costPrice) || 0;
+      const sellingPrice = Number(item.sellingPrice) || 0;
+      const amounts = calcItemAmounts(qty, costPrice, sellingPrice);
+      return {
+        company_id: companyId,
+        estimate_id: estimateId,
+        category_id: categoryId,
+        name: item.name.trim() || "明細",
+        specification: item.specification?.trim() || null,
+        quantity: qty,
+        unit: item.unit?.trim() || "式",
+        cost_price: costPrice,
+        selling_price: sellingPrice,
+        ...amounts,
+        sort_order: itemSort++,
+        notes: null,
+        is_text_row: false,
+      };
+    });
+
+    const { error: insertErr } = await supabase.from("estimate_items").insert(rows);
+    throwIfSupabaseError(insertErr);
+  }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (draft.notes?.trim()) {
+    patch.notes = draft.notes.trim();
+  }
+  const { error: patchErr } = await supabase.from("estimates").update(patch).eq("id", estimateId);
+  throwIfSupabaseError(patchErr);
+
+  await recalculateEstimateTotals(supabase, estimateId);
+  return getConstructionEstimate(estimateId);
+}
+
+/** 工事に紐づく最新見積 ID（Linq 共同作成のフォールバック） */
+export async function getPrimaryConstructionEstimateId(constructionId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("id")
+    .eq("construction_id", constructionId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return data?.id ?? null;
+}
+
 export async function getConstructionEstimate(estimateId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase

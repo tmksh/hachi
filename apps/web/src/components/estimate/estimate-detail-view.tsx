@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle, Sparkles } from "lucide-react";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   addEstimateCategory,
@@ -39,6 +39,7 @@ import { EstimateApprovalActions } from "@/components/estimate/estimate-approval
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { calcGrossProfitRatePercent, toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { humanizeClientError } from "@/lib/humanize-error";
+import { useBridgeChat } from "@/contexts/chat-panel-context";
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
   draft: "下書き", issued: "発行済", sent: "送付済", accepted: "受注", rejected: "失注",
 };
@@ -536,6 +537,7 @@ export function EstimateDetailView({
   const [seedingEmpty, setSeedingEmpty] = useState(false);
   const inlineInputRef = useRef<HTMLInputElement>(null);
   const seededEstimateIdRef = useRef<string | null>(null);
+  const { openBridgeChat } = useBridgeChat();
 
   useEffect(() => {
     setCollapsedIds(new Set());
@@ -921,6 +923,25 @@ export function EstimateDetailView({
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-[var(--brand-dark)] border-[var(--brand-dark)]/25 bg-[var(--brand-dark)]/5 hover:bg-[var(--brand-dark)]/10"
+            onClick={() => {
+              openBridgeChat({
+                estimateDraft: {
+                  estimateId: estimate.id,
+                  onApplied: (updated) => {
+                    onEstimateChange(updated as EstimateForView);
+                    toast.success("Linq ドラフトを見積に反映しました（要確認・調整）");
+                  },
+                },
+              });
+            }}
+          >
+            <Sparkles className="h-4 w-4" />
+            Linqと共に作成
+          </Button>
           <Popover open={refSelectOpen} onOpenChange={(o) => { setRefSelectOpen(o); if (!o) setRefSearch(""); }}>
             <PopoverTrigger asChild>
               <Button

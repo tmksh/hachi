@@ -303,6 +303,57 @@ type Message = { role: "user" | "assistant"; text: string };
 
 const SCHEDULE_TAG = "【工程表作成";
 
+const ESTIMATE_DRAFT_TAG = "【見積ドラフト";
+
+/** 工事詳細で見積作成意図を検知 → Linq ドラフトを生成して見積に反映 */
+async function handleEstimateDraftRequest(
+  history: Message[],
+  pathname: string,
+): Promise<{ text: string; ok: boolean; estimateId?: string } | null> {
+  const [path, queryStr] = pathname.split("?");
+  const m = path.match(/^\/constructions\/([0-9a-fA-F-]{36})/);
+  if (!m) return null;
+
+  const lastUser = history.at(-1)?.text ?? "";
+  const wantsEstimate =
+    /(見積|見積もり)/.test(lastUser) &&
+    /(作|生成|ドラフト|追加|作成|お願い|して|反映|ください|下さい)/.test(lastUser);
+  if (!wantsEstimate) return null;
+
+  // 工程表ウィザード中は除外
+  const lastAssistant = [...history].reverse().find((x) => x.role === "assistant")?.text ?? "";
+  if (lastAssistant.startsWith(SCHEDULE_TAG)) return null;
+
+  const constructionId = m[1];
+  let estimateId = new URLSearchParams(queryStr ?? "").get("estimateId");
+  if (!estimateId) {
+    const { getPrimaryConstructionEstimateId } = await import("@/lib/actions/constructions");
+    estimateId = await getPrimaryConstructionEstimateId(constructionId);
+  }
+  if (!estimateId) {
+    return {
+      ok: false,
+      text: "見積ドラフトを生成するには、先に「見積もり」タブで見積を開くか作成してください。",
+    };
+  }
+
+  try {
+    const { generateAndApplyLinqEstimateDraft } = await import("@/lib/estimate-linq-draft");
+    const result = await generateAndApplyLinqEstimateDraft(estimateId, lastUser);
+    if (!result.ok) {
+      return { ok: false, text: result.error };
+    }
+    return {
+      ok: true,
+      text: `${ESTIMATE_DRAFT_TAG} 反映完了】\n${result.summary}`,
+      estimateId,
+    };
+  } catch (e) {
+    console.error("[handleEstimateDraftRequest]", e);
+    return { ok: false, text: "見積ドラフトの生成に失敗しました。もう一度お試しください。" };
+  }
+}
+
 /** 工事種別ごとの標準工程テンプレート（重み = 全工期に対する日数比率） */
 const SCHEDULE_TEMPLATES: { match: RegExp; label: string; phases: { name: string; w: number }[] }[] = [
   {
@@ -583,10 +634,25 @@ async function callAnthropicChat(messages: Message[], config: { apiKey: string; 
 export async function sendBridgeAiMessage(
   history: Message[],
   pathname: string,
-): Promise<{ text: string; ok: boolean }> {
+): Promise<{ text: string; ok: boolean; estimate?: unknown }> {
   // 工程表作成ウィザード（No.6）: AI設定に依存せず対話→自動生成
   const wizardReply = await handleScheduleWizard(history, pathname);
   if (wizardReply) return wizardReply;
+
+  // 工事見積 Linq 共同作成: 追加工事内容 → 大項目・明細・金額を見積に反映
+  const estimateDraftReply = await handleEstimateDraftRequest(history, pathname);
+  if (estimateDraftReply) {
+    let estimate: unknown;
+    if (estimateDraftReply.ok && estimateDraftReply.estimateId) {
+      try {
+        const { getConstructionEstimate } = await import("@/lib/actions/constructions");
+        estimate = await getConstructionEstimate(estimateDraftReply.estimateId);
+      } catch {
+        estimate = undefined;
+      }
+    }
+    return { text: estimateDraftReply.text, ok: estimateDraftReply.ok, estimate };
+  }
 
   // 設定取得とページコンテキスト取得を並列実行（応答時間短縮）
   const [config, pageContext] = await Promise.all([
