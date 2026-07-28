@@ -232,7 +232,7 @@ export function BridgeAiChat({
             <BrandMark className={cn("h-9 w-auto", sending && "animate-cube-thinking")} />
           </span>
           <span className="flex flex-col items-start leading-tight flex-1">
-            <span className="text-base font-semibold">BLIDGE AI</span>
+            <span className="text-base font-semibold">BRIDGE AI</span>
             <span className="text-[10px] font-normal text-emerald-600 flex items-center gap-1">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
               オンライン

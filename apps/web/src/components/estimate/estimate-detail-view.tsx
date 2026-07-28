@@ -395,7 +395,8 @@ function EstimateItemRow({
           min={0}
           step="any"
           className={ITEM_CELL_NUM}
-          value={draft.quantity}
+          value={draft.quantity || ""}
+          placeholder="0"
           disabled={isTemp}
           onChange={(e) => {
             const qty = Number(e.target.value) || 0;
@@ -420,7 +421,8 @@ function EstimateItemRow({
           min={0}
           step="1"
           className={cn(ITEM_CELL_NUM, "text-amber-700")}
-          value={draft.cost_price}
+          value={draft.cost_price || ""}
+          placeholder="0"
           disabled={isTemp}
           onChange={(e) => {
             const costPrice = Number(e.target.value) || 0;
@@ -438,7 +440,8 @@ function EstimateItemRow({
           min={0}
           step="1"
           className={cn(ITEM_CELL_NUM, "text-blue-700")}
-          value={draft.selling_price}
+          value={draft.selling_price || ""}
+          placeholder="0"
           disabled={isTemp}
           onChange={(e) => {
             const sellingPrice = Number(e.target.value) || 0;
