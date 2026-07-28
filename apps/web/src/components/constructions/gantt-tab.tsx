@@ -90,6 +90,9 @@ const COL_DATE  = 100;
 const LEFT_W    = COL_NAME + COL_DATE * 2;
 const ROW_H     = 44;
 const HEADER_H  = 58; // 月ラベル行 + 日付行
+const BAR_TOP   = 10;
+const BAR_H     = ROW_H - 20;
+const BAR_MID_Y = BAR_TOP + BAR_H / 2;
 
 const EMPTY_FORM = {
   name: "", start_date: "", end_date: "", status: "not_started", description: "",
@@ -103,6 +106,21 @@ const BAR_COLORS: Record<string, string> = {
   completed:    "bg-slate-300",
   on_hold:      "bg-amber-300",
 };
+
+/** 先行工程の終端 → 後続工程の始端（FS）を折れ線＋矢印で描画 */
+function buildDependencyPath(fromX: number, fromY: number, toX: number, toY: number): string {
+  const tip = 7;
+  const endX = toX - tip;
+  if (Math.abs(fromY - toY) < 2) {
+    if (fromX + 4 <= endX) {
+      return `M ${fromX} ${fromY} L ${endX} ${fromY}`;
+    }
+    const drop = 12;
+    return `M ${fromX} ${fromY} L ${fromX + 8} ${fromY} L ${fromX + 8} ${fromY + drop} L ${endX - 8} ${fromY + drop} L ${endX - 8} ${toY} L ${endX} ${toY}`;
+  }
+  const elbowX = Math.max(fromX + 12, Math.min(toX - 16, fromX + 24));
+  return `M ${fromX} ${fromY} L ${elbowX} ${fromY} L ${elbowX} ${toY} L ${endX} ${toY}`;
+}
 
 export function GanttTab({ constructionId, initialTasks }: Props) {
   const [tasks, setTasks]       = useState<Task[]>(initialTasks);
@@ -328,6 +346,55 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
     await updateConstructionTask(task.id, { status: next }).catch(console.error);
   }
 
+  /* 依存関係の接続線（先行工程バー終端 → 後続工程バー始端） */
+  const dependencyLinks = useMemo(() => {
+    const links: Array<{
+      id: string;
+      fromX: number;
+      fromY: number;
+      toX: number;
+      toY: number;
+      predName: string;
+      succName: string;
+    }> = [];
+    const rowById = new Map(tasks.map((t, i) => [t.id, i]));
+
+    const barGeom = (s: Date | null, e: Date | null) => {
+      if (!s || !e) return null;
+      return {
+        left: Math.max(0, diffDays(timelineStart, s)) * cw,
+        width: Math.max(cw, (diffDays(s, e) + 1) * cw),
+      };
+    };
+
+    for (const task of tasks) {
+      const depId = task.depends_on_task_id;
+      if (!depId) continue;
+      const predIdx = rowById.get(depId);
+      const succIdx = rowById.get(task.id);
+      if (predIdx === undefined || succIdx === undefined) continue;
+      const pred = tasks[predIdx];
+      const predEff = effectiveDates(pred);
+      const succEff = effectiveDates(task);
+      const predBar = barGeom(predEff.s, predEff.e);
+      const succBar = barGeom(succEff.s, succEff.e);
+      if (!predBar || !succBar) continue;
+
+      links.push({
+        id: `${depId}->${task.id}`,
+        fromX: predBar.left + predBar.width,
+        fromY: predIdx * ROW_H + BAR_MID_Y,
+        toX: succBar.left,
+        toY: succIdx * ROW_H + BAR_MID_Y,
+        predName: pred.name,
+        succName: task.name,
+      });
+    }
+    return links;
+  // effectiveDates / getBar は drag・timelineStart・cw に依存
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, drag, timelineStart, cw]);
+
   const timelineW = timelineDays * cw;
   const totalW    = LEFT_W + timelineW;
 
@@ -366,7 +433,7 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
       <div className="rounded-xl border border-border overflow-hidden shadow-sm">
         {/* スクロール外枠 */}
         <div ref={scrollWrap} className="overflow-x-auto" style={{ maxHeight: "70vh", overflowY: "auto" }}>
-          <div style={{ width: totalW, minWidth: totalW }}>
+          <div style={{ width: totalW, minWidth: totalW, position: "relative" }}>
 
             {/* ── ヘッダー（sticky top） ── */}
             <div className="sticky top-0 z-20 bg-[#F8FAFB] border-b-2 border-border" style={{ height: HEADER_H }}>
@@ -486,6 +553,11 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                               {task.contractor_name}
                             </span>
                           )}
+                          {depName && (
+                            <span className="text-[10px] text-blue-600 truncate leading-tight" title={`先行: ${depName}`}>
+                              ← {depName}
+                            </span>
+                          )}
                         </div>
                         <div className="ml-auto flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                           <button
@@ -531,16 +603,6 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                       {todayOff >= 0 && todayOff < timelineDays && (
                         <div className="absolute top-0 bottom-0 w-0.5 bg-blue-500/50 z-10" style={{ left: todayOff * cw }} />
                       )}
-                      {/* 依存関係インジケーター */}
-                      {bar && depName && (
-                        <div
-                          className="absolute flex items-center text-[10px] text-slate-400 select-none z-10"
-                          style={{ left: bar.left - 11, top: 10, height: ROW_H - 20 }}
-                          title={`先行: ${depName}`}
-                        >
-                          ◀
-                        </div>
-                      )}
                       {/* ガントバー */}
                       {bar && (
                         <div
@@ -582,6 +644,52 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                   </div>
                 );
               })
+            )}
+
+            {/* 依存関係の接続線（全行にまたがる SVG オーバーレイ） */}
+            {tasks.length > 0 && dependencyLinks.length > 0 && (
+              <svg
+                className="absolute pointer-events-none"
+                style={{
+                  left: LEFT_W,
+                  top: HEADER_H,
+                  width: timelineW,
+                  height: tasks.length * ROW_H,
+                  zIndex: 12,
+                }}
+                width={timelineW}
+                height={tasks.length * ROW_H}
+                aria-hidden
+              >
+                <defs>
+                  <marker
+                    id="gantt-dep-arrow"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                  >
+                    <path d="M0,0 L8,4 L0,8 Z" fill="#475569" />
+                  </marker>
+                </defs>
+                {dependencyLinks.map((link) => (
+                  <g key={link.id}>
+                    <title>{`${link.succName} ← 先行: ${link.predName}`}</title>
+                    <path
+                      d={buildDependencyPath(link.fromX, link.fromY, link.toX, link.toY)}
+                      fill="none"
+                      stroke="#475569"
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      markerEnd="url(#gantt-dep-arrow)"
+                      opacity={0.9}
+                    />
+                  </g>
+                ))}
+              </svg>
             )}
 
           </div>
