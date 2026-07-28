@@ -1012,9 +1012,9 @@ export function Bi2Client({
 
                   {cardId === "sub-gross" && (
                     <MetricIllustCard
-                      label="粗利額"
+                      label="粗利（実績/目標）"
                       value={fmtMan(totalGrossProfit)}
-                      hint={`率 ${grossProfitRate}%`}
+                      hint={`目標 ${fmtTargetMan(targetGp)} · 率 ${grossProfitRate}%`}
                       illustration="/bi/icons/bi-icon-gross.png?v=4"
                     />
                   )}

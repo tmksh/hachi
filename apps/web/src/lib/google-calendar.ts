@@ -49,6 +49,22 @@ export async function createGoogleCalendarEvent(
     all_day?: boolean;
   },
 ): Promise<string | null> {
+  const result = await createGoogleCalendarEventDetailed(accessToken, event);
+  return "id" in result ? result.id : null;
+}
+
+/** サーバー側向け：失敗理由付き */
+export async function createGoogleCalendarEventDetailed(
+  accessToken: string,
+  event: {
+    title: string;
+    description?: string | null;
+    location?: string | null;
+    start_at: string;
+    end_at: string;
+    all_day?: boolean;
+  },
+): Promise<{ id: string } | { error: string }> {
   try {
     const timeZone = "Asia/Tokyo";
     const body: Record<string, unknown> = {
@@ -59,10 +75,10 @@ export async function createGoogleCalendarEvent(
 
     if (event.all_day) {
       body.start = { date: event.start_at.substring(0, 10) };
-      body.end   = { date: event.end_at.substring(0, 10) };
+      body.end = { date: event.end_at.substring(0, 10) };
     } else {
       body.start = { dateTime: event.start_at, timeZone };
-      body.end   = { dateTime: event.end_at,   timeZone };
+      body.end = { dateTime: event.end_at, timeZone };
     }
 
     const res = await fetch(
@@ -77,11 +93,19 @@ export async function createGoogleCalendarEvent(
       },
     );
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.id as string;
-  } catch {
-    return null;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return {
+        error: `Google Calendar API (${res.status}): ${errText.slice(0, 180) || "unknown error"}`,
+      };
+    }
+    const data = (await res.json()) as { id?: string };
+    if (!data.id) return { error: "Google Calendar API: イベントIDが返されませんでした" };
+    return { id: data.id };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Google Calendar API 呼び出しに失敗しました",
+    };
   }
 }
 

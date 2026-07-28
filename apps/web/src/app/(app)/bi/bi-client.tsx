@@ -779,9 +779,9 @@ export function BiClient({
             illustration: "/bi/icons/bi-icon-yoy.png?v=4",
           },
           {
-            label: "粗利額",
+            label: "粗利（実績/目標）",
             value: fmtMan(totalGrossProfit),
-            sub: "部門粗利の合計",
+            sub: `目標 ${fmtTargetMan(targetGp)}`,
             illustration: "/bi/icons/bi-icon-gross.png?v=4",
           },
           {

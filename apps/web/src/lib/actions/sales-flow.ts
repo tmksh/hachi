@@ -263,13 +263,45 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     source: "deal_won",
   });
 
-  // AI 提案は遷移をブロックしない（契約作成後すぐ返す）。工期は裏で契約へ反映。
+  const params = new URLSearchParams({
+    deal_id: dealId,
+    contract_id: contract.id,
+    customer_id: deal.customer_id,
+    title,
+    order_amount: String(amount),
+  });
+  if (latestEstimate?.id) params.set("estimate_id", latestEstimate.id);
+
+  // AI 推定工期は遷移前に同期反映（バナー表示・契約転記の両方を担保）
+  let durationSuggestion: ConfirmDealWonResult["durationSuggestion"];
+  try {
+    const aiConfig = await resolveLinqAiConfig();
+    const duration = await estimateConstructionDuration("", Number(amount), aiConfig);
+    if (duration.startDate && duration.endDate) {
+      durationSuggestion = {
+        startDate: duration.startDate,
+        endDate: duration.endDate,
+        reason: duration.reason,
+      };
+      await supabase.from("contracts").update({
+        start_date: duration.startDate,
+        end_date: duration.endDate,
+        updated_at: new Date().toISOString(),
+      }).eq("id", contract.id);
+      params.set("start_date", duration.startDate);
+      params.set("end_date", duration.endDate);
+      params.set("duration_reason", duration.reason);
+    }
+  } catch {
+    // 推定失敗時はクライアント側フォールバックに任せる
+  }
+
+  // 現場担当者推薦のみ非同期（遷移をブロックしない）
   const customerAddress = (deal.customer as { address?: string })?.address;
   void (async () => {
     try {
       const aiConfig = await resolveLinqAiConfig();
-      const [duration, profilesRes, activeRes] = await Promise.all([
-        estimateConstructionDuration("", Number(amount), aiConfig),
+      const [profilesRes, activeRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("id, display_name, department")
@@ -281,14 +313,6 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
           .in("status", ["preparing", "in_progress"])
           .not("assigned_to", "is", null),
       ]);
-
-      if (duration.startDate && duration.endDate) {
-        await supabase.from("contracts").update({
-          start_date: duration.startDate,
-          end_date: duration.endDate,
-          updated_at: new Date().toISOString(),
-        }).eq("id", contract.id);
-      }
 
       const countByAssignee = new Map<string, number>();
       for (const c of activeRes.data ?? []) {
@@ -310,15 +334,6 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     }
   })();
 
-  const params = new URLSearchParams({
-    deal_id: dealId,
-    contract_id: contract.id,
-    customer_id: deal.customer_id,
-    title,
-    order_amount: String(amount),
-  });
-  if (latestEstimate?.id) params.set("estimate_id", latestEstimate.id);
-
   return {
     contractId: contract.id,
     contractNo,
@@ -326,6 +341,7 @@ export async function confirmDealWon(dealId: string): Promise<ConfirmDealWonResu
     customerId: deal.customer_id,
     estimateId: latestEstimate?.id ?? null,
     redirectUrl: `/constructions/new?${params.toString()}`,
+    durationSuggestion,
   };
 }
 

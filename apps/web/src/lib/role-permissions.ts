@@ -128,6 +128,11 @@ export function mergeRolePermissions(
     }
   }
 
+  // マージ結果を再マージしたとき HEAL が再発しないようスキーマ版を引き継ぐ
+  if (version >= ROLE_PERMISSIONS_SCHEMA_VERSION) {
+    (result as Record<string, unknown>)[SCHEMA_KEY] = ROLE_PERMISSIONS_SCHEMA_VERSION;
+  }
+
   return result;
 }
 
@@ -137,8 +142,10 @@ export function canAccessFeature(
   roleSlugs: string[],
   permissions?: RolePermissions | null,
 ): boolean {
-  const merged = mergeRolePermissions(permissions ?? null);
-  const allowed = merged[featureKey];
+  // permissions が渡されている場合は merge 済みとみなす（再 merge すると _v 欠落で HEAL が走る）
+  const perms =
+    permissions == null ? mergeRolePermissions(null) : permissions;
+  const allowed = perms[featureKey];
   if (!allowed) return true;
   return roleSlugs.some((r) => allowed.includes(r));
 }

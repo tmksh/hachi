@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useTextareaSelection } from "@/hooks/use-textarea-selection";
+import { TextSelectionToolbar } from "@/components/ui/text-selection-toolbar";
 import type { DealActivity } from "@/lib/database.types";
 import {
   getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo,
@@ -71,7 +73,8 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [summaryDraft, setSummaryDraft] = useState("");
-  const [selection, setSelection] = useState("");
+  const { ref: summaryRef, selection, handlers: summarySelectionHandlers, clear: clearSelection } =
+    useTextareaSelection();
   const [saving, setSaving] = useState(false);
   const [assessing, setAssessing] = useState(false);
   const [assessment, setAssessment] = useState<DealConfidenceAssessment | null>(null);
@@ -186,7 +189,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
         source: "deal_timeline",
       });
       toast.success("ToDoに追加しました");
-      setSelection("");
+      clearSelection();
     } catch {
       toast.error("ToDo追加に失敗しました");
     }
@@ -289,30 +292,36 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       </CardHeader>
 
       <CardContent className="px-4 py-4 space-y-4">
-        <div className="space-y-2">
+        <div className="space-y-2 overflow-visible">
           <Label htmlFor="deal-summary" className="text-sm font-semibold">商談要約</Label>
-          <div className="relative">
+          <div className="relative overflow-visible">
             <Textarea
+              ref={summaryRef}
               id="deal-summary"
               value={summaryDraft}
               onChange={(e) => setSummaryDraft(e.target.value)}
-              onSelect={(e) => setSelection((e.target as HTMLTextAreaElement).value.substring(
-                (e.target as HTMLTextAreaElement).selectionStart,
-                (e.target as HTMLTextAreaElement).selectionEnd,
-              ))}
+              {...summarySelectionHandlers}
               rows={4}
+              className="relative z-0"
               placeholder="商談の要点・次のアクションなどを記録..."
             />
-            {(selection.trim()) && (
-              <div className="absolute bottom-2 right-2 flex gap-1 rounded-lg border bg-background shadow-sm p-1">
-                <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
-                  <ListTodo className="h-3.5 w-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="size-7" title="コピー" onClick={() => { navigator.clipboard.writeText(selection); toast.success("コピーしました"); }}>
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
+            <TextSelectionToolbar visible={Boolean(selection.trim())}>
+              <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
+                <ListTodo className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                title="コピー"
+                onClick={() => {
+                  navigator.clipboard.writeText(selection);
+                  toast.success("コピーしました");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </TextSelectionToolbar>
           </div>
           <div className="flex justify-end">
             <Button size="sm" onClick={saveSummary} disabled={saving} className="gap-1.5">

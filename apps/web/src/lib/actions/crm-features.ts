@@ -3,6 +3,8 @@
 import { addDays, format, isSunday, setHours, setMinutes, startOfDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/server";
+import { createGoogleCalendarEventDetailed } from "@/lib/google-calendar";
+import { getValidGoogleAccessToken } from "@/lib/google-token-server";
 import { callLlm, resolveLinqAiConfig } from "@/lib/integrations/linq-ai";
 
 async function getCompanyContext() {
@@ -187,14 +189,11 @@ async function fetchBusyBlocks(
     });
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("google_access_token")
-    .eq("id", userId)
-    .single();
+  // Google Calendar 予定（トークン refresh 込み）
+  const tokenResult = await getValidGoogleAccessToken(userId);
+  const calendarLinked = tokenResult.ok;
 
-  const calendarLinked = !!profile?.google_access_token;
-  if (profile?.google_access_token) {
+  if (tokenResult.ok) {
     try {
       const gcRes = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?${new URLSearchParams({
@@ -204,7 +203,7 @@ async function fetchBusyBlocks(
           orderBy: "startTime",
           maxResults: "200",
         })}`,
-        { headers: { Authorization: `Bearer ${profile.google_access_token}` } },
+        { headers: { Authorization: `Bearer ${tokenResult.accessToken}` } },
       );
       if (gcRes.ok) {
         const gcData = await gcRes.json() as { items?: Array<{ start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string }; location?: string }> };
@@ -546,113 +545,30 @@ export async function confirmSchedulingCandidate(input: {
   }).select().single();
   if (eventErr) throw new Error(eventErr.message || "カレンダーイベントの保存に失敗しました");
 
-  // Google Calendar 連携（トークンがあれば同期。失敗してもローカル登録は維持）
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("google_access_token, google_refresh_token, google_token_expires_at")
-    .eq("id", user_id)
-    .single();
-
+  // Google Calendar 連携（admin 経由でトークン refresh → 作成）
   let googleEventId: string | null = null;
-  if (profile?.google_access_token) {
-    try {
-      let accessToken = profile.google_access_token as string;
-      const expiresAt = profile.google_token_expires_at
-        ? new Date(profile.google_token_expires_at).getTime()
-        : 0;
-      if (expiresAt && expiresAt < Date.now() + 60_000 && profile.google_refresh_token) {
-        const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-        if (clientId && clientSecret) {
-          const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              client_id: clientId,
-              client_secret: clientSecret,
-              refresh_token: profile.google_refresh_token,
-              grant_type: "refresh_token",
-            }),
-          });
-          if (refreshRes.ok) {
-            const tokenJson = await refreshRes.json() as { access_token?: string; expires_in?: number };
-            if (tokenJson.access_token) {
-              accessToken = tokenJson.access_token;
-              await supabase.from("profiles").update({
-                google_access_token: accessToken,
-                google_token_expires_at: tokenJson.expires_in
-                  ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
-                  : null,
-              }).eq("id", user_id);
-            }
-          }
-        }
-      }
+  let googleSyncError: string | null = null;
+  const tokenResult = await getValidGoogleAccessToken(user_id);
 
-      const timeZone = "Asia/Tokyo";
-      const createGoogleEvent = (token: string) =>
-        fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            summary: title,
-            description,
-            start: { dateTime: startAt.toISOString(), timeZone },
-            end: { dateTime: endAt.toISOString(), timeZone },
-          }),
-        });
-
-      let gRes = await createGoogleEvent(accessToken);
-      // 期限切れトークンで 401 のとき refresh して再試行
-      if (gRes.status === 401 && profile.google_refresh_token) {
-        const clientId = process.env.GOOGLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-        if (clientId && clientSecret) {
-          const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              client_id: clientId,
-              client_secret: clientSecret,
-              refresh_token: profile.google_refresh_token,
-              grant_type: "refresh_token",
-            }),
-          });
-          if (refreshRes.ok) {
-            const tokenJson = await refreshRes.json() as { access_token?: string; expires_in?: number };
-            if (tokenJson.access_token) {
-              accessToken = tokenJson.access_token;
-              await supabase.from("profiles").update({
-                google_access_token: accessToken,
-                google_token_expires_at: tokenJson.expires_in
-                  ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
-                  : null,
-              }).eq("id", user_id);
-              gRes = await createGoogleEvent(accessToken);
-            }
-          }
-        }
-      }
-
-      if (gRes.ok) {
-        const gData = await gRes.json() as { id?: string };
-        googleEventId = gData.id ?? null;
-        if (googleEventId) {
-          await supabase.from("calendar_events").update({
-            google_event_id: googleEventId,
-          }).eq("id", event.id);
-        }
-      } else {
-        const errText = await gRes.text().catch(() => "");
-        console.warn("[confirmScheduling] Google Calendar sync failed", gRes.status, errText);
-      }
-    } catch (err) {
-      // Google同期失敗時はローカルイベントのみで成功扱い
-      console.warn("[confirmScheduling] Google Calendar sync error", err);
+  if (tokenResult.ok) {
+    const gResult = await createGoogleCalendarEventDetailed(tokenResult.accessToken, {
+      title,
+      description,
+      start_at: startAt.toISOString(),
+      end_at: endAt.toISOString(),
+    });
+    if ("id" in gResult) {
+      googleEventId = gResult.id;
+      await supabase.from("calendar_events").update({
+        google_event_id: googleEventId,
+      }).eq("id", event.id);
+    } else {
+      googleSyncError = gResult.error;
+      console.warn("[confirmScheduling] Google Calendar sync failed:", gResult.error);
     }
+  } else if (tokenResult.reason !== "not_connected") {
+    googleSyncError = tokenResult.message;
+    console.warn("[confirmScheduling] Google token:", tokenResult.message);
   }
 
   await supabase.from("customer_scheduling_requests").insert({
@@ -667,7 +583,7 @@ export async function confirmSchedulingCandidate(input: {
     if (error) console.warn("[confirmScheduling] scheduling_requests:", error.message);
   });
 
-  return { ...event, googleEventId };
+  return { ...event, googleEventId, googleSyncError };
 }
 
 /**

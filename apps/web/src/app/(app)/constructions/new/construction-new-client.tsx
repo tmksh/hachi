@@ -105,6 +105,11 @@ function ConstructionNewPageContent({
     initialStartDate && initialEndDate ? "ai" : null,
   );
 
+  const selectedContract = useMemo(
+    () => contracts.find((c) => c.id === contractId),
+    [contracts, contractId],
+  );
+
   const aiSuggestion = useMemo(() => {
     if (initialStartDate && initialEndDate) {
       return {
@@ -113,12 +118,28 @@ function ConstructionNewPageContent({
         reason: initialDurationReason || "受注額を基準に推定",
       };
     }
-    // 受注確定以外の導線でも提案工期を見せる（No.64）
-    if (initialDealId || initialOrderAmount) {
-      return estimateDurationFromAmount(initialOrderAmount);
+    const amountStr =
+      orderAmount
+      || initialOrderAmount
+      || (selectedContract?.amount != null ? String(selectedContract.amount) : "");
+    const estimated = estimateDurationFromAmount(amountStr);
+    if (estimated) return estimated;
+    // 受注確定・契約選択時は受注額不明でも標準推定を提示（No.80）
+    if (initialDealId || contractId || initialContractId) {
+      return estimateDurationFromAmount("3000000");
     }
     return null;
-  }, [initialStartDate, initialEndDate, initialDurationReason, initialDealId, initialOrderAmount]);
+  }, [
+    initialStartDate,
+    initialEndDate,
+    initialDurationReason,
+    orderAmount,
+    initialOrderAmount,
+    selectedContract?.amount,
+    initialDealId,
+    contractId,
+    initialContractId,
+  ]);
 
   useEffect(() => {
     setContracts(initialContracts);
@@ -194,11 +215,6 @@ function ConstructionNewPageContent({
     if (!initialCustomerId) return contracts;
     return contracts.filter((c) => c.customer_id === initialCustomerId);
   }, [contracts, initialCustomerId]);
-
-  const selectedContract = useMemo(
-    () => contracts.find((c) => c.id === contractId),
-    [contracts, contractId],
-  );
 
   const customerDisplayName = selectedContract?.customer_name ?? "契約を選択してください";
 
@@ -281,6 +297,12 @@ function ConstructionNewPageContent({
       {initialDealId && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900">
           受注確定フローから遷移しました。契約・見積・顧客情報が自動転記されています。
+        </div>
+      )}
+
+      {dateSource === "contract" && startDate && endDate && (
+        <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/60 px-4 py-2.5 text-sm text-emerald-900">
+          着工日・竣工日は契約情報から自動転記されています（{startDate} 〜 {endDate}）。下の入力欄で手動調整できます。
         </div>
       )}
 

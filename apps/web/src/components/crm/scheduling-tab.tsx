@@ -114,11 +114,13 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
         meeting_type: meetingType,
         duration_minutes: Number(duration),
       });
-      toast.success(
-        result.googleEventId
-          ? "カレンダーに登録しました（Googleカレンダーへ同期済み）"
-          : "カレンダーに登録しました",
-      );
+      if (result.googleEventId) {
+        toast.success("カレンダーに登録しました（Googleカレンダーへ同期済み）");
+      } else if (result.googleSyncError) {
+        toast.warning(`BRIDGEカレンダーに登録しました。Google同期失敗: ${result.googleSyncError}`);
+      } else {
+        toast.success("カレンダーに登録しました");
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "カレンダー登録に失敗しました";
       toast.error(`${msg}。候補日を案内するメール文面を生成します`);

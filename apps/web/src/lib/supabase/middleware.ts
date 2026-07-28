@@ -248,8 +248,8 @@ export async function updateSession(request: NextRequest) {
       const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
       if (cached && cached.u === user.id) {
         role = cached.r;
-        // キャッシュ済みでも旧スキーマ補完を適用（メニューとルート判定を一致させる）
-        permissions = cached.p ? mergeRolePermissions(cached.p) : null;
+        // キャッシュは merge 済み。再 merge すると _v 欠落で HEAL が権限を復元してしまう
+        permissions = cached.p ?? null;
       } else {
         const { data: profile } = await supabase
           .from("profiles")

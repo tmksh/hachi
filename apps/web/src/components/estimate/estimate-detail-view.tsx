@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IntegerInput } from "@/components/ui/integer-input";
 import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle, Sparkles } from "lucide-react";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
@@ -391,19 +392,15 @@ function EstimateItemRow({
         />
       </td>
       <td className="px-1.5 py-1.5 whitespace-nowrap w-14">
-        <input
-          type="number"
-          min={0}
-          step="any"
+        <IntegerInput
           className={ITEM_CELL_NUM}
-          value={draft.quantity || ""}
+          value={Number(draft.quantity) || 0}
           placeholder="0"
           disabled={isTemp}
-          onChange={(e) => {
-            const qty = Number(e.target.value) || 0;
+          onValueChange={(qty) => {
             setDraft((d) => recalcItemAmounts({ ...d, quantity: qty }));
           }}
-          onBlur={() => void commit("quantity", draft.quantity)}
+          onBlur={(qty) => void commit("quantity", qty)}
         />
       </td>
       <td className="px-1 py-1.5 whitespace-nowrap w-12">
@@ -417,38 +414,30 @@ function EstimateItemRow({
         />
       </td>
       <td className="px-1.5 py-1.5 bg-amber-50/30 whitespace-nowrap min-w-[6rem]">
-        <input
-          type="number"
-          min={0}
-          step="1"
+        <IntegerInput
           className={cn(ITEM_CELL_NUM, "text-amber-700")}
-          value={draft.cost_price || ""}
+          value={Number(draft.cost_price) || 0}
           placeholder="0"
           disabled={isTemp}
-          onChange={(e) => {
-            const costPrice = Number(e.target.value) || 0;
+          onValueChange={(costPrice) => {
             setDraft((d) => recalcItemAmounts({ ...d, cost_price: costPrice }));
           }}
-          onBlur={() => void commit("cost_price", draft.cost_price)}
+          onBlur={(costPrice) => void commit("cost_price", costPrice)}
         />
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums text-xs text-amber-700 bg-amber-50/30 whitespace-nowrap min-w-[6.5rem]">
         ¥{(draft.cost_amount ?? 0).toLocaleString()}
       </td>
       <td className="px-1.5 py-1.5 bg-blue-50/30 whitespace-nowrap min-w-[6rem]">
-        <input
-          type="number"
-          min={0}
-          step="1"
+        <IntegerInput
           className={cn(ITEM_CELL_NUM, "text-blue-700")}
-          value={draft.selling_price || ""}
+          value={Number(draft.selling_price) || 0}
           placeholder="0"
           disabled={isTemp}
-          onChange={(e) => {
-            const sellingPrice = Number(e.target.value) || 0;
+          onValueChange={(sellingPrice) => {
             setDraft((d) => recalcItemAmounts({ ...d, selling_price: sellingPrice }));
           }}
-          onBlur={() => void commit("selling_price", draft.selling_price)}
+          onBlur={(sellingPrice) => void commit("selling_price", sellingPrice)}
         />
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums text-xs text-blue-700 bg-blue-50/30 font-medium whitespace-nowrap min-w-[6.5rem]">
@@ -1461,19 +1450,15 @@ export function EstimateDetailView({
                 <span className="block text-[10px] text-muted-foreground font-normal">担当者は使用不可・売価ゼロ</span>
               </td>
               <td colSpan={2} className="px-3 py-2.5">
-                <Input
-                  type="number"
-                  min={0}
-                  step={1}
+                <IntegerInput
                   disabled={savingReserve}
-                  className="h-8 text-xs tabular-nums text-right"
-                  value={reserve1Amount || ""}
+                  className="h-8 text-xs tabular-nums text-right w-full rounded-md border border-input bg-background px-2"
+                  value={reserve1Amount}
                   placeholder="0"
-                  onChange={(e) => {
-                    const v = Number(e.target.value) || 0;
+                  onValueChange={(v) => {
                     onEstimateChange({ ...estimate, reserve_fee_1_amount: v });
                   }}
-                  onBlur={(e) => void handleReserveAmountChange("reserve_fee_1_amount", Number(e.target.value) || 0)}
+                  onBlur={(v) => void handleReserveAmountChange("reserve_fee_1_amount", v)}
                 />
               </td>
               <td colSpan={4} className="px-3 py-2.5 text-[10px] text-muted-foreground">原価のみ計上（顧客向けPDF非出力）</td>
@@ -1484,19 +1469,15 @@ export function EstimateDetailView({
                 <span className="block text-[10px] text-muted-foreground font-normal">実行予算移行後に明細側で操作可</span>
               </td>
               <td colSpan={2} className="px-3 py-2.5">
-                <Input
-                  type="number"
-                  min={0}
-                  step={1}
+                <IntegerInput
                   disabled={savingReserve}
-                  className="h-8 text-xs tabular-nums text-right"
-                  value={reserve2Amount || ""}
+                  className="h-8 text-xs tabular-nums text-right w-full rounded-md border border-input bg-background px-2"
+                  value={reserve2Amount}
                   placeholder="0"
-                  onChange={(e) => {
-                    const v = Number(e.target.value) || 0;
+                  onValueChange={(v) => {
                     onEstimateChange({ ...estimate, reserve_fee_2_amount: v });
                   }}
-                  onBlur={(e) => void handleReserveAmountChange("reserve_fee_2_amount", Number(e.target.value) || 0)}
+                  onBlur={(v) => void handleReserveAmountChange("reserve_fee_2_amount", v)}
                 />
               </td>
               <td colSpan={4} className="px-3 py-2.5 text-[10px] text-muted-foreground">原価のみ計上（顧客向けPDF非出力）</td>
