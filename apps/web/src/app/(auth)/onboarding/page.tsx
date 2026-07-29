@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Loader2, CalendarDays, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -17,14 +18,7 @@ export default function OnboardingPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard`,
-        scopes: "https://www.googleapis.com/auth/calendar",
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
+      options: googleCalendarOAuthOptions(`${window.location.origin}/api/auth/callback?next=/dashboard`),
     });
     if (error) {
       toast.error("Google 連携に失敗しました");

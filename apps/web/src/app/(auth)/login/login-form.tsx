@@ -13,6 +13,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Loader2, Mail, Building2 } from "lucide-react";
 import { toast } from "sonner";
+import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { BrandLogo } from "@/components/layout/brand-logo";
 interface LoginFormProps {
@@ -53,14 +54,7 @@ export function LoginForm({ companyName }: LoginFormProps) {
     setIsGoogleLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-        scopes: "https://www.googleapis.com/auth/calendar",
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
+      options: googleCalendarOAuthOptions(`${window.location.origin}/api/auth/callback`),
     });
 
     if (error) {

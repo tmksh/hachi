@@ -30,7 +30,7 @@ export async function getAnnouncements() {
 
 export async function getAnnouncement(id: string) {
   const supabase = await createClient();
-  const [announcementRes, commentsRes, authRes] = await Promise.all([
+  const [announcementRes, commentsRes, readsRes, authRes] = await Promise.all([
     supabase
       .from("announcements")
       .select("*, author:profiles!announcements_author_id_fkey(id, display_name)")
@@ -41,6 +41,11 @@ export async function getAnnouncement(id: string) {
       .select("*, user:profiles!announcement_comments_user_id_fkey(id, display_name)")
       .eq("announcement_id", id)
       .order("created_at"),
+    supabase
+      .from("announcement_reads")
+      .select("user_id, read_at, user:profiles!announcement_reads_user_id_fkey(id, display_name)")
+      .eq("announcement_id", id)
+      .order("read_at", { ascending: false }),
     supabase.auth.getUser(),
   ]);
   if (announcementRes.error) throw new Error(announcementRes.error.message);
@@ -54,21 +59,32 @@ export async function getAnnouncement(id: string) {
     }
   }
 
-  // 既読は表示をブロックしない
+  let markedRead = false;
   if (user) {
-    void (async () => {
-      const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-      if (!profile) return;
-      await supabase.from("announcement_reads").upsert({
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    if (profile) {
+      const { error: readErr } = await supabase.from("announcement_reads").upsert({
         company_id: profile.company_id,
         announcement_id: id,
         user_id: user.id,
         read_at: new Date().toISOString(),
       }, { onConflict: "company_id,announcement_id,user_id" });
-    })();
+      markedRead = !readErr;
+    }
   }
 
-  return { ...announcementRes.data, comments: commentsRes.data || [] };
+  const reads = (readsRes.data ?? []).map((r) => ({
+    user_id: r.user_id as string,
+    read_at: r.read_at as string,
+    display_name: (r.user as { display_name?: string } | null)?.display_name ?? "—",
+  }));
+
+  return {
+    ...announcementRes.data,
+    comments: commentsRes.data || [],
+    reads,
+    current_user_read: markedRead || reads.some((r) => r.user_id === user?.id),
+  };
 }
 
 function isAnnouncementSchemaMismatch(error: { message?: string; code?: string } | null): boolean {

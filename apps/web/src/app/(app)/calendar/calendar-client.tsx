@@ -83,6 +83,7 @@ import { MemberShareSelect } from "@/components/calendar/member-share-select";
 import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/google-calendar";
 import { tokyoWallTimeToISO } from "@/lib/tokyo-date";
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
@@ -412,14 +413,7 @@ export function CalendarClient({
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=/calendar`,
-        scopes: "https://www.googleapis.com/auth/calendar",
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
+      options: googleCalendarOAuthOptions(`${window.location.origin}/api/auth/callback?next=/calendar`),
     });
     if (error) {
       toast.error("Google 連携に失敗しました");

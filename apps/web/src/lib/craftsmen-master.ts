@@ -123,12 +123,31 @@ export async function listCraftsmanMasterItems(
   if ("error" in ctx) return [];
 
   const table = TABLE_BY_KIND[kind];
-  const { data } = await ctx.supabase
+  const { data, error } = await ctx.supabase
     .from(table)
     .select("id, label, sort_order")
     .eq("company_id", ctx.company_id)
     .order("sort_order");
-  return (data ?? []) as CraftsmanMasterItem[];
+
+  if (!error && data) return data as CraftsmanMasterItem[];
+
+  // RLS で SELECT が空になる環境では admin 経由で同一 company のみ取得
+  if (isRlsOrPermissionError(error?.message ?? "")) {
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const admin = createAdminClient();
+      const retry = await admin
+        .from(table)
+        .select("id, label, sort_order")
+        .eq("company_id", ctx.company_id)
+        .order("sort_order");
+      if (!retry.error && retry.data) return retry.data as CraftsmanMasterItem[];
+    } catch {
+      // fall through
+    }
+  }
+
+  return [];
 }
 
 /** 職種区分 / 資格マスタの追加（throw しない） */

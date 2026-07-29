@@ -220,7 +220,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const gradeChanged = assessment != null && assessment.suggestedGrade !== assessment.currentGrade;
 
   return (
-    <Card variant="inset" className="py-0 overflow-hidden">
+    <Card variant="inset" className="py-0 overflow-visible">
       {deals.length > 1 && (
         <div className="px-4 pt-4 pb-3 border-b border-border/40">
           <p className="text-xs text-muted-foreground mb-2">商談（{deals.length}件）</p>
@@ -294,7 +294,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       <CardContent className="px-4 py-4 space-y-4">
         <div className="space-y-2 overflow-visible">
           <Label htmlFor="deal-summary" className="text-sm font-semibold">商談要約</Label>
-          <div className="relative overflow-visible">
+          <div className="relative overflow-visible pt-9">
             <Textarea
               ref={summaryRef}
               id="deal-summary"

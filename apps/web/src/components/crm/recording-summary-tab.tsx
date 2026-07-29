@@ -555,7 +555,7 @@ export function RecordingSummaryTab({
               </div>
             )}
 
-            <div className="relative shrink-0 overflow-visible">
+            <div className="relative shrink-0 overflow-visible pt-9">
               <Textarea
                 ref={memoRef}
                 value={memo}

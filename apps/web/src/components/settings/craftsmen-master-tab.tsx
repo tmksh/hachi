@@ -140,9 +140,8 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
   }, []);
 
   useEffect(() => {
-    if (initialData) return;
     void reload();
-  }, [reload, initialData]);
+  }, [reload]);
 
   return (
     <div className="space-y-4">
@@ -154,16 +153,36 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           title="職種区分"
           description="協力職人の職種カテゴリ"
           items={specialties}
-          onCreate={async (label) => { await createMasterItem("specialties", label); toast.success("追加しました"); await reload(); }}
-          onDelete={async (id) => { await deleteMasterItem("specialties", id); toast.success("削除しました"); await reload(); }}
+          onCreate={async (label) => {
+            const item = await createMasterItem("specialties", label);
+            setSpecialties((prev) => [...prev, item].sort((a, b) => a.sort_order - b.sort_order));
+            toast.success("追加しました");
+            await reload();
+          }}
+          onDelete={async (id) => {
+            await deleteMasterItem("specialties", id);
+            setSpecialties((prev) => prev.filter((x) => x.id !== id));
+            toast.success("削除しました");
+            await reload();
+          }}
           placeholder="例: 大工"
         />
         <MasterList
           title="資格・保有免許"
           description="職人が保有できる資格の選択肢"
           items={qualifications}
-          onCreate={async (label) => { await createMasterItem("qualifications", label); toast.success("追加しました"); await reload(); }}
-          onDelete={async (id) => { await deleteMasterItem("qualifications", id); toast.success("削除しました"); await reload(); }}
+          onCreate={async (label) => {
+            const item = await createMasterItem("qualifications", label);
+            setQualifications((prev) => [...prev, item].sort((a, b) => a.sort_order - b.sort_order));
+            toast.success("追加しました");
+            await reload();
+          }}
+          onDelete={async (id) => {
+            await deleteMasterItem("qualifications", id);
+            setQualifications((prev) => prev.filter((x) => x.id !== id));
+            toast.success("削除しました");
+            await reload();
+          }}
           placeholder="例: 施工管理技士"
         />
       </div>

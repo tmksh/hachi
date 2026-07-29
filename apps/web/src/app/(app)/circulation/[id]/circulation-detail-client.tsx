@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Send, Users, Pencil, Trash2, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, Users, Pencil, Trash2, Save, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -32,6 +32,7 @@ import { ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 type Detail = Awaited<ReturnType<typeof getAnnouncement>>;
+type AnnouncementReadRow = { user_id: string; read_at: string; display_name: string };
 
 const ROLE_ORDER_LIST: Role[] = [
   ROLES.HQ_ADMIN,
@@ -117,6 +118,7 @@ function CirculationDetailContent({ initialData }: CirculationDetailClientProps)
     try {
       await deleteAnnouncement(id as string);
       toast.success("削除しました");
+      router.refresh();
       router.push("/circulation");
     } catch { toast.error("削除に失敗しました"); } finally { setDeleting(false); }
   };
@@ -176,8 +178,31 @@ function CirculationDetailContent({ initialData }: CirculationDetailClientProps)
         <p className="text-sm text-muted-foreground mt-1">
           {data.author?.display_name ?? "-"} · {format(parseISO(data.published_at), "yyyy年M月d日 HH:mm", { locale: ja })}
           {data.due_date && <span className="ml-2">期限: {data.due_date}</span>}
+          {data.current_user_read && (
+            <span className="ml-2 inline-flex items-center gap-1 text-emerald-700">
+              <CheckCircle2 className="h-3.5 w-3.5" />既読
+            </span>
+          )}
         </p>
       </div>
+
+      {data.reads && data.reads.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold mb-2">既読者（{data.reads.length}名）</p>
+            <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+              {data.reads.map((r: AnnouncementReadRow) => (
+                <li key={r.user_id} className="flex items-center justify-between text-sm gap-2">
+                  <span>{r.display_name}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {format(parseISO(r.read_at), "M/d HH:mm", { locale: ja })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-5">

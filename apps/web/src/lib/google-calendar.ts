@@ -95,6 +95,12 @@ export async function createGoogleCalendarEventDetailed(
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
+      if (res.status === 403) {
+        return {
+          error:
+            "Googleカレンダーへの書き込み権限がありません。カレンダー画面から「再連携」し、カレンダーへのアクセスを許可してください",
+        };
+      }
       return {
         error: `Google Calendar API (${res.status}): ${errText.slice(0, 180) || "unknown error"}`,
       };

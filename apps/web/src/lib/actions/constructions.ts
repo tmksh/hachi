@@ -1471,10 +1471,15 @@ export async function bulkApplyMarginToEstimate(
     };
   });
 
-  const { error: updateErr } = await supabase
-    .from("estimate_items")
-    .upsert(updates, { onConflict: "id" });
-  throwIfSupabaseError(updateErr);
+  for (const row of updates) {
+    const { id, ...patch } = row;
+    const { error: rowErr } = await supabase
+      .from("estimate_items")
+      .update(patch)
+      .eq("id", id)
+      .eq("company_id", companyId);
+    throwIfSupabaseError(rowErr);
+  }
 
   const totals = await recalculateEstimateTotals(supabase, estimateId);
 

@@ -152,7 +152,6 @@ export async function runMonthlyInvoiceBulkGeneration(
           tax,
           total: subtotal + tax,
           status: "draft",
-          notes: `${period.label} 分（月次一括生成）`,
           created_by: user.id,
         })
         .select("id")
