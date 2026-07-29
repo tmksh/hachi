@@ -1,53 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** textarea の選択範囲テキストを取得 */
 export function readTextareaSelection(el: HTMLTextAreaElement | null): string {
   if (!el) return "";
   const { selectionStart, selectionEnd, value } = el;
-  if (selectionStart === selectionEnd) return "";
+  if (
+    selectionStart == null ||
+    selectionEnd == null ||
+    selectionStart === selectionEnd
+  ) {
+    return "";
+  }
   return value.slice(selectionStart, selectionEnd);
 }
 
 /**
  * textarea のテキスト選択を追跡。
- * ドラッグ選択で mouseup が textarea 外になるケースも document レベルで捕捉する。
+ * ローディング後に textarea がマウントされても効くよう callback ref + document 監視。
  */
-export function useTextareaSelection(externalRef?: RefObject<HTMLTextAreaElement | null>) {
-  const internalRef = useRef<HTMLTextAreaElement>(null);
-  const ref = externalRef ?? internalRef;
+export function useTextareaSelection() {
+  const elementRef = useRef<HTMLTextAreaElement | null>(null);
   const [selection, setSelection] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  const setRef = useCallback((node: HTMLTextAreaElement | null) => {
+    elementRef.current = node;
+    setMounted(Boolean(node));
+  }, []);
 
   const sync = useCallback(() => {
-    setSelection(readTextareaSelection(ref.current));
-  }, [ref]);
+    setSelection(readTextareaSelection(elementRef.current));
+  }, []);
 
   const clear = useCallback(() => {
     setSelection("");
   }, []);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
     const scheduleSync = () => {
-      requestAnimationFrame(() => sync());
+      requestAnimationFrame(() => {
+        setSelection(readTextareaSelection(elementRef.current));
+      });
     };
 
     const onSelectionChange = () => {
+      const el = elementRef.current;
+      if (!el) return;
       if (document.activeElement === el) scheduleSync();
     };
 
     const onPointerUp = () => scheduleSync();
 
     const onPointerDown = (e: PointerEvent) => {
+      const el = elementRef.current;
+      if (!el) return;
       const target = e.target as Node;
       if (el.contains(target)) return;
       if ((target as HTMLElement).closest?.("[data-text-selection-toolbar]")) return;
       requestAnimationFrame(() => {
-        const text = readTextareaSelection(el);
-        if (!text) clear();
+        if (!readTextareaSelection(el)) clear();
       });
     };
 
@@ -55,12 +68,14 @@ export function useTextareaSelection(externalRef?: RefObject<HTMLTextAreaElement
     document.addEventListener("pointerup", onPointerUp);
     document.addEventListener("pointerdown", onPointerDown);
 
+    if (mounted) scheduleSync();
+
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
       document.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [ref, sync, clear]);
+  }, [clear, mounted]);
 
   const handlers = {
     onSelect: sync,
@@ -70,5 +85,5 @@ export function useTextareaSelection(externalRef?: RefObject<HTMLTextAreaElement
     onPointerUp: sync,
   };
 
-  return { ref, selection, sync, clear, handlers };
+  return { ref: setRef, selection, sync, clear, handlers };
 }

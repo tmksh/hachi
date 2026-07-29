@@ -60,14 +60,21 @@ export async function getAnnouncement(id: string) {
   }
 
   let markedRead = false;
+  let readerName = "—";
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id, display_name")
+      .eq("id", user.id)
+      .single();
     if (profile) {
+      readerName = profile.display_name ?? "—";
+      const now = new Date().toISOString();
       const { error: readErr } = await supabase.from("announcement_reads").upsert({
         company_id: profile.company_id,
         announcement_id: id,
         user_id: user.id,
-        read_at: new Date().toISOString(),
+        read_at: now,
       }, { onConflict: "company_id,announcement_id,user_id" });
       markedRead = !readErr;
     }
@@ -78,6 +85,15 @@ export async function getAnnouncement(id: string) {
     read_at: r.read_at as string,
     display_name: (r.user as { display_name?: string } | null)?.display_name ?? "—",
   }));
+
+  // 今回の既読をリストへ即反映（並列取得時点では未反映のため）
+  if (user && markedRead && !reads.some((r) => r.user_id === user.id)) {
+    reads.unshift({
+      user_id: user.id,
+      read_at: new Date().toISOString(),
+      display_name: readerName,
+    });
+  }
 
   return {
     ...announcementRes.data,
@@ -249,8 +265,52 @@ export async function updateAnnouncement(id: string, input: {
 
 export async function deleteAnnouncement(id: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("announcements").delete().eq("id", id);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("ログインが必要です");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, company_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile) throw new Error("プロフィールが見つかりません");
+
+  const { data: ann, error: fetchErr } = await supabase
+    .from("announcements")
+    .select("id, author_id, company_id")
+    .eq("id", id)
+    .single();
+  if (fetchErr || !ann) throw new Error("お知らせが見つかりません");
+  if (ann.company_id !== profile.company_id) throw new Error("お知らせが見つかりません");
+
+  const isAuthor = ann.author_id === user.id;
+  const isAdmin = ["hq_admin", "admin", "owner"].includes(profile.role);
+  if (!isAuthor && !isAdmin) throw new Error("削除権限がありません");
+
+  // RLS の DELETE は hq_admin/owner のみのため、投稿者削除は 0 行になりがち → 件数確認＋admin フォールバック
+  const { data: deleted, error } = await supabase
+    .from("announcements")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(error.message);
+  if (deleted?.length) return;
+
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+    const retry = await admin
+      .from("announcements")
+      .delete()
+      .eq("id", id)
+      .eq("company_id", profile.company_id)
+      .select("id");
+    if (retry.error) throw new Error(retry.error.message);
+    if (!retry.data?.length) throw new Error("削除に失敗しました");
+  } catch (e) {
+    if (e instanceof Error && e.message) throw e;
+    throw new Error("削除に失敗しました");
+  }
 }
 
 export async function addAnnouncementComment(announcementId: string, message: string) {

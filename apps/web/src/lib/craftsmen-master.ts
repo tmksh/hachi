@@ -115,6 +115,25 @@ async function adminClientDelete(
   }
 }
 
+async function listViaAdmin(
+  table: "craftsmen_specialties" | "craftsmen_qualifications",
+  company_id: string,
+): Promise<CraftsmanMasterItem[] | null> {
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+    const retry = await admin
+      .from(table)
+      .select("id, label, sort_order")
+      .eq("company_id", company_id)
+      .order("sort_order");
+    if (!retry.error && retry.data) return retry.data as CraftsmanMasterItem[];
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
 /** 職種区分 / 資格マスタの一覧（throw しない） */
 export async function listCraftsmanMasterItems(
   kind: CraftsmanMasterKind,
@@ -129,25 +148,15 @@ export async function listCraftsmanMasterItems(
     .eq("company_id", ctx.company_id)
     .order("sort_order");
 
-  if (!error && data) return data as CraftsmanMasterItem[];
+  // RLS で error なし・空配列が返るケースがある（admin INSERT 後に user SELECT できない等）
+  if (!error && data && data.length > 0) return data as CraftsmanMasterItem[];
 
-  // RLS で SELECT が空になる環境では admin 経由で同一 company のみ取得
-  if (isRlsOrPermissionError(error?.message ?? "")) {
-    try {
-      const { createAdminClient } = await import("@/lib/supabase/admin");
-      const admin = createAdminClient();
-      const retry = await admin
-        .from(table)
-        .select("id, label, sort_order")
-        .eq("company_id", ctx.company_id)
-        .order("sort_order");
-      if (!retry.error && retry.data) return retry.data as CraftsmanMasterItem[];
-    } catch {
-      // fall through
-    }
+  if (error || !data || data.length === 0) {
+    const viaAdmin = await listViaAdmin(table, ctx.company_id);
+    if (viaAdmin) return viaAdmin;
   }
 
-  return [];
+  return (data ?? []) as CraftsmanMasterItem[];
 }
 
 /** 職種区分 / 資格マスタの追加（throw しない） */

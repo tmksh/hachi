@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -20,6 +20,7 @@ type CirculationClientProps = {
 };
 
 export function CirculationClient({ initialItems }: CirculationClientProps) {
+  const [items, setItems] = useState<Ann[]>(initialItems);
   const [keyword, setKeyword] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -27,8 +28,21 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
   const [filterPinned, setFilterPinned] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
+  const reload = useCallback(() => {
+    getAnnouncements().then(setItems).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+
+  // 詳細から戻った直後など、SSRキャッシュずれを避けるためマウント時に再取得
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
   const filtered = useMemo(() => {
-    return initialItems.filter(a => {
+    return items.filter(a => {
       if (keyword.trim()) {
         const kw = keyword.trim().toLowerCase();
         const hit = a.title.toLowerCase().includes(kw) || a.body.toLowerCase().includes(kw);
@@ -40,7 +54,7 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
       if (filterPinned && !a.pinned) return false;
       return true;
     });
-  }, [initialItems, keyword, dateFrom, dateTo, filterUrgent, filterPinned]);
+  }, [items, keyword, dateFrom, dateTo, filterUrgent, filterPinned]);
 
   const hasFilter = keyword || dateFrom || dateTo || filterUrgent || filterPinned;
 
@@ -132,7 +146,7 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {hasFilter ? `${filtered.length} 件 / 全 ${initialItems.length} 件` : `全 ${initialItems.length} 件`}
+        {hasFilter ? `${filtered.length} 件 / 全 ${items.length} 件` : `全 ${items.length} 件`}
       </p>
 
       {filtered.length === 0 ? (
