@@ -52,6 +52,10 @@ export function validateGoogleOAuthCredentials(
   return { ok: true, creds: { clientId, clientSecret } };
 }
 
+export function calendarCallbackUri(origin: string): string {
+  return `${origin.replace(/\/$/, "")}/api/google-calendar/callback`;
+}
+
 export function gmailCallbackUri(origin: string): string {
   return `${origin.replace(/\/$/, "")}/api/gmail/callback`;
 }

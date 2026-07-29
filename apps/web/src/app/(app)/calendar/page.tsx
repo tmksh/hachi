@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { endOfDay, startOfDay, startOfWeek, addDays } from "date-fns";
 import { getCalendarEvents } from "@/lib/actions/calendar";
 import { CalendarClient } from "./calendar-client";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function getInitialCalendarRange() {
   const currentDate = new Date();
@@ -22,9 +24,11 @@ export default async function CalendarPage() {
   }).catch(() => []);
 
   return (
-    <CalendarClient
-      initialEvents={initialEvents}
-      initialMembers={[]}
-    />
+    <Suspense fallback={<Skeleton className="h-[480px] w-full rounded-xl" />}>
+      <CalendarClient
+        initialEvents={initialEvents}
+        initialMembers={[]}
+      />
+    </Suspense>
   );
 }

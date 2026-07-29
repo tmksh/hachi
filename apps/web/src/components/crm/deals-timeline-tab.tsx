@@ -73,7 +73,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [summaryDraft, setSummaryDraft] = useState("");
-  const { ref: summaryRef, selection, handlers: summarySelectionHandlers, clear: clearSelection } =
+  const { ref: summaryRef, selection, anchorRect, handlers: summarySelectionHandlers, clear: clearSelection } =
     useTextareaSelection();
   const [saving, setSaving] = useState(false);
   const [assessing, setAssessing] = useState(false);
@@ -294,7 +294,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       <CardContent className="px-4 py-4 space-y-4">
         <div className="space-y-2 overflow-visible">
           <Label htmlFor="deal-summary" className="text-sm font-semibold">商談要約</Label>
-          <div className="relative overflow-visible pt-9">
+          <div className="relative overflow-visible">
             <Textarea
               ref={summaryRef}
               id="deal-summary"
@@ -305,7 +305,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               className="relative z-0"
               placeholder="商談の要点・次のアクションなどを記録..."
             />
-            <TextSelectionToolbar visible={Boolean(selection.trim())}>
+            <TextSelectionToolbar visible={Boolean(selection.trim())} anchorRect={anchorRect}>
               <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
                 <ListTodo className="h-3.5 w-3.5" />
               </Button>

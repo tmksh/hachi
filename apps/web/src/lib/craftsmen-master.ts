@@ -42,6 +42,7 @@ async function getMasterContext(requireAdmin: boolean) {
     .eq("id", user.id)
     .single();
   if (!profile) return { error: "プロフィールが見つかりません" as const };
+  if (!profile.company_id) return { error: "会社情報が設定されていません" as const };
 
   if (requireAdmin && !MASTER_ADMIN_ROLES.has(profile.role)) {
     return { error: "マスタの編集は本部管理者のみ可能です" as const };
@@ -128,10 +129,19 @@ async function listViaAdmin(
       .eq("company_id", company_id)
       .order("sort_order");
     if (!retry.error && retry.data) return retry.data as CraftsmanMasterItem[];
-  } catch {
-    // fall through
+    if (retry.error) {
+      console.warn("[craftsmen-master] admin list failed:", retry.error.message);
+    }
+  } catch (e) {
+    console.warn("[craftsmen-master] admin client unavailable:", e);
   }
   return null;
+}
+
+function canUseAdminClient(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
 }
 
 /** 職種区分 / 資格マスタの一覧（throw しない） */
@@ -142,19 +152,23 @@ export async function listCraftsmanMasterItems(
   if ("error" in ctx) return [];
 
   const table = TABLE_BY_KIND[kind];
+
+  // SERVICE_ROLE がある環境では admin を優先（RLS 差異で空配列になるケースを避ける）
+  if (canUseAdminClient()) {
+    const viaAdmin = await listViaAdmin(table, ctx.company_id);
+    if (viaAdmin) return viaAdmin;
+  }
+
   const { data, error } = await ctx.supabase
     .from(table)
     .select("id, label, sort_order")
     .eq("company_id", ctx.company_id)
     .order("sort_order");
 
-  // RLS で error なし・空配列が返るケースがある（admin INSERT 後に user SELECT できない等）
-  if (!error && data && data.length > 0) return data as CraftsmanMasterItem[];
+  if (!error && data) return data as CraftsmanMasterItem[];
 
-  if (error || !data || data.length === 0) {
-    const viaAdmin = await listViaAdmin(table, ctx.company_id);
-    if (viaAdmin) return viaAdmin;
-  }
+  const viaAdmin = await listViaAdmin(table, ctx.company_id);
+  if (viaAdmin) return viaAdmin;
 
   return (data ?? []) as CraftsmanMasterItem[];
 }

@@ -11,7 +11,7 @@ type Item = { id: string; label: string; sort_order: number };
 type MasterKind = "specialties" | "qualifications";
 
 async function fetchMasterLists(): Promise<{ specialties: Item[]; qualifications: Item[] }> {
-  const res = await fetch("/api/settings/craftsmen-master");
+  const res = await fetch("/api/settings/craftsmen-master", { cache: "no-store" });
   const data = (await res.json()) as {
     ok?: boolean;
     error?: string;
@@ -155,15 +155,15 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           items={specialties}
           onCreate={async (label) => {
             const item = await createMasterItem("specialties", label);
-            setSpecialties((prev) => [...prev, item].sort((a, b) => a.sort_order - b.sort_order));
+            setSpecialties((prev) =>
+              [...prev.filter((x) => x.id !== item.id), item].sort((a, b) => a.sort_order - b.sort_order),
+            );
             toast.success("追加しました");
-            await reload();
           }}
           onDelete={async (id) => {
             await deleteMasterItem("specialties", id);
             setSpecialties((prev) => prev.filter((x) => x.id !== id));
             toast.success("削除しました");
-            await reload();
           }}
           placeholder="例: 大工"
         />
@@ -173,15 +173,15 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           items={qualifications}
           onCreate={async (label) => {
             const item = await createMasterItem("qualifications", label);
-            setQualifications((prev) => [...prev, item].sort((a, b) => a.sort_order - b.sort_order));
+            setQualifications((prev) =>
+              [...prev.filter((x) => x.id !== item.id), item].sort((a, b) => a.sort_order - b.sort_order),
+            );
             toast.success("追加しました");
-            await reload();
           }}
           onDelete={async (id) => {
             await deleteMasterItem("qualifications", id);
             setQualifications((prev) => prev.filter((x) => x.id !== id));
             toast.success("削除しました");
-            await reload();
           }}
           placeholder="例: 施工管理技士"
         />

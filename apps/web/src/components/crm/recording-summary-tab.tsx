@@ -51,7 +51,7 @@ export function RecordingSummaryTab({
   const [liveTranscript, setLiveTranscript] = useState(""); // Web Speech API リアルタイム
   const [result, setResult] = useState<MeetingResult | null>(null);
   const [memo, setMemo] = useState("");
-  const { ref: memoRef, selection, handlers: memoSelectionHandlers, clear: clearMemoSelection } =
+  const { ref: memoRef, selection, anchorRect, handlers: memoSelectionHandlers, clear: clearMemoSelection } =
     useTextareaSelection();
   const [sendToCustomer, setSendToCustomer] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -555,7 +555,7 @@ export function RecordingSummaryTab({
               </div>
             )}
 
-            <div className="relative shrink-0 overflow-visible pt-9">
+            <div className="relative shrink-0 overflow-visible">
               <Textarea
                 ref={memoRef}
                 value={memo}
@@ -565,7 +565,7 @@ export function RecordingSummaryTab({
                 className="min-h-[72px] resize-none [field-sizing:fixed] relative z-0"
                 placeholder={recordingState === "done" ? "AI要約（編集可能）" : "営業メモ（手入力可）"}
               />
-              <TextSelectionToolbar visible={Boolean(selection.trim())}>
+              <TextSelectionToolbar visible={Boolean(selection.trim())} anchorRect={anchorRect}>
                 <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
                   <ListTodo className="h-3.5 w-3.5" />
                 </Button>

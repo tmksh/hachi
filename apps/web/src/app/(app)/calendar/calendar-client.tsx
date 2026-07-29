@@ -22,7 +22,7 @@ import {
 } from "date-fns";
 import { ja } from "date-fns/locale";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,6 @@ import { MemberShareSelect } from "@/components/calendar/member-share-select";
 import type { CalendarEvent } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 import { fetchGoogleCalendarEvents, mapGoogleEvent, type MappedGoogleEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/google-calendar";
 import { tokyoWallTimeToISO } from "@/lib/tokyo-date";
 type Ev = Awaited<ReturnType<typeof getCalendarEvents>>[number];
@@ -196,6 +195,39 @@ export function CalendarClient({
   }, []);
   const refreshEvents = useCallback(() => setReloadKey((k) => k + 1), []);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  /* Google カレンダー専用 OAuth コールバック結果 */
+  useEffect(() => {
+    const connected = searchParams.get("gcal_connected");
+    const error = searchParams.get("gcal_error");
+    if (!connected && !error) return;
+
+    if (connected) {
+      googleTokenRef.current = undefined;
+      setConnectingGoogle(false);
+      setReloadKey((k) => k + 1);
+      toast.success("Googleカレンダーと連携しました（書き込み権限を含む）");
+    } else if (error) {
+      setConnectingGoogle(false);
+      const messages: Record<string, string> = {
+        access_denied: "Googleカレンダー連携がキャンセルされました",
+        missing_calendar_scope: "カレンダーへの書き込み権限が付与されませんでした。再度「再連携」してください",
+        oauth_not_configured: "Google OAuth 設定が未完了です（管理者に連絡してください）",
+        invalid_client: "Google OAuth クライアント設定が不正です",
+        redirect_uri_mismatch: "Google OAuth の redirect URI 設定が一致しません",
+        token_exchange: "Google トークンの取得に失敗しました",
+        db_error: "連携情報の保存に失敗しました",
+      };
+      toast.error(messages[error] ?? "Googleカレンダー連携に失敗しました");
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("gcal_connected");
+    url.searchParams.delete("gcal_error");
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+  }, [searchParams, router]);
+
   const newEventHref = (d: Date) =>
     `/calendar/new?date=${format(d, "yyyy-MM-dd")}`;
   const createAtSlot = useCallback(
@@ -407,18 +439,11 @@ export function CalendarClient({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeStart, rangeEnd]);
 
-  /* Google 連携を開始 / 再連携 */
-  const connectGoogle = useCallback(async () => {
+  /* Google 連携を開始 / 再連携（Supabase OAuth ではなく専用フローで calendar スコープを確実に取得） */
+  const connectGoogle = useCallback(() => {
     setConnectingGoogle(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: googleCalendarOAuthOptions(`${window.location.origin}/api/auth/callback?next=/calendar`),
-    });
-    if (error) {
-      toast.error("Google 連携に失敗しました");
-      setConnectingGoogle(false);
-    }
+    const returnPath = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/api/google-calendar/auth?return=${encodeURIComponent(returnPath)}`;
   }, []);
 
   const disconnectGoogle = useCallback(async () => {
