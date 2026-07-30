@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IntegerInput } from "@/components/ui/integer-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/shared/page-header";
@@ -831,19 +832,15 @@ export function BiSettingsPanel({
                 <div key={grade} className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">見込 {grade}</Label>
                   <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={1}
+                    <IntegerInput
                       className="max-w-[120px] tabular-nums"
                       value={companyConfig.prospect_grade_rates[grade]}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setCompanyConfig((prev) => ({
                           ...prev,
                           prospect_grade_rates: {
                             ...prev.prospect_grade_rates,
-                            [grade]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                            [grade]: Math.min(100, Math.max(0, v)),
                           },
                         }))
                       }
@@ -865,17 +862,13 @@ export function BiSettingsPanel({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
+              <IntegerInput
                 className="max-w-[120px] tabular-nums"
                 value={companyConfig.special_demand_rate}
-                onChange={(e) =>
+                onValueChange={(v) =>
                   setCompanyConfig((prev) => ({
                     ...prev,
-                    special_demand_rate: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                    special_demand_rate: Math.min(100, Math.max(0, v)),
                   }))
                 }
               />

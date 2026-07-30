@@ -97,11 +97,16 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
     setInvoices(prev.map(inv => inv.id === id ? { ...inv, status } : inv));
     setUpdating(id);
     try {
-      await updateInvoiceStatus(id, status);
+      const result = await updateInvoiceStatus(id, status);
+      if (!result.ok) {
+        setInvoices(prev);
+        toast.error(result.error);
+        return;
+      }
       toast.success(`ステータスを「${getStatusOption("invoice", status)?.label ?? status}」に変更しました`);
-    } catch {
+    } catch (e) {
       setInvoices(prev);
-      toast.error("ステータスの更新に失敗しました");
+      toast.error(e instanceof Error ? e.message : "ステータスの更新に失敗しました");
     } finally {
       setUpdating(null);
     }

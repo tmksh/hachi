@@ -48,42 +48,83 @@ export async function getInvoice(id: string) {
   return { ...data, items: items || [] };
 }
 
-export async function updateInvoiceStatus(id: string, status: "draft" | "sent" | "paid" | "cancelled") {
-  const supabase = await createClient();
-  const { data: before } = await supabase
-    .from("invoices")
-    .select("status, company_id, invoice_no, total, recipient")
-    .eq("id", id)
-    .single();
+export async function updateInvoiceStatus(
+  id: string,
+  status: "draft" | "sent" | "paid" | "cancelled",
+): Promise<ActionResult<{ status: typeof status }>> {
+  const cancelledConstraintHint =
+    "キャンセル状態がDBで許可されていません。マイグレーション（00065）を適用してください";
 
-  const patch: { status: typeof status; paid_at?: string | null } = { status };
-  if (status === "paid") {
-    patch.paid_at = new Date().toISOString();
-  } else if (before?.status === "paid") {
-    patch.paid_at = null;
-  }
+  try {
+    const supabase = await createClient();
+    const { data: before } = await supabase
+      .from("invoices")
+      .select("status, company_id, invoice_no, total, recipient, paid_at")
+      .eq("id", id)
+      .single();
 
-  const { data, error } = await supabase.from("invoices").update(patch).eq("id", id).select().single();
-  if (error) throw error;
+    if (!before) return actionFail("請求書が見つかりません", "請求書が見つかりません");
 
-  if (before && before.status !== status) {
-    if (status === "sent") {
-      void dispatchWebhook(data.company_id, "invoice.issued", {
-        id: data.id,
-        invoice_no: data.invoice_no,
-        total: data.total,
-        recipient: data.recipient,
-      });
-    }
+    const patch: { status: typeof status; paid_at?: string | null } = { status };
     if (status === "paid") {
-      void dispatchWebhook(data.company_id, "invoice.paid", {
-        id: data.id,
-        invoice_no: data.invoice_no,
-        total: data.total,
-        recipient: data.recipient,
-        paid_at: data.paid_at,
-      });
+      patch.paid_at = new Date().toISOString();
+    } else if (before.status === "paid") {
+      patch.paid_at = null;
     }
+
+    let { data, error } = await supabase
+      .from("invoices")
+      .update(patch)
+      .eq("id", id)
+      .select()
+      .single();
+
+    // paid_at クリア同梱で失敗する場合は status のみ → paid_at を分離
+    if (error && patch.paid_at === null) {
+      const statusOnly = await supabase
+        .from("invoices")
+        .update({ status })
+        .eq("id", id)
+        .select()
+        .single();
+      if (statusOnly.error) {
+        const isCheck =
+          statusOnly.error.message?.includes("check") || statusOnly.error.code === "23514";
+        return actionFail(statusOnly.error, isCheck ? cancelledConstraintHint : "ステータスの更新に失敗しました");
+      }
+      data = statusOnly.data;
+      error = null;
+      await supabase.from("invoices").update({ paid_at: null }).eq("id", id);
+    }
+
+    if (error || !data) {
+      const isCheck = error?.message?.includes("check") || error?.code === "23514";
+      return actionFail(error, isCheck ? cancelledConstraintHint : "ステータスの更新に失敗しました");
+    }
+
+    if (before.status !== status) {
+      if (status === "sent") {
+        void dispatchWebhook(data.company_id, "invoice.issued", {
+          id: data.id,
+          invoice_no: data.invoice_no,
+          total: data.total,
+          recipient: data.recipient,
+        });
+      }
+      if (status === "paid") {
+        void dispatchWebhook(data.company_id, "invoice.paid", {
+          id: data.id,
+          invoice_no: data.invoice_no,
+          total: data.total,
+          recipient: data.recipient,
+          paid_at: data.paid_at,
+        });
+      }
+    }
+
+    return actionOk({ status });
+  } catch (e) {
+    return actionFail(e, "ステータスの更新に失敗しました");
   }
 }
 
@@ -420,7 +461,8 @@ export async function sendInvoiceEmail(
   if (!invoice) throw new Error("請求書が見つかりません");
 
   if (!process.env.RESEND_API_KEY) {
-    await updateInvoiceStatus(id, "sent");
+    const statusResult = await updateInvoiceStatus(id, "sent");
+    if (!statusResult.ok) throw new Error(statusResult.error);
     return { sent: false as const };
   }
 
@@ -441,6 +483,7 @@ export async function sendInvoiceEmail(
     throw new Error(`メール送信に失敗しました: ${mailError.message}`);
   }
 
-  await updateInvoiceStatus(id, "sent");
+  const statusResult = await updateInvoiceStatus(id, "sent");
+  if (!statusResult.ok) throw new Error(statusResult.error);
   return { sent: true as const, sentTo: to };
 }

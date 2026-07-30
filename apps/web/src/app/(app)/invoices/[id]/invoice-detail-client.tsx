@@ -8,6 +8,7 @@ import { ja } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IntegerInput } from "@/components/ui/integer-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -114,8 +115,17 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
   };
 
   const handleStatusChange = async (status: "draft" | "sent" | "paid" | "cancelled") => {
-    try { await updateInvoiceStatus(id as string, status); toast.success("ステータスを更新"); reload(); }
-    catch { toast.error("更新に失敗"); }
+    try {
+      const result = await updateInvoiceStatus(id as string, status);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("ステータスを更新");
+      reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "更新に失敗");
+    }
   };
 
   const handleDelete = async () => {
@@ -309,8 +319,20 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
               ) : editing ? items.map((it, i) => (
                 <TableRow key={i}>
                   <TableCell><Input value={it.description} onChange={e => updateItem(i, "description", e.target.value)} /></TableCell>
-                  <TableCell><Input type="number" value={it.quantity} onChange={e => updateItem(i, "quantity", Number(e.target.value))} className="text-right" /></TableCell>
-                  <TableCell><Input type="number" value={it.unit_price} onChange={e => updateItem(i, "unit_price", Number(e.target.value))} className="text-right" /></TableCell>
+                  <TableCell>
+                    <IntegerInput
+                      className="text-right tabular-nums"
+                      value={it.quantity}
+                      onValueChange={(v) => updateItem(i, "quantity", v)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <IntegerInput
+                      className="text-right tabular-nums"
+                      value={it.unit_price}
+                      onValueChange={(v) => updateItem(i, "unit_price", v)}
+                    />
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">¥{(it.quantity * it.unit_price).toLocaleString()}</TableCell>
                   <TableCell><Button size="icon" variant="ghost" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button></TableCell>
                 </TableRow>

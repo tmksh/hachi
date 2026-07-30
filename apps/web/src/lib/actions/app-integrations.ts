@@ -13,6 +13,7 @@ import {
   type AppIntegrationProvider,
   type ChatworkRoom,
 } from "@/lib/app-integrations/types";
+import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 
 async function getAdminContext() {
   const supabase = await createClient();
@@ -236,22 +237,31 @@ export async function disconnectAppIntegration(provider: AppIntegrationProvider)
   if (error) throw error;
 }
 
-export async function testAppIntegration(provider: AppIntegrationProvider) {
-  const { supabase, company_id } = await getAdminContext();
-  const { data, error } = await supabase
-    .from("app_integrations")
-    .select("provider, credentials, settings")
-    .eq("company_id", company_id)
-    .eq("provider", provider)
-    .eq("is_active", true)
-    .single();
-  if (error || !data) throw new Error("連携が見つかりません");
+export async function testAppIntegration(
+  provider: AppIntegrationProvider,
+): Promise<ActionResult<{ sent: true }>> {
+  try {
+    const { supabase, company_id } = await getAdminContext();
+    const { data, error } = await supabase
+      .from("app_integrations")
+      .select("provider, credentials, settings")
+      .eq("company_id", company_id)
+      .eq("provider", provider)
+      .eq("is_active", true)
+      .single();
+    if (error || !data) {
+      return actionFail(error ?? "連携が見つかりません", "連携が見つかりません");
+    }
 
-  await sendIntegrationTest(
-    data.provider as AppIntegrationProvider,
-    (data.credentials ?? {}) as Record<string, string>,
-    (data.settings ?? {}) as Record<string, string>
-  );
+    await sendIntegrationTest(
+      data.provider as AppIntegrationProvider,
+      (data.credentials ?? {}) as Record<string, string>,
+      (data.settings ?? {}) as Record<string, string>,
+    );
+    return actionOk({ sent: true as const });
+  } catch (e) {
+    return actionFail(e, "テスト送信に失敗しました");
+  }
 }
 
 /** カタログ定義のみ（秘密情報なし）— 認証待ち不要でタブ表示を速くする */

@@ -58,7 +58,10 @@ import { markAnnouncementAsRead } from "@/lib/actions/notifications";
 import { fetchNotifications, type Notification } from "@/lib/queries/notifications";
 import { BombAlert } from "@/components/layout/bomb-alert";
 
-const BOMB_THRESHOLD = 10;
+/** 緊急回覧: 未読1件で BombAlert（仕様どおり） */
+const ANNOUNCEMENT_BOMB_THRESHOLD = 1;
+/** 社内チャット: 未読が溜まったときのみ */
+const CHAT_BOMB_THRESHOLD = 10;
 const CHAT_BOMB_LS_KEY = "hachi_chat_bomb_check";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
@@ -114,8 +117,8 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       try {
         const count = await getUnreadMessageCount();
         setChatUnreadCount((prev) => (prev === count ? prev : count));
-        // 未読チャットが10件以上溜まったら爆弾アラートを発動（1日1回・セッション1回）
-        if (count >= BOMB_THRESHOLD && !chatBombFired.current) {
+        // 未読チャットが閾値以上溜まったら爆弾アラートを発動（1日1回・セッション1回）
+        if (count >= CHAT_BOMB_THRESHOLD && !chatBombFired.current) {
           const today = new Date().toDateString();
           const lastFired = localStorage.getItem(CHAT_BOMB_LS_KEY);
           if (lastFired !== today) {
@@ -190,8 +193,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
         } catch { /* ignore */ }
         const filtered = notifs.filter((n) => !dismissed.includes(n.id));
         setNotifications(filtered);
-        const urgentCount = filtered.filter((n) => n.is_urgent).length;
-        if (urgentCount >= BOMB_THRESHOLD) {
+        const urgentCount = filtered.filter(
+          (n) => n.is_urgent && n.type === "announcement",
+        ).length;
+        if (urgentCount >= ANNOUNCEMENT_BOMB_THRESHOLD) {
           localStorage.setItem("hachi_bomb_check", today);
           setBombUrgentCount(urgentCount);
           setShowBombAlert(true);

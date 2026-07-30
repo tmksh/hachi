@@ -216,7 +216,11 @@ export function AppIntegrationsTab({ initialData }: { initialData?: AppIntegrati
   const handleTest = async (provider: AppIntegrationProvider) => {
     setTesting(provider);
     try {
-      await testAppIntegration(provider);
+      const result = await testAppIntegration(provider);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("テスト通知を送信しました");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "テスト送信に失敗しました");

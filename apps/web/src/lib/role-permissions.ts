@@ -146,7 +146,7 @@ export function canAccessFeature(
   const perms =
     permissions == null ? mergeRolePermissions(null) : permissions;
   const allowed = perms[featureKey];
-  if (!allowed) return true;
+  if (!Array.isArray(allowed)) return true;
   return roleSlugs.some((r) => allowed.includes(r));
 }
 

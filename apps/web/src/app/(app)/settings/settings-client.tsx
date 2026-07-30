@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IntegerInput } from "@/components/ui/integer-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -419,7 +420,7 @@ export function SettingsClient({
 
   const togglePerm = (featureKey: string, role: string) => {
     setRolePerms((prev) => {
-      const current = prev[featureKey] ?? [];
+      const current = Array.isArray(prev[featureKey]) ? prev[featureKey] : [];
       const next = current.includes(role)
         ? current.filter((r) => r !== role)
         : [...current, role];
@@ -440,8 +441,11 @@ export function SettingsClient({
       setRolePerms((prev) => {
         const next = { ...prev };
         Object.keys(next).forEach((key) => {
-          if (next[key].includes(newRoleBase)) {
-            next[key] = [...next[key], id];
+          // _v（スキーマ版番号）など非配列キーをスキップ
+          const roles = next[key];
+          if (!Array.isArray(roles)) return;
+          if (roles.includes(newRoleBase)) {
+            next[key] = [...roles, id];
           }
         });
         return next;
@@ -459,7 +463,9 @@ export function SettingsClient({
     setRolePerms((prev) => {
       const next = { ...prev };
       Object.keys(next).forEach((key) => {
-        next[key] = next[key].filter((r) => r !== id);
+        const roles = next[key];
+        if (!Array.isArray(roles)) return;
+        next[key] = roles.filter((r) => r !== id);
       });
       return next;
     });
@@ -826,19 +832,15 @@ export function SettingsClient({
                                 <div key={grade} className="space-y-1">
                                   <span className="text-xs text-muted-foreground">見込 {grade}</span>
                                   <div className="flex items-center gap-1.5">
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      max={100}
-                                      step={1}
+                                    <IntegerInput
                                       className="tabular-nums"
                                       value={biConfig.prospect_grade_rates[grade]}
-                                      onChange={(e) =>
+                                      onValueChange={(v) =>
                                         setBiConfig((prev) => prev && ({
                                           ...prev,
                                           prospect_grade_rates: {
                                             ...prev.prospect_grade_rates,
-                                            [grade]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                                            [grade]: Math.min(100, Math.max(0, v)),
                                           },
                                         }))
                                       }
@@ -1255,7 +1257,8 @@ export function SettingsClient({
                                 <span className="text-sm">{row.label}</span>
                               </td>
                               {allCols.map((col) => {
-                                const has = (rolePerms[row.key] ?? []).includes(col.key);
+                                const allowed = rolePerms[row.key];
+                                const has = Array.isArray(allowed) && allowed.includes(col.key);
                                 const editable = canManageMembers;
                                 return (
                                   <td key={col.key} className="text-center px-1.5 py-1.5">

@@ -47,7 +47,13 @@ export function IntegerInput({
       inputMode="numeric"
       disabled={disabled}
       placeholder={placeholder}
-      className={cn(className)}
+      data-slot="input"
+      className={cn(
+        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground h-9 w-full min-w-0 rounded-lg px-3 py-1 text-base outline-none transition-all duration-200 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        "bg-white border border-[rgba(0,0,0,0.09)] dark:bg-[#1F2937] dark:border-[rgba(255,255,255,0.08)]",
+        "focus-visible:border-ring/60 focus-visible:ring-ring/40 focus-visible:ring-[3px]",
+        className,
+      )}
       value={text}
       onFocus={(e) => {
         setFocused(true);

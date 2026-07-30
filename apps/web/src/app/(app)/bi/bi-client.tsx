@@ -445,7 +445,8 @@ export function BiClient({
   const effectiveSettings         = dashboardMock?.settings ?? settings;
   const effectiveActuals          = dashboardMock?.actuals ?? actuals;
   const effectivePrevActuals      = dashboardMock?.prevActuals ?? prevActuals;
-  const effectiveProspectSummary  = dashboardMock?.prospectSummary ?? prospectSummary;
+  // 見込度確度%・特需契約率は会社設定を即時反映するため、モックで上書きしない
+  const effectiveProspectSummary  = prospectSummary;
 
   const settingsConfigured = effectiveSettings !== null;
   const targetRevenue  = settingsConfigured ? normalizeBudgetMan(effectiveSettings.target_revenue ?? 0)        : null;

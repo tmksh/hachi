@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IntegerInput } from "@/components/ui/integer-input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,7 +68,25 @@ export function InvoiceNewClient({
       <Card><CardHeader className="pb-3 flex-row items-center justify-between"><CardTitle className="text-base">明細</CardTitle><Button size="sm" variant="outline" onClick={addItem}><Plus className="h-4 w-4 mr-1" />行追加</Button></CardHeader>
         <CardContent><Table><TableHeader><TableRow><TableHead>内容</TableHead><TableHead className="w-20">数量</TableHead><TableHead className="w-28">単価</TableHead><TableHead className="w-28 text-right">金額</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
           <TableBody>{items.map((item, i) => (
-            <TableRow key={i}><TableCell><Input value={item.description} onChange={e=>updateItem(i,"description",e.target.value)} /></TableCell><TableCell><Input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",Number(e.target.value))} /></TableCell><TableCell><Input type="number" value={item.unit_price} onChange={e=>updateItem(i,"unit_price",Number(e.target.value))} /></TableCell><TableCell className="text-right tabular-nums">¥{(item.quantity*item.unit_price).toLocaleString()}</TableCell><TableCell><Button size="icon" variant="ghost" onClick={()=>removeItem(i)} disabled={items.length<=1}><Trash2 className="h-4 w-4" /></Button></TableCell></TableRow>
+            <TableRow key={i}>
+              <TableCell><Input value={item.description} onChange={e=>updateItem(i,"description",e.target.value)} /></TableCell>
+              <TableCell>
+                <IntegerInput
+                  className="text-right tabular-nums"
+                  value={item.quantity}
+                  onValueChange={(v) => updateItem(i, "quantity", v)}
+                />
+              </TableCell>
+              <TableCell>
+                <IntegerInput
+                  className="text-right tabular-nums"
+                  value={item.unit_price}
+                  onValueChange={(v) => updateItem(i, "unit_price", v)}
+                />
+              </TableCell>
+              <TableCell className="text-right tabular-nums">¥{(item.quantity*item.unit_price).toLocaleString()}</TableCell>
+              <TableCell><Button size="icon" variant="ghost" onClick={()=>removeItem(i)} disabled={items.length<=1}><Trash2 className="h-4 w-4" /></Button></TableCell>
+            </TableRow>
           ))}</TableBody>
         </Table>
         <div className="mt-4 text-right space-y-1"><p className="text-sm">小計: ¥{subtotal.toLocaleString()}</p><p className="text-sm">消費税: ¥{tax.toLocaleString()}</p><p className="text-lg font-bold">合計: ¥{(subtotal+tax).toLocaleString()}</p></div>

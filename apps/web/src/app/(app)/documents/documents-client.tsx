@@ -24,9 +24,13 @@ import {
   updateDocumentCategory, deleteDocumentCategory,
   type DocCategory,
 } from "@/lib/actions/documents";
+import { getCustomers } from "@/lib/actions/customers";
+import { getConstructions } from "@/lib/actions/constructions";
 import { uploadToStorage, getSignedStorageUrl } from "@/lib/storage-browser";
 
 type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
+type CustomerOption = { id: string; name: string; company_name: string | null };
+type ConstructionOption = { id: string; title: string; customer_id: string | null };
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes}B`;
@@ -57,6 +61,11 @@ export function DocumentsClient({
   const [uploadCategory, setUploadCategory] = useState(initialCategories[0]?.key ?? "");
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCustomerId, setUploadCustomerId] = useState("");
+  const [uploadConstructionId, setUploadConstructionId] = useState("");
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [constructions, setConstructions] = useState<ConstructionOption[]>([]);
+  const [linkOptionsLoading, setLinkOptionsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Doc | null>(null);
 
@@ -100,6 +109,40 @@ export function DocumentsClient({
     try { await deleteDocument(id); toast.success("削除しました"); setDeleteTarget(null); load(); } catch { toast.error("失敗"); }
   };
 
+  const filteredConstructions = constructions.filter(
+    (c) => !uploadCustomerId || c.customer_id === uploadCustomerId,
+  );
+
+  const openUploadDialog = () => {
+    setUploadOpen(true);
+    if (customers.length > 0 && constructions.length > 0) return;
+    setLinkOptionsLoading(true);
+    Promise.all([
+      getCustomers({ limit: 100 }),
+      getConstructions(),
+    ])
+      .then(([custResult, cons]) => {
+        setCustomers(
+          custResult.customers.map((c) => ({
+            id: c.id,
+            name: c.name,
+            company_name: c.company_name ?? null,
+          })),
+        );
+        setConstructions(
+          cons.map((c) => ({
+            id: c.id,
+            title: c.title,
+            customer_id: c.customer_id,
+          })),
+        );
+      })
+      .catch(() => {
+        toast.error("顧客・工事一覧の取得に失敗しました");
+      })
+      .finally(() => setLinkOptionsLoading(false));
+  };
+
   const handleUpload = async () => {
     if (!uploadName.trim() || !uploadFile) { toast.error("名前とファイルを入力してください"); return; }
     setUploading(true);
@@ -117,11 +160,17 @@ export function DocumentsClient({
         file_name: uploadFile.name,
         mime_type: uploadFile.type,
         size: uploadFile.size,
+        customer_id: uploadCustomerId || undefined,
+        construction_id: uploadConstructionId || undefined,
       });
 
       toast.success("アップロードしました");
       setUploadOpen(false);
-      setUploadName(""); setUploadDescription(""); setUploadFile(null);
+      setUploadName("");
+      setUploadDescription("");
+      setUploadFile(null);
+      setUploadCustomerId("");
+      setUploadConstructionId("");
       load();
     } catch (e: unknown) {
       toast.error(`アップロード失敗: ${e instanceof Error ? e.message : "不明なエラー"}`);
@@ -185,7 +234,7 @@ export function DocumentsClient({
         <Button variant="outline" size="sm" onClick={() => setCatOpen(true)}>
           <Settings2 className="h-4 w-4 mr-1" />カテゴリ設定
         </Button>
-        <Button size="sm" onClick={() => setUploadOpen(true)}>
+        <Button size="sm" onClick={openUploadDialog}>
           <Upload className="h-4 w-4 mr-1" />アップロード
         </Button>
       </PageHeader>
@@ -335,6 +384,59 @@ export function DocumentsClient({
                 <SelectTrigger><SelectValue placeholder="カテゴリを選択" /></SelectTrigger>
                 <SelectContent>
                   {categories.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>顧客（任意）</Label>
+              <Select
+                value={uploadCustomerId || "__none__"}
+                onValueChange={(v) => {
+                  const next = v === "__none__" ? "" : v;
+                  setUploadCustomerId(next);
+                  setUploadConstructionId((prev) => {
+                    if (!prev) return prev;
+                    const con = constructions.find((c) => c.id === prev);
+                    return con && next && con.customer_id !== next ? "" : prev;
+                  });
+                }}
+                disabled={linkOptionsLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={linkOptionsLoading ? "読込中..." : "顧客を選択"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">未選択</SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.company_name ? `${c.name}（${c.company_name}）` : c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>工事（任意）</Label>
+              <Select
+                value={uploadConstructionId || "__none__"}
+                onValueChange={(v) => {
+                  const next = v === "__none__" ? "" : v;
+                  setUploadConstructionId(next);
+                  if (next) {
+                    const con = constructions.find((c) => c.id === next);
+                    if (con?.customer_id) setUploadCustomerId(con.customer_id);
+                  }
+                }}
+                disabled={linkOptionsLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={linkOptionsLoading ? "読込中..." : "工事を選択"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">未選択</SelectItem>
+                  {filteredConstructions.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
