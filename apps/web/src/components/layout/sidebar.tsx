@@ -60,6 +60,8 @@ import { BombAlert } from "@/components/layout/bomb-alert";
 
 /** 緊急回覧: 未読1件で BombAlert（仕様どおり） */
 const ANNOUNCEMENT_BOMB_THRESHOLD = 1;
+/** BombAlert 表示済みの緊急回覧ID（同じ回覧で何度も出さないため） */
+const ANNOUNCEMENT_BOMB_SHOWN_LS_KEY = "hachi_bomb_shown_ann";
 /** 社内チャット: 未読が溜まったときのみ */
 const CHAT_BOMB_THRESHOLD = 10;
 const CHAT_BOMB_LS_KEY = "hachi_chat_bomb_check";
@@ -174,13 +176,11 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     };
   }, []);
 
-  // ログイン時の爆弾チェック（1日1回）。初期遷移と競合しないよう遅延実行
+  // ログイン時の爆弾チェック。同じ緊急回覧は1回だけ表示し、新着があれば同日でも再表示する。
+  // 初期遷移と競合しないよう遅延実行
   useEffect(() => {
     if (bombChecked.current) return;
     bombChecked.current = true;
-    const today = new Date().toDateString();
-    const lastCheck = localStorage.getItem("hachi_bomb_check");
-    if (lastCheck === today) return;
 
     let idleId: number | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -193,12 +193,23 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
         } catch { /* ignore */ }
         const filtered = notifs.filter((n) => !dismissed.includes(n.id));
         setNotifications(filtered);
-        const urgentCount = filtered.filter(
+        const urgent = filtered.filter(
           (n) => n.is_urgent && n.type === "announcement",
-        ).length;
-        if (urgentCount >= ANNOUNCEMENT_BOMB_THRESHOLD) {
-          localStorage.setItem("hachi_bomb_check", today);
-          setBombUrgentCount(urgentCount);
+        );
+        let shownIds: string[] = [];
+        try {
+          shownIds = JSON.parse(localStorage.getItem(ANNOUNCEMENT_BOMB_SHOWN_LS_KEY) ?? "[]") as string[];
+        } catch { /* ignore */ }
+        const fresh = urgent.filter((n) => !shownIds.includes(n.id));
+        if (fresh.length >= ANNOUNCEMENT_BOMB_THRESHOLD) {
+          // 既読等で通知から消えたIDは掃除しつつ、今回表示分を記録
+          const nextShown = [
+            ...shownIds.filter((id) => urgent.some((n) => n.id === id)),
+            ...fresh.map((n) => n.id),
+          ];
+          localStorage.setItem(ANNOUNCEMENT_BOMB_SHOWN_LS_KEY, JSON.stringify(nextShown));
+          localStorage.removeItem("hachi_bomb_check");
+          setBombUrgentCount(urgent.length);
           setShowBombAlert(true);
         }
       }).catch(() => {});
