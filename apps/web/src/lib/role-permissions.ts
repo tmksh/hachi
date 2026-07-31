@@ -8,12 +8,13 @@ export type RolePermissions = Record<string, string[]>;
  * 上げると、旧保存データに対してデフォルト権限の欠落ロールを一度だけ補完する。
  * （明示的に外した設定は、保存時に _v が最新になっていれば尊重される）
  */
-export const ROLE_PERMISSIONS_SCHEMA_VERSION = 2;
+export const ROLE_PERMISSIONS_SCHEMA_VERSION = 3;
 
 const SCHEMA_KEY = "_v";
 
 /** 旧データ補完の対象キー（営業・経営層のリード系アクセス） */
 const HEAL_FEATURE_KEYS = [
+  "leads",
   "crm",
   "deals",
   "quotes",
@@ -31,6 +32,7 @@ const HEAL_FEATURE_KEYS = [
 export const ROUTE_FEATURE_KEYS: Array<{ prefix: string; featureKey: string }> = [
   { prefix: "/bi2", featureKey: "bi2" },
   { prefix: "/bi", featureKey: "bi" },
+  { prefix: "/leads", featureKey: "leads" },
   { prefix: "/crm", featureKey: "crm" },
   { prefix: "/deals", featureKey: "deals" },
   { prefix: "/quotes", featureKey: "quotes" },
@@ -53,7 +55,7 @@ export function buildDefaultRolePermissions(): RolePermissions {
   const all: Role[] = [...SYSTEM_PERMISSION_ROLES];
   const result: RolePermissions = {};
   const allKeys = [
-    "dashboard", "bi", "bi2", "crm", "deals", "quotes", "craftsmen",
+    "dashboard", "bi", "bi2", "leads", "crm", "deals", "quotes", "craftsmen",
     "contracts", "constructions", "invoices", "budget",
     "calendar", "mail", "attendance", "workflow", "circulation", "documents",
   ];
@@ -111,7 +113,7 @@ export function mergeRolePermissions(
   }
 
   // キー自体が欠落している場合の安全弁
-  const salesFlowKeys = ["crm", "deals", "quotes", "contracts", "workflow"] as const;
+  const salesFlowKeys = ["leads", "crm", "deals", "quotes", "contracts", "workflow"] as const;
   for (const key of salesFlowKeys) {
     if (!(key in saved) && DEFAULT_ROLE_PERMISSIONS[key]?.includes("sales")) {
       result[key] = [...DEFAULT_ROLE_PERMISSIONS[key]];

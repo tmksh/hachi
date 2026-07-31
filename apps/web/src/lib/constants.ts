@@ -12,6 +12,7 @@ export const NAV_GROUPS = [
     key: "lead",
     label: "リード",
     items: [
+      { key: "leads", label: "問い合わせ管理", href: "/leads" },
       { key: "crm", label: "顧客・商談管理", href: "/crm" },
       { key: "quotes", label: "見積管理", href: "/quotes" },
       { key: "craftsmen", label: "職人管理", href: "/craftsmen" },
@@ -98,7 +99,8 @@ export const ADMIN_ROLES: Role[] = ["hq_admin", "admin"];
 export const ROUTE_ROLES: Record<string, Role[]> = {
   "/bi":          ["hq_admin", "contractor_admin", "admin", "executive"],
   "/bi2":         ["hq_admin", "contractor_admin", "admin", "executive"],
-  // 営業・経営層はリード系（顧客/商談/見積/職人）にアクセス可能
+  // 営業・経営層はリード系（問い合わせ/顧客/商談/見積/職人）にアクセス可能
+  "/leads":       ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   "/crm":         ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   "/deals":       ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   "/quotes":      ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
@@ -125,6 +127,7 @@ export const CSV_ROLE_LABELS: Record<string, string> = {
 /** ナビ項目キー → 許可するロール一覧 (未定義 = 全ロール許可) */
 export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   bi:                 ["hq_admin", "contractor_admin", "admin", "executive"],
+  leads:              ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   crm:                ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   deals:              ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   quotes:             ["hq_admin", "contractor_admin", "admin", "sales", "executive"],

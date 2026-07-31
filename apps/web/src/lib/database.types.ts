@@ -24,6 +24,26 @@ export type Profile = {
   updated_at: string;
 };
 
+export type InboundLead = {
+  id: string;
+  company_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  inquiry_category: string | null;
+  inquiry_content: string | null;
+  status: "new" | "in_progress" | "converted" | "discarded";
+  assigned_to: string | null;
+  customer_id: string | null;
+  deal_id: string | null;
+  converted_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  assignee?: { id: string; display_name: string } | null;
+};
+
 export type Customer = {
   id: string;
   company_id: string;

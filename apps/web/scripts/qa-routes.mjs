@@ -98,6 +98,7 @@ const STATIC_ROUTES = [
   { group: "リード", path: "/deals" },
   { group: "リード", path: "/quotes" },
   { group: "リード", path: "/quotes/new" },
+  { group: "リード", path: "/leads" },
   { group: "リード", path: "/craftsmen" },
   { group: "リード", path: "/craftsmen/new" },
   { group: "生産", path: "/contracts" },

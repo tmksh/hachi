@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { dispatchWebhook } from "@/lib/webhooks";
 
 export const dynamic = "force-dynamic";
 
-/** 開発用: 問い合わせ自動取り込み（認証不要・デモ会社に登録） */
+/** 開発用: 問い合わせ自動取り込み（認証不要・デモ会社の inbound_leads に登録） */
 export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEV_INBOUND !== "true") {
     return NextResponse.json({ error: "Not available" }, { status: 404 });
@@ -56,7 +55,7 @@ export async function POST(request: Request) {
 
     const assigneeId = assignee?.id ?? null;
 
-    const { data: customer, error: custErr } = await admin.from("customers").insert({
+    const { data: lead, error: leadErr } = await admin.from("inbound_leads").insert({
       company_id: companyId,
       name: body.name.trim(),
       email: body.email ?? null,
@@ -64,27 +63,15 @@ export async function POST(request: Request) {
       source: body.source ?? "dev_api",
       inquiry_content: body.inquiry_content ?? null,
       inquiry_category: body.inquiry_category ?? null,
-      inquiry_date: new Date().toISOString().slice(0, 10),
       assigned_to: assigneeId,
-      status: "active",
+      status: "new",
     }).select().single();
-    if (custErr) throw custErr;
-
-    const { data: deal, error: dealErr } = await admin.from("deals").insert({
-      company_id: companyId,
-      customer_id: customer.id,
-      title: `${body.name.trim()} 様 問い合わせ`,
-      stage: "inquiry",
-      assigned_to: assigneeId,
-    }).select().single();
-    if (dealErr) throw dealErr;
+    if (leadErr) throw leadErr;
 
     if (assigneeId) {
       await admin.from("todos").insert({
         company_id: companyId,
         assigned_to: assigneeId,
-        customer_id: customer.id,
-        deal_id: deal.id,
         title: `新規問い合わせ: ${body.name.trim()}`,
         description: body.inquiry_content?.slice(0, 200) ?? "問い合わせが自動登録されました",
         status: "pending",
@@ -94,21 +81,9 @@ export async function POST(request: Request) {
       });
     }
 
-    void dispatchWebhook(companyId, "customer.created", {
-      customer_id: customer.id,
-      deal_id: deal.id,
-      source: body.source ?? "dev_api",
-    });
-    void dispatchWebhook(companyId, "deal.created", {
-      id: deal.id,
-      customer_id: customer.id,
-      title: deal.title,
-    });
-
     return NextResponse.json({
       ok: true,
-      customerId: customer.id,
-      dealId: deal.id,
+      leadId: lead.id,
       assigneeId,
     });
   } catch (e) {
