@@ -80,6 +80,24 @@ export async function createInboundLead(input: InboundLeadInput): Promise<Inboun
   return data as InboundLead;
 }
 
+/** 画面から自動取り込み相当のテストデータを登録（ターミナル不要） */
+export async function createTestInboundLead(): Promise<InboundLead> {
+  const stamp = new Date().toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return createInboundLead({
+    name: `Webhook検証 ${stamp}`,
+    email: "webhook-test@example.com",
+    phone: "09000000000",
+    source: "web",
+    inquiry_category: "検証",
+    inquiry_content: "画面の「テスト取り込み」から登録した自動取り込み検証用データです。",
+  });
+}
+
 export async function updateInboundLeadStatus(
   id: string,
   status: InboundLead["status"],

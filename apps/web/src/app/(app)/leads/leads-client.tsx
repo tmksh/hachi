@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   createInboundLead,
+  createTestInboundLead,
   convertInboundLeadToCustomer,
   discardInboundLead,
   updateInboundLeadStatus,
@@ -46,7 +47,7 @@ import {
 } from "@/lib/actions/leads";
 import type { InboundLead } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
-import { Copy, Link2, RefreshCw } from "lucide-react";
+import { Copy, Link2, RefreshCw, FlaskConical } from "lucide-react";
 
 const STATUS_LABELS: Record<InboundLead["status"], string> = {
   new: "未対応",
@@ -279,6 +280,43 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
     });
   }
 
+  /** ターミナル不要。画面から自動取り込み相当のテストデータを登録 */
+  function handleTestImport() {
+    startTransition(async () => {
+      try {
+        // シークレットが画面にあるときは実WebhookへPOST（本経路の確認）
+        if (webhookUrl && freshSecret) {
+          const res = await fetch(webhookUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Bridge-Secret": freshSecret,
+            },
+            body: JSON.stringify({
+              name: `Webhook検証 ${new Date().toLocaleTimeString("ja-JP")}`,
+              email: "webhook-test@example.com",
+              phone: "09000000000",
+              source: "web",
+              inquiry_content: "画面のテストボタンからWebhookへ送信した検証データです。",
+            }),
+          });
+          const json = await res.json().catch(() => ({})) as { error?: string; leadId?: string };
+          if (!res.ok) throw new Error(json.error || `送信に失敗しました（${res.status}）`);
+          toast.success("Webhook経由で取り込みました。一覧を更新します");
+          router.refresh();
+          return;
+        }
+        // シークレット非表示時はサーバー側で同等データを登録
+        const created = await createTestInboundLead();
+        setLeads((prev) => [created, ...prev]);
+        toast.success("テスト取り込みを登録しました（一覧に追加済み）");
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "テスト取り込みに失敗しました");
+      }
+    });
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader
@@ -362,10 +400,29 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
                   </p>
                 )}
               </div>
-              <pre className="text-[11px] leading-relaxed overflow-x-auto rounded bg-background border p-2 text-muted-foreground">{`curl -X POST "${webhookUrl ?? ""}" \\
-  -H "Content-Type: application/json" \\
-  -H "X-Bridge-Secret: ${freshSecret ?? "<SECRET>"}" \\
-  -d '{"name":"山田太郎","email":"a@example.com","phone":"09012345678","source":"web","inquiry_content":"キッチンリフォーム相談"}'`}</pre>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button size="sm" disabled={pending} onClick={handleTestImport}>
+                  <FlaskConical className="h-3.5 w-3.5 mr-1" />
+                  テスト取り込み
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  {freshSecret
+                    ? "ボタン1つでWebhookへ送信し、一覧に登録されます（ターミナル不要）"
+                    : "ボタン1つで取り込み相当のテストデータを一覧に登録します。実Webhook経路を試す場合は「シークレット再発行」後に実行してください"}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!webhook.path && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" disabled={pending} onClick={handleTestImport}>
+                <FlaskConical className="h-3.5 w-3.5 mr-1" />
+                テスト取り込み
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Webhook未設定でも、取り込み後の一覧表示を確認できます
+              </p>
             </div>
           )}
         </CardContent>
