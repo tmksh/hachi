@@ -208,7 +208,7 @@ export async function getNotifications(): Promise<Notification[]> {
     ...calendarNotifs,
   ]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 20);
+    .slice(0, 50);
 }
 
 export async function notifyManagerOfOverload(urgentCount: number): Promise<{ managerName: string | null }> {

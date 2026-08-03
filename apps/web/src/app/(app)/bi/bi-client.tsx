@@ -46,6 +46,7 @@ import {
 import {
   buildBiDashboardMock,
   shouldUseBiDashboardMock,
+  applyLiveRatesToProspectMock,
   buildBiDashboardMonthlyCombo,
 } from "@/lib/bi-mock-data";
 import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
@@ -445,8 +446,10 @@ export function BiClient({
   const effectiveSettings         = dashboardMock?.settings ?? settings;
   const effectiveActuals          = dashboardMock?.actuals ?? actuals;
   const effectivePrevActuals      = dashboardMock?.prevActuals ?? prevActuals;
-  // 見込度確度%・特需契約率は会社設定を即時反映するため、モックで上書きしない
-  const effectiveProspectSummary  = prospectSummary;
+  // 当年度モック時はデモ母数に会社設定の確度%／特需率を掛けて表示（実CRMが空で¥0になるのを防ぐ）
+  const effectiveProspectSummary  = useDashboardMock && dashboardMock
+    ? applyLiveRatesToProspectMock(dashboardMock.prospectSummary, prospectSummary)
+    : prospectSummary;
 
   const settingsConfigured = effectiveSettings !== null;
   const targetRevenue  = settingsConfigured ? normalizeBudgetMan(effectiveSettings.target_revenue ?? 0)        : null;
@@ -662,7 +665,7 @@ export function BiClient({
     .map((d) => ({ label: d.name, value: d.revenue, color: d.color }));
 
   const prospectBars = (effectiveProspectSummary?.rows ?? []).map((row, i) => ({
-    label: `見込 ${row.grade}`,
+    label: `見込 ${row.grade}（${row.rate}%）`,
     values: [row.weightedRevenue],
     color: DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length],
   }));
@@ -1271,7 +1274,7 @@ export function BiClient({
                 data={[
                   ...prospectBars.map((p) => ({ label: p.label, values: p.values })),
                   ...(includeSpecial && effectiveProspectSummary?.hasSpecial
-                    ? [{ label: "特需", values: [effectiveProspectSummary.special.weightedRevenue] }]
+                    ? [{ label: `特需（${effectiveProspectSummary.special.companyRate}%）`, values: [effectiveProspectSummary.special.weightedRevenue] }]
                     : []),
                 ]}
                 series={[{ label: "期待値", color: CHART_PRIMARY }]}

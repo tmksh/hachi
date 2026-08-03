@@ -428,47 +428,76 @@ export function SettingsClient({
     });
   };
 
+  const persistRoleSettings = async (
+    nextRoles: CustomRole[],
+    nextPerms: RolePermissions,
+    successMessage: string,
+  ) => {
+    setSavingRolePerms(true);
+    try {
+      const permsToSave = withPermissionsSchema(nextPerms);
+      await updateCompany({ role_permissions: permsToSave, custom_roles: nextRoles });
+      localStorage.setItem("bridge_role_permissions", JSON.stringify(permsToSave));
+      localStorage.setItem("bridge_custom_roles", JSON.stringify(nextRoles));
+      await refreshPerms(true);
+      toast.success(successMessage);
+    } catch (e) {
+      toast.error("保存に失敗しました", { description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setSavingRolePerms(false);
+    }
+  };
+
   const handleAddOrUpdateCustomRole = () => {
     if (!newRoleName.trim()) return;
+    const wasEditing = Boolean(editingRole);
+    let nextRoles = customRoles;
+    let nextPerms = rolePerms;
     if (editingRole) {
-      setCustomRoles((prev) =>
-        prev.map((r) => r.id === editingRole.id ? { ...r, name: newRoleName.trim(), base_role: newRoleBase, color: newRoleColor } : r)
+      nextRoles = customRoles.map((r) =>
+        r.id === editingRole.id
+          ? { ...r, name: newRoleName.trim(), base_role: newRoleBase, color: newRoleColor }
+          : r,
       );
     } else {
       const id = `cr_${Date.now()}`;
-      setCustomRoles((prev) => [...prev, { id, name: newRoleName.trim(), base_role: newRoleBase, color: newRoleColor }]);
+      nextRoles = [...customRoles, { id, name: newRoleName.trim(), base_role: newRoleBase, color: newRoleColor }];
       // 新しいカスタムロールに base_role と同じ権限を初期付与
-      setRolePerms((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((key) => {
-          // _v（スキーマ版番号）など非配列キーをスキップ
-          const roles = next[key];
-          if (!Array.isArray(roles)) return;
-          if (roles.includes(newRoleBase)) {
-            next[key] = [...roles, id];
-          }
-        });
-        return next;
+      nextPerms = { ...rolePerms };
+      Object.keys(nextPerms).forEach((key) => {
+        const roles = nextPerms[key];
+        if (!Array.isArray(roles)) return;
+        if (roles.includes(newRoleBase)) {
+          nextPerms[key] = [...roles, id];
+        }
       });
     }
+    setCustomRoles(nextRoles);
+    setRolePerms(nextPerms);
     setAddRoleOpen(false);
     setEditingRole(null);
     setNewRoleName("");
     setNewRoleBase("employee");
     setNewRoleColor("slate");
+    // 追加・更新は即DB保存（リロードで消えないようにする）
+    void persistRoleSettings(
+      nextRoles,
+      nextPerms,
+      wasEditing ? "カスタムロールを更新しました" : "カスタムロールを追加しました",
+    );
   };
 
   const handleDeleteCustomRole = (id: string) => {
-    setCustomRoles((prev) => prev.filter((r) => r.id !== id));
-    setRolePerms((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((key) => {
-        const roles = next[key];
-        if (!Array.isArray(roles)) return;
-        next[key] = roles.filter((r) => r !== id);
-      });
-      return next;
+    const nextRoles = customRoles.filter((r) => r.id !== id);
+    const nextPerms = { ...rolePerms };
+    Object.keys(nextPerms).forEach((key) => {
+      const roles = nextPerms[key];
+      if (!Array.isArray(roles)) return;
+      nextPerms[key] = roles.filter((r) => r !== id);
     });
+    setCustomRoles(nextRoles);
+    setRolePerms(nextPerms);
+    void persistRoleSettings(nextRoles, nextPerms, "カスタムロールを削除しました");
   };
 
   const handleSaveAttendance = async () => {
@@ -827,28 +856,49 @@ export function SettingsClient({
                             顧客の見込度をBIダッシュボードの見込み売上に反映する際の掛け率です
                           </p>
                           {biConfig ? (
-                            <div className="grid grid-cols-3 gap-4 max-w-md">
-                              {(["A", "B", "C"] as const).map((grade) => (
-                                <div key={grade} className="space-y-1">
-                                  <span className="text-xs text-muted-foreground">見込 {grade}</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <IntegerInput
-                                      className="tabular-nums"
-                                      value={biConfig.prospect_grade_rates[grade]}
-                                      onValueChange={(v) =>
-                                        setBiConfig((prev) => prev && ({
-                                          ...prev,
-                                          prospect_grade_rates: {
-                                            ...prev.prospect_grade_rates,
-                                            [grade]: Math.min(100, Math.max(0, v)),
-                                          },
-                                        }))
-                                      }
-                                    />
-                                    <span className="text-sm text-muted-foreground">%</span>
+                            <div className="space-y-3 max-w-md">
+                              <div className="grid grid-cols-3 gap-4">
+                                {(["A", "B", "C"] as const).map((grade) => (
+                                  <div key={grade} className="space-y-1">
+                                    <span className="text-xs text-muted-foreground">見込 {grade}</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <IntegerInput
+                                        className="tabular-nums"
+                                        value={biConfig.prospect_grade_rates[grade]}
+                                        onValueChange={(v) =>
+                                          setBiConfig((prev) => prev && ({
+                                            ...prev,
+                                            prospect_grade_rates: {
+                                              ...prev.prospect_grade_rates,
+                                              [grade]: Math.min(100, Math.max(0, v)),
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      <span className="text-sm text-muted-foreground">%</span>
+                                    </div>
                                   </div>
+                                ))}
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-xs text-muted-foreground">特需のデフォルト契約率</span>
+                                <div className="flex items-center gap-1.5 max-w-[8rem]">
+                                  <IntegerInput
+                                    className="tabular-nums"
+                                    value={biConfig.special_demand_rate}
+                                    onValueChange={(v) =>
+                                      setBiConfig((prev) => prev && ({
+                                        ...prev,
+                                        special_demand_rate: Math.min(100, Math.max(0, v)),
+                                      }))
+                                    }
+                                  />
+                                  <span className="text-sm text-muted-foreground">%</span>
                                 </div>
-                              ))}
+                                <p className="text-[11px] text-muted-foreground">
+                                  案件に個別確度がないとき、BIの特需期待値に使います
+                                </p>
+                              </div>
                             </div>
                           ) : (
                             <Skeleton className="h-9 w-full max-w-md" />

@@ -60,15 +60,22 @@ import { BombAlert } from "@/components/layout/bomb-alert";
 
 /** 緊急回覧: 未読1件で BombAlert（仕様どおり） */
 const ANNOUNCEMENT_BOMB_THRESHOLD = 1;
-/** BombAlert 表示済みの緊急回覧ID（同じ回覧で何度も出さないため） */
-const ANNOUNCEMENT_BOMB_SHOWN_LS_KEY = "hachi_bomb_shown_ann";
-/** 社内チャット: 未読が溜まったときのみ */
+/** 社内チャット: 未読≥10で BombAlert（マウント＝ログイン単位で1回） */
 const CHAT_BOMB_THRESHOLD = 10;
-const CHAT_BOMB_LS_KEY = "hachi_chat_bomb_check";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+
+/** 回覧はDB既読が正本。localStorageの「非表示」は回覧以外にだけ適用する */
+function filterDismissedNotifications(notifs: Notification[]): Notification[] {
+  let dismissed: string[] = [];
+  try {
+    dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
+  } catch { /* ignore */ }
+  if (dismissed.length === 0) return notifs;
+  return notifs.filter((n) => n.type === "announcement" || !dismissed.includes(n.id));
+}
 
 const GROUP_ICONS = {
   dashboard: LayoutDashboard,
@@ -119,16 +126,13 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       try {
         const count = await getUnreadMessageCount();
         setChatUnreadCount((prev) => (prev === count ? prev : count));
-        // 未読チャットが閾値以上溜まったら爆弾アラートを発動（1日1回・セッション1回）
+        // 未読チャット≥10で爆弾アラート（このマウント＝ログイン後の画面で1回）
         if (count >= CHAT_BOMB_THRESHOLD && !chatBombFired.current) {
-          const today = new Date().toDateString();
-          const lastFired = localStorage.getItem(CHAT_BOMB_LS_KEY);
-          if (lastFired !== today) {
-            chatBombFired.current = true;
-            localStorage.setItem(CHAT_BOMB_LS_KEY, today);
-            setBombUrgentCount(count);
-            setShowBombAlert(true);
-          }
+          chatBombFired.current = true;
+          // 旧・1日1回キーが残っていても再ログインで再発火できるよう掃除
+          try { localStorage.removeItem("hachi_chat_bomb_check"); } catch { /* ignore */ }
+          setBombUrgentCount(count);
+          setShowBombAlert(true);
         }
       } catch {}
     };
@@ -187,28 +191,18 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
     const run = () => {
       fetchNotifications().then((notifs) => {
-        let dismissed: string[] = [];
-        try {
-          dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-        } catch { /* ignore */ }
-        const filtered = notifs.filter((n) => !dismissed.includes(n.id));
+        const filtered = filterDismissedNotifications(notifs);
         setNotifications(filtered);
         const urgent = filtered.filter(
           (n) => n.is_urgent && n.type === "announcement",
         );
-        let shownIds: string[] = [];
+        // 旧 localStorage 抑制キーは未読中の再ログインを妨げるため掃除
         try {
-          shownIds = JSON.parse(localStorage.getItem(ANNOUNCEMENT_BOMB_SHOWN_LS_KEY) ?? "[]") as string[];
-        } catch { /* ignore */ }
-        const fresh = urgent.filter((n) => !shownIds.includes(n.id));
-        if (fresh.length >= ANNOUNCEMENT_BOMB_THRESHOLD) {
-          // 既読等で通知から消えたIDは掃除しつつ、今回表示分を記録
-          const nextShown = [
-            ...shownIds.filter((id) => urgent.some((n) => n.id === id)),
-            ...fresh.map((n) => n.id),
-          ];
-          localStorage.setItem(ANNOUNCEMENT_BOMB_SHOWN_LS_KEY, JSON.stringify(nextShown));
+          localStorage.removeItem("hachi_bomb_shown_ann");
           localStorage.removeItem("hachi_bomb_check");
+        } catch { /* ignore */ }
+        // 未読の緊急回覧があれば表示（マウント単位で1回。再ログインで再表示）
+        if (urgent.length >= ANNOUNCEMENT_BOMB_THRESHOLD) {
           setBombUrgentCount(urgent.length);
           setShowBombAlert(true);
         }
@@ -231,13 +225,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     if (!notifOpen) return;
     const fetchNotifs = () =>
       fetchNotifications()
-        .then((notifs) => {
-          let dismissed: string[] = [];
-          try {
-            dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-          } catch { /* ignore */ }
-          setNotifications(notifs.filter((n) => !dismissed.includes(n.id)));
-        })
+        .then((notifs) => setNotifications(filterDismissedNotifications(notifs)))
         .catch(() => {});
     void fetchNotifs();
     const timer = setInterval(fetchNotifs, 60_000);
@@ -623,7 +611,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              placeholder="顧客名・工事名・商談名で検索..."
+              placeholder="顧客・工事・商談・見積で検索..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -635,11 +623,16 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">検索中...</div>
                 ) : searchResults.length > 0 ? (
                   <>
-                    {(["customer", "construction", "deal"] as const).map((type) => {
+                    {(["customer", "construction", "deal", "estimate"] as const).map((type) => {
                       const items = searchResults.filter(r => r.type === type);
                       if (!items.length) return null;
-                      const labels = { customer: "顧客", construction: "工事", deal: "商談" };
-                      const colors = { customer: "text-blue-600 bg-blue-50", construction: "text-amber-600 bg-amber-50", deal: "text-emerald-600 bg-emerald-50" };
+                      const labels = { customer: "顧客", construction: "工事", deal: "商談", estimate: "見積" };
+                      const colors = {
+                        customer: "text-blue-600 bg-blue-50",
+                        construction: "text-amber-600 bg-amber-50",
+                        deal: "text-emerald-600 bg-emerald-50",
+                        estimate: "text-violet-600 bg-violet-50",
+                      };
                       return (
                         <div key={type}>
                           <p className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{labels[type]}</p>
@@ -702,9 +695,17 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   size="sm"
                   className="h-7 text-xs text-muted-foreground"
                   onClick={() => {
+                    const annIds = notifications
+                      .filter((n) => n.type === "announcement")
+                      .map((n) => n.id.replace("ann_", ""));
+                    const otherIds = notifications
+                      .filter((n) => n.type !== "announcement")
+                      .map((n) => n.id);
+                    // 回覧はDB既読へ。それ以外はローカル非表示。
+                    void Promise.all(annIds.map((id) => markAnnouncementAsRead(id))).catch(() => {});
                     try {
                       const dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-                      const next = [...new Set([...dismissed, ...notifications.map((n) => n.id)])];
+                      const next = [...new Set([...dismissed, ...otherIds])];
                       localStorage.setItem("hachi_dismissed_notifs", JSON.stringify(next.slice(-200)));
                     } catch { /* ignore */ }
                     setNotifications([]);

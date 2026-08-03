@@ -178,6 +178,45 @@ export function buildBiDashboardMock(
   return { settings, actuals, prevActuals, prospectSummary };
 }
 
+/**
+ * ダッシュボードモックの見込み母数に、会社設定の確度%／特需契約率を掛け直す。
+ * （着地予測はモックのまま、見込み売上だけ実CRMで¥0になる不整合を防ぐ）
+ */
+export function applyLiveRatesToProspectMock(
+  mock: BiProspectSummary,
+  live: BiProspectSummary | null | undefined,
+): BiProspectSummary {
+  const rateByGrade = new Map(
+    (live?.rows ?? []).map((r) => [r.grade, r.rate] as const),
+  );
+  const rows = mock.rows.map((r) => {
+    const rate = rateByGrade.get(r.grade) ?? r.rate;
+    return {
+      ...r,
+      rate,
+      weightedRevenue: Math.round(r.baseRevenue * rate / 100),
+    };
+  });
+  const companyRate = live?.special.companyRate ?? mock.special.companyRate;
+  const special = {
+    ...mock.special,
+    companyRate,
+    weightedRevenue: Math.round(mock.special.baseRevenue * companyRate / 100),
+  };
+  const totalBase = rows.reduce((s, r) => s + r.baseRevenue, 0);
+  const totalWeighted = rows.reduce((s, r) => s + r.weightedRevenue, 0);
+  return {
+    rows,
+    special,
+    totalBase,
+    totalWeighted,
+    totalBaseWithSpecial: totalBase + special.baseRevenue,
+    totalWeightedWithSpecial: totalWeighted + special.weightedRevenue,
+    hasData: true,
+    hasSpecial: special.customerCount > 0,
+  };
+}
+
 /** 月別推移グラフ用（ダッシュボードモックと同系列） */
 export function buildBiDashboardMonthlyCombo(
   fiscalMonthStart = DEFAULT_FISCAL_MONTH_START,

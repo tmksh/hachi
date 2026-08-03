@@ -21,8 +21,17 @@ export default function ResetPasswordPage() {
     setLoading(true);
     try {
       const supabase = createClient();
+      // Netlify デフォルトホストや旧 URL に飛ばないよう、本番ドメインを優先
+      const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN?.replace(/^https?:\/\//, "");
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+      const host = window.location.hostname;
+      const base =
+        appUrl
+        || (appDomain ? `https://${appDomain}` : null)
+        || (host.endsWith("netlify.app") && appDomain ? `https://${appDomain}` : null)
+        || window.location.origin;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=/update-password`,
+        redirectTo: `${base}/api/auth/callback?next=/update-password`,
       });
       if (error) throw error;
       setSent(true);

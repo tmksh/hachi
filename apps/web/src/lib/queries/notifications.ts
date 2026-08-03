@@ -202,5 +202,5 @@ export async function fetchNotifications(): Promise<Notification[]> {
     ...calendarNotifs,
   ]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 20);
+    .slice(0, 50);
 }
