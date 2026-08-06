@@ -12,9 +12,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, FileDown, Sparkles, Loader2 } from "lucide-react";
 import { createEstimate, getEstimate, type CreateEstimateCategoryInput } from "@/lib/actions/estimates";
 import { getCustomers } from "@/lib/actions/customers";
+import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actions/deals";
 import { generateEstimateDraftForCustomer } from "@/lib/actions/sales-flow";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { EstimatePdfPreviewDialog, toEstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useBridgeChat } from "@/contexts/chat-panel-context";
 
 type DetailItem = { id: string; name: string; quantity: number; unit: string; cost_price: number; selling_price: number };
@@ -97,6 +105,8 @@ export function QuoteNewClient({
 
   const [title, setTitle] = useState(dealTitle ? `${dealTitle} 見積書` : "");
   const [notes, setNotes] = useState("");
+  const [departmentName, setDepartmentName] = useState<string>("");
+  const [departments, setDepartments] = useState<DepartmentMarginRate[]>([]);
   const [categories, setCategories] = useState<CategoryGroup[]>(() => {
     if (dealTitle) {
       return [{
@@ -124,12 +134,19 @@ export function QuoteNewClient({
   }, [initialCustomers.length]);
 
   useEffect(() => {
+    getDepartmentMarginRates()
+      .then(setDepartments)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!copyFromId) return;
     setLoadingSource(true);
     getEstimate(copyFromId)
       .then((estimate) => {
         setTitle(estimate.title ? `${estimate.title}（コピー）` : "見積（コピー）");
         setNotes(estimate.notes ?? "");
+        setDepartmentName(estimate.department_name ?? "");
         setCategories(mapEstimateToCategories(estimate));
       })
       .catch(() => toast.error("コピー元の見積を読み込めませんでした"))
@@ -294,7 +311,12 @@ export function QuoteNewClient({
     setSaving(true);
     try {
       const created = await createEstimate(
-        { title: title.trim(), customer_id: customerId, notes: notes || undefined },
+        {
+          title: title.trim(),
+          customer_id: customerId,
+          notes: notes || undefined,
+          department_name: departmentName || null,
+        },
         payload,
       );
       toast.success(copyFromId ? "見積をコピーして作成しました" : "見積を作成しました");
@@ -388,7 +410,7 @@ export function QuoteNewClient({
         <CardContent className="p-0">
           <div className="px-5 py-4 border-b border-border/60 bg-muted/20">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">基本情報</p>
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px_180px] gap-4">
               <div className="space-y-2">
                 <Label>件名 *</Label>
                 <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例: キッチンリフォーム見積" />
@@ -398,6 +420,27 @@ export function QuoteNewClient({
                 <div className="h-9 px-3 flex items-center rounded-md border bg-muted/30 text-sm">
                   {customerName}
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>部門</Label>
+                <Select
+                  value={departmentName || "__none__"}
+                  onValueChange={(v) => setDepartmentName(v === "__none__" ? "" : v)}
+                  disabled={departments.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="部門を選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">未選択</SelectItem>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.department_name}>
+                        {d.department_name}
+                        <span className="ml-1.5 text-muted-foreground tabular-nums">({d.margin_rate_percent}%)</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2 mt-4">

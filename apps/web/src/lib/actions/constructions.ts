@@ -1175,7 +1175,7 @@ async function recalculateEstimateTotals(
       .eq("estimate_id", estimateId),
     supabase
       .from("estimates")
-      .select("reserve_fee_1_amount, reserve_fee_2_amount")
+      .select("id")
       .eq("id", estimateId)
       .single(),
   ]);
@@ -1199,10 +1199,8 @@ async function recalculateEstimateTotals(
   subtotal += uncategorized.reduce((s, i) => s + Number(i.selling_amount ?? 0), 0);
   lineCost += uncategorized.reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
 
-  // 経営調整費・予備費は明細外サマリー金額を原価に加算（売価はゼロ扱い）
-  const reserveCost =
-    Number(est?.reserve_fee_1_amount ?? 0) + Number(est?.reserve_fee_2_amount ?? 0);
-  const costTotal = lineCost + reserveCost;
+  // No.106: 経営調整費・予備費は明細行（発注業者=システム予約）に一本化。明細外サマリーは加算しない
+  const costTotal = lineCost;
   const tax = Math.floor(subtotal * 0.1);
   const total = subtotal + tax;
   const grossProfit = subtotal - costTotal;
@@ -1429,7 +1427,7 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
   throwIfSupabaseError(fetchError);
   if (!current || current.company_id !== profile.company_id) throw new Error("明細が見つかりません");
 
-  // 予備費行判定（No.61/67）: 文字列ではなく craftsman の種別フラグで判定する
+  // システム原価行判定（No.61/67/106）: 予備費・経営調整費は種別フラグで判定（文字列判定しない）
   let isReserveRow: boolean = Boolean(current.is_reserve_row);
   const vendorCraftsmanId =
     patch.vendor_craftsman_id !== undefined ? patch.vendor_craftsman_id : current.vendor_craftsman_id;
@@ -1440,7 +1438,9 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
         .select("kind, system_key")
         .eq("id", patch.vendor_craftsman_id)
         .single();
-      isReserveRow = craftsman?.kind === "system" && craftsman?.system_key === "reserve";
+      isReserveRow =
+        craftsman?.kind === "system" &&
+        (craftsman?.system_key === "reserve" || craftsman?.system_key === "management");
     } else {
       isReserveRow = false;
     }

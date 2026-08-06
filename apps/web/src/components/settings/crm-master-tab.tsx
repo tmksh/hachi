@@ -14,6 +14,8 @@ import {
   getLostReasons, createLostReason, deleteLostReason,
   getLeadSources, createLeadSource, deleteLeadSource,
   getCustomerTagMasters, createCustomerTagMaster, deleteCustomerTagMaster,
+  getDepartmentMarginRates, createDepartmentMarginRate, updateDepartmentMarginRate, deleteDepartmentMarginRate,
+  type DepartmentMarginRate,
 } from "@/lib/actions/deals";
 
 type Stage = { id: string; key: string; label: string; color: string; sort_order: number; is_won: boolean; is_lost: boolean };
@@ -300,11 +302,186 @@ function StageList({ stages, onReload }: { stages: Stage[]; onReload: () => void
   );
 }
 
+function DepartmentMarginList({
+  items,
+  onReload,
+}: {
+  items: DepartmentMarginRate[];
+  onReload: () => Promise<void> | void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [newRate, setNewRate] = useState("50");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRate, setEditRate] = useState("");
+
+  async function handleAdd() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    try {
+      await createDepartmentMarginRate(newName.trim(), Number(newRate) || 0);
+      toast.success("部門を追加しました");
+      setNewName("");
+      setNewRate("50");
+      await onReload();
+    } catch {
+      toast.error("追加に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave(id: string) {
+    if (!editName.trim()) return;
+    try {
+      await updateDepartmentMarginRate(id, {
+        department_name: editName.trim(),
+        margin_rate_percent: Number(editRate) || 0,
+      });
+      toast.success("更新しました");
+      setEditId(null);
+      await onReload();
+    } catch {
+      toast.error("更新に失敗しました");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteDepartmentMarginRate(id);
+      toast.success("削除しました");
+      await onReload();
+    } catch {
+      toast.error("削除に失敗しました");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <MasterCard
+      title="部門別規定粗利"
+      description="見積の部門選択と承認基準に使用"
+      count={items.length}
+    >
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 pb-1.5 -mx-3 px-3">
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="部門名（例: 一般住宅）"
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          className="h-7 text-sm flex-1 min-w-[140px]"
+        />
+        <div className="relative w-20 shrink-0">
+          <Input
+            type="number"
+            min={0}
+            max={99.9}
+            step={0.1}
+            value={newRate}
+            onChange={(e) => setNewRate(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            className="h-7 text-sm pr-5 tabular-nums"
+          />
+          <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
+        </div>
+        <Button size="sm" className="h-7 shrink-0 px-2.5" onClick={handleAdd} disabled={saving || !newName.trim()}>
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-4 rounded-lg border border-dashed bg-muted/20">
+          まだ登録がありません
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1 group"
+            >
+              {editId === item.id ? (
+                <>
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="h-7 text-xs flex-1"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleSave(item.id);
+                      if (e.key === "Escape") setEditId(null);
+                    }}
+                  />
+                  <div className="relative w-16 shrink-0">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={99.9}
+                      step={0.1}
+                      value={editRate}
+                      onChange={(e) => setEditRate(e.target.value)}
+                      className="h-7 text-xs pr-5 tabular-nums"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void handleSave(item.id);
+                        if (e.key === "Escape") setEditId(null);
+                      }}
+                    />
+                    <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
+                  </div>
+                  <button type="button" onClick={() => void handleSave(item.id)} className="p-0.5 rounded hover:bg-background/80">
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={() => setEditId(null)} className="p-0.5 rounded hover:bg-background/80">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs font-medium flex-1 truncate">{item.department_name}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground shrink-0">
+                    {item.margin_rate_percent}%
+                  </span>
+                  <div className="flex opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditId(item.id);
+                        setEditName(item.department_name);
+                        setEditRate(String(item.margin_rate_percent));
+                      }}
+                      className="p-0.5 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(item.id)}
+                      disabled={deletingId === item.id}
+                      className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </MasterCard>
+  );
+}
+
 function CrmMasterSkeleton() {
   return (
     <div className="space-y-4">
       <Skeleton className="h-4 w-80" />
       <Skeleton className="h-64 w-full rounded-lg" />
+      <Skeleton className="h-40 w-full rounded-lg" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Skeleton className="h-48 w-full rounded-lg" />
         <Skeleton className="h-48 w-full rounded-lg" />
@@ -319,6 +496,7 @@ export type CrmMasterInitialData = {
   lostReasons: Item[];
   leadSources: Item[];
   tags: Item[];
+  departmentMargins?: DepartmentMarginRate[];
 };
 
 export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialData }) {
@@ -326,23 +504,32 @@ export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialDa
   const [lostReasons, setLostReasons] = useState<Item[]>(initialData?.lostReasons ?? []);
   const [leadSources, setLeadSources] = useState<Item[]>(initialData?.leadSources ?? []);
   const [tags, setTags]             = useState<Item[]>(initialData?.tags ?? []);
+  const [departmentMargins, setDepartmentMargins] = useState<DepartmentMarginRate[]>(initialData?.departmentMargins ?? []);
   const [loading, setLoading]       = useState(!initialData);
 
   const reload = useCallback(async () => {
-    const [s, l, ls, t] = await Promise.all([
+    const [s, l, ls, t, dm] = await Promise.all([
       getDealStages(),
       getLostReasons(),
       getLeadSources(),
       getCustomerTagMasters(),
+      getDepartmentMarginRates(),
     ]);
     setStages(s as Stage[]);
     setLostReasons(l as Item[]);
     setLeadSources(ls as Item[]);
     setTags(t as Item[]);
+    setDepartmentMargins(dm);
   }, []);
 
   useEffect(() => {
-    if (initialData) return;
+    if (initialData) {
+      // SSRで部門マスタ未取得の場合のみ補完
+      if (!initialData.departmentMargins) {
+        void getDepartmentMarginRates().then(setDepartmentMargins).catch(() => {});
+      }
+      return;
+    }
     void reload().finally(() => setLoading(false));
   }, [reload, initialData]);
 
@@ -351,10 +538,12 @@ export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialDa
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        商談ステージ・失注理由・紹介元・顧客タグを会社ごとにカスタマイズできます。
+        商談ステージ・部門別規定粗利・失注理由・紹介元・顧客タグを会社ごとにカスタマイズできます。
       </p>
 
       <StageList stages={stages} onReload={reload} />
+
+      <DepartmentMarginList items={departmentMargins} onReload={reload} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <ChipList

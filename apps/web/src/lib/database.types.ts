@@ -143,7 +143,7 @@ export type Craftsman = {
   /** 種別: vendor=実業者（デフォルト）/ system=システム予約（削除・改名不可） */
   kind?: 'vendor' | 'system';
   /** システム予約の識別キー（unregistered=未登録業者 / reserve=予備費）。kind=system のときのみ */
-  system_key?: 'unregistered' | 'reserve' | null;
+  system_key?: 'unregistered' | 'reserve' | 'management' | null;
   specialty: 'carpenter' | 'electrical' | 'interior' | 'plumbing' | 'general' | null;
   rank: 'A' | 'B' | 'C' | null;
   report_rate: number;
@@ -184,6 +184,8 @@ export type Estimate = {
   /** 予備費（担当者がリスク用に計上）金額。明細外サマリーで記入（旧称: 予備予備費） */
   reserve_fee_2_amount?: number;
   default_gross_profit_rate: number;
+  /** 事業部門。部門別規定粗利率の判定に使用（No.72） */
+  department_name?: string | null;
   validity_date: string | null;
   issued_at: string | null;
   assigned_to: string | null;
@@ -193,6 +195,17 @@ export type Estimate = {
   customer?: Customer;
   categories?: EstimateCategory[];
   items?: EstimateItem[];
+};
+
+/** 部門別規定粗利率マスタ（No.72） */
+export type DepartmentMarginRate = {
+  id: string;
+  company_id: string;
+  department_name: string;
+  margin_rate_percent: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ChangeOrder = {

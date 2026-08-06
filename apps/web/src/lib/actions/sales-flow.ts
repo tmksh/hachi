@@ -64,6 +64,39 @@ async function getCompanyBaseMarginPercent(
   return raw > 1 ? raw : raw * 100;
 }
 
+/**
+ * 見積の規定粗利率（%）を解決。
+ * 部門が選ばれておりマスタにあれば部門率、なければ会社一律、それもなければ見積デフォルト。
+ */
+async function resolveEstimateBaseMarginPercent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  estimate: { department_name?: string | null; default_gross_profit_rate?: number | null },
+): Promise<{ baseThreshold: number; source: "department" | "company" | "estimate_default"; departmentName: string | null }> {
+  const departmentName = estimate.department_name?.trim() || null;
+  if (departmentName) {
+    const { data } = await supabase
+      .from("department_margin_rates")
+      .select("margin_rate_percent")
+      .eq("company_id", companyId)
+      .eq("department_name", departmentName)
+      .maybeSingle();
+    const rate = Number(data?.margin_rate_percent ?? NaN);
+    if (Number.isFinite(rate) && rate >= 0) {
+      return { baseThreshold: rate, source: "department", departmentName };
+    }
+  }
+  const company = await getCompanyBaseMarginPercent(supabase, companyId);
+  if (company != null) {
+    return { baseThreshold: company, source: "company", departmentName };
+  }
+  return {
+    baseThreshold: toMarginThresholdPercent(estimate.default_gross_profit_rate),
+    source: "estimate_default",
+    departmentName,
+  };
+}
+
 /** 3経路通知（他モジュールからも利用） */
 export type SalesFlowNotifyInput = {
   title: string;
@@ -368,19 +401,19 @@ export async function submitEstimateApproval(input: {
     }
 
     try {
-      assertReserveFeesSecured(estimate);
+      await assertReserveFeesSecured(supabase, input.estimateId);
     } catch (e) {
       return actionFail(e, "経営調整費・予備費を計上してから申請してください");
     }
 
-    const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
-      ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+    const { baseThreshold, source } = await resolveEstimateBaseMarginPercent(supabase, company_id, estimate);
     const reservePercent = await getCompanyReservePercent(supabase, company_id);
-    // 会社指定粗利＋経営調整費を満たす必要がある
+    // 部門/会社指定粗利＋経営調整費を満たす必要がある
     const threshold = baseThreshold + reservePercent;
+    const baseLabel = source === "department" ? "部門指定" : "会社指定";
     if ((estimate.gross_profit_rate ?? 0) >= threshold) {
       return actionFail(
-        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
+        `粗利率が基準(${threshold.toFixed(0)}%=${baseLabel}${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
         "承認申請は不要です",
       );
     }
@@ -511,14 +544,13 @@ export async function getEstimateMarginThreshold(estimateId: string) {
   }
   const { data } = await supabase
     .from("estimates")
-    .select("gross_profit_rate, default_gross_profit_rate, approval_status, workflow_request_id, status")
+    .select("gross_profit_rate, default_gross_profit_rate, department_name, approval_status, workflow_request_id, status")
     .eq("id", estimateId)
     .single();
   if (!data) return null;
-  const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
-    ?? toMarginThresholdPercent(data.default_gross_profit_rate);
+  const { baseThreshold, source, departmentName } = await resolveEstimateBaseMarginPercent(supabase, company_id, data);
   const reservePercent = await getCompanyReservePercent(supabase, company_id);
-  // 会社指定粗利＋経営調整費を満たす必要がある
+  // 部門/会社指定粗利＋経営調整費を満たす必要がある
   const threshold = baseThreshold + reservePercent;
 
   // 差戻し/却下済みWFに紐づいたまま pending が残っている場合は補正（再申請ボタンが出ない不具合の自己修復）
@@ -567,6 +599,8 @@ export async function getEstimateMarginThreshold(estimateId: string) {
     threshold,
     baseThreshold,
     reservePercent,
+    baseSource: source,
+    departmentName,
     needsApproval: (data.gross_profit_rate ?? 0) < threshold,
     approvalStatus,
     workflowRequestId,
@@ -576,16 +610,44 @@ export async function getEstimateMarginThreshold(estimateId: string) {
 }
 
 /** 粗利率が基準以上の見積を確定（発行済み）にする（No.38） */
-/** 経営調整費・予備費未計上での確定・提出を防ぐ（議事録: 予備費確保文化） */
-function assertReserveFeesSecured(estimate: {
-  reserve_fee_1_amount?: number | null;
-  reserve_fee_2_amount?: number | null;
-}) {
-  const r1 = Number(estimate.reserve_fee_1_amount ?? 0);
-  const r2 = Number(estimate.reserve_fee_2_amount ?? 0);
-  if (r1 <= 0 || r2 <= 0) {
+/** 経営調整費・予備費が明細行に計上されているか（No.106: 表下サマリー廃止） */
+async function assertReserveFeesSecured(
+  supabase: Awaited<ReturnType<typeof getCompanyContext>>["supabase"],
+  estimateId: string,
+) {
+  const { data: rows } = await supabase
+    .from("estimate_items")
+    .select("cost_amount, vendor_craftsman_id")
+    .eq("estimate_id", estimateId)
+    .eq("is_reserve_row", true)
+    .gt("cost_amount", 0);
+
+  const vendorIds = [
+    ...new Set(
+      (rows ?? [])
+        .map((r) => r.vendor_craftsman_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (vendorIds.length === 0) {
     throw new Error(
-      "経営調整費・予備費をサマリー欄に計上してから確定・提出してください（未計上のまま提出できません）",
+      "経営調整費・予備費を明細行（発注業者）で計上してから確定・提出してください（未計上のまま提出できません）",
+    );
+  }
+
+  const { data: craftsmen } = await supabase
+    .from("craftsmen")
+    .select("id, system_key, kind")
+    .in("id", vendorIds);
+
+  const keys = new Set(
+    (craftsmen ?? [])
+      .filter((c) => c.kind === "system")
+      .map((c) => c.system_key),
+  );
+  if (!keys.has("management") || !keys.has("reserve")) {
+    throw new Error(
+      "経営調整費・予備費を明細行（発注業者）で計上してから確定・提出してください（未計上のまま提出できません）",
     );
   }
 }
@@ -596,13 +658,13 @@ export async function confirmEstimateIssued(estimateId: string) {
     const { supabase, company_id } = await getCompanyContext();
     const { data: estimate, error } = await supabase
       .from("estimates")
-      .select("gross_profit_rate, default_gross_profit_rate, status, reserve_fee_1_amount, reserve_fee_2_amount")
+      .select("gross_profit_rate, default_gross_profit_rate, department_name, status")
       .eq("id", estimateId)
       .single();
     if (error || !estimate) return actionFail(error, "見積が見つかりません");
 
     try {
-      assertReserveFeesSecured(estimate);
+      await assertReserveFeesSecured(supabase, estimateId);
     } catch (e) {
       return actionFail(e, "経営調整費・予備費を計上してから確定してください");
     }
@@ -616,13 +678,13 @@ export async function confirmEstimateIssued(estimateId: string) {
     const liveRate = calcGrossProfitRatePercent(items ?? []);
     const rate = liveRate > 0 ? liveRate : (estimate.gross_profit_rate ?? 0);
 
-    const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
-      ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
+    const { baseThreshold, source } = await resolveEstimateBaseMarginPercent(supabase, company_id, estimate);
     const reservePercent = await getCompanyReservePercent(supabase, company_id);
     const threshold = baseThreshold + reservePercent;
+    const baseLabel = source === "department" ? "部門指定" : "会社指定";
     if (rate < threshold) {
       return actionFail(
-        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`,
+        `粗利率が基準(${threshold.toFixed(0)}%=${baseLabel}${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`,
         "上長承認が必要です",
       );
     }

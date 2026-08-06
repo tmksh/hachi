@@ -89,7 +89,14 @@ export type CreateEstimateCategoryInput = {
 };
 
 export async function createEstimate(
-  input: { title: string; customer_id?: string; notes?: string; validity_date?: string; assigned_to?: string },
+  input: {
+    title: string;
+    customer_id?: string;
+    notes?: string;
+    validity_date?: string;
+    assigned_to?: string;
+    department_name?: string | null;
+  },
   categories: CreateEstimateCategoryInput[],
 ) {
   const supabase = await createClient();
@@ -148,8 +155,9 @@ export async function createEstimate(
       notes: input.notes || null,
       validity_date: input.validity_date || null,
       assigned_to: input.assigned_to || null,
+      department_name: input.department_name?.trim() || null,
       status: "draft",
-      // 新規見積: 経営調整費・予備費を必ず確保する文化のためデフォルト料率をセット（金額はサマリー欄で記入）
+      // 新規見積: 料率は残置（BI連動用）。金額は明細行（発注業者=システム予約）で計上（No.106）
       reserve_fee_1_rate: 0.02,
       reserve_fee_2_rate: 0.03,
       reserve_fee_1_amount: 0,
@@ -231,7 +239,7 @@ export async function createEstimate(
 
 export async function updateEstimate(
   id: string,
-  input: Partial<Pick<Estimate, "title" | "customer_id" | "notes" | "validity_date" | "assigned_to" | "status" | "reserve_fee_1_rate" | "reserve_fee_2_rate" | "reserve_fee_1_amount" | "reserve_fee_2_amount">>,
+  input: Partial<Pick<Estimate, "title" | "customer_id" | "notes" | "validity_date" | "assigned_to" | "status" | "department_name" | "reserve_fee_1_rate" | "reserve_fee_2_rate" | "reserve_fee_1_amount" | "reserve_fee_2_amount">>,
   items?: Array<Omit<EstimateItem, "id" | "company_id" | "estimate_id" | "created_at" | "updated_at">>
 ) {
   const supabase = await createClient();

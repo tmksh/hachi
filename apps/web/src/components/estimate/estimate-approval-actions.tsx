@@ -24,14 +24,14 @@ import { humanizeClientError } from "@/lib/humanize-error";
 
 type Props = {
   estimateId: string;
+  /** 部門変更時に承認基準を再取得するためのキー */
+  departmentName?: string | null;
   /** ライブ粗利率（%）。明細編集に追従させる */
   grossProfitRate: number;
   defaultGrossProfitRate?: number | null;
   estimateStatus?: string | null;
-  /** 経営調整費（サマリー）。未計上だと申請不可 */
-  reserveFee1Amount?: number | null;
-  /** 予備費（サマリー）。未計上だと申請不可 */
-  reserveFee2Amount?: number | null;
+  /** 明細行に経営調整費・予備費が計上済みか（No.106） */
+  systemFeesOk?: boolean;
   onConfirmed?: () => void;
   /** 承認ステータスが変わったとき（親の差戻しバナー更新用） */
   onStatusChange?: () => void;
@@ -39,11 +39,11 @@ type Props = {
 
 export function EstimateApprovalActions({
   estimateId,
+  departmentName,
   grossProfitRate,
   defaultGrossProfitRate,
   estimateStatus,
-  reserveFee1Amount,
-  reserveFee2Amount,
+  systemFeesOk = false,
   onConfirmed,
   onStatusChange,
 }: Props) {
@@ -79,7 +79,7 @@ export function EstimateApprovalActions({
       window.removeEventListener("focus", loadMargin);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [estimateId]);
+  }, [estimateId, departmentName]);
 
   const threshold = marginInfo?.threshold
     ?? toMarginThresholdPercent(defaultGrossProfitRate);
@@ -92,12 +92,11 @@ export function EstimateApprovalActions({
     || estimateStatus === "accepted"
     || approvalStatus === "approved";
 
-  const reserveOk =
-    Number(reserveFee1Amount ?? 0) > 0 && Number(reserveFee2Amount ?? 0) > 0;
+  const reserveOk = systemFeesOk;
 
   const openDialog = () => {
     if (!reserveOk) {
-      toast.error("経営調整費・予備費をサマリー欄に計上してから申請してください");
+      toast.error("経営調整費・予備費を明細行（発注業者）で計上してから申請してください");
       return;
     }
     if (profiles.length === 0) {
@@ -128,7 +127,7 @@ export function EstimateApprovalActions({
 
   const handleSubmit = async () => {
     if (!reserveOk) {
-      toast.error("経営調整費・予備費をサマリー欄に計上してから申請してください");
+      toast.error("経営調整費・予備費を明細行（発注業者）で計上してから申請してください");
       return;
     }
     if (!comment.trim()) { toast.error("申請コメントを入力してください"); return; }
@@ -219,7 +218,7 @@ export function EstimateApprovalActions({
             </p>
             {!reserveOk && (
               <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                経営調整費・予備費が未計上です。サマリー欄で計上してから申請してください。
+                経営調整費・予備費が未計上です。明細の発注業者で計上してから申請してください。
               </div>
             )}
             {marginInfo?.remandComment && (

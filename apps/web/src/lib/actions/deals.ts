@@ -258,3 +258,140 @@ export async function deleteCustomerTagMaster(id: string) {
   const { error } = await supabase.from("customer_tag_masters").delete().eq("id", id);
   if (error) throw error;
 }
+
+// ── 部門別規定粗利率（No.72）────────────────────────────────
+
+export type DepartmentMarginRate = {
+  id: string;
+  department_name: string;
+  margin_rate_percent: number;
+  sort_order: number;
+};
+
+const DEFAULT_DEPARTMENT_MARGINS: Array<{ department_name: string; margin_rate_percent: number }> = [
+  { department_name: "一般住宅", margin_rate_percent: 50 },
+  { department_name: "新築", margin_rate_percent: 40 },
+  { department_name: "公共工事", margin_rate_percent: 25 },
+  { department_name: "リフォーム", margin_rate_percent: 35 },
+];
+
+/** 部門別規定粗利率一覧。未登録ならデフォルト部門を自動seed */
+export async function getDepartmentMarginRates(): Promise<DepartmentMarginRate[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return [];
+
+  const { data: existing } = await supabase
+    .from("department_margin_rates")
+    .select("id, department_name, margin_rate_percent, sort_order")
+    .eq("company_id", profile.company_id)
+    .order("sort_order");
+
+  if (existing && existing.length > 0) {
+    return existing.map((r) => ({
+      id: r.id,
+      department_name: r.department_name,
+      margin_rate_percent: Number(r.margin_rate_percent),
+      sort_order: r.sort_order,
+    }));
+  }
+
+  const { data: seeded, error } = await supabase
+    .from("department_margin_rates")
+    .insert(
+      DEFAULT_DEPARTMENT_MARGINS.map((d, i) => ({
+        company_id: profile.company_id,
+        department_name: d.department_name,
+        margin_rate_percent: d.margin_rate_percent,
+        sort_order: i,
+      })),
+    )
+    .select("id, department_name, margin_rate_percent, sort_order");
+  if (error) {
+    const { data: again } = await supabase
+      .from("department_margin_rates")
+      .select("id, department_name, margin_rate_percent, sort_order")
+      .eq("company_id", profile.company_id)
+      .order("sort_order");
+    return (again ?? []).map((r) => ({
+      id: r.id,
+      department_name: r.department_name,
+      margin_rate_percent: Number(r.margin_rate_percent),
+      sort_order: r.sort_order,
+    }));
+  }
+  return (seeded ?? []).map((r) => ({
+    id: r.id,
+    department_name: r.department_name,
+    margin_rate_percent: Number(r.margin_rate_percent),
+    sort_order: r.sort_order,
+  }));
+}
+
+export async function createDepartmentMarginRate(departmentName: string, marginRatePercent: number) {
+  const { supabase, company_id } = await getCompanyId();
+  const name = departmentName.trim();
+  if (!name) throw new Error("部門名を入力してください");
+  const rate = Math.max(0, Math.min(99.9, Number(marginRatePercent) || 0));
+  const { data: existing } = await supabase
+    .from("department_margin_rates")
+    .select("sort_order")
+    .eq("company_id", company_id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data, error } = await supabase
+    .from("department_margin_rates")
+    .insert({
+      company_id,
+      department_name: name,
+      margin_rate_percent: rate,
+      sort_order: (existing?.sort_order ?? -1) + 1,
+    })
+    .select("id, department_name, margin_rate_percent, sort_order")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    department_name: data.department_name,
+    margin_rate_percent: Number(data.margin_rate_percent),
+    sort_order: data.sort_order,
+  } satisfies DepartmentMarginRate;
+}
+
+export async function updateDepartmentMarginRate(
+  id: string,
+  patch: { department_name?: string; margin_rate_percent?: number },
+) {
+  const { supabase } = await getCompanyId();
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.department_name !== undefined) {
+    const name = patch.department_name.trim();
+    if (!name) throw new Error("部門名を入力してください");
+    update.department_name = name;
+  }
+  if (patch.margin_rate_percent !== undefined) {
+    update.margin_rate_percent = Math.max(0, Math.min(99.9, Number(patch.margin_rate_percent) || 0));
+  }
+  const { data, error } = await supabase
+    .from("department_margin_rates")
+    .update(update)
+    .eq("id", id)
+    .select("id, department_name, margin_rate_percent, sort_order")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    department_name: data.department_name,
+    margin_rate_percent: Number(data.margin_rate_percent),
+    sort_order: data.sort_order,
+  } satisfies DepartmentMarginRate;
+}
+
+export async function deleteDepartmentMarginRate(id: string) {
+  const { supabase } = await getCompanyId();
+  const { error } = await supabase.from("department_margin_rates").delete().eq("id", id);
+  if (error) throw error;
+}

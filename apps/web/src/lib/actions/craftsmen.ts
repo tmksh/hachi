@@ -21,14 +21,18 @@ export async function getCraftsmen() {
 }
 
 // ── システム予約業者（No.66）────────────────────
-// 「未登録業者」「予備費」をテナントごとに自動作成する。削除・改名不可。
+// 「未登録業者」「予備費」「経営調整費」をテナントごとに自動作成する。削除・改名不可。
 
-const SYSTEM_CRAFTSMEN: Array<{ system_key: "unregistered" | "reserve"; name: string }> = [
+const SYSTEM_CRAFTSMEN: Array<{
+  system_key: "unregistered" | "reserve" | "management";
+  name: string;
+}> = [
   { system_key: "unregistered", name: "未登録業者" },
   { system_key: "reserve", name: "予備費" },
+  { system_key: "management", name: "経営調整費" },
 ];
 
-/** システム予約業者（未登録業者・予備費）が無ければ作成する */
+/** システム予約業者が無ければ作成する */
 export async function ensureSystemCraftsmen(): Promise<void> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -64,7 +68,7 @@ export type VendorCandidate = {
   name: string;
   company_name: string | null;
   kind: "vendor" | "system";
-  system_key: "unregistered" | "reserve" | null;
+  system_key: "unregistered" | "reserve" | "management" | null;
 };
 
 /** 発注業者のインクリメンタルサーチ候補（システム予約含む）。無ければシステム予約をseed */
@@ -118,7 +122,7 @@ export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman,
   const supabase = await createClient();
   const { data: current } = await supabase.from("craftsmen").select("kind, name").eq("id", id).single();
   if (current?.kind === "system") {
-    // システム予約（未登録業者・予備費）は改名・種別変更不可
+    // システム予約は改名・種別変更不可
     if ((input.name && input.name !== current.name) || input.kind || input.system_key !== undefined) {
       throw new Error("システム予約の業者は名称・種別を変更できません");
     }
@@ -137,7 +141,7 @@ export async function deleteCraftsman(id: string) {
   const supabase = await createClient();
   const { data: current } = await supabase.from("craftsmen").select("kind").eq("id", id).single();
   if (current?.kind === "system") {
-    throw new Error("システム予約の業者（未登録業者・予備費）は削除できません");
+    throw new Error("システム予約の業者（未登録業者・予備費・経営調整費）は削除できません");
   }
   const { error } = await supabase
     .from("craftsmen")

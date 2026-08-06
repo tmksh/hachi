@@ -8,6 +8,7 @@ import {
   getLostReasons,
   getLeadSources,
   getCustomerTagMasters,
+  getDepartmentMarginRates,
 } from "@/lib/actions/deals";
 import {
   getCraftsmenSpecialties,
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
     lostReasons,
     leadSources,
     tags,
+    departmentMargins,
     specialties,
     qualifications,
     appIntegrations,
@@ -41,6 +43,7 @@ export default async function SettingsPage() {
     getLostReasons().catch(() => []),
     getLeadSources().catch(() => []),
     getCustomerTagMasters().catch(() => []),
+    getDepartmentMarginRates().catch(() => []),
     getCraftsmenSpecialties().catch(() => []),
     getCraftsmenQualifications().catch(() => []),
     getAppIntegrations().catch(() => []),
@@ -66,6 +69,7 @@ export default async function SettingsPage() {
           lostReasons: lostReasons as Array<{ id: string; label: string; sort_order: number }>,
           leadSources: leadSources as Array<{ id: string; label: string; sort_order: number }>,
           tags: tags as Array<{ id: string; label: string; sort_order: number }>,
+          departmentMargins,
         }}
         initialCraftsmenMaster={{
           specialties: specialties as Array<{ id: string; label: string; sort_order: number }>,

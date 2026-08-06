@@ -23,6 +23,29 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+/** 行ドラッグ用: 入力欄・ボタン上では DnD を開始しない */
+function isInteractiveDragTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      'input, textarea, select, button, a, label, [contenteditable="true"], [role="combobox"], [role="option"], [data-no-dnd]',
+    ),
+  );
+}
+
+class RowPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: "onPointerDown" as const,
+      handler: ({ nativeEvent: event }: React.PointerEvent) => {
+        if (!event.isPrimary || event.button !== 0) return false;
+        if (isInteractiveDragTarget(event.target)) return false;
+        return true;
+      },
+    },
+  ];
+}
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   addEstimateCategory,
@@ -37,7 +60,7 @@ import {
   type EstimateCategoryDetailPatch,
 } from "@/lib/actions/constructions";
 import { getVendorCandidates, type VendorCandidate } from "@/lib/actions/craftsmen";
-import { vendorNameMatches, normalizeVendorName } from "@/lib/vendor-normalize";
+import { vendorNameMatches } from "@/lib/vendor-normalize";
 import { effectiveCategoryAmounts } from "@/lib/estimate-category-totals";
 import {
   EstimatePdfPreviewDialog,
@@ -57,7 +80,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getEstimates, getEstimate, updateEstimate } from "@/lib/actions/estimates";
+import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actions/deals";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
@@ -213,6 +244,8 @@ export type EstimateForView = {
   reserve_fee_1_amount?: number;
   reserve_fee_2_amount?: number;
   default_gross_profit_rate?: number;
+  /** 事業部門（No.72）。部門別規定粗利の判定に使用 */
+  department_name?: string | null;
   categories?: EstimateCategory[];
   items?: EstimateItem[];
 };
@@ -245,129 +278,174 @@ const ITEM_CELL_NUM =
 const ITEM_CELL_UNIT =
   "w-full min-w-[2rem] bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap text-center text-muted-foreground";
 
-// ---- 発注業者入力（インクリメンタルサーチ・No.58/71） -----------------------
+// ---- 発注業者入力（ポップアップ検索・No.58/71） -----------------------------
+// セルは表示のみ。クリックでポップアップを開き、そこで検索・選択する。
 
 type VendorValue = { craftsmanId: string | null; name: string };
 
 function VendorInput({
+  craftsmanId,
   vendorName,
   candidates,
   disabled,
   isReserve,
   onCommit,
 }: {
+  craftsmanId?: string | null;
   vendorName: string;
   candidates: VendorCandidate[];
   disabled?: boolean;
   isReserve?: boolean;
   onCommit: (value: VendorValue) => void;
 }) {
-  const [text, setText] = useState(vendorName);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setText(vendorName);
-  }, [vendorName]);
+    if (!open) return;
+    setQuery("");
+    const t = window.setTimeout(() => searchRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
-  const query = text.trim();
-  const filtered = query
+  const q = query.trim();
+  const filtered = (q
     ? candidates.filter(
         (c) =>
-          vendorNameMatches(c.name, query) ||
-          (c.company_name ? vendorNameMatches(c.company_name, query) : false),
+          vendorNameMatches(c.name, q) ||
+          (c.company_name ? vendorNameMatches(c.company_name, q) : false),
       )
-    : candidates;
-  const shown = filtered.slice(0, 8);
+    : candidates
+  ).slice().sort((a, b) => {
+    const rank = (c: VendorCandidate) => {
+      if (c.kind !== "system") return 3;
+      if (c.system_key === "reserve") return 0;
+      if (c.system_key === "management") return 1;
+      return 2;
+    };
+    const d = rank(a) - rank(b);
+    if (d !== 0) return d;
+    return a.name.localeCompare(b.name, "ja");
+  });
+  const shown = filtered.slice(0, 20);
 
   const select = (c: VendorCandidate) => {
-    setText(c.name);
     setOpen(false);
     onCommit({ craftsmanId: c.id, name: c.name });
   };
 
-  const commitFree = () => {
+  const clear = () => {
     setOpen(false);
-    const trimmed = text.trim();
-    if (trimmed === vendorName.trim()) return;
-    // 表記ゆれを吸収して一致する業者があれば自動リンク（No.71）
-    const exact = trimmed
-      ? candidates.find((c) => normalizeVendorName(c.name) === normalizeVendorName(trimmed))
-      : undefined;
-    if (exact) {
-      setText(exact.name);
-      onCommit({ craftsmanId: exact.id, name: exact.name });
-    } else {
-      onCommit({ craftsmanId: null, name: trimmed });
-    }
+    onCommit({ craftsmanId: null, name: "" });
   };
 
+  const label = vendorName.trim() || "業者を検索";
+
   return (
-    <div className="relative">
-      <input
-        className={cn(ITEM_CELL, isReserve ? "text-amber-700 font-medium" : "text-muted-foreground")}
-        value={text}
-        placeholder="業者名で検索"
-        disabled={disabled}
-        onFocus={() => setOpen(true)}
-        onChange={(e) => {
-          setText(e.target.value);
-          setOpen(true);
-        }}
-        onBlur={() => commitFree()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            (e.target as HTMLInputElement).blur();
-          }
-          if (e.key === "Escape") {
-            setText(vendorName);
-            setOpen(false);
-          }
-        }}
-      />
-      {open && shown.length > 0 && (
-        <div className="absolute left-0 top-full z-30 mt-0.5 w-56 rounded-md border border-border bg-popover shadow-md py-1 max-h-56 overflow-y-auto">
-          {shown.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              // blur より先に選択を確定させるため onMouseDown を使う
-              onMouseDown={(e) => {
-                e.preventDefault();
-                select(c);
-              }}
-              className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/60 flex items-center gap-1.5"
-            >
-              <span className="truncate">{c.name}</span>
-              {c.company_name && (
-                <span className="text-[10px] text-muted-foreground truncate">{c.company_name}</span>
-              )}
-              {c.kind === "system" && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "ml-auto text-[9px] py-0 shrink-0",
-                    c.system_key === "reserve"
-                      ? "border-amber-300 text-amber-700 bg-amber-50"
-                      : "border-slate-300 text-slate-500",
-                  )}
-                >
-                  {c.system_key === "reserve" ? "予備費" : "システム予約"}
-                </Badge>
-              )}
-            </button>
-          ))}
+    <Popover open={open} onOpenChange={(o) => !disabled && setOpen(o)}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-no-dnd
+          disabled={disabled}
+          className={cn(
+            "w-full h-7 px-1 text-left text-xs truncate rounded-sm",
+            "hover:bg-muted/40 disabled:opacity-50 flex items-center gap-0.5",
+            vendorName.trim()
+              ? isReserve
+                ? "text-amber-700 font-medium"
+                : "text-muted-foreground"
+              : "text-slate-400",
+          )}
+          title={vendorName.trim() || undefined}
+        >
+          <span className="truncate flex-1">{label}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-72 p-2"
+        data-no-dnd
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <input
+          ref={searchRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="業者名で検索（㈱・カタカナ可）"
+          className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && shown[0]) {
+              e.preventDefault();
+              select(shown[0]);
+            }
+          }}
+        />
+        <div className="mt-1.5 max-h-56 overflow-y-auto rounded-md border border-border/60">
+          <button
+            type="button"
+            className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/60"
+            onClick={clear}
+          >
+            （未選択）
+          </button>
+          {shown.length === 0 ? (
+            <p className="px-2 py-2 text-[11px] text-muted-foreground">候補がありません</p>
+          ) : (
+            shown.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => select(c)}
+                className={cn(
+                  "w-full text-left px-2 py-1.5 text-xs hover:bg-muted/60 flex items-center gap-1.5",
+                  c.id === craftsmanId && "bg-muted/40",
+                )}
+              >
+                <span className="truncate min-w-0 flex-1">{c.name}</span>
+                {c.kind === "system" && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[9px] py-0 shrink-0",
+                      c.system_key === "reserve" || c.system_key === "management"
+                        ? "border-amber-300 text-amber-700 bg-amber-50"
+                        : "border-slate-300 text-slate-500",
+                    )}
+                  >
+                    {c.system_key === "reserve"
+                      ? "予備費"
+                      : c.system_key === "management"
+                        ? "経営調整費"
+                        : "システム予約"}
+                  </Badge>
+                )}
+              </button>
+            ))
+          )}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-/** 候補から予備費行かどうかを判定（craftsman 種別フラグ・No.61/67） */
-function isReserveCandidate(candidates: VendorCandidate[], craftsmanId: string | null): boolean {
+/** システム原価行（予備費・経営調整費）かどうか（種別フラグ・No.61/67/106） */
+function isSystemCostCandidate(candidates: VendorCandidate[], craftsmanId: string | null): boolean {
   if (!craftsmanId) return false;
   const c = candidates.find((x) => x.id === craftsmanId);
-  return c?.kind === "system" && c?.system_key === "reserve";
+  return (
+    c?.kind === "system" &&
+    (c?.system_key === "reserve" || c?.system_key === "management")
+  );
+}
+
+function systemCostLabel(candidates: VendorCandidate[], craftsmanId: string | null | undefined): string {
+  const c = craftsmanId ? candidates.find((x) => x.id === craftsmanId) : undefined;
+  if (c?.system_key === "management") return "経営調整費";
+  if (c?.system_key === "reserve") return "予備費";
+  return "予備費";
 }
 
 // ---- 並べ替え（DnD・No.59） -------------------------------------------------
@@ -525,7 +603,7 @@ function EstimateItemRow({
       vendor.name === (item.vendor_name ?? "")
     ) return;
 
-    const reserve = isReserveCandidate(candidates, vendor.craftsmanId);
+    const reserve = isSystemCostCandidate(candidates, vendor.craftsmanId);
     const optimistic = recalcItemAmounts({
       ...item,
       vendor_craftsman_id: vendor.craftsmanId,
@@ -553,35 +631,19 @@ function EstimateItemRow({
   const isReserveRow = Boolean(draft.is_reserve_row);
   const isStandaloneText = isTextRow && !item.category_id;
 
-  const dragHandle = (
-    <button
-      type="button"
-      className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
-      aria-label="行を並べ替え"
-      {...attributes}
-      {...listeners}
-    >
-      <GripVertical className="h-3 w-3" />
-    </button>
-  );
-
   if (isTextRow) {
     return (
       <tr
         ref={setNodeRef}
         style={sortableStyle}
         className={cn(
-          "border-t border-border/40 bg-slate-50/60 hover:bg-muted/10",
+          "border-t border-border/40 bg-slate-50/60 hover:bg-muted/10 cursor-grab active:cursor-grabbing",
           saving && "opacity-70",
           isDragging && "opacity-60",
         )}
+        {...attributes}
+        {...listeners}
       >
-        <td className="px-2 py-1 text-center">
-          <div className="flex items-center gap-0.5 justify-center">
-            {dragHandle}
-            <input type="checkbox" className="rounded border-slate-300" />
-          </div>
-        </td>
         <td className="px-2 py-1.5" colSpan={10}>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-[10px] shrink-0 border-slate-300 text-slate-600">
@@ -607,23 +669,19 @@ function EstimateItemRow({
       ref={setNodeRef}
       style={sortableStyle}
       className={cn(
-        "border-t border-border/40 hover:bg-muted/10",
+        "border-t border-border/40 hover:bg-muted/10 cursor-grab active:cursor-grabbing",
         isReserveRow && "bg-amber-50/40",
         saving && "opacity-70",
         isDragging && "opacity-60",
       )}
+      {...attributes}
+      {...listeners}
     >
-      <td className="px-2 py-1 text-center">
-        <div className="flex items-center gap-0.5 justify-center">
-          {dragHandle}
-          <input type="checkbox" className="rounded border-slate-300" />
-        </div>
-      </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
         <div className="flex items-center gap-1">
           {isReserveRow && (
             <Badge variant="outline" className="text-[9px] py-0 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
-              予備費
+              {systemCostLabel(candidates, draft.vendor_craftsman_id)}
             </Badge>
           )}
           <input
@@ -648,6 +706,7 @@ function EstimateItemRow({
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
         <VendorInput
+          craftsmanId={draft.vendor_craftsman_id}
           vendorName={draft.vendor_name ?? ""}
           candidates={candidates}
           disabled={isTemp}
@@ -794,32 +853,33 @@ function CategoryHeaderRow({
     void commit({ [field]: value } as EstimateCategoryDetailPatch);
   };
 
+  const isReserveCategory = isSystemCostCandidate(candidates, draft.vendor_craftsman_id ?? null);
+
   const commitVendor = (vendor: VendorValue) => {
     if (
       vendor.craftsmanId === (category.vendor_craftsman_id ?? null) &&
       vendor.name === (category.vendor_name ?? "")
     ) return;
-    void commit({ vendor_craftsman_id: vendor.craftsmanId, vendor_name: vendor.name || null });
+    const reserve = isSystemCostCandidate(candidates, vendor.craftsmanId);
+    void commit({
+      vendor_craftsman_id: vendor.craftsmanId,
+      vendor_name: vendor.name || null,
+      ...(reserve ? { selling_price: 0 } : {}),
+    });
   };
 
   const CAT_CELL =
     "w-full bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap placeholder:text-slate-400/70";
 
   return (
-    <tr className={cn("bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70", saving && "opacity-70")}>
-      <td className="px-2 py-2 text-center">
-        <div className="flex items-center gap-0.5 justify-center">
-          <button
-            type="button"
-            className="text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing shrink-0 touch-none"
-            aria-label="大項目を並べ替え"
-            {...handleProps}
-          >
-            <GripVertical className="h-3.5 w-3.5" />
-          </button>
-          <input type="checkbox" className="rounded border-slate-300" />
-        </div>
-      </td>
+    <tr
+      className={cn(
+        "bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70 cursor-grab active:cursor-grabbing",
+        isReserveCategory && "bg-amber-100/70",
+        saving && "opacity-70",
+      )}
+      {...handleProps}
+    >
       <td className="px-2 py-2 font-semibold text-slate-700">
         <div className="flex items-center gap-1.5 min-w-0">
           <button
@@ -847,6 +907,7 @@ function CategoryHeaderRow({
       </td>
       <td className="px-2 py-2 whitespace-nowrap">
         <VendorInput
+          craftsmanId={draft.vendor_craftsman_id}
           vendorName={draft.vendor_name ?? ""}
           candidates={candidates}
           disabled={isTemp}
@@ -887,17 +948,23 @@ function CategoryHeaderRow({
         ¥{eff.cost_amount.toLocaleString()}
       </td>
       <td className="px-1.5 py-2 bg-blue-50/40 whitespace-nowrap min-w-[6rem]">
-        <IntegerInput
-          className={cn(ITEM_CELL_NUM, "text-blue-700")}
-          value={Number(draft.selling_price) || 0}
-          placeholder="0"
-          disabled={isTemp}
-          onValueChange={(v) => setDraft((d) => ({ ...d, selling_price: v }))}
-          onBlur={(v) => commitField("selling_price", Number(v) || 0)}
-        />
+        {isReserveCategory ? (
+          <span className="block text-right text-[10px] text-amber-700 px-1" title="システム原価行は売価入力不可">
+            売価0固定
+          </span>
+        ) : (
+          <IntegerInput
+            className={cn(ITEM_CELL_NUM, "text-blue-700")}
+            value={Number(draft.selling_price) || 0}
+            placeholder="0"
+            disabled={isTemp}
+            onValueChange={(v) => setDraft((d) => ({ ...d, selling_price: v }))}
+            onBlur={(v) => commitField("selling_price", Number(v) || 0)}
+          />
+        )}
       </td>
       <td className="px-2 py-2 text-right tabular-nums font-semibold bg-blue-50/40 whitespace-nowrap text-xs">
-        ¥{eff.selling_amount.toLocaleString()}
+        ¥{isReserveCategory ? 0 : eff.selling_amount.toLocaleString()}
       </td>
       <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-xs">{effRate.toFixed(1)}%</td>
       <td className="px-2 py-2 whitespace-nowrap">
@@ -948,6 +1015,7 @@ export function EstimateDetailView({
     threshold: number;
     baseThreshold: number;
     reservePercent: number;
+    baseSource?: "department" | "company" | "estimate_default";
     approvalStatus: string;
     remandComment: string | null;
     workflowRequestId: string | null;
@@ -956,10 +1024,15 @@ export function EstimateDetailView({
   const canSeeReserve = true;
   // 発注業者のインクリメンタルサーチ候補（業者マスタ・システム予約含む）
   const [vendorCandidates, setVendorCandidates] = useState<VendorCandidate[]>([]);
+  const [departments, setDepartments] = useState<DepartmentMarginRate[]>([]);
+  const [savingDepartment, setSavingDepartment] = useState(false);
 
   useEffect(() => {
     getVendorCandidates()
       .then(setVendorCandidates)
+      .catch(() => {});
+    getDepartmentMarginRates()
+      .then(setDepartments)
       .catch(() => {});
   }, []);
 
@@ -971,6 +1044,7 @@ export function EstimateDetailView({
           threshold: r.threshold,
           baseThreshold: r.baseThreshold,
           reservePercent: r.reservePercent,
+          baseSource: r.baseSource,
           approvalStatus: r.approvalStatus ?? "none",
           remandComment: r.remandComment ?? null,
           workflowRequestId: r.workflowRequestId ?? null,
@@ -980,9 +1054,6 @@ export function EstimateDetailView({
   }, [estimate.id]);
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = estimate.items ?? [];
-  const costTotal = estimate.cost_total ?? 0;
-  const reserve1Amount = Number(estimate.reserve_fee_1_amount ?? 0);
-  const reserve2Amount = Number(estimate.reserve_fee_2_amount ?? 0);
 
   const itemsByCategory = categories.map((cat) => ({
     category: cat,
@@ -992,7 +1063,7 @@ export function EstimateDetailView({
 
   // ── 並べ替え（DnD・No.59）────────────────────────────────────────────
   const dndSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(RowPointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -1054,12 +1125,25 @@ export function EstimateDetailView({
     }
     return { sell, cost };
   })();
+
+  // No.106: 表下サマリー廃止。発注業者=経営調整費／予備費の明細行（原価>0）で計上判定
+  const managementVendorId = vendorCandidates.find((c) => c.system_key === "management")?.id;
+  const reserveVendorId = vendorCandidates.find((c) => c.system_key === "reserve")?.id;
+  const managementCost = items
+    .filter((i) => i.vendor_craftsman_id === managementVendorId)
+    .reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
+  const reserveCost = items
+    .filter((i) => i.vendor_craftsman_id === reserveVendorId)
+    .reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
+  const systemFeesOk =
+    managementCost > 0 &&
+    items.some((i) => i.vendor_craftsman_id === reserveVendorId && Number(i.cost_amount ?? 0) > 0);
+
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const [inlineAdd, setInlineAdd] = useState<"category" | string | null>(null);
   const [inlineAddKind, setInlineAddKind] = useState<"calc" | "text">("calc");
   const [inlineName, setInlineName] = useState("");
   const [savingLine, setSavingLine] = useState(false);
-  const [savingReserve, setSavingReserve] = useState(false);
   const [seedingEmpty, setSeedingEmpty] = useState(false);
   const inlineInputRef = useRef<HTMLInputElement>(null);
   const seededEstimateIdRef = useRef<string | null>(null);
@@ -1322,38 +1406,6 @@ export function EstimateDetailView({
     }
   };
 
-  const handleReserveAmountChange = async (field: "reserve_fee_1_amount" | "reserve_fee_2_amount", value: number) => {
-    const next = Math.max(0, Math.round(value) || 0);
-    const prev = { ...estimate };
-    onEstimateChange({ ...estimate, [field]: next });
-    setSavingReserve(true);
-    try {
-      await updateEstimate(estimate.id, { [field]: next });
-      // 合計再計算はサーバー側。最新を取り直さずローカルで概算反映
-      const r1 = field === "reserve_fee_1_amount" ? next : reserve1Amount;
-      const r2 = field === "reserve_fee_2_amount" ? next : reserve2Amount;
-      const lineCost = effectiveLineTotals.cost;
-      const sell = effectiveLineTotals.sell;
-      const cost_total = lineCost + r1 + r2;
-      const tax = Math.floor(sell * 0.1);
-      onEstimateChange({
-        ...estimate,
-        [field]: next,
-        cost_total,
-        subtotal: sell,
-        tax,
-        total: sell + tax,
-        gross_profit: sell - cost_total,
-        gross_profit_rate: sell > 0 ? ((sell - cost_total) / sell) * 100 : 0,
-      });
-    } catch (e) {
-      onEstimateChange(prev);
-      toast.error(e instanceof Error ? e.message : "予備費の更新に失敗しました");
-    } finally {
-      setSavingReserve(false);
-    }
-  };
-
   const handleInlineKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -1416,16 +1468,38 @@ export function EstimateDetailView({
     });
   };
 
-  // 明細（大項目直接入力含む）からライブ算出（保存前の調整でもボタンが切り替わる）
-  const liveGrossRate = effectiveLineTotals.sell > 0
-    ? ((effectiveLineTotals.sell - effectiveLineTotals.cost) / effectiveLineTotals.sell) * 100
-    : 0;
+  // 明細からライブ算出（estimate.cost_total が古いと¥0表示になるため画面上はこちらを正とする）
+  const liveSell = effectiveLineTotals.sell;
+  const liveCost = effectiveLineTotals.cost;
+  const liveTax = Math.floor(liveSell * 0.1);
+  const liveTotal = liveSell + liveTax;
+  const liveGross = liveSell - liveCost;
+  const liveDetailCost = Math.max(0, liveCost - managementCost);
+  const liveGrossRate = liveSell > 0 ? (liveGross / liveSell) * 100 : 0;
   const grossRate = liveGrossRate || (estimate.gross_profit_rate ?? 0);
-  // 承認の基準は会社設定（会社指定粗利率＋経営調整費率）をサーバーから取得
+  // 承認の基準は部門/会社設定（指定粗利率＋経営調整費率）をサーバーから取得
   const marginThreshold = marginInfo?.threshold ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
   const reservePercent = marginInfo?.reservePercent ?? 0;
   const baseThreshold = marginInfo?.baseThreshold ?? marginThreshold;
+  const baseLabel = marginInfo?.baseSource === "department" ? "部門指定" : "指定";
   const isLowMargin = grossRate < marginThreshold;
+
+  const handleDepartmentChange = async (value: string) => {
+    const next = value === "__none__" ? null : value;
+    const prev = estimate.department_name ?? null;
+    if (next === prev) return;
+    setSavingDepartment(true);
+    onEstimateChange({ ...estimate, department_name: next });
+    try {
+      await updateEstimate(estimate.id, { department_name: next });
+      refreshMarginInfo();
+    } catch (e) {
+      onEstimateChange({ ...estimate, department_name: prev });
+      toast.error(humanizeClientError(e, "部門の更新に失敗しました"));
+    } finally {
+      setSavingDepartment(false);
+    }
+  };
   const approvalStatus = marginInfo?.approvalStatus ?? "none";
   const isReturned = approvalStatus === "returned";
   const isRejected = approvalStatus === "rejected";
@@ -1579,11 +1653,11 @@ export function EstimateDetailView({
           </DropdownMenu>
           <EstimateApprovalActions
             estimateId={estimate.id}
+            departmentName={estimate.department_name}
             grossProfitRate={grossRate}
             defaultGrossProfitRate={estimate.default_gross_profit_rate}
             estimateStatus={estimate.status}
-            reserveFee1Amount={reserve1Amount}
-            reserveFee2Amount={reserve2Amount}
+            systemFeesOk={systemFeesOk}
             onConfirmed={() => {
               onEstimateChange({
                 ...estimate,
@@ -1602,24 +1676,70 @@ export function EstimateDetailView({
         <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border/60">
           <div className="px-3 py-2">
             <p className="text-[10px] leading-tight text-muted-foreground">売上(税込)</p>
-            <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{(estimate.total ?? 0).toLocaleString()}</p>
+            <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{liveTotal.toLocaleString()}</p>
           </div>
           <div className="px-3 py-2">
             <p className="text-[10px] leading-tight text-muted-foreground">原価</p>
-            <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{costTotal.toLocaleString()}</p>
+            <p className="text-base font-bold tabular-nums leading-tight mt-px">¥{liveCost.toLocaleString()}</p>
+            {/* No.107: 原価内訳は常時表示（ポップアップだと overflow で見切れるため） */}
+            <div className="mt-1.5 space-y-0.5 text-[10px] leading-tight">
+              <div className="flex justify-between gap-2 text-muted-foreground">
+                <span>明細原価{reserveCost > 0 ? "（予備費含む）" : ""}</span>
+                <span className="tabular-nums">¥{liveDetailCost.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between gap-2 text-muted-foreground">
+                <span>
+                  経営調整費
+                  {reservePercent > 0 ? `（売価の${reservePercent.toFixed(0)}%・会社規定）` : ""}
+                </span>
+                <span className="tabular-nums">¥{managementCost.toLocaleString()}</span>
+              </div>
+            </div>
           </div>
           <div className="px-3 py-2">
             <p className="text-[10px] leading-tight text-muted-foreground">粗利</p>
             <p className="text-base font-bold tabular-nums leading-tight mt-px">
-              ¥{(estimate.gross_profit ?? 0).toLocaleString()}
+              ¥{liveGross.toLocaleString()}
             </p>
           </div>
           <div className={cn("px-3 py-2", isLowMargin && "bg-amber-50/60")}>
-            <p className={cn("text-[10px] leading-tight", isLowMargin ? "text-amber-700" : "text-muted-foreground")}>
-              粗利率<span className="ml-1">(基準 {marginThreshold.toFixed(0)}%{canSeeReserve && reservePercent > 0 ? `＝指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%` : ""})</span>
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className={cn("text-[10px] leading-tight", isLowMargin ? "text-amber-700" : "text-muted-foreground")}>
+                粗利率
+              </p>
+              <Select
+                value={estimate.department_name || "__none__"}
+                onValueChange={(v) => void handleDepartmentChange(v)}
+                disabled={savingDepartment || departments.length === 0}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className={cn(
+                    "h-6 w-auto min-w-[96px] max-w-[140px] px-1.5 text-[10px] shadow-none",
+                    isLowMargin && "border-amber-200 bg-white/80",
+                  )}
+                >
+                  <SelectValue placeholder="部門" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="__none__">部門未選択</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.department_name}>
+                      {d.department_name}
+                      <span className="ml-1.5 text-muted-foreground tabular-nums">({d.margin_rate_percent}%)</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <p className={cn("text-base font-bold tabular-nums leading-tight mt-px", isLowMargin ? "text-amber-600" : "text-emerald-700")}>
               {grossRate.toFixed(1)}%
+            </p>
+            <p className={cn("text-[10px] leading-tight mt-0.5", isLowMargin ? "text-amber-700/80" : "text-muted-foreground")}>
+              基準 {marginThreshold.toFixed(0)}%
+              {canSeeReserve && reservePercent > 0
+                ? `＝${baseLabel}${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%`
+                : ""}
             </p>
           </div>
         </div>
@@ -1685,10 +1805,9 @@ export function EstimateDetailView({
         <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
         <table className="w-full text-xs border-collapse min-w-[1100px] table-fixed">
           <colgroup>
-            <col className="w-8" />
-            <col className="w-[8%]" />
-            <col className="w-[10%]" />
             <col className="w-[9%]" />
+            <col className="w-[11%]" />
+            <col className="w-[10%]" />
             <col className="w-14" />
             <col className="w-12" />
             <col className="w-[6rem]" />
@@ -1700,7 +1819,7 @@ export function EstimateDetailView({
           </colgroup>
           <thead className="bg-muted/40">
             <tr>
-              <th colSpan={6} className="bg-muted/40" />
+              <th colSpan={5} className="bg-muted/40" />
               <th colSpan={2} className="px-2 py-1.5 bg-amber-50/50 border-b border-border/40">
                 <Popover open={bulkCostOpen} onOpenChange={setBulkCostOpen}>
                   <PopoverTrigger asChild>
@@ -1800,7 +1919,6 @@ export function EstimateDetailView({
               <th colSpan={2} className="bg-muted/40 border-b border-border/40" />
             </tr>
             <tr className="text-muted-foreground text-xs whitespace-nowrap">
-              <th className="w-8 px-2 py-2 text-center"></th>
               <th className="text-left px-2 py-2 font-medium">大項目／詳細項目</th>
               <th className="text-left px-2 py-2 font-medium">形状・摘要</th>
               <th className="text-left px-2 py-2 font-medium">発注業者</th>
@@ -1850,9 +1968,9 @@ export function EstimateDetailView({
                 </SortableContext>
                 {!collapsed && isAddingHere && (
                   <tr className="border-t border-primary/20 bg-primary/5">
-                    <td className="px-2 py-1.5 text-center text-muted-foreground">＋</td>
                     <td className="px-2 py-1.5" colSpan={11}>
                       <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground shrink-0">＋</span>
                         <input
                           ref={inlineInputRef}
                           type="text"
@@ -1880,7 +1998,7 @@ export function EstimateDetailView({
                 )}
                 {!collapsed && !isAddingHere && inlineAdd === null && (
                   <tr>
-                    <td colSpan={12} className="p-0">
+                    <td colSpan={11} className="p-0">
                       <div className="px-3 py-2 border-t border-dashed border-border/40 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
@@ -1921,7 +2039,7 @@ export function EstimateDetailView({
           {seedingEmpty && (
             <tbody>
               <tr>
-                <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" />
                   入力欄を準備しています…
                 </td>
@@ -1933,9 +2051,9 @@ export function EstimateDetailView({
           <tfoot className="group/cat-add">
             {inlineAdd === "standalone-text" ? (
               <tr className="border-t border-primary/20 bg-primary/5">
-                <td className="px-2 py-1.5 text-center text-muted-foreground">＋</td>
                 <td className="px-2 py-1.5" colSpan={11}>
                   <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground shrink-0">＋</span>
                     <Badge variant="outline" className="text-[10px] shrink-0 border-slate-300 text-slate-600">
                       独立テキスト行
                     </Badge>
@@ -1963,9 +2081,9 @@ export function EstimateDetailView({
               </tr>
             ) : inlineAdd === "category" ? (
               <tr className="border-t border-primary/20 bg-primary/5">
-                <td className="px-2 py-1.5 text-center text-muted-foreground">＋</td>
                 <td className="px-2 py-1.5" colSpan={11}>
                   <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground shrink-0">＋</span>
                     <input
                       ref={inlineInputRef}
                       type="text"
@@ -1990,7 +2108,7 @@ export function EstimateDetailView({
               </tr>
             ) : inlineAdd === null ? (
               <tr>
-                <td colSpan={12} className="p-0">
+                <td colSpan={11} className="p-0">
                   <div className="px-3 py-2.5 border-t border-dashed border-border/40 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -2010,57 +2128,19 @@ export function EstimateDetailView({
                 </td>
               </tr>
             ) : null}
-            {/* 経営調整費・予備費は明細表の外（サマリー付近）で記入。顧客向けPDF非出力 */}
-            {(reserve1Amount <= 0 || reserve2Amount <= 0) && (
+            {/* No.106: 表下のサマリー入力は廃止。明細の発注業者で経営調整費・予備費を計上 */}
+            {!systemFeesOk && (
               <tr className="bg-rose-50 border-t border-rose-200">
-                <td colSpan={12} className="px-3 py-2 text-[11px] text-rose-800 font-medium">
-                  経営調整費・予備費を両方計上してください。未計上のままでは確定・提出できません。
+                <td colSpan={11} className="px-3 py-2 text-[11px] text-rose-800 font-medium">
+                  経営調整費・予備費が明細に計上されていません。発注業者で「経営調整費」「予備費」を選び原価を入れてください。未計上のままでは確定・提出できません。
                 </td>
               </tr>
             )}
-            <tr className="bg-amber-50/40 border-t border-amber-200/60">
-              <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
-                <span className="font-medium">経営調整費（会社確保分）</span>
-                <span className="block text-[10px] text-muted-foreground font-normal">会社規定%・担当者は編集不可・売価ゼロ</span>
-              </td>
-              <td colSpan={2} className="px-3 py-2.5">
-                <IntegerInput
-                  disabled={savingReserve}
-                  className="h-8 text-xs tabular-nums text-right w-full rounded-md border border-input bg-background px-2"
-                  value={reserve1Amount}
-                  placeholder="0"
-                  onValueChange={(v) => {
-                    onEstimateChange({ ...estimate, reserve_fee_1_amount: v });
-                  }}
-                  onBlur={(v) => void handleReserveAmountChange("reserve_fee_1_amount", v)}
-                />
-              </td>
-              <td colSpan={4} className="px-3 py-2.5 text-[10px] text-muted-foreground">原価のみ計上（顧客向けPDF非出力）</td>
-            </tr>
-            <tr className="bg-amber-50/25 border-t border-amber-100/80">
-              <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
-                <span className="font-medium">予備費（現場対応分）</span>
-                <span className="block text-[10px] text-muted-foreground font-normal">担当者がリスク用に計上・実行予算移行後に明細側で操作可</span>
-              </td>
-              <td colSpan={2} className="px-3 py-2.5">
-                <IntegerInput
-                  disabled={savingReserve}
-                  className="h-8 text-xs tabular-nums text-right w-full rounded-md border border-input bg-background px-2"
-                  value={reserve2Amount}
-                  placeholder="0"
-                  onValueChange={(v) => {
-                    onEstimateChange({ ...estimate, reserve_fee_2_amount: v });
-                  }}
-                  onBlur={(v) => void handleReserveAmountChange("reserve_fee_2_amount", v)}
-                />
-              </td>
-              <td colSpan={4} className="px-3 py-2.5 text-[10px] text-muted-foreground">原価のみ計上（顧客向けPDF非出力）</td>
-            </tr>
             <tr className="bg-slate-100/70 border-t border-border/40 font-bold">
-              <td colSpan={6} className="px-3 py-3 text-right text-sm">合計</td>
-              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{costTotal.toLocaleString()}</td>
-              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{(estimate.total ?? 0).toLocaleString()}</td>
-              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-sm">{(estimate.gross_profit_rate ?? 0).toFixed(1)}%</td>
+              <td colSpan={5} className="px-3 py-3 text-right text-sm">合計</td>
+              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{liveCost.toLocaleString()}</td>
+              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{liveTotal.toLocaleString()}</td>
+              <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-sm">{grossRate.toFixed(1)}%</td>
             </tr>
           </tfoot>
         </table>

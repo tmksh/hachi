@@ -48,6 +48,8 @@ export type EstimatePdfPreviewData = {
     selling_amount: number;
     is_text_row?: boolean;
     is_reserve_row?: boolean;
+    /** 発注業者表示名（予備費／経営調整費ラベル用） */
+    vendor_name?: string | null;
   }>;
 };
 
@@ -81,6 +83,7 @@ type EstimatePdfSource = {
     selling_amount?: number;
     is_text_row?: boolean;
     is_reserve_row?: boolean;
+    vendor_name?: string | null;
   }>;
 };
 
@@ -131,6 +134,7 @@ function toEstimatePdfData(
       selling_amount: Number(item.selling_amount) || 0,
       is_text_row: Boolean(item.is_text_row),
       is_reserve_row: Boolean(item.is_reserve_row),
+      vendor_name: item.vendor_name ?? null,
     }));
 
   // 大項目の有効金額（詳細行優先・No.68/70）はフィルタ前の全明細から算出する
@@ -157,8 +161,6 @@ function toEstimatePdfData(
     + items
       .filter((i) => !i.is_text_row && !i.category_id)
       .reduce((s, i) => s + i.cost_amount, 0);
-  const reserve1 = Number(estimate.reserve_fee_1_amount) || 0;
-  const reserve2 = Number(estimate.reserve_fee_2_amount) || 0;
 
   return {
     mode,
@@ -170,9 +172,10 @@ function toEstimatePdfData(
     subtotal: estimate.subtotal ?? 0,
     tax: estimate.tax ?? 0,
     total: estimate.total ?? 0,
-    cost_total: estimate.cost_total ?? lineCost + reserve1 + reserve2,
-    reserve_fee_1_amount: reserve1,
-    reserve_fee_2_amount: reserve2,
+    // No.106: 経営調整費・予備費は明細原価に含まれる
+    cost_total: estimate.cost_total ?? lineCost,
+    reserve_fee_1_amount: Number(estimate.reserve_fee_1_amount) || 0,
+    reserve_fee_2_amount: Number(estimate.reserve_fee_2_amount) || 0,
     categories,
     items,
   };
@@ -384,8 +387,28 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
       );
     }
     return (
-      <tr key={item.id}>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
+      <tr key={item.id} style={item.is_reserve_row ? { background: "#fffbeb" } : undefined}>
+        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>
+          {item.is_reserve_row && (
+            <span
+              style={{
+                display: "inline-block",
+                marginRight: "6px",
+                padding: "0 5px",
+                fontSize: "10px",
+                fontWeight: 600,
+                color: "#b45309",
+                background: "#fef3c7",
+                border: "1px solid #fcd34d",
+                borderRadius: "3px",
+                verticalAlign: "middle",
+              }}
+            >
+              {item.vendor_name === "経営調整費" ? "経営調整費" : "予備費"}
+            </span>
+          )}
+          {item.name || "—"}
+        </td>
         <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity || "—"}</td>
         <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>
           {item.selling_amount === 0 && item.cost_amount > 0 ? "小計" : (item.unit ?? "式")}
@@ -441,25 +464,7 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
               ...data.items.filter((i) => !i.category_id).map(renderItemRow),
             ]
           : data.items.map(renderItemRow)}
-        {/* 明細外の経営調整費・予備費（原価内訳書にのみ出力） */}
-        <tr style={{ background: "#fff7ed" }}>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>経営調整費（会社確保分）</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>小計</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-            ¥{data.reserve_fee_1_amount.toLocaleString()}
-          </td>
-        </tr>
-        <tr style={{ background: "#fffbeb" }}>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>予備費（現場対応分）</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>小計</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-            ¥{data.reserve_fee_2_amount.toLocaleString()}
-          </td>
-        </tr>
+        {/* No.106: 経営調整費・予備費は明細行側に一本化（表下サマリー行は廃止） */}
         {Array.from({ length: Math.max(0, 6 - itemCount) }).map((_, i) => (
           <tr key={`empty-${i}`}>
             <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "10px" }}>&nbsp;</td>
