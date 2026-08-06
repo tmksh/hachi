@@ -217,6 +217,43 @@ export function applyLiveRatesToProspectMock(
   };
 }
 
+/** No.75 モック案件行（部門別・万円）。規定割れが一目で分かるよう粗利率にばらつきを持たせる */
+const MOCK_DEPT_PROJECTS: Record<string, Array<{
+  customerName: string;
+  projectName: string;
+  revenue: number;
+  grossProfitRate: number;
+}>> = {
+  一般住宅: [
+    { customerName: "田中様", projectName: "中川町新築", revenue: 320, grossProfitRate: 62.1 },
+    { customerName: "佐藤様", projectName: "港区リノベーション", revenue: 280, grossProfitRate: 59.4 },
+    { customerName: "山本様", projectName: "名東区リノベーション", revenue: 250, grossProfitRate: 41.2 },
+    { customerName: "伊藤様", projectName: "昭和区増築", revenue: 210, grossProfitRate: 38.5 },
+    { customerName: "鈴木様", projectName: "千種区内装リフォーム", revenue: 140, grossProfitRate: 66.0 },
+  ],
+  新築: [
+    { customerName: "加藤様", projectName: "天白区新築戸建", revenue: 420, grossProfitRate: 61.2 },
+    { customerName: "中村様", projectName: "緑区注文住宅", revenue: 380, grossProfitRate: 58.0 },
+    { customerName: "小林建設", projectName: "守山区建売（3棟）", revenue: 310, grossProfitRate: 42.5 },
+    { customerName: "吉田様", projectName: "瑞穂区新築", revenue: 220, grossProfitRate: 55.8 },
+    { customerName: "松本様", projectName: "熱田区狭小住宅", revenue: 120, grossProfitRate: 48.0 },
+  ],
+  公共工事: [
+    { customerName: "市役所", projectName: "区役所改修工事", revenue: 210, grossProfitRate: 52.0 },
+    { customerName: "教育委員会", projectName: "小学校体育館改修", revenue: 160, grossProfitRate: 48.5 },
+    { customerName: "水道局", projectName: "配水管更新工事", revenue: 110, grossProfitRate: 44.0 },
+    { customerName: "公園緑地課", projectName: "公園トイレ新設", revenue: 80, grossProfitRate: 55.5 },
+    { customerName: "消防本部", projectName: "署舎耐震補強", revenue: 60, grossProfitRate: 39.0 },
+  ],
+  リフォーム: [
+    { customerName: "渡辺様", projectName: "キッチン全面改装", revenue: 85, grossProfitRate: 72.0 },
+    { customerName: "斎藤様", projectName: "浴室・洗面改修", revenue: 60, grossProfitRate: 68.5 },
+    { customerName: "清水様", projectName: "外壁塗装", revenue: 45, grossProfitRate: 55.0 },
+    { customerName: "森田様", projectName: "屋根葺き替え", revenue: 35, grossProfitRate: 48.0 },
+    { customerName: "池田様", projectName: "内装リフォーム", revenue: 25, grossProfitRate: 80.0 },
+  ],
+};
+
 /** 部門PJ一覧（No.75）のモック行。BI本体がモック表示の年度で使用（万円） */
 export function buildBiDepartmentProjectsMock(departmentName: string): Array<{
   id: string;
@@ -227,18 +264,34 @@ export function buildBiDepartmentProjectsMock(departmentName: string): Array<{
   grossProfit: number;
   cost: number;
 }> {
+  const preset = MOCK_DEPT_PROJECTS[departmentName];
+  if (preset) {
+    return preset.map((r, i) => {
+      const grossProfit = Math.round((r.revenue * r.grossProfitRate) / 100);
+      return {
+        id: `mock-${departmentName}-${i}`,
+        customerName: r.customerName,
+        projectName: r.projectName,
+        revenue: r.revenue,
+        grossProfitRate: r.grossProfitRate,
+        grossProfit,
+        cost: r.revenue - grossProfit,
+      };
+    });
+  }
+
   const dept = MOCK_DEPT_ACTUALS.find((d) => d.name === departmentName);
   if (!dept) return [];
 
   const customers = ["田中様", "佐藤様", "鈴木建設", "山本様", "高橋不動産"];
   const shares = [0.34, 0.26, 0.18, 0.13, 0.09];
-  const rateJitter = [1.6, -2.1, 0.8, -1.2, 2.4];
+  const rateJitter = [1.6, -12.1, 0.8, -14.2, 2.4];
   const baseRate = dept.revenue > 0 ? (dept.grossProfit / dept.revenue) * 100 : 50;
 
   return shares.map((share, i) => {
     const revenue = Math.round(dept.revenue * share);
     const rate = Math.round((baseRate + rateJitter[i]) * 10) / 10;
-    const grossProfit = Math.round(revenue * rate / 100);
+    const grossProfit = Math.round((revenue * rate) / 100);
     return {
       id: `mock-${departmentName}-${i}`,
       customerName: customers[i],

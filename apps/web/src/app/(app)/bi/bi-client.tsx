@@ -22,7 +22,6 @@ import {
   MessageCircle,
   Sparkles,
   FileText,
-  Users,
 } from "lucide-react";
 import { useBridgeChat } from "@/contexts/chat-panel-context";
 import { ComboChart } from "@/components/charts/combo-chart";
@@ -401,7 +400,8 @@ export function BiClient({
   const [deptDetailName, setDeptDetailName] = useState<string | null>(null);
   /** 換算人数（No.77/78: 正社員=1.0 / パート=0.5） */
   const [headcount, setHeadcount] = useState<BiHeadcountSummary | null>(null);
-  const [perCapitaTab, setPerCapitaTab] = useState<"op" | "gpt">("op");
+  /** 全社サマリーの表示モード（No.77/78: 滝チャート内で切替） */
+  const [summaryMode, setSummaryMode] = useState<"company" | "perCapita">("company");
   /** No.95: 選択年度の確定済み決算書（存在すれば確定値として表示） */
   const [finActuals, setFinActuals] = useState<FinancialActualsForBi | null>(null);
 
@@ -585,11 +585,10 @@ export function BiClient({
   const operatingProfit  = grossProfitTotal - sgaYtd;
   const opRate           = pct(operatingProfit, totalRevenue);
 
-  // 1人当たり利益（No.77/78）: 従業員区分の係数合計（正社員=1.0 / パート=0.5）で割る
+  // 1人当たり（No.77/78）: 滝チャートの各金額を換算人数で割る
   const headcountWeight = headcount?.weight ?? 0;
-  const perCapitaValue = headcountWeight > 0
-    ? Math.round(((perCapitaTab === "op" ? operatingProfit : grossProfitTotal) / headcountWeight) * 10) / 10
-    : null;
+  const perCapitaDivisor = summaryMode === "perCapita" && headcountWeight > 0 ? headcountWeight : 1;
+  const perCapita = (v: number) => Math.round((v / perCapitaDivisor) * 10) / 10;
   const consultActionAsk =
     operatingProfit < 0
       ? "見込みの高い商談へ、今週中に再メール・電話のフォローを出しますか？"
@@ -957,41 +956,6 @@ export function BiClient({
         ]}
       />
 
-      {/* ── 1人当たり利益（No.77/78: 従業員区分の係数換算・タブ切替） ── */}
-      <div className="frost-card rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center rounded-full border border-border/60 p-0.5 gap-0.5 bg-muted/30">
-            {([["op", "1人当たり営業利益"], ["gpt", "1人当たり売上総利益"]] as const).map(([tab, label]) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setPerCapitaTab(tab)}
-                className={cn(
-                  "px-3 py-1 text-[11px] rounded-full transition-colors",
-                  perCapitaTab === tab
-                    ? "bg-[var(--brand-dark)] text-white font-semibold shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className={cn(
-            "text-xl font-bold tabular-nums leading-none",
-            perCapitaValue != null && perCapitaValue < 0 ? "text-rose-500" : "text-foreground",
-          )}>
-            {perCapitaValue == null ? "—" : fmtSigned(perCapitaValue)}
-          </p>
-        </div>
-        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Users className="h-3.5 w-3.5 shrink-0" />
-          {headcount
-            ? `従業員数 ${headcount.weight}人換算（正社員${headcount.fullTimeCount}名×1.0／パート${headcount.partTimeCount}名×0.5）`
-            : "従業員数を取得中…"}
-        </p>
-      </div>
-
       {/* ── 予備費バナー（社員にも表示：非表示による不信感を防止） ── */}
       {reserveRate > 0 && (
         <div className={cn(
@@ -1067,10 +1031,29 @@ export function BiClient({
           {/* 左：計算の流れ（右の高さに合わせ、中身は上下中央） */}
           <div className="relative h-full p-5 sm:p-6 flex flex-col justify-center bg-white">
             <div>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              上から順に引くと、いちばん下の「営業利益」になります
-            </p>
-
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                上から順に引くと、いちばん下の「営業利益」になります
+              </p>
+              {/* No.77/78: 全社 / 1人当たり（滝チャート内タブ） */}
+              <div className="flex items-center rounded-full border border-border/60 p-0.5 gap-0.5 bg-muted/30 shrink-0">
+                {([["company", "全社"], ["perCapita", "1人当たり"]] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSummaryMode(mode)}
+                    className={cn(
+                      "px-3 py-1 text-[11px] rounded-full transition-colors",
+                      summaryMode === mode
+                        ? "bg-[var(--brand-dark)] text-white font-semibold shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-3">
               <div className="flex items-end justify-between gap-3 py-2.5">
                 <div className="min-w-0">
@@ -1079,7 +1062,7 @@ export function BiClient({
                     年間目標 {fmtTargetMan(targetRevenue)} の {achieveRateTotal}%
                   </p>
                 </div>
-                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(totalRevenue)}</p>
+                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(perCapita(totalRevenue))}</p>
               </div>
 
               <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border/60">
@@ -1091,7 +1074,7 @@ export function BiClient({
                     <span className="ml-1 text-muted-foreground/80">※工事粗利ベース</span>
                   </p>
                 </div>
-                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(totalGrossProfit)}</p>
+                <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(perCapita(totalGrossProfit))}</p>
               </div>
 
               <div
@@ -1106,17 +1089,19 @@ export function BiClient({
                   </p>
                 </div>
                 <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
-                  {settingsConfigured ? fmtMan(overheadYtd) : "未設定"}
+                  {settingsConfigured ? fmtMan(perCapita(overheadYtd)) : "未設定"}
                 </p>
               </div>
 
               <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border/60">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">ここまでの残り</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">売上総利益</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {summaryMode === "perCapita" ? "1人当たり売上総利益" : "売上総利益"}
+                  </p>
                 </div>
                 <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">
-                  {fmtSigned(grossProfitTotal)}
+                  {fmtSigned(perCapita(grossProfitTotal))}
                 </p>
               </div>
 
@@ -1132,7 +1117,7 @@ export function BiClient({
                   </p>
                 </div>
                 <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
-                  {settingsConfigured ? fmtMan(sgaYtd) : "未設定"}
+                  {settingsConfigured ? fmtMan(perCapita(sgaYtd)) : "未設定"}
                 </p>
               </div>
             </div>
@@ -1149,13 +1134,15 @@ export function BiClient({
               }}
             >
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold text-white">営業利益</p>
+                <p className="text-base sm:text-lg font-bold text-white">
+                  {summaryMode === "perCapita" ? "1人当たり営業利益" : "営業利益"}
+                </p>
                 <p className="text-xs sm:text-sm text-white/80 mt-1">
                   売上比 {operatingProfit < 0 ? "▲" : ""}{r1(Math.abs(opRate))}%
                 </p>
               </div>
               <p className="text-3xl sm:text-4xl font-black tabular-nums shrink-0 leading-none tracking-tight text-white">
-                {fmtSigned(operatingProfit)}
+                {fmtSigned(perCapita(operatingProfit))}
               </p>
             </div>
             </div>
@@ -1369,8 +1356,13 @@ export function BiClient({
       {/* 部門PJ一覧スライドパネル（No.75/84） */}
       <BiDepartmentProjectsSheet
         departmentName={deptDetailName}
+        departmentLabel={deptCards.find((d) => d.name === deptDetailName)?.label}
         fiscalYear={fiscalYear}
+        fiscalMonthStart={fiscalMonthStart}
         useMock={useDashboardMock}
+        achieveRate={deptCards.find((d) => d.name === deptDetailName)?.achieveRate}
+        deptRevenue={deptCards.find((d) => d.name === deptDetailName)?.revenue}
+        deptGrossProfit={deptCards.find((d) => d.name === deptDetailName)?.grossProfit}
         fmtMan={fmtMan}
         onClose={() => setDeptDetailName(null)}
       />
