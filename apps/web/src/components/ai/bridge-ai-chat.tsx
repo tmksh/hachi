@@ -329,12 +329,15 @@ export function BridgeAiChat({
         ) : (
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.map((m, i) => (
-              <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+              <div
+                key={i}
+                className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
+              >
                 <span
                   className={
                     m.role === "user"
-                      ? "inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap bg-primary text-primary-foreground"
-                      : "inline-block max-w-[90%] py-1 text-sm whitespace-pre-wrap text-foreground leading-relaxed"
+                      ? "inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm text-left whitespace-pre-wrap leading-relaxed bg-primary text-primary-foreground"
+                      : "inline-block max-w-[90%] py-1 text-sm text-left whitespace-pre-wrap text-foreground leading-relaxed"
                   }
                 >
                   {m.displayText ?? m.text}
