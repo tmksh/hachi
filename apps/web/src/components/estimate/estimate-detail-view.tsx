@@ -8,15 +8,37 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IntegerInput } from "@/components/ui/integer-input";
 import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle, Sparkles } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
   addEstimateCategory,
   addEstimateItem,
   updateEstimateItem,
   updateEstimateCategoryName,
+  updateEstimateCategoryDetails,
+  reorderEstimateCategories,
+  reorderEstimateItems,
   importCategoryFromReference,
   type EstimateItemUpdatePatch,
+  type EstimateCategoryDetailPatch,
 } from "@/lib/actions/constructions";
+import { getVendorCandidates, type VendorCandidate } from "@/lib/actions/craftsmen";
+import { vendorNameMatches, normalizeVendorName } from "@/lib/vendor-normalize";
+import { effectiveCategoryAmounts } from "@/lib/estimate-category-totals";
 import {
   EstimatePdfPreviewDialog,
   toEstimatePdfPreviewData,
@@ -38,7 +60,7 @@ import { Badge } from "@/components/ui/badge";
 import { getEstimates, getEstimate, updateEstimate } from "@/lib/actions/estimates";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
-import { calcGrossProfitRatePercent, toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { humanizeClientError } from "@/lib/humanize-error";
 import { useBridgeChat } from "@/contexts/chat-panel-context";
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
@@ -198,13 +220,15 @@ export type EstimateForView = {
 function recalcItemAmounts(item: EstimateItem): EstimateItem {
   const qty = Number(item.quantity) || 0;
   const costPrice = Number(item.cost_price) || 0;
-  const sellingPrice = Number(item.selling_price) || 0;
+  // 予備費行は売価0固定（No.61/65）
+  const sellingPrice = item.is_reserve_row ? 0 : Number(item.selling_price) || 0;
   const costAmount = Math.round(qty * costPrice);
   const sellingAmount = Math.round(qty * sellingPrice);
   const grossProfit = sellingAmount - costAmount;
   const grossProfitRate = sellingAmount > 0 ? (grossProfit / sellingAmount) * 100 : 0;
   return {
     ...item,
+    selling_price: sellingPrice,
     cost_amount: costAmount,
     selling_amount: sellingAmount,
     gross_profit: grossProfit,
@@ -220,6 +244,155 @@ const ITEM_CELL_NUM =
 
 const ITEM_CELL_UNIT =
   "w-full min-w-[2rem] bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap text-center text-muted-foreground";
+
+// ---- 発注業者入力（インクリメンタルサーチ・No.58/71） -----------------------
+
+type VendorValue = { craftsmanId: string | null; name: string };
+
+function VendorInput({
+  vendorName,
+  candidates,
+  disabled,
+  isReserve,
+  onCommit,
+}: {
+  vendorName: string;
+  candidates: VendorCandidate[];
+  disabled?: boolean;
+  isReserve?: boolean;
+  onCommit: (value: VendorValue) => void;
+}) {
+  const [text, setText] = useState(vendorName);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setText(vendorName);
+  }, [vendorName]);
+
+  const query = text.trim();
+  const filtered = query
+    ? candidates.filter(
+        (c) =>
+          vendorNameMatches(c.name, query) ||
+          (c.company_name ? vendorNameMatches(c.company_name, query) : false),
+      )
+    : candidates;
+  const shown = filtered.slice(0, 8);
+
+  const select = (c: VendorCandidate) => {
+    setText(c.name);
+    setOpen(false);
+    onCommit({ craftsmanId: c.id, name: c.name });
+  };
+
+  const commitFree = () => {
+    setOpen(false);
+    const trimmed = text.trim();
+    if (trimmed === vendorName.trim()) return;
+    // 表記ゆれを吸収して一致する業者があれば自動リンク（No.71）
+    const exact = trimmed
+      ? candidates.find((c) => normalizeVendorName(c.name) === normalizeVendorName(trimmed))
+      : undefined;
+    if (exact) {
+      setText(exact.name);
+      onCommit({ craftsmanId: exact.id, name: exact.name });
+    } else {
+      onCommit({ craftsmanId: null, name: trimmed });
+    }
+  };
+
+  return (
+    <div className="relative">
+      <input
+        className={cn(ITEM_CELL, isReserve ? "text-amber-700 font-medium" : "text-muted-foreground")}
+        value={text}
+        placeholder="業者名で検索"
+        disabled={disabled}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setOpen(true);
+        }}
+        onBlur={() => commitFree()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          }
+          if (e.key === "Escape") {
+            setText(vendorName);
+            setOpen(false);
+          }
+        }}
+      />
+      {open && shown.length > 0 && (
+        <div className="absolute left-0 top-full z-30 mt-0.5 w-56 rounded-md border border-border bg-popover shadow-md py-1 max-h-56 overflow-y-auto">
+          {shown.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              // blur より先に選択を確定させるため onMouseDown を使う
+              onMouseDown={(e) => {
+                e.preventDefault();
+                select(c);
+              }}
+              className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/60 flex items-center gap-1.5"
+            >
+              <span className="truncate">{c.name}</span>
+              {c.company_name && (
+                <span className="text-[10px] text-muted-foreground truncate">{c.company_name}</span>
+              )}
+              {c.kind === "system" && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "ml-auto text-[9px] py-0 shrink-0",
+                    c.system_key === "reserve"
+                      ? "border-amber-300 text-amber-700 bg-amber-50"
+                      : "border-slate-300 text-slate-500",
+                  )}
+                >
+                  {c.system_key === "reserve" ? "予備費" : "システム予約"}
+                </Badge>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 候補から予備費行かどうかを判定（craftsman 種別フラグ・No.61/67） */
+function isReserveCandidate(candidates: VendorCandidate[], craftsmanId: string | null): boolean {
+  if (!craftsmanId) return false;
+  const c = candidates.find((x) => x.id === craftsmanId);
+  return c?.kind === "system" && c?.system_key === "reserve";
+}
+
+// ---- 並べ替え（DnD・No.59） -------------------------------------------------
+
+function SortableCategoryTbody({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handleProps: Record<string, unknown>) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    data: { type: "category" },
+  });
+  return (
+    <tbody
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("group/cat", isDragging && "opacity-60")}
+    >
+      {children({ ...attributes, ...(listeners ?? {}) })}
+    </tbody>
+  );
+}
 
 function CategoryNameInput({
   category,
@@ -283,9 +456,11 @@ function CategoryNameInput({
 
 function EstimateItemRow({
   item,
+  candidates,
   onUpdate,
 }: {
   item: EstimateItem;
+  candidates: VendorCandidate[];
   onUpdate: (item: EstimateItem, totals?: EstimateTotalsPatch) => void;
 }) {
   const [draft, setDraft] = useState(item);
@@ -296,6 +471,20 @@ function EstimateItemRow({
   }, [item]);
 
   const isTemp = item.id.startsWith("temp-");
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: item.id,
+    data: { type: "item", categoryId: item.category_id ?? "none" },
+    disabled: isTemp,
+  });
+  const sortableStyle = { transform: CSS.Transform.toString(transform), transition };
 
   const commit = async (field: keyof EstimateItemUpdatePatch, rawValue: string | number | null) => {
     if (isTemp || saving) return;
@@ -328,18 +517,75 @@ function EstimateItemRow({
     }
   };
 
+  // 発注業者の確定（No.58/61: 予備費は craftsman 種別フラグで判定）
+  const commitVendor = async (vendor: VendorValue) => {
+    if (isTemp || saving) return;
+    if (
+      vendor.craftsmanId === (item.vendor_craftsman_id ?? null) &&
+      vendor.name === (item.vendor_name ?? "")
+    ) return;
+
+    const reserve = isReserveCandidate(candidates, vendor.craftsmanId);
+    const optimistic = recalcItemAmounts({
+      ...item,
+      vendor_craftsman_id: vendor.craftsmanId,
+      vendor_name: vendor.name || null,
+      is_reserve_row: reserve,
+    } as EstimateItem);
+    onUpdate(optimistic);
+    setSaving(true);
+    try {
+      const { item: saved, totals } = await updateEstimateItem(item.id, {
+        vendor_craftsman_id: vendor.craftsmanId,
+        vendor_name: vendor.name || null,
+      });
+      onUpdate(saved as EstimateItem, totals);
+    } catch (e) {
+      onUpdate(item);
+      setDraft(item);
+      toast.error(e instanceof Error ? e.message : "発注業者の更新に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const isTextRow = Boolean(draft.is_text_row);
+  const isReserveRow = Boolean(draft.is_reserve_row);
+  const isStandaloneText = isTextRow && !item.category_id;
+
+  const dragHandle = (
+    <button
+      type="button"
+      className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+      aria-label="行を並べ替え"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="h-3 w-3" />
+    </button>
+  );
 
   if (isTextRow) {
     return (
-      <tr className={cn("border-t border-border/40 bg-slate-50/60 hover:bg-muted/10", saving && "opacity-70")}>
+      <tr
+        ref={setNodeRef}
+        style={sortableStyle}
+        className={cn(
+          "border-t border-border/40 bg-slate-50/60 hover:bg-muted/10",
+          saving && "opacity-70",
+          isDragging && "opacity-60",
+        )}
+      >
         <td className="px-2 py-1 text-center">
-          <input type="checkbox" className="rounded border-slate-300" />
+          <div className="flex items-center gap-0.5 justify-center">
+            {dragHandle}
+            <input type="checkbox" className="rounded border-slate-300" />
+          </div>
         </td>
         <td className="px-2 py-1.5" colSpan={10}>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-[10px] shrink-0 border-slate-300 text-slate-600">
-              テキスト行
+              {isStandaloneText ? "独立テキスト行" : "テキスト行"}
             </Badge>
             <input
               className={cn(ITEM_CELL, "italic text-muted-foreground")}
@@ -357,19 +603,38 @@ function EstimateItemRow({
   }
 
   return (
-    <tr className={cn("border-t border-border/40 hover:bg-muted/10", saving && "opacity-70")}>
+    <tr
+      ref={setNodeRef}
+      style={sortableStyle}
+      className={cn(
+        "border-t border-border/40 hover:bg-muted/10",
+        isReserveRow && "bg-amber-50/40",
+        saving && "opacity-70",
+        isDragging && "opacity-60",
+      )}
+    >
       <td className="px-2 py-1 text-center">
-        <input type="checkbox" className="rounded border-slate-300" />
+        <div className="flex items-center gap-0.5 justify-center">
+          {dragHandle}
+          <input type="checkbox" className="rounded border-slate-300" />
+        </div>
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
-        <input
-          className={ITEM_CELL}
-          value={draft.name}
-          disabled={isTemp}
-          placeholder="詳細項目名"
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          onBlur={() => void commit("name", draft.name)}
-        />
+        <div className="flex items-center gap-1">
+          {isReserveRow && (
+            <Badge variant="outline" className="text-[9px] py-0 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
+              予備費
+            </Badge>
+          )}
+          <input
+            className={ITEM_CELL}
+            value={draft.name}
+            disabled={isTemp}
+            placeholder="詳細項目名"
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            onBlur={() => void commit("name", draft.name)}
+          />
+        </div>
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
         <input
@@ -382,13 +647,12 @@ function EstimateItemRow({
         />
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
-        <input
-          className={cn(ITEM_CELL, "text-muted-foreground")}
-          value={draft.notes ?? ""}
-          placeholder="—"
+        <VendorInput
+          vendorName={draft.vendor_name ?? ""}
+          candidates={candidates}
           disabled={isTemp}
-          onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-          onBlur={() => void commit("notes", draft.notes ?? "")}
+          isReserve={isReserveRow}
+          onCommit={(v) => void commitVendor(v)}
         />
       </td>
       <td className="px-1.5 py-1.5 whitespace-nowrap w-14">
@@ -429,24 +693,224 @@ function EstimateItemRow({
         ¥{(draft.cost_amount ?? 0).toLocaleString()}
       </td>
       <td className="px-1.5 py-1.5 bg-blue-50/30 whitespace-nowrap min-w-[6rem]">
-        <IntegerInput
-          className={cn(ITEM_CELL_NUM, "text-blue-700")}
-          value={Number(draft.selling_price) || 0}
-          placeholder="0"
-          disabled={isTemp}
-          onValueChange={(sellingPrice) => {
-            setDraft((d) => recalcItemAmounts({ ...d, selling_price: sellingPrice }));
-          }}
-          onBlur={(sellingPrice) => void commit("selling_price", sellingPrice)}
-        />
+        {isReserveRow ? (
+          <span className="block text-right text-[10px] text-amber-700 px-1" title="予備費行は売価入力不可（売価0固定）">
+            売価0固定
+          </span>
+        ) : (
+          <IntegerInput
+            className={cn(ITEM_CELL_NUM, "text-blue-700")}
+            value={Number(draft.selling_price) || 0}
+            placeholder="0"
+            disabled={isTemp}
+            onValueChange={(sellingPrice) => {
+              setDraft((d) => recalcItemAmounts({ ...d, selling_price: sellingPrice }));
+            }}
+            onBlur={(sellingPrice) => void commit("selling_price", sellingPrice)}
+          />
+        )}
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums text-xs text-blue-700 bg-blue-50/30 font-medium whitespace-nowrap min-w-[6.5rem]">
         ¥{(draft.selling_amount ?? 0).toLocaleString()}
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums text-xs whitespace-nowrap w-14">
-        {(draft.gross_profit_rate ?? 0).toFixed(1)}%
+        {isReserveRow ? "—" : `${(draft.gross_profit_rate ?? 0).toFixed(1)}%`}
       </td>
-      <td className="px-2 py-1.5 text-muted-foreground text-xs whitespace-nowrap">—</td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        {isReserveRow ? (
+          <span className="text-[10px] text-amber-700 whitespace-nowrap">顧客PDF非表示</span>
+        ) : (
+          <input
+            className={cn(ITEM_CELL, "text-muted-foreground")}
+            value={draft.notes ?? ""}
+            placeholder="—"
+            disabled={isTemp}
+            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+            onBlur={() => void commit("notes", draft.notes ?? "")}
+          />
+        )}
+      </td>
+    </tr>
+  );
+}
+
+// ---- 大項目行（明細行と同等の直接入力・No.70/68） ---------------------------
+
+function CategoryHeaderRow({
+  category,
+  catItems,
+  collapsed,
+  candidates,
+  onToggle,
+  onRenamed,
+  onCategoryPatched,
+  handleProps,
+}: {
+  category: EstimateCategory;
+  catItems: EstimateItem[];
+  collapsed: boolean;
+  candidates: VendorCandidate[];
+  onToggle: () => void;
+  onRenamed: (next: EstimateCategory) => void;
+  onCategoryPatched: (next: EstimateCategory, totals?: EstimateTotalsPatch) => void;
+  handleProps: Record<string, unknown>;
+}) {
+  const [draft, setDraft] = useState(category);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(category);
+  }, [category]);
+
+  const isTemp = category.id.startsWith("temp-");
+  const eff = effectiveCategoryAmounts(draft, catItems);
+  const effRate = eff.selling_amount > 0
+    ? ((eff.selling_amount - eff.cost_amount) / eff.selling_amount) * 100
+    : 0;
+
+  const commit = async (patch: EstimateCategoryDetailPatch) => {
+    if (isTemp || saving) return;
+    const optimistic = { ...category, ...patch } as EstimateCategory;
+    onCategoryPatched(optimistic);
+    setSaving(true);
+    try {
+      const { category: saved, totals } = await updateEstimateCategoryDetails(category.id, patch);
+      onCategoryPatched(saved as EstimateCategory, totals);
+    } catch (e) {
+      onCategoryPatched(category);
+      setDraft(category);
+      toast.error(e instanceof Error ? e.message : "大項目の更新に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const commitField = <K extends keyof EstimateCategoryDetailPatch>(
+    field: K,
+    value: EstimateCategoryDetailPatch[K],
+  ) => {
+    const prev = category[field as keyof EstimateCategory];
+    if (prev === value || (prev == null && (value === "" || value === null))) return;
+    void commit({ [field]: value } as EstimateCategoryDetailPatch);
+  };
+
+  const commitVendor = (vendor: VendorValue) => {
+    if (
+      vendor.craftsmanId === (category.vendor_craftsman_id ?? null) &&
+      vendor.name === (category.vendor_name ?? "")
+    ) return;
+    void commit({ vendor_craftsman_id: vendor.craftsmanId, vendor_name: vendor.name || null });
+  };
+
+  const CAT_CELL =
+    "w-full bg-transparent border-0 outline-none text-xs leading-tight py-1 px-1 whitespace-nowrap placeholder:text-slate-400/70";
+
+  return (
+    <tr className={cn("bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70", saving && "opacity-70")}>
+      <td className="px-2 py-2 text-center">
+        <div className="flex items-center gap-0.5 justify-center">
+          <button
+            type="button"
+            className="text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+            aria-label="大項目を並べ替え"
+            {...handleProps}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+          <input type="checkbox" className="rounded border-slate-300" />
+        </div>
+      </td>
+      <td className="px-2 py-2 font-semibold text-slate-700">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <button
+            type="button"
+            className="text-slate-400 w-4 shrink-0 text-center hover:text-slate-700"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "展開" : "折りたたむ"}
+            onClick={onToggle}
+          >
+            {collapsed ? "▸" : "▾"}
+          </button>
+          <CategoryNameInput category={category} onRenamed={onRenamed} />
+          <span className="text-[10px] text-muted-foreground font-normal shrink-0">{catItems.length}項目</span>
+        </div>
+      </td>
+      <td className="px-2 py-2 whitespace-nowrap">
+        <input
+          className={cn(CAT_CELL, "text-slate-600")}
+          value={draft.specification ?? ""}
+          placeholder="形状・摘要"
+          disabled={isTemp}
+          onChange={(e) => setDraft((d) => ({ ...d, specification: e.target.value }))}
+          onBlur={() => commitField("specification", (draft.specification ?? "").trim() || null)}
+        />
+      </td>
+      <td className="px-2 py-2 whitespace-nowrap">
+        <VendorInput
+          vendorName={draft.vendor_name ?? ""}
+          candidates={candidates}
+          disabled={isTemp}
+          onCommit={commitVendor}
+        />
+      </td>
+      <td className="px-1.5 py-2 whitespace-nowrap w-14">
+        <IntegerInput
+          className={ITEM_CELL_NUM}
+          value={Number(draft.quantity) || 0}
+          placeholder="0"
+          disabled={isTemp}
+          onValueChange={(qty) => setDraft((d) => ({ ...d, quantity: qty }))}
+          onBlur={(qty) => commitField("quantity", Number(qty) || 0)}
+        />
+      </td>
+      <td className="px-1 py-2 whitespace-nowrap w-12">
+        <input
+          className={ITEM_CELL_UNIT}
+          value={draft.unit ?? ""}
+          placeholder="—"
+          disabled={isTemp}
+          onChange={(e) => setDraft((d) => ({ ...d, unit: e.target.value }))}
+          onBlur={() => commitField("unit", (draft.unit ?? "").trim() || null)}
+        />
+      </td>
+      <td className="px-1.5 py-2 bg-amber-50/40 whitespace-nowrap min-w-[6rem]">
+        <IntegerInput
+          className={cn(ITEM_CELL_NUM, "text-amber-700")}
+          value={Number(draft.cost_price) || 0}
+          placeholder="0"
+          disabled={isTemp}
+          onValueChange={(v) => setDraft((d) => ({ ...d, cost_price: v }))}
+          onBlur={(v) => commitField("cost_price", Number(v) || 0)}
+        />
+      </td>
+      <td className="px-2 py-2 text-right tabular-nums font-semibold bg-amber-50/40 whitespace-nowrap text-xs">
+        ¥{eff.cost_amount.toLocaleString()}
+      </td>
+      <td className="px-1.5 py-2 bg-blue-50/40 whitespace-nowrap min-w-[6rem]">
+        <IntegerInput
+          className={cn(ITEM_CELL_NUM, "text-blue-700")}
+          value={Number(draft.selling_price) || 0}
+          placeholder="0"
+          disabled={isTemp}
+          onValueChange={(v) => setDraft((d) => ({ ...d, selling_price: v }))}
+          onBlur={(v) => commitField("selling_price", Number(v) || 0)}
+        />
+      </td>
+      <td className="px-2 py-2 text-right tabular-nums font-semibold bg-blue-50/40 whitespace-nowrap text-xs">
+        ¥{eff.selling_amount.toLocaleString()}
+      </td>
+      <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-xs">{effRate.toFixed(1)}%</td>
+      <td className="px-2 py-2 whitespace-nowrap">
+        {eff.overridden && (
+          <Badge
+            variant="outline"
+            className="text-[9px] py-0 border-slate-400 text-slate-600 bg-white/60"
+            title="大項目の直接入力より配下の詳細行が優先されています"
+          >
+            詳細項目により上書き
+          </Badge>
+        )}
+      </td>
     </tr>
   );
 }
@@ -488,8 +952,16 @@ export function EstimateDetailView({
     remandComment: string | null;
     workflowRequestId: string | null;
   } | null>(null);
-  // 予備費は社員にも表示（非表示による不信感を防止）
+  // 経営調整費は社員にも表示（非表示による不信感を防止）
   const canSeeReserve = true;
+  // 発注業者のインクリメンタルサーチ候補（業者マスタ・システム予約含む）
+  const [vendorCandidates, setVendorCandidates] = useState<VendorCandidate[]>([]);
+
+  useEffect(() => {
+    getVendorCandidates()
+      .then(setVendorCandidates)
+      .catch(() => {});
+  }, []);
 
   const refreshMarginInfo = useCallback(() => {
     getEstimateMarginThreshold(estimate.id)
@@ -517,6 +989,71 @@ export function EstimateDetailView({
     items: items.filter((item) => item.category_id === cat.id),
   }));
   const uncategorized = items.filter((item) => !item.category_id);
+
+  // ── 並べ替え（DnD・No.59）────────────────────────────────────────────
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const aData = active.data.current as { type?: string; categoryId?: string } | undefined;
+    const oData = over.data.current as { type?: string; categoryId?: string } | undefined;
+
+    if (aData?.type === "category" && oData?.type === "category") {
+      const oldIndex = categories.findIndex((c) => c.id === active.id);
+      const newIndex = categories.findIndex((c) => c.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const next = arrayMove(categories, oldIndex, newIndex);
+      onEstimateChange({ ...estimate, categories: next });
+      try {
+        await reorderEstimateCategories(estimate.id, next.map((c) => c.id));
+      } catch (e) {
+        onEstimateChange({ ...estimate, categories });
+        toast.error(e instanceof Error ? e.message : "並べ替えの保存に失敗しました");
+      }
+      return;
+    }
+
+    // 明細行は同一大項目（または未分類）内のみ並べ替え可能
+    if (aData?.type === "item" && oData?.type === "item" && aData.categoryId === oData.categoryId) {
+      const catKey = aData.categoryId;
+      const group = items.filter((i) => (i.category_id ?? "none") === catKey);
+      const oldIndex = group.findIndex((i) => i.id === active.id);
+      const newIndex = group.findIndex((i) => i.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const newGroup = arrayMove(group, oldIndex, newIndex);
+      let cursor = 0;
+      const nextItems = items.map((i) =>
+        (i.category_id ?? "none") === catKey ? newGroup[cursor++] : i,
+      );
+      onEstimateChange({ ...estimate, items: nextItems });
+      try {
+        await reorderEstimateItems(estimate.id, newGroup.map((i) => i.id));
+      } catch (e) {
+        onEstimateChange({ ...estimate, items });
+        toast.error(e instanceof Error ? e.message : "並べ替えの保存に失敗しました");
+      }
+    }
+  };
+
+  // 大項目直接入力を含む有効合計（No.68: 詳細行があれば詳細優先）
+  const effectiveLineTotals = (() => {
+    let sell = 0;
+    let cost = 0;
+    for (const { category, items: catItems } of itemsByCategory) {
+      const eff = effectiveCategoryAmounts(category, catItems);
+      sell += eff.selling_amount;
+      cost += eff.cost_amount;
+    }
+    for (const i of uncategorized) {
+      if (i.is_text_row) continue;
+      sell += Number(i.selling_amount ?? 0);
+      cost += Number(i.cost_amount ?? 0);
+    }
+    return { sell, cost };
+  })();
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const [inlineAdd, setInlineAdd] = useState<"category" | string | null>(null);
   const [inlineAddKind, setInlineAddKind] = useState<"calc" | "text">("calc");
@@ -694,6 +1231,13 @@ export function EstimateDetailView({
     setInlineAdd(categoryId);
   };
 
+  // 独立テキスト行（大項目に紐づかない・No.69②）
+  const startAddStandaloneText = () => {
+    setInlineName("");
+    setInlineAddKind("text");
+    setInlineAdd("standalone-text");
+  };
+
   const cancelInline = () => { setInlineAdd(null); setInlineName(""); setInlineAddKind("calc"); };
 
   const commitInline = async () => {
@@ -732,8 +1276,9 @@ export function EstimateDetailView({
       return;
     }
 
-    const categoryId = mode;
-    const isTextRow = inlineAddKind === "text";
+    const isStandalone = mode === "standalone-text";
+    const categoryId = isStandalone ? null : mode;
+    const isTextRow = isStandalone || inlineAddKind === "text";
     const tempId = `temp-item-${Date.now()}`;
     const optimistic: EstimateItem = {
       id: tempId,
@@ -751,9 +1296,10 @@ export function EstimateDetailView({
       selling_amount: 0,
       gross_profit: 0,
       gross_profit_rate: 0,
-      sort_order: prevItems.filter((i) => i.category_id === categoryId).length,
+      sort_order: prevItems.filter((i) => (i.category_id ?? null) === categoryId).length,
       notes: null,
       is_text_row: isTextRow,
+      text_row_scope: isTextRow ? (categoryId ? "category" : "standalone") : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -786,12 +1332,8 @@ export function EstimateDetailView({
       // 合計再計算はサーバー側。最新を取り直さずローカルで概算反映
       const r1 = field === "reserve_fee_1_amount" ? next : reserve1Amount;
       const r2 = field === "reserve_fee_2_amount" ? next : reserve2Amount;
-      const lineCost = items
-        .filter((i) => !i.is_text_row)
-        .reduce((s, i) => s + (i.cost_amount ?? 0), 0);
-      const sell = items
-        .filter((i) => !i.is_text_row)
-        .reduce((s, i) => s + (i.selling_amount ?? 0), 0);
+      const lineCost = effectiveLineTotals.cost;
+      const sell = effectiveLineTotals.sell;
       const cost_total = lineCost + r1 + r2;
       const tax = Math.floor(sell * 0.1);
       onEstimateChange({
@@ -874,12 +1416,12 @@ export function EstimateDetailView({
     });
   };
 
-  const sumCost = (list: EstimateItem[]) => list.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
-  const sumSell = (list: EstimateItem[]) => list.reduce((s, i) => s + (i.selling_amount ?? 0), 0);
-  const calcRate = (cost: number, sell: number) => sell > 0 ? ((sell - cost) / sell) * 100 : 0;
-  // 明細からライブ算出（保存前の調整でもボタンが切り替わる）
-  const grossRate = calcGrossProfitRatePercent(items) || (estimate.gross_profit_rate ?? 0);
-  // 承認の基準は会社設定（会社指定粗利率＋予備費率）をサーバーから取得
+  // 明細（大項目直接入力含む）からライブ算出（保存前の調整でもボタンが切り替わる）
+  const liveGrossRate = effectiveLineTotals.sell > 0
+    ? ((effectiveLineTotals.sell - effectiveLineTotals.cost) / effectiveLineTotals.sell) * 100
+    : 0;
+  const grossRate = liveGrossRate || (estimate.gross_profit_rate ?? 0);
+  // 承認の基準は会社設定（会社指定粗利率＋経営調整費率）をサーバーから取得
   const marginThreshold = marginInfo?.threshold ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
   const reservePercent = marginInfo?.reservePercent ?? 0;
   const baseThreshold = marginInfo?.baseThreshold ?? marginThreshold;
@@ -1031,7 +1573,7 @@ export function EstimateDetailView({
                   setPdfOpen(true);
                 }}
               >
-                原価内訳書（社内・予備費含む）
+                原価内訳書（社内・経営調整費・予備費含む）
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1074,7 +1616,7 @@ export function EstimateDetailView({
           </div>
           <div className={cn("px-3 py-2", isLowMargin && "bg-amber-50/60")}>
             <p className={cn("text-[10px] leading-tight", isLowMargin ? "text-amber-700" : "text-muted-foreground")}>
-              粗利率<span className="ml-1">(基準 {marginThreshold.toFixed(0)}%{canSeeReserve && reservePercent > 0 ? `＝指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%` : ""})</span>
+              粗利率<span className="ml-1">(基準 {marginThreshold.toFixed(0)}%{canSeeReserve && reservePercent > 0 ? `＝指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%` : ""})</span>
             </p>
             <p className={cn("text-base font-bold tabular-nums leading-tight mt-px", isLowMargin ? "text-amber-600" : "text-emerald-700")}>
               {grossRate.toFixed(1)}%
@@ -1140,6 +1682,7 @@ export function EstimateDetailView({
               ここにドロップして大項目を追加
             </div>
           )}
+        <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
         <table className="w-full text-xs border-collapse min-w-[1100px] table-fixed">
           <colgroup>
             <col className="w-8" />
@@ -1271,51 +1814,40 @@ export function EstimateDetailView({
               <th className="text-left px-2 py-2 font-medium">備考</th>
             </tr>
           </thead>
+          <SortableContext items={categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {itemsByCategory.map(({ category, items: catItems }) => {
-            const catCost = sumCost(catItems);
-            const catSell = sumSell(catItems);
-            const catRate = calcRate(catCost, catSell);
             const collapsed = collapsedIds.has(category.id);
             const isAddingHere = inlineAdd === category.id;
             return (
-              <tbody key={category.id} className="group/cat">
-                <tr className="bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70">
-                  <td className="px-2 py-2 text-center">
-                    <input type="checkbox" className="rounded border-slate-300" />
-                  </td>
-                  <td className="px-3 py-2 font-semibold text-slate-700" colSpan={5}>
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <button
-                        type="button"
-                        className="text-slate-400 w-4 shrink-0 text-center hover:text-slate-700"
-                        aria-expanded={!collapsed}
-                        aria-label={collapsed ? "展開" : "折りたたむ"}
-                        onClick={() => toggleCategory(category.id)}
-                      >
-                        {collapsed ? "▸" : "▾"}
-                      </button>
-                      <CategoryNameInput
-                        category={category}
-                        onRenamed={(next) => {
-                          onEstimateChange({
-                            ...estimate,
-                            categories: categories.map((c) => (c.id === next.id ? { ...c, name: next.name } : c)),
-                          });
-                        }}
-                      />
-                      <span className="text-[10px] text-muted-foreground font-normal shrink-0">{catItems.length}項目</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-right text-muted-foreground bg-amber-50/40 whitespace-nowrap text-xs">小計</td>
-                  <td className="px-2 py-2 text-right tabular-nums font-semibold bg-amber-50/40 whitespace-nowrap text-xs">¥{catCost.toLocaleString()}</td>
-                  <td className="px-2 py-2 text-right text-muted-foreground bg-blue-50/40 whitespace-nowrap text-xs">小計</td>
-                  <td className="px-2 py-2 text-right tabular-nums font-semibold bg-blue-50/40 whitespace-nowrap text-xs">¥{catSell.toLocaleString()}</td>
-                  <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-xs">{catRate.toFixed(1)}%</td>
-                  <td className="px-3 py-2"></td>
-                </tr>
-                {!collapsed && catItems.map((item) => (
-                  <EstimateItemRow key={item.id} item={item} onUpdate={handleItemUpdate} />
-                ))}
+              <SortableCategoryTbody key={category.id} id={category.id}>
+                {(handleProps) => (
+                  <>
+                <CategoryHeaderRow
+                  category={category}
+                  catItems={catItems}
+                  collapsed={collapsed}
+                  candidates={vendorCandidates}
+                  onToggle={() => toggleCategory(category.id)}
+                  onRenamed={(next) => {
+                    onEstimateChange({
+                      ...estimate,
+                      categories: categories.map((c) => (c.id === next.id ? { ...c, name: next.name } : c)),
+                    });
+                  }}
+                  onCategoryPatched={(next, totals) => {
+                    onEstimateChange({
+                      ...estimate,
+                      categories: categories.map((c) => (c.id === next.id ? next : c)),
+                      ...(totals ?? {}),
+                    });
+                  }}
+                  handleProps={handleProps}
+                />
+                <SortableContext items={catItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                  {!collapsed && catItems.map((item) => (
+                    <EstimateItemRow key={item.id} item={item} candidates={vendorCandidates} onUpdate={handleItemUpdate} />
+                  ))}
+                </SortableContext>
                 {!collapsed && isAddingHere && (
                   <tr className="border-t border-primary/20 bg-primary/5">
                     <td className="px-2 py-1.5 text-center text-muted-foreground">＋</td>
@@ -1368,16 +1900,21 @@ export function EstimateDetailView({
                     </td>
                   </tr>
                 )}
-              </tbody>
+                  </>
+                )}
+              </SortableCategoryTbody>
             );
           })}
+          </SortableContext>
 
-          {/* 未分類項目 */}
+          {/* 未分類項目（独立テキスト行含む） */}
           {uncategorized.length > 0 && (
             <tbody>
-              {uncategorized.map((item) => (
-                <EstimateItemRow key={item.id} item={item} onUpdate={handleItemUpdate} />
-              ))}
+              <SortableContext items={uncategorized.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                {uncategorized.map((item) => (
+                  <EstimateItemRow key={item.id} item={item} candidates={vendorCandidates} onUpdate={handleItemUpdate} />
+                ))}
+              </SortableContext>
             </tbody>
           )}
 
@@ -1394,7 +1931,37 @@ export function EstimateDetailView({
 
           {/* 大項目追加 */}
           <tfoot className="group/cat-add">
-            {inlineAdd === "category" ? (
+            {inlineAdd === "standalone-text" ? (
+              <tr className="border-t border-primary/20 bg-primary/5">
+                <td className="px-2 py-1.5 text-center text-muted-foreground">＋</td>
+                <td className="px-2 py-1.5" colSpan={11}>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] shrink-0 border-slate-300 text-slate-600">
+                      独立テキスト行
+                    </Badge>
+                    <input
+                      ref={inlineInputRef}
+                      type="text"
+                      autoFocus
+                      value={inlineName}
+                      onChange={(e) => setInlineName(e.target.value)}
+                      onKeyDown={handleInlineKeyDown}
+                      placeholder="注釈テキストを入力（大項目に紐づかない独立行）..."
+                      className="flex-1 bg-transparent border-b border-primary outline-none text-xs py-0.5 placeholder:text-muted-foreground/50"
+                    />
+                    {savingLine
+                      ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                      : (
+                        <>
+                          <button type="button" onClick={() => void commitInline()} disabled={!inlineName.trim()} className="text-[10px] text-primary font-medium hover:underline disabled:opacity-40">追加</button>
+                          <button type="button" onClick={cancelInline} className="text-[10px] text-muted-foreground hover:underline">キャンセル</button>
+                        </>
+                      )
+                    }
+                  </div>
+                </td>
+              </tr>
+            ) : inlineAdd === "category" ? (
               <tr className="border-t border-primary/20 bg-primary/5">
                 <td className="px-2 py-1.5 text-center text-muted-foreground">＋</td>
                 <td className="px-2 py-1.5" colSpan={11}>
@@ -1424,7 +1991,7 @@ export function EstimateDetailView({
             ) : inlineAdd === null ? (
               <tr>
                 <td colSpan={12} className="p-0">
-                  <div className="px-3 py-2.5 border-t border-dashed border-border/40">
+                  <div className="px-3 py-2.5 border-t border-dashed border-border/40 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={startAddCategory}
@@ -1432,22 +1999,29 @@ export function EstimateDetailView({
                     >
                       <Plus className="h-3.5 w-3.5" />大項目を追加
                     </button>
+                    <button
+                      type="button"
+                      onClick={startAddStandaloneText}
+                      className="inline-flex items-center gap-1 text-xs text-slate-600 hover:bg-slate-100 rounded px-2 py-1"
+                    >
+                      <Plus className="h-3 w-3" />独立テキスト行を追加
+                    </button>
                   </div>
                 </td>
               </tr>
             ) : null}
-            {/* 予備費・予備予備費は明細表の外（サマリー付近）で記入。顧客向けPDF非出力 */}
+            {/* 経営調整費・予備費は明細表の外（サマリー付近）で記入。顧客向けPDF非出力 */}
             {(reserve1Amount <= 0 || reserve2Amount <= 0) && (
               <tr className="bg-rose-50 border-t border-rose-200">
                 <td colSpan={12} className="px-3 py-2 text-[11px] text-rose-800 font-medium">
-                  予備費・予備予備費を両方計上してください。未計上のままでは確定・提出できません。
+                  経営調整費・予備費を両方計上してください。未計上のままでは確定・提出できません。
                 </td>
               </tr>
             )}
             <tr className="bg-amber-50/40 border-t border-amber-200/60">
               <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
-                <span className="font-medium">予備費（会社確保分）</span>
-                <span className="block text-[10px] text-muted-foreground font-normal">担当者は使用不可・売価ゼロ</span>
+                <span className="font-medium">経営調整費（会社確保分）</span>
+                <span className="block text-[10px] text-muted-foreground font-normal">会社規定%・担当者は編集不可・売価ゼロ</span>
               </td>
               <td colSpan={2} className="px-3 py-2.5">
                 <IntegerInput
@@ -1465,8 +2039,8 @@ export function EstimateDetailView({
             </tr>
             <tr className="bg-amber-50/25 border-t border-amber-100/80">
               <td colSpan={6} className="px-3 py-2.5 text-right text-xs text-amber-900">
-                <span className="font-medium">予備予備費（現場対応分）</span>
-                <span className="block text-[10px] text-muted-foreground font-normal">実行予算移行後に明細側で操作可</span>
+                <span className="font-medium">予備費（現場対応分）</span>
+                <span className="block text-[10px] text-muted-foreground font-normal">担当者がリスク用に計上・実行予算移行後に明細側で操作可</span>
               </td>
               <td colSpan={2} className="px-3 py-2.5">
                 <IntegerInput
@@ -1490,6 +2064,7 @@ export function EstimateDetailView({
             </tr>
           </tfoot>
         </table>
+        </DndContext>
         </div>
       </div>
 

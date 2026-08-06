@@ -22,6 +22,8 @@ import {
   ClipboardList,
   Settings2,
   RotateCcw,
+  ChevronUp,
+  ChevronDown,
   MessageSquare,
   Clock,
   ClipboardCheck,
@@ -210,6 +212,19 @@ export function DashboardClient({
     { id: "kpi-approvals",     label: "承認待ち",    value: String(data?.workflow.pendingApprovals ?? 0),                     sub: "件",     icon: Clock },
     { id: "kpi-contracts",     label: "進行中契約",  value: String(data?.productionSummary.activeContracts ?? 0),             sub: "件",     icon: ClipboardCheck },
   ];
+
+  // No.56: KPI指標をユーザー設定（useWidgets の order）に従って並び替え
+  const kpiWidgets = widgets.filter((w) => w.id.startsWith("kpi-"));
+  const kpiOrderMap = new Map(kpiWidgets.map((w, i) => [w.id, i]));
+  const orderedKpis = [...kpis].sort(
+    (a, b) => (kpiOrderMap.get(a.id) ?? 99) - (kpiOrderMap.get(b.id) ?? 99),
+  );
+  /** KPI同士でのみ順序を入れ替える（間にある他ウィジェットの順序は保つ） */
+  const moveKpi = (id: string, dir: -1 | 1) => {
+    const idx = kpiWidgets.findIndex((w) => w.id === id);
+    const neighbor = kpiWidgets[idx + dir];
+    if (idx !== -1 && neighbor) reorder(id, neighbor.id);
+  };
 
   const renderCard = (id: string) => {
     switch (id) {
@@ -960,12 +975,32 @@ export function DashboardClient({
 
             <div className="border-t border-border/60 mb-3" />
 
-            {/* KPI セクション */}
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">KPI指標</p>
+            {/* KPI セクション（No.56: 表示ON/OFF + 上下ボタンで並び替え） */}
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">KPI指標（並び替え可）</p>
             <div className="space-y-0.5 mb-3">
-              {widgets.filter((w) => w.id.startsWith("kpi-")).map((w) => (
-                <div key={w.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <span className={`text-sm ${w.visible ? "text-foreground" : "text-muted-foreground"}`}>{w.label}</span>
+              {kpiWidgets.map((w, i) => (
+                <div key={w.id} className="flex items-center justify-between gap-1 py-1 px-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <span className={`text-sm flex-1 min-w-0 truncate ${w.visible ? "text-foreground" : "text-muted-foreground"}`}>{w.label}</span>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveKpi(w.id, -1)}
+                      disabled={i === 0}
+                      className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      title="上へ移動"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveKpi(w.id, 1)}
+                      disabled={i === kpiWidgets.length - 1}
+                      className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      title="下へ移動"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <Switch checked={w.visible} onCheckedChange={() => toggleVisible(w.id)} className="scale-90" />
                 </div>
               ))}
@@ -988,11 +1023,11 @@ export function DashboardClient({
         </div>
       </div>
 
-      {/* KPI row — 個別表示制御 */}
-      {kpis.some((k) => isVisible(k.id)) && (
+      {/* KPI row — 個別表示制御 + ユーザー設定順（No.56） */}
+      {orderedKpis.some((k) => isVisible(k.id)) && (
         <KpiRow
           loading={loading}
-          items={kpis.filter((k) => isVisible(k.id))}
+          items={orderedKpis.filter((k) => isVisible(k.id))}
           columns={4}
         />
       )}

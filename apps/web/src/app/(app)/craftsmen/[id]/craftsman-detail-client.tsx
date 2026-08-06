@@ -27,9 +27,12 @@ export function CraftsmanDetailClient({ initialData }: CraftsmanDetailClientProp
     setData(initialData);
   }, [initialData]);
 
+  const isSystem = data?.kind === "system";
+
   const handleDelete = async () => {
+    if (isSystem) { toast.error("システム予約の業者（未登録業者・予備費）は削除できません"); return; }
     if (!confirm("この職人を削除しますか？")) return;
-    try { await deleteCraftsman(id as string); toast.success("削除しました"); router.push("/craftsmen"); } catch { toast.error("削除に失敗"); }
+    try { await deleteCraftsman(id as string); toast.success("削除しました"); router.push("/craftsmen"); } catch (e) { toast.error(e instanceof Error ? e.message : "削除に失敗"); }
   };
 
   if (!data) return <div className="p-4 md:p-8"><Link href="/craftsmen" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="mt-4">見つかりません</p></div>;
@@ -41,12 +44,19 @@ export function CraftsmanDetailClient({ initialData }: CraftsmanDetailClientProp
         <div className="flex items-center gap-4">
           <CustomerAvatar seed={data.id} name={data.name} size="lg" />
           <div><h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
+          {isSystem && <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">システム予約</Badge>}
           {data.specialty && <Badge variant="secondary">{SPEC_LABELS[data.specialty]}</Badge>}
           {data.rank && <Badge>{data.rank}ランク</Badge>}
         </div>
         <div className="flex gap-2">
-          <Link href={`/craftsmen/${id}/edit`}><Button variant="outline" size="sm"><Pencil className="h-4 w-4 mr-1" />編集</Button></Link>
-          <Button variant="outline" size="sm" onClick={handleDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-1" />削除</Button>
+          {isSystem ? (
+            <span className="text-xs text-muted-foreground self-center">システム予約のため削除・改名できません</span>
+          ) : (
+            <>
+              <Link href={`/craftsmen/${id}/edit`}><Button variant="outline" size="sm"><Pencil className="h-4 w-4 mr-1" />編集</Button></Link>
+              <Button variant="outline" size="sm" onClick={handleDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-1" />削除</Button>
+            </>
+          )}
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

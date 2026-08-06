@@ -32,6 +32,7 @@ const HEAL_FEATURE_KEYS = [
 export const ROUTE_FEATURE_KEYS: Array<{ prefix: string; featureKey: string }> = [
   { prefix: "/bi2", featureKey: "bi2" },
   { prefix: "/bi", featureKey: "bi" },
+  { prefix: "/financials", featureKey: "financials" },
   { prefix: "/leads", featureKey: "leads" },
   { prefix: "/crm", featureKey: "crm" },
   { prefix: "/deals", featureKey: "deals" },
@@ -65,6 +66,8 @@ export function buildDefaultRolePermissions(): RolePermissions {
     const restricted = NAV_ITEM_ROLES[sourceKey] as Role[] | undefined;
     result[key] = restricted ? [...restricted] : [...all];
   });
+  // 決算書（No.85/103）: 本部管理者・管理者・経営層のみ
+  result.financials = ["hq_admin", "admin", "executive"];
   result["marketing-email"] = ["hq_admin"];
   result["marketing-sns"] = ["hq_admin"];
   result["marketing-roi"] = ["hq_admin"];

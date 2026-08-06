@@ -20,6 +20,8 @@ export type Profile = {
   department: string | null;
   position: string | null;
   phone: string | null;
+  /** 従業員区分（1人当たり利益の係数: full_time=1.0 / part_time=0.5）。マイグレーション未適用環境では undefined */
+  employment_type?: 'full_time' | 'part_time';
   created_at: string;
   updated_at: string;
 };
@@ -138,6 +140,10 @@ export type Craftsman = {
   company_name: string | null;
   phone: string | null;
   email: string | null;
+  /** 種別: vendor=実業者（デフォルト）/ system=システム予約（削除・改名不可） */
+  kind?: 'vendor' | 'system';
+  /** システム予約の識別キー（unregistered=未登録業者 / reserve=予備費）。kind=system のときのみ */
+  system_key?: 'unregistered' | 'reserve' | null;
   specialty: 'carpenter' | 'electrical' | 'interior' | 'plumbing' | 'general' | null;
   rank: 'A' | 'B' | 'C' | null;
   report_rate: number;
@@ -173,9 +179,9 @@ export type Estimate = {
   gross_profit_rate: number;
   reserve_fee_1_rate: number;
   reserve_fee_2_rate: number;
-  /** 予備費（会社確保分）金額。明細外サマリーで記入 */
+  /** 経営調整費（会社規定%・担当者編集不可）金額。明細外サマリーで記入（旧称: 予備費） */
   reserve_fee_1_amount?: number;
-  /** 予備予備費（現場対応分）金額。明細外サマリーで記入 */
+  /** 予備費（担当者がリスク用に計上）金額。明細外サマリーで記入（旧称: 予備予備費） */
   reserve_fee_2_amount?: number;
   default_gross_profit_rate: number;
   validity_date: string | null;
@@ -217,6 +223,20 @@ export type EstimateCategory = {
   name: string;
   sort_order: number;
   reserve_fee_rate?: number;
+  /** 大項目の形状・摘要（直接入力）。配下詳細行に金額があれば詳細優先 */
+  specification?: string | null;
+  /** 大項目の発注業者（業者マスタ参照） */
+  vendor_craftsman_id?: string | null;
+  /** 大項目の発注業者表示名 */
+  vendor_name?: string | null;
+  /** 大項目の数量（直接入力） */
+  quantity?: number;
+  /** 大項目の単位（直接入力） */
+  unit?: string | null;
+  /** 大項目の原単価（直接入力） */
+  cost_price?: number;
+  /** 大項目の見積単価（直接入力） */
+  selling_price?: number;
   created_at: string;
 };
 
@@ -240,6 +260,14 @@ export type EstimateItem = {
   notes: string | null;
   /** テキスト行（注釈用・売価ゼロ・計算なし） */
   is_text_row?: boolean;
+  /** テキスト行の種類: category=大項目に紐づく / standalone=独立 */
+  text_row_scope?: 'category' | 'standalone' | null;
+  /** 発注業者（業者マスタ craftsmen 参照）。未登録の自由入力は vendor_name のみ */
+  vendor_craftsman_id?: string | null;
+  /** 発注業者の表示名 */
+  vendor_name?: string | null;
+  /** 予備費行（発注業者=システム予約「予備費」）。原価のみ・売価0固定・顧客向けPDF非表示 */
+  is_reserve_row?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -613,4 +641,68 @@ export type InternalMessage = {
   sender?: { id: string; display_name: string; avatar_url: string | null };
   recipient?: { id: string; display_name: string; avatar_url: string | null } | null;
   related_customer?: { id: string; name: string } | null;
+};
+
+// ── 決算書（財務諸表）関連: 00069_financial_statements.sql ──────────────
+
+/** PL区分（No.87 勘定科目マスタの第1階層） */
+export type FinancialAccountSection =
+  | 'revenue'
+  | 'cogs'
+  | 'sga'
+  | 'non_operating_income'
+  | 'non_operating_expense';
+
+/** 製造原価報告書のサブ区分（No.90: 材料費/労務費/外注費/製造経費） */
+export type FinancialCogsCategory = 'material' | 'labor' | 'outsourcing' | 'expense';
+
+export type FinancialAccountItem = {
+  id: string;
+  company_id: string;
+  section: FinancialAccountSection;
+  cogs_category: FinancialCogsCategory | null;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FinancialStatement = {
+  id: string;
+  company_id: string;
+  /** 決算期の開始年（西暦） */
+  fiscal_year: number;
+  /** 決算期の開始月（1〜12） */
+  start_month: number;
+  /** 自動生成ラベル（例: 2025年8月〜2026年7月期）手入力禁止（No.104） */
+  period_label: string;
+  status: 'draft' | 'final';
+  finalized_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  lines?: FinancialStatementLine[];
+};
+
+export type FinancialStatementLine = {
+  id: string;
+  company_id: string;
+  statement_id: string;
+  account_item_id: string;
+  budget_amount: number;
+  actual_amount: number;
+  prior_actual_amount: number;
+  variance_note: string | null;
+  created_at: string;
+  updated_at: string;
+  account_item?: FinancialAccountItem;
+};
+
+export type FinancialReportSettings = {
+  company_id: string;
+  /** 実績列の見出しラベル（No.101 例: 実績（弥生）） */
+  actual_column_label: string;
+  created_at: string;
+  updated_at: string;
 };

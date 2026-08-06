@@ -99,6 +99,8 @@ export const ADMIN_ROLES: Role[] = ["hq_admin", "admin"];
 export const ROUTE_ROLES: Record<string, Role[]> = {
   "/bi":          ["hq_admin", "contractor_admin", "admin", "executive"],
   "/bi2":         ["hq_admin", "contractor_admin", "admin", "executive"],
+  // 決算書（No.85/103）: 経営情報のためアクセスは本部管理者・管理者・経営層のみ
+  "/financials":  ["hq_admin", "admin", "executive"],
   // 営業・経営層はリード系（問い合わせ/顧客/商談/見積/職人）にアクセス可能
   "/leads":       ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   "/crm":         ["hq_admin", "contractor_admin", "admin", "sales", "executive"],

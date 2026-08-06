@@ -86,6 +86,7 @@ import {
   listTeamMembers,
   inviteTeamMember,
   updateTeamMemberRole,
+  updateTeamMemberEmploymentType,
   removeTeamMember,
   resendTeamInvite,
   type TeamRole,
@@ -288,6 +289,7 @@ export function SettingsClient({
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [resendTarget, setResendTarget] = useState<Profile | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+  const [updatingEmploymentId, setUpdatingEmploymentId] = useState<string | null>(null);
 
   const reloadMembers = useCallback(async () => {
     if (!canManageMembers) return;
@@ -602,6 +604,28 @@ export function SettingsClient({
       });
     } finally {
       setUpdatingRoleId(null);
+    }
+  };
+
+  /** 従業員区分の変更（No.77/78: BIの1人当たり利益で係数として使用） */
+  const handleChangeEmploymentType = async (
+    member: Profile,
+    employmentType: "full_time" | "part_time",
+  ) => {
+    if ((member.employment_type ?? "full_time") === employmentType) return;
+    setUpdatingEmploymentId(member.id);
+    const prev = [...members];
+    setMembers((m) => m.map((x) => (x.id === member.id ? { ...x, employment_type: employmentType } : x)));
+    try {
+      await updateTeamMemberEmploymentType(member.id, employmentType);
+      toast.success("従業員区分を変更しました");
+    } catch (e) {
+      setMembers(prev);
+      toast.error("従業員区分の変更に失敗しました", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setUpdatingEmploymentId(null);
     }
   };
 
@@ -1134,6 +1158,7 @@ export function SettingsClient({
                           <th className="text-left px-3 py-2 font-medium">表示名</th>
                           <th className="text-left px-3 py-2 font-medium">メール</th>
                           <th className="text-left px-3 py-2 font-medium">ロール</th>
+                          <th className="text-left px-3 py-2 font-medium">従業員区分</th>
                           <th className="text-right px-3 py-2 font-medium">操作</th>
                         </tr>
                       </thead>
@@ -1187,6 +1212,21 @@ export function SettingsClient({
                                     {isSelf && <span className="ml-1">（自分）</span>}
                                   </Badge>
                                 )}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <Select
+                                  value={m.employment_type ?? "full_time"}
+                                  onValueChange={(v) => void handleChangeEmploymentType(m, v as "full_time" | "part_time")}
+                                  disabled={updatingEmploymentId === m.id}
+                                >
+                                  <SelectTrigger className="h-7 data-[size=default]:h-7 py-0 text-xs px-2 w-[110px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="full_time">正社員（1.0）</SelectItem>
+                                    <SelectItem value="part_time">パート（0.5）</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </td>
                               <td className="px-3 py-2.5 text-right">
                                 {canEditThis ? (

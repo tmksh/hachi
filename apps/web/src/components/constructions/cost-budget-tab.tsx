@@ -392,7 +392,7 @@ function mapEstimateToBudgetRows(
     selling_amount: number;
     is_text_row?: boolean | null;
   }[],
-  /** 実行予算移行後は予備予備費のみ明細側へ戻す（議事録） */
+  /** 実行予算移行後は予備費（現場対応分・旧予備予備費）のみ明細側へ戻す（議事録） */
   reserveFee2Amount = 0,
 ): ContractorRow[] {
   const calcItems = items.filter((item) => !item.is_text_row);
@@ -430,13 +430,13 @@ function mapEstimateToBudgetRows(
     monthly: {},
   }));
 
-  // 予備予備費（現場対応分）を明細行として戻す。担当者が金額ベースで付け替え可能
+  // 予備費（現場対応分）を明細行として戻す。担当者が金額ベースで付け替え可能
   if (reserveFee2Amount > 0) {
     rows.push({
       id: `est-reserve2-${Date.now()}`,
       status: "未発注" as const,
       name: "",
-      work_type: "予備予備費（現場対応分）",
+      work_type: "予備費（現場対応分）",
       budget: 0,
       add_contracts: [0, 0],
       management_budget: 0,
@@ -632,7 +632,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     if (targets.length === 0) return;
     const unnamed = targets.filter(r => !r.name.trim());
     if (unnamed.length > 0) {
-      toast.error("施工業者名が未入力の行が選択されています");
+      toast.error("業者名が未入力の行が選択されています");
       return;
     }
     setBulkOrdering(true);
@@ -1025,7 +1025,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
               </th>
               <th className={cn(th, "bg-gray-100")}>#</th>
               <th className={cn(th, "bg-gray-100")}>発注</th>
-              <th className={cn(th, "bg-gray-100 text-left")}>施工業者名</th>
+              <th className={cn(th, "bg-gray-100 text-left")}>業者名</th>
               <th className={cn(th, "bg-gray-100 text-left")}>工種</th>
               <th className={cn(th, "bg-blue-50")}>実行予算</th>
               {Array.from({ length: contractColCount }).map((_, i) => (
@@ -1069,7 +1069,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                       checked={selectedIds.has(row.id)}
                       onChange={() => toggleSelected(row.id)}
                       disabled={!row.name.trim()}
-                      title={row.name.trim() ? "一括発注の対象に選択" : "施工業者名を入力すると選択できます"}
+                      title={row.name.trim() ? "一括発注の対象に選択" : "業者名を入力すると選択できます"}
                       className="accent-blue-600 cursor-pointer disabled:cursor-not-allowed"
                     />
                   </td>

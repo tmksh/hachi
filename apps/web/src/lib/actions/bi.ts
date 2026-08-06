@@ -823,6 +823,131 @@ export type BiProspectSummary = {
   hasSpecial: boolean;
 };
 
+// ── 部門別 PJ（案件/工事）一覧（No.75/84） ────────────────────────────
+export type BiDepartmentProject = {
+  id: string;
+  /** 顧客名。閲覧権限がないロールにはサーバー側で「（非表示）」を返す */
+  customerName: string;
+  projectName: string;
+  /** 売上（万円） */
+  revenue: number;
+  /** 粗利率（%） */
+  grossProfitRate: number;
+  /** 工事粗利（万円） */
+  grossProfit: number;
+  /** 原価（万円） */
+  cost: number;
+};
+
+export type BiDepartmentProjectsResult = {
+  rows: BiDepartmentProject[];
+  /** 顧客名を表示できるロールか（hq_admin / admin / executive） */
+  canViewCustomer: boolean;
+};
+
+/** 顧客名の閲覧を許可するロール（No.84） */
+const CUSTOMER_NAME_VISIBLE_ROLES = ["hq_admin", "admin", "executive"];
+const CUSTOMER_NAME_HIDDEN = "（非表示）";
+
+export async function getBiDepartmentProjects(
+  departmentName: string,
+  fiscalYear?: number,
+): Promise<BiDepartmentProjectsResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { rows: [], canViewCustomer: false };
+
+  const [{ data: profile }, fiscalMonthStart, companyConfig] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", user.id).single(),
+    getCompanyFiscalMonthStart(),
+    getBiCompanyConfig(),
+  ]);
+  const canViewCustomer = CUSTOMER_NAME_VISIBLE_ROLES.includes(profile?.role ?? "");
+
+  const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
+  const { start, end } = fiscalYearRange(year, fiscalMonthStart);
+
+  const [{ data: constructions }, { data: settings }] = await Promise.all([
+    supabase
+      .from("constructions")
+      .select("id, title, department_name, status, order_amount, actual_cost, budget_cost, end_date, start_date, customer:customers(name)")
+      .or(
+        `and(start_date.lte.${end},end_date.gte.${start}),and(start_date.gte.${start},start_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end})`,
+      ),
+    supabase
+      .from("bi_annual_settings")
+      .select("department_targets:bi_department_targets(department_name, sort_order)")
+      .eq("fiscal_year", year)
+      .maybeSingle(),
+  ]);
+
+  const deptNames = (settings?.department_targets ?? [])
+    .sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order)
+    .map((d: { department_name: string }) => d.department_name);
+  const departments = deptNames.length > 0 ? deptNames : [...DEFAULT_DEPARTMENTS];
+  const unassigned = companyConfig.unassigned_department_label;
+
+  const rows: BiDepartmentProject[] = (constructions ?? [])
+    .filter((c) => resolveDepartmentName(c.department_name, departments, unassigned) === departmentName)
+    .map((c) => {
+      const { revenue, grossProfit } = constructionMetrics(c, companyConfig.invoice_gross_profit_rate);
+      const customer = c.customer as { name?: string } | { name?: string }[] | null;
+      const customerName = Array.isArray(customer) ? customer[0]?.name : customer?.name;
+      return {
+        id: c.id,
+        customerName: canViewCustomer ? (customerName ?? "—") : CUSTOMER_NAME_HIDDEN,
+        projectName: c.title ?? "—",
+        revenue: toManYen(revenue),
+        grossProfitRate: revenue > 0 ? Math.round((grossProfit / revenue) * 1000) / 10 : 0,
+        grossProfit: toManYen(grossProfit),
+        cost: toManYen(revenue - grossProfit),
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+
+  return { rows, canViewCustomer };
+}
+
+// ── 換算人数（No.77/78: 正社員=1.0 / パート=0.5） ────────────────────
+export type BiHeadcountSummary = {
+  /** 係数合計（正社員=1.0 / パート=0.5） */
+  weight: number;
+  fullTimeCount: number;
+  partTimeCount: number;
+};
+
+export async function getBiHeadcount(): Promise<BiHeadcountSummary> {
+  const { supabase, companyId } = await getCompanyId();
+  if (!companyId) return { weight: 0, fullTimeCount: 0, partTimeCount: 0 };
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("employment_type")
+    .eq("company_id", companyId);
+
+  // employment_type カラム未適用の環境では全員を正社員として集計する
+  if (error) {
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId);
+    const fullTimeCount = count ?? 0;
+    return { weight: fullTimeCount, fullTimeCount, partTimeCount: 0 };
+  }
+
+  let fullTimeCount = 0;
+  let partTimeCount = 0;
+  for (const row of data ?? []) {
+    if ((row as { employment_type?: string }).employment_type === "part_time") partTimeCount += 1;
+    else fullTimeCount += 1;
+  }
+  return {
+    weight: fullTimeCount + partTimeCount * 0.5,
+    fullTimeCount,
+    partTimeCount,
+  };
+}
+
 export async function getBiProspectSummary(): Promise<BiProspectSummary> {
   const [{ supabase, companyId }, config] = await Promise.all([
     getCompanyId(),

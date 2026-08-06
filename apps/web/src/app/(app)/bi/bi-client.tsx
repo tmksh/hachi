@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -20,13 +21,23 @@ import {
   RotateCcw,
   MessageCircle,
   Sparkles,
+  FileText,
+  Users,
 } from "lucide-react";
 import { useBridgeChat } from "@/contexts/chat-panel-context";
 import { ComboChart } from "@/components/charts/combo-chart";
 import { TrendAreaChart } from "@/components/charts/trend-area-chart";
 import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
-import { getBiSettings, getBiActuals, getBiProspectSummary, releaseReserve, type BiProspectSummary } from "@/lib/actions/bi";
+import {
+  getBiSettings,
+  getBiActuals,
+  getBiProspectSummary,
+  getBiHeadcount,
+  releaseReserve,
+  type BiProspectSummary,
+  type BiHeadcountSummary,
+} from "@/lib/actions/bi";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import { toast } from "sonner";
@@ -49,8 +60,13 @@ import {
   applyLiveRatesToProspectMock,
   buildBiDashboardMonthlyCombo,
 } from "@/lib/bi-mock-data";
+import {
+  getFinancialActualsForBi,
+  type FinancialActualsForBi,
+} from "@/lib/actions/financial-statements";
 import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
 import { BiDepartmentCards } from "@/components/bi/bi-department-cards";
+import { BiDepartmentProjectsSheet } from "@/components/bi/bi-department-projects-sheet";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { cn } from "@/lib/utils";
 import { useBrandColor } from "@/hooks/use-brand-color";
@@ -77,11 +93,30 @@ const FALLBACK_FORECAST_TIERS = [
 // ── ユーティリティ ──────────────────────────────────────────────────
 function r1(v: number) { return Math.round(v * 10) / 10; }
 function pct(part: number, whole: number) { return whole > 0 ? r1((part / whole) * 100) : 0; }
-function fmtMan(v: number) { return `¥${Math.abs(v).toLocaleString()}万`; }
-function fmtSigned(v: number) { return v < 0 ? `▲${fmtMan(v)}` : fmtMan(v); }
-function fmtTargetMan(v: number | null | undefined) {
-  if (v == null) return "未設定";
-  return fmtMan(v);
+
+/** 表示単位（No.82）。内部データは円（画面上は万円）で保持し、表示のみ切り替える */
+type BiDisplayUnit = "man" | "yen" | "thousand" | "million";
+
+const BI_DISPLAY_UNIT_OPTIONS: Array<{ value: BiDisplayUnit; label: string }> = [
+  { value: "man", label: "万円" },
+  { value: "yen", label: "円" },
+  { value: "thousand", label: "千円" },
+  { value: "million", label: "百万円" },
+];
+
+/** 万円の値を選択中の表示単位でフォーマット */
+function fmtManWithUnit(v: number, unit: BiDisplayUnit): string {
+  const man = Math.abs(v);
+  switch (unit) {
+    case "yen":
+      return `¥${Math.round(man * 10_000).toLocaleString()}`;
+    case "thousand":
+      return `¥${Math.round(man * 10).toLocaleString()}千円`;
+    case "million":
+      return `¥${(man / 100).toLocaleString("ja-JP", { maximumFractionDigits: 1 })}百万円`;
+    default:
+      return `¥${man.toLocaleString()}万`;
+  }
 }
 function deltaLabel(pt: number | null | undefined, unit = "pt") {
   if (pt == null) return undefined;
@@ -214,9 +249,13 @@ function resolveMonthlyAllocation(
   return v > 0 ? v : 0;
 }
 
-function fmtMonthlyAlloc(allocation: number, settingsConfigured: boolean) {
+function fmtMonthlyAlloc(
+  allocation: number,
+  settingsConfigured: boolean,
+  fmt: (v: number) => string,
+) {
   if (!settingsConfigured || allocation <= 0) return "—";
-  return `▲¥${allocation.toLocaleString()}万`;
+  return `▲${fmt(allocation)}`;
 }
 
 // ── セクションヘッダー ───────────────────────────────────────────────
@@ -356,6 +395,39 @@ export function BiClient({
   const { openBridgeChat } = useBridgeChat();
   /** idle → 提案表示 → 回答済み */
   const [consultStep, setConsultStep] = useState<"idle" | "suggest" | "done">("idle");
+  /** 表示単位切替（No.82）。内部データは変えず表示のみ変換 */
+  const [displayUnit, setDisplayUnit] = useState<BiDisplayUnit>("man");
+  /** 部門PJ一覧パネル（No.75）で表示中の部門名 */
+  const [deptDetailName, setDeptDetailName] = useState<string | null>(null);
+  /** 換算人数（No.77/78: 正社員=1.0 / パート=0.5） */
+  const [headcount, setHeadcount] = useState<BiHeadcountSummary | null>(null);
+  const [perCapitaTab, setPerCapitaTab] = useState<"op" | "gpt">("op");
+  /** No.95: 選択年度の確定済み決算書（存在すれば確定値として表示） */
+  const [finActuals, setFinActuals] = useState<FinancialActualsForBi | null>(null);
+
+  const fmtMan = useCallback((v: number) => fmtManWithUnit(v, displayUnit), [displayUnit]);
+  const fmtSigned = useCallback((v: number) => (v < 0 ? `▲${fmtMan(v)}` : fmtMan(v)), [fmtMan]);
+  const fmtTargetMan = useCallback(
+    (v: number | null | undefined) => (v == null ? "未設定" : fmtMan(v)),
+    [fmtMan],
+  );
+
+  // 決算書（/financials）へのリンクは経営層ロールのみ表示（No.79）
+  const canViewFinancials = ["hq_admin", "admin", "executive"].includes(role ?? "");
+
+  useEffect(() => {
+    getBiHeadcount().then(setHeadcount).catch(() => {});
+  }, []);
+
+  // No.95: 確定済み決算書があれば取得してBIに反映（無ければ null → 速報値表示）
+  useEffect(() => {
+    let cancelled = false;
+    setFinActuals(null);
+    getFinancialActualsForBi(fiscalYear)
+      .then((fa) => { if (!cancelled) setFinActuals(fa); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [fiscalYear]);
 
   useEffect(() => {
     setConsultStep("idle");
@@ -499,10 +571,25 @@ export function BiClient({
 
   const grossProfitRate  = pct(totalGrossProfit, totalRevenue);
   const achieveRateTotal = pct(totalRevenue, targetRevenueForCalc);
-  const grossProfitTotal = totalGrossProfit - overheadForCalc;
+
+  // No.105: 固定費（予定配賦）・販管費の年額は、期中は月割り（経過月数/12）で按分して控除する。
+  // 過年度は12ヶ月分（=年額）をそのまま使用。
+  const elapsedMonths = fiscalYear === getCurrentFiscalYear(fiscalMonthStart)
+    ? Math.max(1, Math.min(getForecastStartIndex(fiscalMonthStart), 12))
+    : 12;
+  const overheadYtd = Math.round(overheadForCalc * elapsedMonths / 12);
+  const sgaYtd      = Math.round(sgaForCalc * elapsedMonths / 12);
+
+  const grossProfitTotal = totalGrossProfit - overheadYtd;
   const gptRate          = pct(grossProfitTotal, totalRevenue);
-  const operatingProfit  = grossProfitTotal - sgaForCalc;
+  const operatingProfit  = grossProfitTotal - sgaYtd;
   const opRate           = pct(operatingProfit, totalRevenue);
+
+  // 1人当たり利益（No.77/78）: 従業員区分の係数合計（正社員=1.0 / パート=0.5）で割る
+  const headcountWeight = headcount?.weight ?? 0;
+  const perCapitaValue = headcountWeight > 0
+    ? Math.round(((perCapitaTab === "op" ? operatingProfit : grossProfitTotal) / headcountWeight) * 10) / 10
+    : null;
   const consultActionAsk =
     operatingProfit < 0
       ? "見込みの高い商談へ、今週中に再メール・電話のフォローを出しますか？"
@@ -732,9 +819,38 @@ export function BiClient({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">BIダッシュボード</h1>
-          <p className="text-sm mt-1 text-muted-foreground">{fiscalYearLabel(fiscalYear)}</p>
+          <p className="text-sm mt-1 text-muted-foreground flex items-center gap-2">
+            {fiscalYearLabel(fiscalYear)}
+            {/* No.83/95: 確定済み決算書があれば「確定値」、当期で未確定なら「速報値」を明示 */}
+            {finActuals ? (
+              <span
+                className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                title={`決算書「${finActuals.periodLabel}」の確定値が登録されています`}
+              >
+                確定値あり
+              </span>
+            ) : isCurrentFY && (
+              <span
+                className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
+                title="決算確定前の数字（速報値）です"
+              >
+                速報値
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* No.82: 表示単位切替（内部データは変えず表示のみ） */}
+          <Select value={displayUnit} onValueChange={(v) => setDisplayUnit(v as BiDisplayUnit)}>
+            <SelectTrigger className="w-[100px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BI_DISPLAY_UNIT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={String(fiscalYear)} onValueChange={(v) => setFiscalYear(Number(v))}>
             <SelectTrigger className="w-[120px] h-8 text-xs">
               <SelectValue />
@@ -745,6 +861,14 @@ export function BiClient({
               ))}
             </SelectContent>
           </Select>
+          {/* No.79: 決算書（別作業者作成中の /financials へのリンクのみ） */}
+          {canViewFinancials && (
+            <Button variant="outline" size="sm" className="gap-1.5 border-slate-200" asChild>
+              <Link href="/financials">
+                <FileText className="h-3.5 w-3.5" />決算書
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="gap-1.5 border-slate-200" onClick={() => setSettingsOpen(true)}>
             <Settings2 className="h-3.5 w-3.5" />期首設定
           </Button>
@@ -757,6 +881,35 @@ export function BiClient({
         fiscalYear={fiscalYear}
         onSaved={loadBiData}
       />
+
+      {/* ── No.95: 決算書の確定値（final の決算書がある年度のみ表示） ── */}
+      {finActuals && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-emerald-900">
+              決算書 確定値（{finActuals.periodLabel}）
+            </p>
+            <p className="text-[11px] text-emerald-700">
+              ※会計ベース。下の集計（工事粗利ベース・速報）とは定義が異なる場合があります
+            </p>
+          </div>
+          <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "売上高", value: finActuals.revenue },
+              { label: "売上総利益", value: finActuals.grossProfit },
+              { label: "営業利益", value: finActuals.operatingIncome },
+              { label: "経常利益", value: finActuals.ordinaryIncome },
+            ].map((it) => (
+              <div key={it.label}>
+                <p className="text-[11px] text-emerald-700">{it.label}</p>
+                <p className="text-base font-bold text-emerald-950 tabular-nums">
+                  {fmtSigned(it.value / 10_000)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── 最上部 KPI ストリップ（予定配賦含む） ── */}
       <KpiRow
@@ -779,13 +932,13 @@ export function BiClient({
           {
             label: "粗利率",
             value: `${grossProfitRate}%`,
-            sub: deltaLabel(grossProfitRateDelta) ?? "完工工事の平均",
+            sub: `${deltaLabel(grossProfitRateDelta) ?? "完工工事の平均"} ※工事粗利ベース`,
             illustration: "/bi/icons/bi-icon-yoy.png?v=4",
           },
           {
-            label: "粗利（実績/目標）",
+            label: "粗利額（実績/目標）",
             value: fmtMan(totalGrossProfit),
-            sub: `目標 ${fmtTargetMan(targetGp)}`,
+            sub: `目標 ${fmtTargetMan(targetGp)} ※工事粗利ベース`,
             illustration: "/bi/icons/bi-icon-gross.png?v=4",
           },
           {
@@ -803,6 +956,41 @@ export function BiClient({
           },
         ]}
       />
+
+      {/* ── 1人当たり利益（No.77/78: 従業員区分の係数換算・タブ切替） ── */}
+      <div className="frost-card rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center rounded-full border border-border/60 p-0.5 gap-0.5 bg-muted/30">
+            {([["op", "1人当たり営業利益"], ["gpt", "1人当たり売上総利益"]] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setPerCapitaTab(tab)}
+                className={cn(
+                  "px-3 py-1 text-[11px] rounded-full transition-colors",
+                  perCapitaTab === tab
+                    ? "bg-[var(--brand-dark)] text-white font-semibold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className={cn(
+            "text-xl font-bold tabular-nums leading-none",
+            perCapitaValue != null && perCapitaValue < 0 ? "text-rose-500" : "text-foreground",
+          )}>
+            {perCapitaValue == null ? "—" : fmtSigned(perCapitaValue)}
+          </p>
+        </div>
+        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Users className="h-3.5 w-3.5 shrink-0" />
+          {headcount
+            ? `従業員数 ${headcount.weight}人換算（正社員${headcount.fullTimeCount}名×1.0／パート${headcount.partTimeCount}名×0.5）`
+            : "従業員数を取得中…"}
+        </p>
+      </div>
 
       {/* ── 予備費バナー（社員にも表示：非表示による不信感を防止） ── */}
       {reserveRate > 0 && (
@@ -861,7 +1049,7 @@ export function BiClient({
       )}
 
       {/* ─────────────────────────────────────────────────────── */}
-      {/* 全社サマリー：レシート型（上から引いていけば最終もうけ） */}
+      {/* 全社サマリー：レシート型（上から引いていけば営業利益）   */}
       {/* ─────────────────────────────────────────────────────── */}
       <SectionHeader
         icon={LayoutDashboard}
@@ -869,6 +1057,7 @@ export function BiClient({
         right={
           <span className="text-[11px] text-muted-foreground">
             {fiscalYearLabel(fiscalYear)}
+            {finActuals ? "・決算書確定済（表示は工事台帳ベース）" : isCurrentFY ? "・速報値（決算確定前）" : ""}
           </span>
         }
       />
@@ -879,7 +1068,7 @@ export function BiClient({
           <div className="relative h-full p-5 sm:p-6 flex flex-col justify-center bg-white">
             <div>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              上から順に引くと、いちばん下の「最終のもうけ」になります
+              上から順に引くと、いちばん下の「営業利益」になります
             </p>
 
             <div className="mt-3">
@@ -895,9 +1084,11 @@ export function BiClient({
 
               <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border/60">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">そのうちのもうけ（粗利）</p>
+                  <p className="text-sm font-semibold text-foreground">粗利額</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     売上の {grossProfitRate}% が残っています
+                    {/* No.76: 粗利の定義は経営合意待ちのため当面の基準を明示 */}
+                    <span className="ml-1 text-muted-foreground/80">※工事粗利ベース</span>
                   </p>
                 </div>
                 <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(totalGrossProfit)}</p>
@@ -909,10 +1100,13 @@ export function BiClient({
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--brand-dark)]">会社の固定費を引く</p>
-                  <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">予定配賦（事務所・設備など）</p>
+                  <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">
+                    予定配賦（事務所・設備など）
+                    {elapsedMonths < 12 ? `・経過${elapsedMonths}ヶ月分を月割り` : ""}
+                  </p>
                 </div>
                 <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
-                  {settingsConfigured ? fmtMan(overheadForCalc) : "未設定"}
+                  {settingsConfigured ? fmtMan(overheadYtd) : "未設定"}
                 </p>
               </div>
 
@@ -932,10 +1126,13 @@ export function BiClient({
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--brand-dark)]">売るための経費を引く</p>
-                  <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">販管費（営業・広告などの予算）</p>
+                  <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">
+                    販管費（営業・広告などの予算）
+                    {elapsedMonths < 12 ? `・経過${elapsedMonths}ヶ月分を月割り` : ""}
+                  </p>
                 </div>
                 <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
-                  {settingsConfigured ? fmtMan(sgaForCalc) : "未設定"}
+                  {settingsConfigured ? fmtMan(sgaYtd) : "未設定"}
                 </p>
               </div>
             </div>
@@ -952,9 +1149,9 @@ export function BiClient({
               }}
             >
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold text-white">最終のもうけ</p>
+                <p className="text-base sm:text-lg font-bold text-white">営業利益</p>
                 <p className="text-xs sm:text-sm text-white/80 mt-1">
-                  営業利益 · 売上比 {operatingProfit < 0 ? "▲" : ""}{r1(Math.abs(opRate))}%
+                  売上比 {operatingProfit < 0 ? "▲" : ""}{r1(Math.abs(opRate))}%
                 </p>
               </div>
               <p className="text-3xl sm:text-4xl font-black tabular-nums shrink-0 leading-none tracking-tight text-white">
@@ -1042,9 +1239,9 @@ export function BiClient({
               style={{ borderColor: "var(--brand-dark)" }}
             >
               {operatingProfit < 0
-                ? "いまは最終のもうけがマイナスです。固定費・販管費のほうが、粗利より大きい状態です。"
+                ? "いまは営業利益がマイナスです。固定費・販管費のほうが、粗利より大きい状態です。"
                 : overheadForCalc > 0 && grossProfitTotal < overheadForCalc * 0.2
-                  ? "最終のもうけはプラスですが、固定費を引いたあとの余裕はまだ小さめです。"
+                  ? "営業利益はプラスですが、固定費を引いたあとの余裕はまだ小さめです。"
                   : `売上から費用を引いた結果、会社に ${fmtMan(operatingProfit)} 残っています。`}
             </p>
 
@@ -1157,7 +1354,7 @@ export function BiClient({
         }
       />
 
-      {/* 部門カード（並び替え可）— ファーストビューで完結するデフォルト */}
+      {/* 部門カード（並び替え可・クリックでPJ一覧 No.75）— ファーストビューで完結するデフォルト */}
       <BiDepartmentCards
         fiscalYear={fiscalYear}
         departments={deptCards}
@@ -1166,6 +1363,16 @@ export function BiClient({
         fmtSigned={fmtSigned}
         fmtRatio={fmtRatio}
         yoyRatioClass={yoyRatioClass}
+        onSelect={setDeptDetailName}
+      />
+
+      {/* 部門PJ一覧スライドパネル（No.75/84） */}
+      <BiDepartmentProjectsSheet
+        departmentName={deptDetailName}
+        fiscalYear={fiscalYear}
+        useMock={useDashboardMock}
+        fmtMan={fmtMan}
+        onClose={() => setDeptDetailName(null)}
       />
 
       {/* 部門構成 + 見込み売上（横並び） */}
@@ -1198,7 +1405,15 @@ export function BiClient({
                     {execDonut.map((d) => {
                       const share = totalRevenue > 0 ? pct(d.value, totalRevenue) : 0;
                       return (
-                        <div key={d.label} className="min-h-0">
+                        <div
+                          key={d.label}
+                          className="min-h-0 cursor-pointer rounded-md -mx-1 px-1 py-0.5 transition-colors hover:bg-[rgba(var(--brand-accent-rgb),0.25)]"
+                          role="button"
+                          tabIndex={0}
+                          title={`${d.label} のPJ一覧を表示`}
+                          onClick={() => setDeptDetailName(d.label)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDeptDetailName(d.label); }}
+                        >
                           <div className="flex items-center justify-between gap-2 text-xs mb-1">
                             <span className="flex items-center gap-1.5 min-w-0 font-semibold text-slate-700">
                               <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
@@ -1278,7 +1493,7 @@ export function BiClient({
                     : []),
                 ]}
                 series={[{ label: "期待値", color: CHART_PRIMARY }]}
-                formatValue={(v) => `¥${v.toLocaleString()}万`}
+                formatValue={(v) => fmtMan(v)}
                 labelColor="#64748b"
               />
             </div>
@@ -1288,10 +1503,9 @@ export function BiClient({
             >
               <span className="text-sm font-semibold" style={{ color: "#64748b" }}>期待値合計</span>
               <b className="text-xl font-black tabular-nums" style={{ color: CHART_DARK }}>
-                ¥{(includeSpecial
+                {fmtMan(includeSpecial
                   ? (effectiveProspectSummary?.totalWeightedWithSpecial ?? 0)
-                  : (effectiveProspectSummary?.totalWeighted ?? 0)
-                ).toLocaleString()}万
+                  : (effectiveProspectSummary?.totalWeighted ?? 0))}
               </b>
             </div>
           </ExecCard>
@@ -1385,7 +1599,7 @@ export function BiClient({
                   color: streamPalette[i % streamPalette.length].color,
                   colorEnd: streamPalette[i % streamPalette.length].colorEnd,
                 }))}
-                formatValue={(v) => `¥${Math.abs(Math.round(v)).toLocaleString()}万`}
+                formatValue={(v) => fmtMan(Math.round(v))}
               />
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground px-0.5">
@@ -1443,7 +1657,7 @@ export function BiClient({
                           {hasActivity ? fmtMan(row.grossProfit) : "—"}
                         </td>
                         <td className="text-right px-4 py-2.5 tabular-nums text-rose-500">
-                          {fmtMonthlyAlloc(allocation, settingsConfigured)}
+                          {fmtMonthlyAlloc(allocation, settingsConfigured, fmtMan)}
                         </td>
                         <td className={cn(
                           "text-right px-5 py-2.5 tabular-nums font-semibold",
@@ -1538,7 +1752,7 @@ export function BiClient({
                 color: ratio >= 100 ? CHART_DARK : BI_NEGATIVE,
               };
             })}
-            formatValue={(v) => `¥${Math.abs(v).toLocaleString()}万`}
+            formatValue={(v) => fmtMan(v)}
           />
         </div>
       </BiPanel>
@@ -1646,7 +1860,7 @@ export function BiClient({
       <div className="flex items-start gap-2 text-xs text-muted-foreground rounded-lg p-3.5" style={{ background: "rgba(var(--brand-accent-rgb),0.25)", border: "1px solid rgba(var(--brand-accent-rgb),0.8)" }}>
         <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
         <span>
-          売上総利益のマイナスは<strong className="text-[var(--brand-dark)]">仕様です</strong>。粗利の積み上げが製造間接費（年額 {overheadBudget != null ? `¥${overheadBudget.toLocaleString()}万` : "未設定"}）を超えるまで赤字表示となり、損益分岐点までの距離を示します。
+          売上総利益のマイナスは<strong className="text-[var(--brand-dark)]">仕様です</strong>。粗利の積み上げが製造間接費（年額 {overheadBudget != null ? fmtMan(overheadBudget) : "未設定"}）を超えるまで赤字表示となり、損益分岐点までの距離を示します。
         </span>
       </div>
 

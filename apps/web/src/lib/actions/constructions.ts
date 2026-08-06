@@ -1160,10 +1160,18 @@ async function recalculateEstimateTotals(
   supabase: Awaited<ReturnType<typeof createClient>>,
   estimateId: string,
 ) {
-  const [{ data: items, error: itemsError }, { data: est, error: estError }] = await Promise.all([
+  const [
+    { data: items, error: itemsError },
+    { data: categories, error: catsError },
+    { data: est, error: estError },
+  ] = await Promise.all([
     supabase
       .from("estimate_items")
-      .select("selling_amount, cost_amount, is_text_row")
+      .select("category_id, selling_amount, cost_amount, is_text_row")
+      .eq("estimate_id", estimateId),
+    supabase
+      .from("estimate_categories")
+      .select("id, quantity, cost_price, selling_price")
       .eq("estimate_id", estimateId),
     supabase
       .from("estimates")
@@ -1172,12 +1180,26 @@ async function recalculateEstimateTotals(
       .single(),
   ]);
   throwIfSupabaseError(itemsError);
+  throwIfSupabaseError(catsError);
   throwIfSupabaseError(estError);
 
-  const lineItems = (items ?? []).filter((item) => !item.is_text_row);
-  const subtotal = lineItems.reduce((sum, item) => sum + Number(item.selling_amount ?? 0), 0);
-  const lineCost = lineItems.reduce((sum, item) => sum + Number(item.cost_amount ?? 0), 0);
-  // 予備費・予備予備費は明細外サマリー金額を原価に加算（売価はゼロ扱い）
+  const { effectiveCategoryAmounts } = await import("@/lib/estimate-category-totals");
+
+  // 大項目直接入力と配下詳細行の優先ロジック（No.68: 詳細行があれば詳細優先）
+  let subtotal = 0;
+  let lineCost = 0;
+  for (const cat of categories ?? []) {
+    const catItems = (items ?? []).filter((i) => i.category_id === cat.id);
+    const eff = effectiveCategoryAmounts(cat, catItems);
+    subtotal += eff.selling_amount;
+    lineCost += eff.cost_amount;
+  }
+  // 未分類（独立テキスト行含む）はテキスト行を除いてそのまま加算
+  const uncategorized = (items ?? []).filter((i) => !i.category_id && !i.is_text_row);
+  subtotal += uncategorized.reduce((s, i) => s + Number(i.selling_amount ?? 0), 0);
+  lineCost += uncategorized.reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
+
+  // 経営調整費・予備費は明細外サマリー金額を原価に加算（売価はゼロ扱い）
   const reserveCost =
     Number(est?.reserve_fee_1_amount ?? 0) + Number(est?.reserve_fee_2_amount ?? 0);
   const costTotal = lineCost + reserveCost;
@@ -1315,32 +1337,39 @@ export async function updateEstimateCategoryName(categoryId: string, name: strin
 
 export async function addEstimateItem(
   estimateId: string,
-  categoryId: string,
+  categoryId: string | null,
   name?: string,
   options?: { isTextRow?: boolean },
 ) {
   const trimmed = name?.trim() ?? "";
   const isTextRow = options?.isTextRow === true;
 
+  // 独立テキスト行（No.69②）のみ大項目なしを許可
+  if (!categoryId && !isTextRow) throw new Error("大項目を指定してください");
+
   const { supabase, companyId } = await assertEstimateAccess(estimateId);
 
-  const [{ data: category, error: catError }, { data: existing }] = await Promise.all([
-    supabase
+  if (categoryId) {
+    const { data: category, error: catError } = await supabase
       .from("estimate_categories")
       .select("id")
       .eq("id", categoryId)
       .eq("estimate_id", estimateId)
-      .single(),
-    supabase
-      .from("estimate_items")
-      .select("sort_order")
-      .eq("estimate_id", estimateId)
-      .eq("category_id", categoryId)
-      .order("sort_order", { ascending: false })
-      .limit(1),
-  ]);
-  throwIfSupabaseError(catError);
-  if (!category) throw new Error("大項目が見つかりません");
+      .single();
+    throwIfSupabaseError(catError);
+    if (!category) throw new Error("大項目が見つかりません");
+  }
+
+  let existingQuery = supabase
+    .from("estimate_items")
+    .select("sort_order")
+    .eq("estimate_id", estimateId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  existingQuery = categoryId
+    ? existingQuery.eq("category_id", categoryId)
+    : existingQuery.is("category_id", null);
+  const { data: existing } = await existingQuery;
 
   const sortOrder = (existing?.[0]?.sort_order ?? -1) + 1;
 
@@ -1361,6 +1390,7 @@ export async function addEstimateItem(
       gross_profit_rate: 0,
       sort_order: sortOrder,
       is_text_row: isTextRow,
+      text_row_scope: isTextRow ? (categoryId ? "category" : "standalone") : null,
     })
     .select()
     .single();
@@ -1378,6 +1408,10 @@ export type EstimateItemUpdatePatch = {
   unit?: string | null;
   cost_price?: number;
   selling_price?: number;
+  /** 発注業者（業者マスタ参照）。null で解除 */
+  vendor_craftsman_id?: string | null;
+  /** 発注業者の表示名（自由入力含む） */
+  vendor_name?: string | null;
 };
 
 export async function updateEstimateItem(itemId: string, patch: EstimateItemUpdatePatch) {
@@ -1395,9 +1429,29 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
   throwIfSupabaseError(fetchError);
   if (!current || current.company_id !== profile.company_id) throw new Error("明細が見つかりません");
 
+  // 予備費行判定（No.61/67）: 文字列ではなく craftsman の種別フラグで判定する
+  let isReserveRow: boolean = Boolean(current.is_reserve_row);
+  const vendorCraftsmanId =
+    patch.vendor_craftsman_id !== undefined ? patch.vendor_craftsman_id : current.vendor_craftsman_id;
+  if (patch.vendor_craftsman_id !== undefined) {
+    if (patch.vendor_craftsman_id) {
+      const { data: craftsman } = await supabase
+        .from("craftsmen")
+        .select("kind, system_key")
+        .eq("id", patch.vendor_craftsman_id)
+        .single();
+      isReserveRow = craftsman?.kind === "system" && craftsman?.system_key === "reserve";
+    } else {
+      isReserveRow = false;
+    }
+  }
+
   const quantity = patch.quantity ?? Number(current.quantity) ?? 0;
   const costPrice = patch.cost_price ?? Number(current.cost_price) ?? 0;
-  const sellingPrice = patch.selling_price ?? Number(current.selling_price) ?? 0;
+  // 予備費行は売価入力不可（売価0固定・No.65/61）
+  const sellingPrice = isReserveRow
+    ? 0
+    : patch.selling_price ?? Number(current.selling_price) ?? 0;
   const amounts = calcItemAmounts(quantity, costPrice, sellingPrice);
 
   const { data: item, error } = await supabase
@@ -1410,6 +1464,9 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
       unit: patch.unit !== undefined ? patch.unit : current.unit,
       cost_price: costPrice,
       selling_price: sellingPrice,
+      vendor_craftsman_id: vendorCraftsmanId ?? null,
+      vendor_name: patch.vendor_name !== undefined ? patch.vendor_name : current.vendor_name,
+      is_reserve_row: isReserveRow,
       ...amounts,
       updated_at: new Date().toISOString(),
     })
@@ -1420,6 +1477,78 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
 
   const totals = await recalculateEstimateTotals(supabase, current.estimate_id);
   return { item, totals };
+}
+
+export type EstimateCategoryDetailPatch = {
+  specification?: string | null;
+  vendor_craftsman_id?: string | null;
+  vendor_name?: string | null;
+  quantity?: number;
+  unit?: string | null;
+  cost_price?: number;
+  selling_price?: number;
+};
+
+/** 大項目（カテゴリ行）の直接入力を更新する（No.70） */
+export async function updateEstimateCategoryDetails(
+  categoryId: string,
+  patch: EstimateCategoryDetailPatch,
+) {
+  const supabase = await createClient();
+  const { data: category, error: findError } = await supabase
+    .from("estimate_categories")
+    .select("id, estimate_id")
+    .eq("id", categoryId)
+    .single();
+  throwIfSupabaseError(findError);
+  if (!category) throw new Error("大項目が見つかりません");
+
+  await assertEstimateAccess(category.estimate_id);
+
+  const { data, error } = await supabase
+    .from("estimate_categories")
+    .update(patch)
+    .eq("id", categoryId)
+    .select()
+    .single();
+  throwIfSupabaseError(error);
+
+  const totals = await recalculateEstimateTotals(supabase, category.estimate_id);
+  return { category: data, totals };
+}
+
+/** 大項目の並べ替え（No.59） */
+export async function reorderEstimateCategories(estimateId: string, orderedIds: string[]) {
+  const { supabase } = await assertEstimateAccess(estimateId);
+  for (const [index, id] of orderedIds.entries()) {
+    const { error } = await supabase
+      .from("estimate_categories")
+      .update({ sort_order: index })
+      .eq("id", id)
+      .eq("estimate_id", estimateId);
+    throwIfSupabaseError(error);
+  }
+  await supabase
+    .from("estimates")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
+}
+
+/** 明細行の並べ替え（同一大項目内・No.59） */
+export async function reorderEstimateItems(estimateId: string, orderedIds: string[]) {
+  const { supabase } = await assertEstimateAccess(estimateId);
+  for (const [index, id] of orderedIds.entries()) {
+    const { error } = await supabase
+      .from("estimate_items")
+      .update({ sort_order: index, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("estimate_id", estimateId);
+    throwIfSupabaseError(error);
+  }
+  await supabase
+    .from("estimates")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
 }
 
 /**

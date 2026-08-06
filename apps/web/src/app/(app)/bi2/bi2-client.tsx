@@ -632,9 +632,17 @@ export function Bi2Client({
 
   const grossProfitRate  = pct(totalGrossProfit, totalRevenue);
   const achieveRateTotal = pct(totalRevenue, targetRevenueForCalc);
-  const grossProfitTotal = totalGrossProfit - overheadForCalc;
+
+  // No.105: 固定費（予定配賦）・販管費の年額は、期中は月割り（経過月数/12）で按分して控除する
+  const elapsedMonths = fiscalYear === getCurrentFiscalYear(fiscalMonthStart)
+    ? Math.max(1, Math.min(getForecastStartIndex(fiscalMonthStart), 12))
+    : 12;
+  const overheadYtd = Math.round(overheadForCalc * elapsedMonths / 12);
+  const sgaYtd      = Math.round(sgaForCalc * elapsedMonths / 12);
+
+  const grossProfitTotal = totalGrossProfit - overheadYtd;
   const gptRate          = pct(grossProfitTotal, totalRevenue);
-  const operatingProfit  = grossProfitTotal - sgaForCalc;
+  const operatingProfit  = grossProfitTotal - sgaYtd;
   const opRate           = pct(operatingProfit, totalRevenue);
 
   const monthlyComboDataRaw = (() => {
@@ -1068,9 +1076,9 @@ export function Bi2Client({
                         {[
                           { label: "売上", value: fmtMan(totalRevenue) },
                           { label: "粗利", value: fmtMan(totalGrossProfit) },
-                          { label: "予定配賦", value: settingsConfigured ? fmtMan(overheadForCalc) : "未設定", dim: true },
+                          { label: elapsedMonths < 12 ? `予定配賦（${elapsedMonths}ヶ月分月割）` : "予定配賦", value: settingsConfigured ? fmtMan(overheadYtd) : "未設定", dim: true },
                           { label: "売上総利益", value: fmtSigned(grossProfitTotal) },
-                          { label: "販管費", value: settingsConfigured ? fmtMan(sgaForCalc) : "未設定", dim: true },
+                          { label: elapsedMonths < 12 ? `販管費（${elapsedMonths}ヶ月分月割）` : "販管費", value: settingsConfigured ? fmtMan(sgaYtd) : "未設定", dim: true },
                         ].map((row, i) => (
                           <div
                             key={row.label}

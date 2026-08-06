@@ -17,6 +17,13 @@ import type { Craftsman } from "@/lib/database.types";
 
 const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"電気", interior:"内装", plumbing:"配管", general:"総合" };
 
+function KindBadge({ craftsman }: { craftsman: Craftsman }) {
+  if (craftsman.kind === "system") {
+    return <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">システム予約</Badge>;
+  }
+  return <Badge variant="outline" className="text-xs text-muted-foreground">業者</Badge>;
+}
+
 type ViewMode = "grid" | "list";
 
 type CraftsmenClientProps = {
@@ -93,7 +100,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
                       <CustomerAvatar seed={c.id} name={c.name} size="md" />
                       <div><p className="font-medium">{c.name}</p><p className="text-sm text-muted-foreground">{c.company_name || "-"}</p></div>
                     </div>
-                    <div className="flex gap-1">{c.specialty && <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge>}{c.rank && <Badge className="text-xs">{c.rank}</Badge>}</div>
+                    <div className="flex gap-1"><KindBadge craftsman={c} />{c.specialty && <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge>}{c.rank && <Badge className="text-xs">{c.rank}</Badge>}</div>
                   </div>
                   <div className="flex gap-4 text-xs text-muted-foreground">
                     <span>進行中: {c.active_projects}件</span><span>累計: {c.total_projects}件</span>
@@ -114,6 +121,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[200px]">名前</TableHead>
+                  <TableHead className="w-[110px]">種別</TableHead>
                   <TableHead>会社名</TableHead>
                   <TableHead className="w-[80px]">専門</TableHead>
                   <TableHead className="w-[70px]">ランク</TableHead>
@@ -132,6 +140,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
                         <span className="font-medium">{c.name}</span>
                       </div>
                     </TableCell>
+                    <TableCell><KindBadge craftsman={c} /></TableCell>
                     <TableCell className="text-muted-foreground">{c.company_name || "-"}</TableCell>
                     <TableCell>{c.specialty ? <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge> : "-"}</TableCell>
                     <TableCell>{c.rank ? <Badge className="text-xs">{c.rank}</Badge> : "-"}</TableCell>

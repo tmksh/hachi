@@ -44,6 +44,8 @@ type BiDepartmentCardsProps = {
   fmtSigned: (v: number) => string;
   fmtRatio: (ratio: number | null) => string;
   yoyRatioClass: (ratio: number | null) => string;
+  /** 部門クリック時（PJ一覧パネルの表示など） */
+  onSelect?: (departmentName: string) => void;
 };
 
 function storageKey(fiscalYear: number) {
@@ -72,6 +74,7 @@ function SortableDeptCard({
   showTheoretical,
   fmtMan,
   fmtSigned,
+  onSelect,
 }: {
   dept: BiDeptCardData;
   showTheoretical: boolean;
@@ -79,6 +82,7 @@ function SortableDeptCard({
   fmtSigned: (v: number) => string;
   fmtRatio: (ratio: number | null) => string;
   yoyRatioClass: (ratio: number | null) => string;
+  onSelect?: (departmentName: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: dept.id,
@@ -106,8 +110,10 @@ function SortableDeptCard({
       }}
       className={cn(
         "frost-card rounded-xl p-4 flex flex-col gap-3.5 border border-border/50",
+        onSelect && "cursor-pointer transition-shadow hover:shadow-md",
         isDragging && "opacity-60 shadow-lg",
       )}
+      onClick={() => onSelect?.(dept.name)}
     >
       {/* 部門名 + 評価 */}
       <div className="flex items-start justify-between gap-2">
@@ -129,6 +135,7 @@ function SortableDeptCard({
             type="button"
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-grab active:cursor-grabbing touch-none"
             aria-label={`${dept.name}を並び替え`}
+            onClick={(e) => e.stopPropagation()}
             {...attributes}
             {...listeners}
           >
@@ -234,6 +241,7 @@ export function BiDepartmentCards({
   fmtSigned,
   fmtRatio,
   yoyRatioClass,
+  onSelect,
 }: BiDepartmentCardsProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -294,6 +302,7 @@ export function BiDepartmentCards({
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground px-0.5">
         右上の≡をドラッグすると並び順を変えられます
+        {onSelect ? "。カードをクリックすると部門のPJ一覧を表示します" : ""}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={order} strategy={rectSortingStrategy}>
@@ -307,6 +316,7 @@ export function BiDepartmentCards({
                 fmtSigned={fmtSigned}
                 fmtRatio={fmtRatio}
                 yoyRatioClass={yoyRatioClass}
+                onSelect={onSelect}
               />
             ))}
           </div>

@@ -460,6 +460,31 @@ export async function updateTeamMemberRole(userId: string, role: TeamRole) {
   if (error) throw error;
 }
 
+/** 従業員区分の変更（No.77/78: BIの1人当たり利益の係数に使用。正社員=1.0 / パート=0.5） */
+export async function updateTeamMemberEmploymentType(
+  userId: string,
+  employmentType: "full_time" | "part_time",
+) {
+  const { companyId } = await assertTenantAdmin();
+
+  const admin = createAdminClient();
+
+  const { data: target } = await admin
+    .from("profiles")
+    .select("company_id")
+    .eq("id", userId)
+    .single();
+  if (!target || target.company_id !== companyId) {
+    throw new Error("対象メンバーが自社に属していません");
+  }
+
+  const { error } = await admin
+    .from("profiles")
+    .update({ employment_type: employmentType })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
 export async function removeTeamMember(userId: string) {
   const { companyId, actorRole, actorId } = await assertTenantAdmin();
 

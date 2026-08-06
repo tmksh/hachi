@@ -24,9 +24,9 @@ async function getCompanyContext() {
 }
 
 /**
- * 会社指定の予備費率（%）を取得。BI期首設定(bi_annual_settings)の最新年度の
+ * 会社指定の経営調整費率（%）を取得。BI期首設定(bi_annual_settings)の最新年度の
  * reserve_fee_rate（0〜1）をパーセントに変換して返す。未設定なら 0。
- * 見積・実行予算の承認判定では「会社指定粗利＋予備費」を満たす必要がある。
+ * 見積・実行予算の承認判定では「会社指定粗利＋経営調整費」を満たす必要がある。
  */
 async function getCompanyReservePercent(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -370,17 +370,17 @@ export async function submitEstimateApproval(input: {
     try {
       assertReserveFeesSecured(estimate);
     } catch (e) {
-      return actionFail(e, "予備費を計上してから申請してください");
+      return actionFail(e, "経営調整費・予備費を計上してから申請してください");
     }
 
     const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
       ?? toMarginThresholdPercent(estimate.default_gross_profit_rate);
     const reservePercent = await getCompanyReservePercent(supabase, company_id);
-    // 会社指定粗利＋予備費を満たす必要がある
+    // 会社指定粗利＋経営調整費を満たす必要がある
     const threshold = baseThreshold + reservePercent;
     if ((estimate.gross_profit_rate ?? 0) >= threshold) {
       return actionFail(
-        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
+        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
         "承認申請は不要です",
       );
     }
@@ -518,7 +518,7 @@ export async function getEstimateMarginThreshold(estimateId: string) {
   const baseThreshold = (await getCompanyBaseMarginPercent(supabase, company_id))
     ?? toMarginThresholdPercent(data.default_gross_profit_rate);
   const reservePercent = await getCompanyReservePercent(supabase, company_id);
-  // 会社指定粗利＋予備費を満たす必要がある
+  // 会社指定粗利＋経営調整費を満たす必要がある
   const threshold = baseThreshold + reservePercent;
 
   // 差戻し/却下済みWFに紐づいたまま pending が残っている場合は補正（再申請ボタンが出ない不具合の自己修復）
@@ -576,7 +576,7 @@ export async function getEstimateMarginThreshold(estimateId: string) {
 }
 
 /** 粗利率が基準以上の見積を確定（発行済み）にする（No.38） */
-/** 予備費未計上での確定・提出を防ぐ（議事録: 予備費確保文化） */
+/** 経営調整費・予備費未計上での確定・提出を防ぐ（議事録: 予備費確保文化） */
 function assertReserveFeesSecured(estimate: {
   reserve_fee_1_amount?: number | null;
   reserve_fee_2_amount?: number | null;
@@ -585,7 +585,7 @@ function assertReserveFeesSecured(estimate: {
   const r2 = Number(estimate.reserve_fee_2_amount ?? 0);
   if (r1 <= 0 || r2 <= 0) {
     throw new Error(
-      "予備費・予備予備費をサマリー欄に計上してから確定・提出してください（未計上のまま提出できません）",
+      "経営調整費・予備費をサマリー欄に計上してから確定・提出してください（未計上のまま提出できません）",
     );
   }
 }
@@ -604,7 +604,7 @@ export async function confirmEstimateIssued(estimateId: string) {
     try {
       assertReserveFeesSecured(estimate);
     } catch (e) {
-      return actionFail(e, "予備費を計上してから確定してください");
+      return actionFail(e, "経営調整費・予備費を計上してから確定してください");
     }
 
     // 明細から再計算して最新粗利率で判定（画面上の調整と一致させる）
@@ -622,7 +622,7 @@ export async function confirmEstimateIssued(estimateId: string) {
     const threshold = baseThreshold + reservePercent;
     if (rate < threshold) {
       return actionFail(
-        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`,
+        `粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)未満のため、上長承認が必要です`,
         "上長承認が必要です",
       );
     }
@@ -704,7 +704,7 @@ export async function submitBudgetApproval(input: {
     const threshold = baseThreshold + reservePercent;
     if (input.grossProfitRate >= threshold) {
       return actionFail(
-        `工事粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+予備費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
+        `工事粗利率が基準(${threshold.toFixed(0)}%=会社指定${baseThreshold.toFixed(0)}%+経営調整費${reservePercent.toFixed(0)}%)以上のため承認申請は不要です`,
         "承認申請は不要です",
       );
     }
@@ -729,7 +729,7 @@ export async function submitBudgetApproval(input: {
           company_id,
           key: "budget_margin",
           name: "規定粗利未達 実行予算承認",
-          description: "実行予算で会社指定粗利＋予備費に達しない場合の上長承認",
+          description: "実行予算で会社指定粗利＋経営調整費に達しない場合の上長承認",
           fields_schema: [],
           approval_route: [],
           sort_order: 0,

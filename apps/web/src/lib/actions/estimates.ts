@@ -149,7 +149,7 @@ export async function createEstimate(
       validity_date: input.validity_date || null,
       assigned_to: input.assigned_to || null,
       status: "draft",
-      // 新規見積: 予備費を必ず確保する文化のためデフォルト料率をセット（金額はサマリー欄で記入）
+      // 新規見積: 経営調整費・予備費を必ず確保する文化のためデフォルト料率をセット（金額はサマリー欄で記入）
       reserve_fee_1_rate: 0.02,
       reserve_fee_2_rate: 0.03,
       reserve_fee_1_amount: 0,
@@ -278,7 +278,7 @@ export async function updateEstimate(
     const { error } = await supabase.from("estimates").update(input).eq("id", id);
     if (error) throw error;
 
-    // 予備費金額変更時は明細外原価を含めて合計を再計算
+    // 経営調整費・予備費金額変更時は明細外原価を含めて合計を再計算
     if (input.reserve_fee_1_amount != null || input.reserve_fee_2_amount != null) {
       const [{ data: items }, { data: est }] = await Promise.all([
         supabase

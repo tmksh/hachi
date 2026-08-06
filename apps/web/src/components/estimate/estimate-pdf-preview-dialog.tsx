@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FileDown, X } from "lucide-react";
+import { effectiveCategoryAmounts } from "@/lib/estimate-category-totals";
 
 export type EstimatePdfMode = "customer" | "cost_breakdown";
 
@@ -17,9 +18,24 @@ export type EstimatePdfPreviewData = {
   tax: number;
   total: number;
   cost_total: number;
+  /** 経営調整費（会社確保分・旧予備費） */
   reserve_fee_1_amount: number;
+  /** 予備費（現場対応分・旧予備予備費） */
   reserve_fee_2_amount: number;
-  categories: Array<{ id: string; name: string }>;
+  categories: Array<{
+    id: string;
+    name: string;
+    /** 大項目直接入力の数量・単位・単価（詳細行が無いときに印字） */
+    quantity: number;
+    unit?: string | null;
+    cost_price: number;
+    selling_price: number;
+    /** 有効金額（詳細行があれば詳細合計、無ければ直接入力） */
+    cost_amount: number;
+    selling_amount: number;
+    /** 直接入力値を印字に使うか（詳細行なし） */
+    use_direct: boolean;
+  }>;
   items: Array<{
     id: string;
     category_id?: string | null;
@@ -31,6 +47,7 @@ export type EstimatePdfPreviewData = {
     selling_price: number;
     selling_amount: number;
     is_text_row?: boolean;
+    is_reserve_row?: boolean;
   }>;
 };
 
@@ -44,7 +61,14 @@ type EstimatePdfSource = {
   cost_total?: number;
   reserve_fee_1_amount?: number | null;
   reserve_fee_2_amount?: number | null;
-  categories?: Array<{ id: string; name: string }>;
+  categories?: Array<{
+    id: string;
+    name: string;
+    quantity?: number | null;
+    unit?: string | null;
+    cost_price?: number | null;
+    selling_price?: number | null;
+  }>;
   items?: Array<{
     id: string;
     category_id?: string | null;
@@ -56,10 +80,11 @@ type EstimatePdfSource = {
     selling_price?: number;
     selling_amount?: number;
     is_text_row?: boolean;
+    is_reserve_row?: boolean;
   }>;
 };
 
-/** 顧客向け見積書用（売価0・テキスト行・予備費は出さない） */
+/** 顧客向け見積書用（売価0行・予備費行は出さない。テキスト行は印字する・No.62） */
 export function toEstimatePdfPreviewData(
   estimate: EstimatePdfSource,
   customer?: { name?: string | null; company_name?: string | null } | null,
@@ -67,7 +92,7 @@ export function toEstimatePdfPreviewData(
   return toEstimatePdfData(estimate, customer, "customer");
 }
 
-/** 社内向け原価内訳書用（売価0行・テキスト行・予備費を含む） */
+/** 社内向け原価内訳書用（売価0行・テキスト行・経営調整費・予備費を含む） */
 export function toCostBreakdownPdfPreviewData(
   estimate: EstimatePdfSource,
   customer?: { name?: string | null; company_name?: string | null } | null,
@@ -80,12 +105,16 @@ function toEstimatePdfData(
   customer: { name?: string | null; company_name?: string | null } | null | undefined,
   mode: EstimatePdfMode,
 ): EstimatePdfPreviewData {
-  const items = (estimate.items ?? [])
+  const sourceItems = estimate.items ?? [];
+  const items = sourceItems
     .filter((item) => {
       if (mode === "customer") {
+        // 予備費行は顧客向けに出さない（No.61/65）
+        if (item.is_reserve_row) return false;
+        // テキスト行は顧客向けにも印字（No.62）
+        if (item.is_text_row) return true;
         const sell = Number(item.selling_amount) || 0;
-        const isText = Boolean(item.is_text_row);
-        return !isText && sell > 0;
+        return sell > 0;
       }
       // 原価内訳: テキスト行も出し、売価0の計算行も含める
       return true;
@@ -101,11 +130,33 @@ function toEstimatePdfData(
       selling_price: Number(item.selling_price) || 0,
       selling_amount: Number(item.selling_amount) || 0,
       is_text_row: Boolean(item.is_text_row),
+      is_reserve_row: Boolean(item.is_reserve_row),
     }));
 
-  const lineCost = items
-    .filter((i) => !i.is_text_row)
-    .reduce((s, i) => s + i.cost_amount, 0);
+  // 大項目の有効金額（詳細行優先・No.68/70）はフィルタ前の全明細から算出する
+  const categories = (estimate.categories ?? []).map((cat) => {
+    const catItems = sourceItems.filter((i) => i.category_id === cat.id);
+    const eff = effectiveCategoryAmounts(cat, catItems);
+    const hasDetailAmounts = catItems.some(
+      (i) => !i.is_text_row && ((Number(i.cost_amount) || 0) > 0 || (Number(i.selling_amount) || 0) > 0),
+    );
+    return {
+      id: cat.id,
+      name: cat.name,
+      quantity: Number(cat.quantity ?? 0) || 0,
+      unit: cat.unit,
+      cost_price: Number(cat.cost_price ?? 0) || 0,
+      selling_price: Number(cat.selling_price ?? 0) || 0,
+      cost_amount: eff.cost_amount,
+      selling_amount: eff.selling_amount,
+      use_direct: !hasDetailAmounts,
+    };
+  });
+
+  const lineCost = categories.reduce((s, c) => s + c.cost_amount, 0)
+    + items
+      .filter((i) => !i.is_text_row && !i.category_id)
+      .reduce((s, i) => s + i.cost_amount, 0);
   const reserve1 = Number(estimate.reserve_fee_1_amount) || 0;
   const reserve2 = Number(estimate.reserve_fee_2_amount) || 0;
 
@@ -122,7 +173,7 @@ function toEstimatePdfData(
     cost_total: estimate.cost_total ?? lineCost + reserve1 + reserve2,
     reserve_fee_1_amount: reserve1,
     reserve_fee_2_amount: reserve2,
-    categories: (estimate.categories ?? []).map((cat) => ({ id: cat.id, name: cat.name })),
+    categories,
     items,
   };
 }
@@ -233,6 +284,48 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
 }
 
 function CustomerEstimateTable({ data, itemCount }: { data: EstimatePdfPreviewData; itemCount: number }) {
+  // テキスト行は注釈として全幅で印字（No.62）
+  const renderItemRow = (item: EstimatePdfPreviewData["items"][number]) => {
+    if (item.is_text_row) {
+      return (
+        <tr key={item.id}>
+          <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", color: "#64748b", fontStyle: "italic" }}>
+            {item.name || "—"}
+          </td>
+        </tr>
+      );
+    }
+    return (
+      <tr key={item.id}>
+        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
+        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
+        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{item.unit ?? "式"}</td>
+        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
+        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
+      </tr>
+    );
+  };
+
+  // 大項目直接入力（詳細行が無い場合）の金額を大項目行に印字（No.70）
+  const renderCategoryRow = (cat: EstimatePdfPreviewData["categories"][number]) => {
+    if (cat.use_direct && cat.selling_amount > 0) {
+      return (
+        <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{cat.quantity}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{cat.unit ?? "式"}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.selling_price.toLocaleString()}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.selling_amount.toLocaleString()}</td>
+        </tr>
+      );
+    }
+    return (
+      <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
+        <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+      </tr>
+    );
+  };
+
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
       <thead>
@@ -246,29 +339,15 @@ function CustomerEstimateTable({ data, itemCount }: { data: EstimatePdfPreviewDa
       </thead>
       <tbody>
         {data.categories.length > 0
-          ? data.categories.flatMap((cat) => [
-              <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-                <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
-              </tr>,
-              ...data.items.filter((i) => i.category_id === cat.id).map((item) => (
-                <tr key={item.id}>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{item.unit ?? "式"}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
-                  <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
-                </tr>
-              )),
-            ])
-          : data.items.map((item) => (
-              <tr key={item.id}>
-                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{item.unit ?? "式"}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
-                <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
-              </tr>
-            ))}
+          ? [
+              ...data.categories.flatMap((cat) => [
+                renderCategoryRow(cat),
+                ...data.items.filter((i) => i.category_id === cat.id).map(renderItemRow),
+              ]),
+              // 独立テキスト行など未分類の行
+              ...data.items.filter((i) => !i.category_id).map(renderItemRow),
+            ]
+          : data.items.map(renderItemRow)}
         {Array.from({ length: Math.max(0, 8 - itemCount) }).map((_, i) => (
           <tr key={`empty-${i}`}>
             <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "12px" }}>&nbsp;</td>
@@ -321,6 +400,26 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
     );
   };
 
+  // 大項目直接入力（詳細行が無い場合）の原価を大項目行に印字（No.70）
+  const renderCategoryRow = (cat: EstimatePdfPreviewData["categories"][number]) => {
+    if (cat.use_direct && cat.cost_amount > 0) {
+      return (
+        <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{cat.quantity || "—"}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{cat.unit ?? "式"}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.cost_price.toLocaleString()}</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.cost_amount.toLocaleString()}</td>
+        </tr>
+      );
+    }
+    return (
+      <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
+        <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+      </tr>
+    );
+  };
+
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
       <thead>
@@ -334,16 +433,17 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
       </thead>
       <tbody>
         {data.categories.length > 0
-          ? data.categories.flatMap((cat) => [
-              <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-                <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
-              </tr>,
-              ...data.items.filter((i) => i.category_id === cat.id).map(renderItemRow),
-            ])
+          ? [
+              ...data.categories.flatMap((cat) => [
+                renderCategoryRow(cat),
+                ...data.items.filter((i) => i.category_id === cat.id).map(renderItemRow),
+              ]),
+              ...data.items.filter((i) => !i.category_id).map(renderItemRow),
+            ]
           : data.items.map(renderItemRow)}
-        {/* 明細外予備費（原価内訳書にのみ出力） */}
+        {/* 明細外の経営調整費・予備費（原価内訳書にのみ出力） */}
         <tr style={{ background: "#fff7ed" }}>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>予備費（会社確保分）</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>経営調整費（会社確保分）</td>
           <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
           <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>小計</td>
           <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
@@ -352,7 +452,7 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
           </td>
         </tr>
         <tr style={{ background: "#fffbeb" }}>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>予備予備費（現場対応分）</td>
+          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>予備費（現場対応分）</td>
           <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>
           <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>小計</td>
           <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right" }}>—</td>

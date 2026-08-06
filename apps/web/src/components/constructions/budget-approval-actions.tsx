@@ -48,7 +48,7 @@ export function BudgetApprovalActions({ constructionId, grossProfitRate }: Props
   const hasReserve = (info.reservePercent ?? 0) > 0;
   const showBreakdown = canSeeReserve && hasReserve;
   const breakdown = showBreakdown
-    ? `（会社指定${info.baseThreshold.toFixed(0)}%+予備費${info.reservePercent.toFixed(0)}%）`
+    ? `（会社指定${info.baseThreshold.toFixed(0)}%+経営調整費${info.reservePercent.toFixed(0)}%）`
     : "";
 
   const handleSubmit = async () => {
@@ -132,7 +132,7 @@ export function BudgetApprovalActions({ constructionId, grossProfitRate }: Props
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={4}
-                placeholder="例: 追加工事の原価増。予備費を含めても基準未達だが受注優先。"
+                placeholder="例: 追加工事の原価増。経営調整費を含めても基準未達だが受注優先。"
               />
             </div>
             <div className="space-y-2">
