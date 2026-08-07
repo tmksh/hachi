@@ -10,6 +10,7 @@ import {
   getCustomerTagMasters,
   getDepartmentMarginRates,
 } from "@/lib/actions/deals";
+import { getCompanyLocations } from "@/lib/actions/bi";
 import {
   getCraftsmenSpecialties,
   getCraftsmenQualifications,
@@ -31,6 +32,7 @@ export default async function SettingsPage() {
     leadSources,
     tags,
     departmentMargins,
+    locations,
     specialties,
     qualifications,
     appIntegrations,
@@ -44,6 +46,7 @@ export default async function SettingsPage() {
     getLeadSources().catch(() => []),
     getCustomerTagMasters().catch(() => []),
     getDepartmentMarginRates().catch(() => []),
+    getCompanyLocations().catch(() => []),
     getCraftsmenSpecialties().catch(() => []),
     getCraftsmenQualifications().catch(() => []),
     getAppIntegrations().catch(() => []),
@@ -70,6 +73,7 @@ export default async function SettingsPage() {
           leadSources: leadSources as Array<{ id: string; label: string; sort_order: number }>,
           tags: tags as Array<{ id: string; label: string; sort_order: number }>,
           departmentMargins,
+          locations,
         }}
         initialCraftsmenMaster={{
           specialties: specialties as Array<{ id: string; label: string; sort_order: number }>,

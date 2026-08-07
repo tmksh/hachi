@@ -36,8 +36,8 @@ import type {
   FinancialCogsCategory,
 } from "@/lib/database.types";
 import {
-  COGS_CATEGORIES,
   COGS_CATEGORY_LABELS,
+  COGS_DISPLAY_CATEGORIES,
   FINANCIAL_SECTIONS,
 } from "@/lib/financial-statements-utils";
 import {
@@ -235,9 +235,13 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
           <DialogHeader>
             <DialogTitle>勘定科目マスタの管理</DialogTitle>
             <DialogDescription>
-              決算書で使用する科目の追加・編集・並び替えを行います。人件費系の科目は製造原価（労務費）と販管費のどちらにも登録できます。
+              区分 → 科目 → 合計の3階層で管理します。人件費は製造原価（労務費）と販管費のどちらにも登録でき、振り分け先で粗利率が大きく変わります（No.98）。
             </DialogDescription>
           </DialogHeader>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+            <b>No.98 人件費の振分:</b> 同じ「労務費」でも製造原価に置くか販管費に置くかで粗利率が約7pt動きます。営業利益は変わりません。科目は区分を分けて両方登録できます。
+          </div>
 
           {/* 追加フォーム */}
           <div className="flex flex-wrap items-end gap-2 rounded-lg border bg-muted/30 p-3">
@@ -262,7 +266,7 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {COGS_CATEGORIES.map((c) => (
+                    {COGS_DISPLAY_CATEGORIES.map((c) => (
                       <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -284,7 +288,7 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
             </Button>
           </div>
 
-          {/* 区分ごとの一覧 */}
+          {/* 区分ごとの一覧（No.87: 区分 → 科目。売上原価は3区分） */}
           <div className="space-y-4">
             {FINANCIAL_SECTIONS.map((section) => (
               <Fragment key={section.key}>
@@ -292,13 +296,19 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
                   <div className="space-y-3 rounded-lg border p-3">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold">{section.label}</p>
-                      <Badge variant="secondary" className="text-[10px]">製造原価報告書</Badge>
+                      <Badge variant="secondary" className="text-[10px]">製造原価報告書・3区分</Badge>
                     </div>
-                    {COGS_CATEGORIES.map((cat) =>
+                    {COGS_DISPLAY_CATEGORIES.map((cat) =>
                       <Fragment key={cat.key}>
                         {renderGroup(
                           COGS_CATEGORY_LABELS[cat.key],
-                          sorted.filter((i) => i.section === "cogs" && i.cogs_category === cat.key),
+                          sorted.filter((i) => {
+                            if (i.section !== "cogs") return false;
+                            if (cat.key === "expense") {
+                              return i.cogs_category === "expense" || i.cogs_category === "outsourcing";
+                            }
+                            return i.cogs_category === cat.key;
+                          }),
                         )}
                       </Fragment>,
                     )}

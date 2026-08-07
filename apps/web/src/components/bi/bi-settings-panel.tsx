@@ -38,6 +38,7 @@ import {
 import { getCurrentFiscalYear, fiscalYearLabel, DEFAULT_DEPARTMENTS, normalizeBudgetMan } from "@/lib/bi-utils";
 import { toast } from "sonner";
 import { Trash2, Plus, Settings2, ArrowLeft, Info, SlidersHorizontal, ShieldCheck, Lock } from "lucide-react";
+import Link from "next/link";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
@@ -149,6 +150,11 @@ export function BiSettingsPanel({
     }))
   );
 
+  // ── 拠点別目標・販管費（No.80） ──
+  const [locTargets, setLocTargets] = useState<
+    Array<{ id: string; location_id: string; location_name: string; target_revenue: number; sga_budget: number; sort_order: number }>
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyConfig, setCompanyConfig] = useState<BiCompanyConfig>(DEFAULT_BI_COMPANY_CONFIG);
@@ -208,6 +214,13 @@ export function BiSettingsPanel({
             }))
           );
         }
+        setLocTargets(
+          (settings.location_targets ?? []).map((loc) => ({
+            ...loc,
+            target_revenue: normalizeBudgetMan(loc.target_revenue),
+            sga_budget: normalizeBudgetMan(loc.sga_budget),
+          })),
+        );
       } else {
         setOverheadLump(MOCK_OVERHEAD_BUDGET_MAN);
         setOverheadItems(
@@ -253,6 +266,12 @@ export function BiSettingsPanel({
           target_gross_profit: d.target_gross_profit,
           sort_order: i,
         })),
+        location_targets: locTargets.map((l, i) => ({
+          location_id: l.location_id,
+          target_revenue: l.target_revenue,
+          sga_budget: l.sga_budget,
+          sort_order: i,
+        })),
         reserve_fee_rate: reserveRatePct / 100,
         base_gross_profit_rate: baseRatePct / 100,
         budget_change: budgetFieldsChanged
@@ -280,7 +299,7 @@ export function BiSettingsPanel({
     } finally {
       setSaving(false);
     }
-  }, [fiscalYear, targetRevenue, targetGrossProfit, effectiveOverhead, sgaBudget, overheadMode, overheadItems, deptTargets, companyConfig, reserveRatePct, baseRatePct, budgetFieldsChanged, changeEffectiveFrom, changeNote, onSaved, router]);
+  }, [fiscalYear, targetRevenue, targetGrossProfit, effectiveOverhead, sgaBudget, overheadMode, overheadItems, deptTargets, locTargets, companyConfig, reserveRatePct, baseRatePct, budgetFieldsChanged, changeEffectiveFrom, changeNote, onSaved, router]);
 
   const handleToggleReserveRelease = useCallback(async (release: boolean) => {
     setReleasingReserve(true);
@@ -710,6 +729,63 @@ export function BiSettingsPanel({
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded-lg p-2.5 mt-1">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             部門達成率 = 部門売上実績 ÷ 部門売上目標で算出されます。
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── 拠点別目標・販管費（No.80）。拠点名の追加・削除は設定 > CRMマスタ ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">拠点別目標・販管費</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {locTargets.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              拠点がありません。
+              <Link href="/settings" className="underline underline-offset-2 text-foreground ml-1">
+                設定 → マスタ → CRMマスタ
+              </Link>
+              で拠点を追加してください。
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 pb-1 px-1">
+                <span className="text-xs text-muted-foreground font-medium">拠点</span>
+                <span className="text-xs text-muted-foreground font-medium">売上目標（年額・万円）</span>
+                <span className="text-xs text-muted-foreground font-medium">販管費（年額・万円）</span>
+              </div>
+              {locTargets.map((loc) => (
+                <div key={loc.location_id} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center">
+                  <span className="text-sm font-medium px-1">{loc.location_name}</span>
+                  <AmountInput
+                    value={loc.target_revenue}
+                    onChange={(v) =>
+                      setLocTargets((prev) =>
+                        prev.map((d) => d.location_id === loc.location_id ? { ...d, target_revenue: v } : d),
+                      )
+                    }
+                  />
+                  <AmountInput
+                    value={loc.sga_budget}
+                    onChange={(v) =>
+                      setLocTargets((prev) =>
+                        prev.map((d) => d.location_id === loc.location_id ? { ...d, sga_budget: v } : d),
+                      )
+                    }
+                  />
+                </div>
+              ))}
+            </>
+          )}
+          <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded-lg p-2.5 mt-1">
+            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              拠点の追加・改名・削除は
+              <Link href="/settings" className="underline underline-offset-2 text-foreground mx-1">
+                設定 → マスタ → CRMマスタ
+              </Link>
+              で行います。ここは年度ごとの売上目標・販管費のみです。
+            </span>
           </div>
         </CardContent>
       </Card>

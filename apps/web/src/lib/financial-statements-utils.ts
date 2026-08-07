@@ -7,12 +7,13 @@ import type {
   FinancialAccountItem,
   FinancialAccountSection,
   FinancialCogsCategory,
+  FinancialFormulaRole,
   FinancialStatementLine,
 } from "@/lib/database.types";
 
 // ── 区分定義 ─────────────────────────────────────────────────────────
 
-/** PL区分の表示順・ラベル */
+/** PL区分の表示順・ラベル（No.87: 第1階層） */
 export const FINANCIAL_SECTIONS: Array<{ key: FinancialAccountSection; label: string }> = [
   { key: "revenue", label: "売上高" },
   { key: "cogs", label: "売上原価" },
@@ -27,63 +28,160 @@ export const FINANCIAL_SECTION_LABELS: Record<FinancialAccountSection, string> =
     string
   >;
 
-/** 製造原価報告書のサブ区分（No.90: 材料費/労務費/製造経費の3区分＋外注費） */
-export const COGS_CATEGORIES: Array<{ key: FinancialCogsCategory; label: string }> = [
+/**
+ * 製造原価報告書の表示区分（No.90: 材料費/労務費/製造経費の3区分）。
+ * DB上の outsourcing は製造経費に含めて表示する（外注加工費はオレンジ強調）。
+ */
+export const COGS_DISPLAY_CATEGORIES: Array<{
+  key: "material" | "labor" | "expense";
+  label: string;
+}> = [
   { key: "material", label: "材料費" },
   { key: "labor", label: "労務費" },
-  { key: "outsourcing", label: "外注費" },
   { key: "expense", label: "製造経費" },
 ];
 
-export const COGS_CATEGORY_LABELS: Record<FinancialCogsCategory, string> =
-  Object.fromEntries(COGS_CATEGORIES.map((c) => [c.key, c.label])) as Record<
-    FinancialCogsCategory,
-    string
-  >;
+/** マスタ編集用（DBカテゴリ。outsourcing は新規では非推奨だが既存互換） */
+export const COGS_CATEGORIES: Array<{ key: FinancialCogsCategory; label: string }> = [
+  { key: "material", label: "材料費" },
+  { key: "labor", label: "労務費" },
+  { key: "expense", label: "製造経費" },
+  { key: "outsourcing", label: "外注費（旧）" },
+];
 
-/** 法人税概算の実効税率（No.97: あくまで概算表示） */
+export const COGS_CATEGORY_LABELS: Record<FinancialCogsCategory, string> = {
+  material: "材料費",
+  labor: "労務費",
+  expense: "製造経費",
+  outsourcing: "外注費",
+};
+
+/** 法人税概算の実効税率（No.97） */
 export const ESTIMATED_EFFECTIVE_TAX_RATE = 0.3;
 
-// ── 期間ラベル（No.104） ─────────────────────────────────────────────
+const WIP_ROLES: FinancialFormulaRole[] = ["begin_wip", "end_wip"];
+const MATERIAL_INV_ROLES: FinancialFormulaRole[] = [
+  "begin_material",
+  "material_purchase",
+  "end_material",
+];
 
-/**
- * 決算期の開始年・開始月から対象期間ラベルを自動生成する（手入力禁止）。
- * 例: (2025, 8) → 「2025年8月〜2026年7月期」 / (2025, 1) → 「2025年1月〜2025年12月期」
- */
-export function buildFinancialPeriodLabel(fiscalYear: number, startMonth: number): string {
-  const endMonth = startMonth === 1 ? 12 : startMonth - 1;
-  const endYear = startMonth === 1 ? fiscalYear : fiscalYear + 1;
-  return `${fiscalYear}年${startMonth}月〜${endYear}年${endMonth}月期`;
+// ── 期間ラベル（No.104 / モック: 令和表記） ───────────────────────────
+
+/** 西暦 → 令和年（2019=令和1） */
+export function toReiwaYear(westernYear: number): number {
+  return westernYear - 2018;
 }
 
-// ── デフォルト勘定科目（No.87: 標準的な建設業PL・初回自動seed用） ──────
+export type FinancialPeriodOptions = {
+  /** 期首日（1〜28）。未指定・1 のときは暦月の1日〜月末（No.104） */
+  startDay?: number;
+};
+
+/**
+ * 決算期の開始日・終了日を返す（ラベル・期間計算用・No.104）。
+ * startDay>1 のとき: 開始年/開始月/startDay 〜 翌年同月 (startDay-1)
+ * 例: (2026, 3, 21) → 2026/3/21〜2027/3/20
+ */
+export function financialPeriodRange(
+  fiscalYear: number,
+  startMonth: number,
+  startDay = 1,
+): { start: Date; end: Date; startYmd: string; endYmd: string } {
+  const day = Math.min(28, Math.max(1, Math.floor(startDay) || 1));
+  let start: Date;
+  let end: Date;
+  if (day <= 1) {
+    start = new Date(fiscalYear, startMonth - 1, 1);
+    const endMonth = startMonth === 1 ? 12 : startMonth - 1;
+    const endYear = startMonth === 1 ? fiscalYear : fiscalYear + 1;
+    const endDay = new Date(endYear, endMonth, 0).getDate();
+    end = new Date(endYear, endMonth - 1, endDay);
+  } else {
+    start = new Date(fiscalYear, startMonth - 1, day);
+    end = new Date(fiscalYear + 1, startMonth - 1, day - 1);
+  }
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  return { start, end, startYmd: ymd(start), endYmd: ymd(end) };
+}
+
+/**
+ * 決算期ラベルを自動生成（手入力禁止・No.104）。
+ * 例: (2026, 4) → 「令和8年度（2026/4/1〜2027/3/31）」
+ * 例: (2026, 3, { startDay: 21 }) → 「令和8年度（2026/3/21〜2027/3/20）」
+ */
+export function buildFinancialPeriodLabel(
+  fiscalYear: number,
+  startMonth: number,
+  options?: FinancialPeriodOptions,
+): string {
+  const { startYmd, endYmd } = financialPeriodRange(
+    fiscalYear,
+    startMonth,
+    options?.startDay ?? 1,
+  );
+  const reiwa = toReiwaYear(fiscalYear);
+  return `令和${reiwa}年度（${startYmd}〜${endYmd}）`;
+}
+
+/** 短い表示用（ヘッダー等） */
+export function buildFinancialPeriodShortLabel(
+  fiscalYear: number,
+  startMonth: number,
+  options?: FinancialPeriodOptions,
+): string {
+  return buildFinancialPeriodLabel(fiscalYear, startMonth, options);
+}
+
+// ── デフォルト勘定科目（No.87/80/90） ────────────────────────────────
 
 export type DefaultAccountItemSeed = {
   section: FinancialAccountSection;
   cogsCategory?: FinancialCogsCategory;
+  formulaRole?: FinancialFormulaRole;
   name: string;
 };
 
-/**
- * 標準的な建設業PLのデフォルト科目。
- * 人件費系は製造原価（労務費）と販管費のどちらにも登録できる構造（No.98）。
- */
-export const DEFAULT_FINANCIAL_ACCOUNT_ITEMS: DefaultAccountItemSeed[] = [
-  // 売上高
-  { section: "revenue", name: "完成工事高" },
-  { section: "revenue", name: "兼業事業売上高" },
-  // 売上原価（製造原価報告書 No.90）
-  { section: "cogs", cogsCategory: "material", name: "材料費" },
+/** 注釈モック用の部門名（プレビュー表示） */
+export const MOCK_REVENUE_DEPARTMENTS = [
+  "企画部門",
+  "商業施設部門",
+  "住宅リノベ部門",
+  "その他部門",
+] as const;
+
+/** v1 seed から置き換える古い科目名（heal 時に非アクティブ化） */
+export const OBSOLETE_FINANCIAL_ACCOUNT_NAMES = [
+  "完成工事高",
+  "兼業事業売上高",
+  "材料費",
+  "労務外注費",
+  "外注費",
+  "現場従業員給料手当",
+  "機械等経費",
+] as const;
+
+/** 製造原価・販管・営業外の固定科目（売上部門は別途渡す） */
+export const DEFAULT_FINANCIAL_FIXED_ITEMS: DefaultAccountItemSeed[] = [
+  // 材料費
+  { section: "cogs", cogsCategory: "material", formulaRole: "begin_material", name: "期首材料棚卸高" },
+  { section: "cogs", cogsCategory: "material", formulaRole: "material_purchase", name: "材料仕入高" },
+  { section: "cogs", cogsCategory: "material", formulaRole: "end_material", name: "期末材料棚卸高" },
+  // 労務費
   { section: "cogs", cogsCategory: "labor", name: "労務費" },
-  { section: "cogs", cogsCategory: "labor", name: "労務外注費" },
-  { section: "cogs", cogsCategory: "outsourcing", name: "外注費" },
+  { section: "cogs", cogsCategory: "labor", name: "法定福利費" },
+  // 製造経費（外注加工費を含む・No.90）
+  { section: "cogs", cogsCategory: "expense", name: "外注加工費" },
+  { section: "cogs", cogsCategory: "expense", name: "地代家賃" },
+  { section: "cogs", cogsCategory: "expense", name: "減価償却費（製造）" },
   { section: "cogs", cogsCategory: "expense", name: "仮設経費" },
   { section: "cogs", cogsCategory: "expense", name: "動力用水光熱費" },
-  { section: "cogs", cogsCategory: "expense", name: "機械等経費" },
-  { section: "cogs", cogsCategory: "expense", name: "現場従業員給料手当" },
-  { section: "cogs", cogsCategory: "expense", name: "減価償却費（製造）" },
   { section: "cogs", cogsCategory: "expense", name: "その他製造経費" },
-  // 販売費及び一般管理費
+  // 仕掛品
+  { section: "cogs", cogsCategory: "expense", formulaRole: "begin_wip", name: "期首仕掛品棚卸高" },
+  { section: "cogs", cogsCategory: "expense", formulaRole: "end_wip", name: "期末仕掛品棚卸高" },
+  // 販管費
   { section: "sga", name: "役員報酬" },
   { section: "sga", name: "給料手当" },
   { section: "sga", name: "賞与" },
@@ -101,17 +199,34 @@ export const DEFAULT_FINANCIAL_ACCOUNT_ITEMS: DefaultAccountItemSeed[] = [
   { section: "sga", name: "減価償却費" },
   { section: "sga", name: "支払手数料" },
   { section: "sga", name: "雑費" },
-  // 営業外収益
+  // 営業外
   { section: "non_operating_income", name: "受取利息" },
   { section: "non_operating_income", name: "雑収入" },
-  // 営業外費用
   { section: "non_operating_expense", name: "支払利息" },
   { section: "non_operating_expense", name: "雑損失" },
 ];
 
-// ── PL 計算（No.89: 段階利益は自動計算・手入力禁止） ──────────────────
+/**
+ * 部門名付きの標準科目一覧を生成（No.80/87/90）。
+ * 3階層は「区分 → 科目 → 合計（自動計算）」で表現する。
+ */
+export function buildDefaultFinancialAccountItems(
+  departmentNames: string[],
+): DefaultAccountItemSeed[] {
+  const depts = departmentNames.length > 0 ? departmentNames : [...MOCK_REVENUE_DEPARTMENTS];
+  return [
+    ...depts.map((name) => ({ section: "revenue" as const, name })),
+    ...DEFAULT_FINANCIAL_FIXED_ITEMS,
+  ];
+}
 
-/** 予算・実績・前期実績の3値セット */
+/** @deprecated buildDefaultFinancialAccountItems を使う。後方互換の固定リスト */
+export const DEFAULT_FINANCIAL_ACCOUNT_ITEMS = buildDefaultFinancialAccountItems([
+  ...MOCK_REVENUE_DEPARTMENTS,
+]);
+
+// ── PL 計算（No.89 / No.90） ─────────────────────────────────────────
+
 export type PlAmounts = {
   budget: number;
   actual: number;
@@ -135,29 +250,54 @@ export type PlLineEntry = {
 };
 
 export type PlComputation = {
-  /** 区分ごとの科目行 */
   sectionEntries: Record<FinancialAccountSection, PlLineEntry[]>;
-  /** 区分ごとの合計 */
   sectionTotals: Record<FinancialAccountSection, PlAmounts>;
-  /** 製造原価報告書サブ区分ごとの合計（No.90） */
+  /** DBカテゴリ別（outsourcing 含む） */
   cogsCategoryTotals: Record<FinancialCogsCategory, PlAmounts>;
-  /** 売上総利益 = 売上高 − 売上原価 */
+  /** 表示用3区分の合計（材料は棚卸計算後） */
+  cogsDisplayTotals: Record<"material" | "labor" | "expense", PlAmounts>;
+  /** 各区分に出す明細（仕掛品ロールは除外） */
+  cogsDisplayEntries: Record<"material" | "labor" | "expense", PlLineEntry[]>;
+  /** 仕掛品行 */
+  wipEntries: { begin: PlLineEntry[]; end: PlLineEntry[] };
+  /** = 総製造費用 */
+  totalManufacturingCost: PlAmounts;
+  /** = 当期製品製造原価（→ PL売上原価） */
+  productManufacturingCost: PlAmounts;
   grossProfit: PlAmounts;
-  /** 営業利益 = 売上総利益 − 販管費 */
   operatingIncome: PlAmounts;
-  /** 経常利益 = 営業利益 ＋ 営業外収益 − 営業外費用 */
   ordinaryIncome: PlAmounts;
-  /** 税引前当期純利益（特別損益なしのPL1枚構成のため経常利益と同額） */
   pretaxIncome: PlAmounts;
-  /** 法人税等の概算（No.97: 税引前利益 × 実効税率約30%） */
   estimatedTax: PlAmounts;
-  /** 概算の当期純利益（No.97） */
   estimatedNetIncome: PlAmounts;
 };
 
+function roleOf(item: FinancialAccountItem): FinancialFormulaRole | null {
+  return (item.formula_role as FinancialFormulaRole | null | undefined) ?? null;
+}
+
+function isWip(item: FinancialAccountItem): boolean {
+  const r = roleOf(item);
+  return r === "begin_wip" || r === "end_wip";
+}
+
+function displayCategory(
+  cat: FinancialCogsCategory | null,
+): "material" | "labor" | "expense" | null {
+  if (!cat) return null;
+  if (cat === "outsourcing") return "expense";
+  return cat;
+}
+
+/** 外注系科目か（No.90: オレンジ強調） */
+export function isOutsourcingAccount(item: FinancialAccountItem): boolean {
+  if (item.cogs_category === "outsourcing") return true;
+  return /外注/.test(item.name);
+}
+
 /**
- * 勘定科目マスタと明細行から PL 全体（区分合計・段階利益）を計算する。
- * 段階利益は保存せずここで算出する（No.89）。
+ * 勘定科目マスタと明細行から PL・製造原価を計算する。
+ * 段階利益・総製造費用・当期製品製造原価は保存せずここで算出（No.89/90）。
  */
 export function computePl(
   items: FinancialAccountItem[],
@@ -188,6 +328,15 @@ export function computePl(
     expense: { ...ZERO_AMOUNTS },
   } as Record<FinancialCogsCategory, PlAmounts>;
 
+  const cogsDisplayEntries = {
+    material: [] as PlLineEntry[],
+    labor: [] as PlLineEntry[],
+    expense: [] as PlLineEntry[],
+  };
+  const wipEntries = { begin: [] as PlLineEntry[], end: [] as PlLineEntry[] };
+
+  const byRole: Partial<Record<FinancialFormulaRole, PlAmounts>> = {};
+
   const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
   for (const item of sorted) {
     if (!item.is_active) continue;
@@ -197,19 +346,95 @@ export function computePl(
       actual: Number(line?.actual_amount ?? 0),
       prior: Number(line?.prior_actual_amount ?? 0),
     };
-    sectionEntries[item.section].push({
+    const entry: PlLineEntry = {
       item,
       amounts,
       varianceNote: line?.variance_note ?? "",
-    });
-    sectionTotals[item.section] = addAmounts(sectionTotals[item.section], amounts);
-    if (item.section === "cogs" && item.cogs_category) {
+    };
+
+    sectionEntries[item.section].push(entry);
+
+    if (item.section !== "cogs") {
+      sectionTotals[item.section] = addAmounts(sectionTotals[item.section], amounts);
+      continue;
+    }
+
+    const role = roleOf(item);
+    if (role) {
+      byRole[role] = addAmounts(byRole[role] ?? { ...ZERO_AMOUNTS }, amounts);
+    }
+
+    if (role === "begin_wip") {
+      wipEntries.begin.push(entry);
+      continue;
+    }
+    if (role === "end_wip") {
+      wipEntries.end.push(entry);
+      continue;
+    }
+
+    if (item.cogs_category) {
       cogsCategoryTotals[item.cogs_category] = addAmounts(
         cogsCategoryTotals[item.cogs_category],
         amounts,
       );
     }
+    const disp = displayCategory(item.cogs_category);
+    if (disp) cogsDisplayEntries[disp].push(entry);
   }
+
+  // 材料費 = 期首 + 仕入 − 期末（ロールがある場合）。なければ単純合計
+  const hasMaterialFormula = MATERIAL_INV_ROLES.some((r) => byRole[r] != null);
+  let materialTotal: PlAmounts;
+  if (hasMaterialFormula) {
+    materialTotal = subtractAmounts(
+      addAmounts(byRole.begin_material ?? ZERO_AMOUNTS, byRole.material_purchase ?? ZERO_AMOUNTS),
+      byRole.end_material ?? ZERO_AMOUNTS,
+    );
+    // ロール外の材料科目があれば加算
+    for (const e of cogsDisplayEntries.material) {
+      const r = roleOf(e.item);
+      if (!r || !MATERIAL_INV_ROLES.includes(r)) {
+        materialTotal = addAmounts(materialTotal, e.amounts);
+      }
+    }
+  } else {
+    materialTotal = cogsDisplayEntries.material.reduce(
+      (s, e) => addAmounts(s, e.amounts),
+      { ...ZERO_AMOUNTS },
+    );
+  }
+
+  const laborTotal = cogsDisplayEntries.labor.reduce(
+    (s, e) => addAmounts(s, e.amounts),
+    { ...ZERO_AMOUNTS },
+  );
+  // outsourcing は displayCategory で expense に振り分け済み
+  const expenseOnly = cogsDisplayEntries.expense.reduce(
+    (s, e) => addAmounts(s, e.amounts),
+    { ...ZERO_AMOUNTS },
+  );
+
+  const cogsDisplayTotals = {
+    material: materialTotal,
+    labor: laborTotal,
+    expense: expenseOnly,
+  };
+
+  const totalManufacturingCost = addAmounts(
+    addAmounts(materialTotal, laborTotal),
+    expenseOnly,
+  );
+
+  const beginWip = byRole.begin_wip ?? ZERO_AMOUNTS;
+  const endWip = byRole.end_wip ?? ZERO_AMOUNTS;
+  const productManufacturingCost = subtractAmounts(
+    addAmounts(totalManufacturingCost, beginWip),
+    endWip,
+  );
+
+  // PLの売上原価 = 当期製品製造原価
+  sectionTotals.cogs = productManufacturingCost;
 
   const grossProfit = subtractAmounts(sectionTotals.revenue, sectionTotals.cogs);
   const operatingIncome = subtractAmounts(grossProfit, sectionTotals.sga);
@@ -229,6 +454,11 @@ export function computePl(
     sectionEntries,
     sectionTotals,
     cogsCategoryTotals,
+    cogsDisplayTotals,
+    cogsDisplayEntries,
+    wipEntries,
+    totalManufacturingCost,
+    productManufacturingCost,
     grossProfit,
     operatingIncome,
     ordinaryIncome,
@@ -240,27 +470,24 @@ export function computePl(
 
 // ── 表示フォーマット ─────────────────────────────────────────────────
 
-/** 金額（円）を表示用にフォーマット。負値は ▲ 表記 */
 export function fmtYen(v: number): string {
   const rounded = Math.round(v);
   if (rounded < 0) return `▲${Math.abs(rounded).toLocaleString()}`;
   return rounded.toLocaleString();
 }
 
-/** 構成比（売上高計に対する%）。売上高がゼロなら "−" */
 export function fmtCompositionRatio(value: number, revenueTotal: number): string {
   if (revenueTotal === 0) return "−";
   return `${((value / revenueTotal) * 100).toFixed(1)}%`;
 }
 
-/** 前期比（当期実績 ÷ 前期実績）。前期がゼロなら "−" */
 export function fmtYoyRatio(actual: number, prior: number): string {
   if (prior === 0) return "−";
   return `${((actual / prior) * 100).toFixed(1)}%`;
 }
 
-/** 決算期として選択可能な開始年リスト（当年から過去10年＋翌年） */
 export function listFinancialFiscalYears(): number[] {
   const current = new Date().getFullYear();
   return Array.from({ length: 12 }, (_, i) => current + 1 - i);
 }
+

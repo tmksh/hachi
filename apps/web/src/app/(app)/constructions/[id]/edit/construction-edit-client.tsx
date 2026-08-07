@@ -20,12 +20,14 @@ type ConstructionEditClientProps = {
   id: string;
   initialConstruction: Construction;
   initialDepartments: string[];
+  initialLocations: Array<{ id: string; name: string }>;
 };
 
 export function ConstructionEditClient({
   id,
   initialConstruction,
   initialDepartments,
+  initialLocations,
 }: ConstructionEditClientProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -37,12 +39,24 @@ export function ConstructionEditClient({
   const [budgetCost, setBudgetCost] = useState(initialConstruction.budget_cost ? String(initialConstruction.budget_cost) : "");
   const [progress, setProgress] = useState(String(initialConstruction.progress ?? 0));
   const [departmentName, setDepartmentName] = useState(initialConstruction.department_name ?? "");
+  const [locationId, setLocationId] = useState(initialConstruction.location_id ?? "");
   const departments = initialDepartments;
+  const locations = initialLocations;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateConstruction(id, { title, status: status as "preparing"|"in_progress"|"completed"|"suspended"|"delayed", start_date: startDate || null, end_date: endDate || null, order_amount: orderAmount ? Number(orderAmount) : 0, budget_cost: budgetCost ? Number(budgetCost) : 0, progress: Number(progress), department_name: departmentName || null });
+      await updateConstruction(id, {
+        title,
+        status: status as "preparing"|"in_progress"|"completed"|"suspended"|"delayed",
+        start_date: startDate || null,
+        end_date: endDate || null,
+        order_amount: orderAmount ? Number(orderAmount) : 0,
+        budget_cost: budgetCost ? Number(budgetCost) : 0,
+        progress: Number(progress),
+        department_name: departmentName || null,
+        location_id: locationId || null,
+      });
       toast.success("更新しました"); router.push(`/constructions/${id}`);
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
   };
@@ -55,6 +69,7 @@ export function ConstructionEditClient({
           <div className="space-y-2 sm:col-span-2"><Label>工事名</Label><Input value={title} onChange={e=>setTitle(e.target.value)} /></div>
           <div className="space-y-2"><Label>ステータス</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STATUS_OPTIONS.map(s=><SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>部門（BI集計）</Label><Select value={departmentName || "_none"} onValueChange={(v) => setDepartmentName(v === "_none" ? "" : v)}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="_none">未設定</SelectItem>{departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><Label>拠点（BI集計）</Label><Select value={locationId || "_none"} onValueChange={(v) => setLocationId(v === "_none" ? "" : v)}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="_none">未設定</SelectItem>{locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>進捗 (%)</Label><Input type="number" min={0} max={100} value={progress} onChange={e=>setProgress(e.target.value)} /></div>
           <div className="space-y-2"><Label>着工日</Label><Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
           <div className="space-y-2"><Label>竣工日</Label><Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>

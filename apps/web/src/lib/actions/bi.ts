@@ -8,11 +8,14 @@ import type {
   BiBudgetChangeLog,
   BiActuals,
   BiDeptActual,
+  BiLocationActual,
+  BiLocationTarget,
   BiMonthlyActual,
   BiForecastTierActual,
   BiDeptMonthlySeries,
   BiOverheadItem,
   BiDepartmentTarget,
+  CompanyLocation,
 } from "@/lib/bi-types";
 import {
   aggregateForecastTiers,
@@ -32,6 +35,11 @@ import {
   type BiForecastTierConfig,
   type BiMetricRecord,
 } from "@/lib/bi-config";
+import {
+  canAccessFeature,
+  mergeRolePermissions,
+  type RolePermissions,
+} from "@/lib/role-permissions";
 
 function fiscalYearRange(year: number, startMonth = 4) {
   const sm = String(startMonth).padStart(2, "0");
@@ -49,6 +57,125 @@ function toManYen(v: number) {
   return Math.round(v / 10000);
 }
 
+const DEFAULT_LOCATION_NAMES = ["本社", "東京支店", "大阪支店", "名古屋支店"] as const;
+
+/** 拠点マスタ一覧。未登録ならデフォルト4拠点をseed（No.80） */
+export async function getCompanyLocations(): Promise<CompanyLocation[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) return [];
+
+  const { data: existing } = await supabase
+    .from("company_locations")
+    .select("id, name, sort_order, is_active")
+    .eq("company_id", profile.company_id)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  if (existing && existing.length > 0) {
+    return existing.map((r) => ({
+      id: r.id,
+      name: r.name,
+      sort_order: r.sort_order,
+      is_active: r.is_active,
+    }));
+  }
+
+  const { data: seeded, error } = await supabase
+    .from("company_locations")
+    .insert(
+      DEFAULT_LOCATION_NAMES.map((name, i) => ({
+        company_id: profile.company_id,
+        name,
+        sort_order: i,
+        is_active: true,
+      })),
+    )
+    .select("id, name, sort_order, is_active");
+
+  if (error) {
+    const { data: again } = await supabase
+      .from("company_locations")
+      .select("id, name, sort_order, is_active")
+      .eq("company_id", profile.company_id)
+      .eq("is_active", true)
+      .order("sort_order");
+    return (again ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      sort_order: r.sort_order,
+      is_active: r.is_active,
+    }));
+  }
+
+  return (seeded ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    sort_order: r.sort_order,
+    is_active: r.is_active,
+  }));
+}
+
+export async function createCompanyLocation(name: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("拠点名を入力してください");
+  const { data: last } = await supabase
+    .from("company_locations")
+    .select("sort_order")
+    .eq("company_id", profile.company_id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data, error } = await supabase
+    .from("company_locations")
+    .insert({
+      company_id: profile.company_id,
+      name: trimmed,
+      sort_order: (last?.sort_order ?? -1) + 1,
+      is_active: true,
+    })
+    .select("id, name, sort_order, is_active")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error("同じ名前の拠点がすでにあります");
+    throw error;
+  }
+  return data as CompanyLocation;
+}
+
+export async function updateCompanyLocation(id: string, name: string) {
+  const supabase = await createClient();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("拠点名を入力してください");
+  const { data, error } = await supabase
+    .from("company_locations")
+    .update({ name: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id, name, sort_order, is_active")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error("同じ名前の拠点がすでにあります");
+    throw error;
+  }
+  return data as CompanyLocation;
+}
+
+export async function deleteCompanyLocation(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("company_locations")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 async function getCompanyId() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -63,6 +190,19 @@ async function getCompanyId() {
   return { supabase, companyId: profile?.company_id ?? null };
 }
 
+async function loadCompanyRolePermissions(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+): Promise<RolePermissions> {
+  const { data: company } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", companyId)
+    .maybeSingle();
+  const raw = (company?.settings as { role_permissions?: RolePermissions } | null)?.role_permissions;
+  return mergeRolePermissions(raw ?? null);
+}
+
 /**
  * 予備費の設定・決算戻しを操作できるロールか判定する。
  * 会社設定(companies.settings.role_permissions.reserve_fee)の許可ロール配列で制御し、
@@ -74,14 +214,23 @@ async function roleCanManageReserve(
   role: string | null | undefined,
 ): Promise<boolean> {
   if (!role) return false;
-  const { data: company } = await supabase
-    .from("companies")
-    .select("settings")
-    .eq("id", companyId)
-    .maybeSingle();
-  const perms = (company?.settings as { role_permissions?: Record<string, string[]> } | null)?.role_permissions;
-  const allowed = perms?.reserve_fee ?? ["hq_admin"];
-  return allowed.includes(role);
+  const perms = await loadCompanyRolePermissions(supabase, companyId);
+  return canAccessFeature("reserve_fee", [role], perms);
+}
+
+/**
+ * BI案件一覧の顧客名を表示できるロールか（No.84）。
+ * 権限マトリクス「BI顧客名表示」(bi_customer_name) で制御。
+ * 未設定時の既定は本部管理者・管理者・経営層。
+ */
+async function roleCanViewBiCustomerName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string | null | undefined,
+  role: string | null | undefined,
+): Promise<boolean> {
+  if (!role || !companyId) return false;
+  const perms = await loadCompanyRolePermissions(supabase, companyId);
+  return canAccessFeature("bi_customer_name", [role], perms);
 }
 
 // ── 会社別 BI 分析設定 ────────────────────────────────────────────────
@@ -123,17 +272,56 @@ export async function getBiSettings(fiscalYear?: number): Promise<BiAnnualSettin
   const fiscalMonthStart = await getCompanyFiscalMonthStart();
   const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
 
-  const { data, error } = await supabase
-    .from("bi_annual_settings")
-    .select(`
-      *,
-      overhead_items:bi_overhead_items(id, name, amount, sort_order, is_custom),
-      department_targets:bi_department_targets(id, department_name, target_revenue, target_gross_profit, sort_order)
-    `)
-    .eq("fiscal_year", year)
-    .single();
+  const [{ data, error }, locations] = await Promise.all([
+    supabase
+      .from("bi_annual_settings")
+      .select(`
+        *,
+        overhead_items:bi_overhead_items(id, name, amount, sort_order, is_custom),
+        department_targets:bi_department_targets(id, department_name, target_revenue, target_gross_profit, sort_order),
+        location_targets:bi_location_targets(id, location_id, target_revenue, sga_budget, sort_order)
+      `)
+      .eq("fiscal_year", year)
+      .single(),
+    getCompanyLocations(),
+  ]);
 
   if (error || !data) return null;
+
+  const locNameById = new Map(locations.map((l) => [l.id, l.name]));
+  const rawLocTargets = (data.location_targets ?? []) as Array<{
+    id: string;
+    location_id: string;
+    target_revenue: number;
+    sga_budget: number;
+    sort_order: number;
+  }>;
+  const locTargetById = new Map(rawLocTargets.map((t) => [t.location_id, t]));
+  // マスタにある拠点は必ず行を返す（未保存なら0）
+  const location_targets: BiLocationTarget[] = locations.map((loc, i) => {
+    const hit = locTargetById.get(loc.id);
+    return {
+      id: hit?.id ?? `tmp-${loc.id}`,
+      location_id: loc.id,
+      location_name: loc.name,
+      target_revenue: normalizeBudgetMan(Number(hit?.target_revenue ?? 0)),
+      sga_budget: normalizeBudgetMan(Number(hit?.sga_budget ?? 0)),
+      sort_order: hit?.sort_order ?? loc.sort_order ?? i,
+    };
+  }).sort((a, b) => a.sort_order - b.sort_order);
+
+  // 孤立した旧ターゲット（拠点削除済み）は名前だけ残す
+  for (const t of rawLocTargets) {
+    if (locNameById.has(t.location_id)) continue;
+    location_targets.push({
+      id: t.id,
+      location_id: t.location_id,
+      location_name: "（削除済み拠点）",
+      target_revenue: normalizeBudgetMan(Number(t.target_revenue)),
+      sga_budget: normalizeBudgetMan(Number(t.sga_budget)),
+      sort_order: t.sort_order,
+    });
+  }
 
   return {
     ...data,
@@ -158,6 +346,7 @@ export async function getBiSettings(fiscalYear?: number): Promise<BiAnnualSettin
         target_gross_profit: normalizeBudgetMan(Number(dept.target_gross_profit)),
       }))
       .sort((a: BiDepartmentTarget, b: BiDepartmentTarget) => a.sort_order - b.sort_order),
+    location_targets,
   } as BiAnnualSettings;
 }
 
@@ -199,6 +388,8 @@ export async function saveBiSettings(input: {
   overhead_mode: "breakdown" | "lump_sum";
   overhead_items: Array<{ name: string; amount: number; sort_order: number; is_custom: boolean }>;
   department_targets: Array<{ department_name: string; target_revenue: number; target_gross_profit: number; sort_order: number }>;
+  /** 拠点別売上目標・販管費（No.80） */
+  location_targets?: Array<{ location_id: string; target_revenue: number; sga_budget: number; sort_order: number }>;
   /** 予備費率（0〜1）。管理者(hq_admin)のみ変更が反映される */
   reserve_fee_rate?: number;
   /** 会社指定粗利率（0〜1）。管理者のみ変更が反映される */
@@ -311,6 +502,7 @@ export async function saveBiSettings(input: {
 
   await supabase.from("bi_overhead_items").delete().eq("setting_id", setting.id);
   await supabase.from("bi_department_targets").delete().eq("setting_id", setting.id);
+  await supabase.from("bi_location_targets").delete().eq("setting_id", setting.id);
 
   if (input.overhead_items.length > 0) {
     const { error: itemsErr } = await supabase.from("bi_overhead_items").insert(
@@ -338,6 +530,20 @@ export async function saveBiSettings(input: {
       }))
     );
     if (deptErr) return { ok: false, error: deptErr.message };
+  }
+
+  if (input.location_targets && input.location_targets.length > 0) {
+    const { error: locErr } = await supabase.from("bi_location_targets").insert(
+      input.location_targets.map((loc) => ({
+        company_id,
+        setting_id: setting.id,
+        location_id: loc.location_id,
+        target_revenue: normalizeBudgetMan(loc.target_revenue),
+        sga_budget: normalizeBudgetMan(loc.sga_budget),
+        sort_order: loc.sort_order,
+      })),
+    );
+    if (locErr) return { ok: false, error: locErr.message };
   }
 
   return { ok: true };
@@ -571,8 +777,8 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
 
   // 商談・契約・請求は年度で絞る。工事は「年度重複 + 当年請求に紐づくID」だけに限定して全件取得を避ける。
   const constructionSelect =
-    "id, department_name, status, order_amount, actual_cost, budget_cost, end_date, start_date";
-  const [{ data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }, { data: constructionsInYear }] = await Promise.all([
+    "id, department_name, location_id, status, order_amount, actual_cost, budget_cost, end_date, start_date";
+  const [{ data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }, { data: constructionsInYear }, locations] = await Promise.all([
     supabase
       .from("deals")
       .select("id, department_name, stage, value, expected_close_date")
@@ -602,6 +808,7 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
       .or(
         `and(start_date.lte.${end},end_date.gte.${start}),and(start_date.gte.${start},start_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end}),start_date.is.null,end_date.is.null`,
       ),
+    getCompanyLocations(),
   ]);
 
   const invoiceConstructionIds = [
@@ -766,8 +973,38 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
 
   const hasData = actualRecords.length > 0;
 
+  // 拠点別実績（No.80）: 工事の location_id で集計
+  const unassignedLoc = "未設定";
+  const locMap = new Map<string, BiLocationActual>();
+  for (let i = 0; i < locations.length; i++) {
+    const loc = locations[i];
+    locMap.set(loc.id, {
+      id: loc.id,
+      name: loc.name,
+      label: deptLabel(i),
+      revenue: 0,
+      grossProfit: 0,
+    });
+  }
+  locMap.set(unassignedLoc, {
+    id: unassignedLoc,
+    name: unassignedLoc,
+    label: "—",
+    revenue: 0,
+    grossProfit: 0,
+  });
+  for (const c of constructions) {
+    const { revenue, grossProfit } = constructionMetrics(c, companyConfig.invoice_gross_profit_rate);
+    const locId = (c as { location_id?: string | null }).location_id ?? null;
+    const key = locId && locMap.has(locId) ? locId : unassignedLoc;
+    const bucket = locMap.get(key)!;
+    bucket.revenue += toManYen(revenue);
+    bucket.grossProfit += toManYen(grossProfit);
+  }
+
   return {
     deptActuals: Array.from(deptMap.values()).filter((d) => d.name !== unassigned || d.revenue > 0 || d.grossProfit > 0),
+    locationActuals: Array.from(locMap.values()).filter((l) => l.id !== unassignedLoc || l.revenue > 0 || l.grossProfit > 0),
     monthly,
     monthlyByDept,
     monthlyOverheadAllocations,
@@ -841,36 +1078,54 @@ export type BiDepartmentProject = {
 
 export type BiDepartmentProjectsResult = {
   rows: BiDepartmentProject[];
-  /** 顧客名を表示できるロールか（hq_admin / admin / executive） */
+  /** 顧客名を表示できるか（権限マトリクス bi_customer_name） */
   canViewCustomer: boolean;
 };
 
-/** 顧客名の閲覧を許可するロール（No.84） */
-const CUSTOMER_NAME_VISIBLE_ROLES = ["hq_admin", "admin", "executive"];
 const CUSTOMER_NAME_HIDDEN = "（非表示）";
 
 export async function getBiDepartmentProjects(
   departmentName: string,
   fiscalYear?: number,
 ): Promise<BiDepartmentProjectsResult> {
+  return getBiAxisProjects({ axis: "department", key: departmentName, fiscalYear });
+}
+
+/** 拠点別 PJ 一覧（No.80） */
+export async function getBiLocationProjects(
+  locationId: string,
+  fiscalYear?: number,
+): Promise<BiDepartmentProjectsResult> {
+  return getBiAxisProjects({ axis: "location", key: locationId, fiscalYear });
+}
+
+async function getBiAxisProjects(input: {
+  axis: "department" | "location";
+  key: string;
+  fiscalYear?: number;
+}): Promise<BiDepartmentProjectsResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { rows: [], canViewCustomer: false };
 
   const [{ data: profile }, fiscalMonthStart, companyConfig] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user.id).single(),
+    supabase.from("profiles").select("role, company_id").eq("id", user.id).single(),
     getCompanyFiscalMonthStart(),
     getBiCompanyConfig(),
   ]);
-  const canViewCustomer = CUSTOMER_NAME_VISIBLE_ROLES.includes(profile?.role ?? "");
+  const canViewCustomer = await roleCanViewBiCustomerName(
+    supabase,
+    profile?.company_id,
+    profile?.role,
+  );
 
-  const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
+  const year = input.fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
   const { start, end } = fiscalYearRange(year, fiscalMonthStart);
 
   const [{ data: constructions }, { data: settings }] = await Promise.all([
     supabase
       .from("constructions")
-      .select("id, title, department_name, status, order_amount, actual_cost, budget_cost, end_date, start_date, customer:customers(name)")
+      .select("id, title, department_name, location_id, status, order_amount, actual_cost, budget_cost, end_date, start_date, customer:customers(name)")
       .or(
         `and(start_date.lte.${end},end_date.gte.${start}),and(start_date.gte.${start},start_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end})`,
       ),
@@ -888,7 +1143,14 @@ export async function getBiDepartmentProjects(
   const unassigned = companyConfig.unassigned_department_label;
 
   const rows: BiDepartmentProject[] = (constructions ?? [])
-    .filter((c) => resolveDepartmentName(c.department_name, departments, unassigned) === departmentName)
+    .filter((c) => {
+      if (input.axis === "location") {
+        const locId = (c as { location_id?: string | null }).location_id ?? null;
+        if (input.key === "未設定") return !locId;
+        return locId === input.key;
+      }
+      return resolveDepartmentName(c.department_name, departments, unassigned) === input.key;
+    })
     .map((c) => {
       const { revenue, grossProfit } = constructionMetrics(c, companyConfig.invoice_gross_profit_rate);
       const customer = c.customer as { name?: string } | { name?: string }[] | null;

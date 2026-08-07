@@ -17,6 +17,13 @@ import {
   getDepartmentMarginRates, createDepartmentMarginRate, updateDepartmentMarginRate, deleteDepartmentMarginRate,
   type DepartmentMarginRate,
 } from "@/lib/actions/deals";
+import {
+  getCompanyLocations,
+  createCompanyLocation,
+  updateCompanyLocation,
+  deleteCompanyLocation,
+} from "@/lib/actions/bi";
+import type { CompanyLocation } from "@/lib/bi-types";
 
 type Stage = { id: string; key: string; label: string; color: string; sort_order: number; is_won: boolean; is_lost: boolean };
 type Item  = { id: string; label: string; sort_order: number };
@@ -476,6 +483,139 @@ function DepartmentMarginList({
   );
 }
 
+function LocationList({
+  items,
+  onReload,
+}: {
+  items: CompanyLocation[];
+  onReload: () => Promise<void> | void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  async function handleAdd() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    try {
+      await createCompanyLocation(newName.trim());
+      toast.success("拠点を追加しました");
+      setNewName("");
+      await onReload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "追加に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave(id: string) {
+    if (!editName.trim()) return;
+    try {
+      await updateCompanyLocation(id, editName.trim());
+      toast.success("更新しました");
+      setEditId(null);
+      await onReload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "更新に失敗しました");
+    }
+  }
+
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`「${name}」を削除しますか？\n紐づく工事の拠点は「未設定」になります。`)) return;
+    setDeletingId(id);
+    try {
+      await deleteCompanyLocation(id);
+      toast.success("削除しました");
+      await onReload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "削除に失敗しました");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <MasterCard
+      title="拠点"
+      description="BIの拠点別表示・工事の拠点選択に使用"
+      count={items.length}
+    >
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 pb-1.5 -mx-3 px-3">
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="拠点名（例: 福岡支店）"
+          onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
+          className="h-7 text-sm flex-1 min-w-[140px]"
+        />
+        <Button size="sm" className="h-7 shrink-0 px-2.5" onClick={() => void handleAdd()} disabled={saving || !newName.trim()}>
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-4 rounded-lg border border-dashed bg-muted/20">
+          まだ登録がありません
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((item) => (
+            <span
+              key={item.id}
+              className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/30 pl-2 pr-1 py-1 text-xs group hover:bg-muted/50 transition-colors"
+            >
+              {editId === item.id ? (
+                <>
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="h-6 w-28 text-xs py-0 px-1"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleSave(item.id);
+                      if (e.key === "Escape") setEditId(null);
+                    }}
+                  />
+                  <button type="button" onClick={() => void handleSave(item.id)} className="rounded p-0.5 hover:bg-background/80">
+                    <Check className="h-3 w-3" />
+                  </button>
+                  <button type="button" onClick={() => setEditId(null)} className="rounded p-0.5 hover:bg-background/80">
+                    <X className="h-3 w-3" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span>{item.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setEditId(item.id); setEditName(item.name); }}
+                    className="rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground transition-opacity"
+                    aria-label={`${item.name}を編集`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(item.id, item.name)}
+                    disabled={deletingId === item.id}
+                    className="rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    aria-label={`${item.name}を削除`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </MasterCard>
+  );
+}
+
 function CrmMasterSkeleton() {
   return (
     <div className="space-y-4">
@@ -497,6 +637,7 @@ export type CrmMasterInitialData = {
   leadSources: Item[];
   tags: Item[];
   departmentMargins?: DepartmentMarginRate[];
+  locations?: CompanyLocation[];
 };
 
 export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialData }) {
@@ -505,28 +646,33 @@ export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialDa
   const [leadSources, setLeadSources] = useState<Item[]>(initialData?.leadSources ?? []);
   const [tags, setTags]             = useState<Item[]>(initialData?.tags ?? []);
   const [departmentMargins, setDepartmentMargins] = useState<DepartmentMarginRate[]>(initialData?.departmentMargins ?? []);
+  const [locations, setLocations] = useState<CompanyLocation[]>(initialData?.locations ?? []);
   const [loading, setLoading]       = useState(!initialData);
 
   const reload = useCallback(async () => {
-    const [s, l, ls, t, dm] = await Promise.all([
+    const [s, l, ls, t, dm, locs] = await Promise.all([
       getDealStages(),
       getLostReasons(),
       getLeadSources(),
       getCustomerTagMasters(),
       getDepartmentMarginRates(),
+      getCompanyLocations(),
     ]);
     setStages(s as Stage[]);
     setLostReasons(l as Item[]);
     setLeadSources(ls as Item[]);
     setTags(t as Item[]);
     setDepartmentMargins(dm);
+    setLocations(locs);
   }, []);
 
   useEffect(() => {
     if (initialData) {
-      // SSRで部門マスタ未取得の場合のみ補完
       if (!initialData.departmentMargins) {
         void getDepartmentMarginRates().then(setDepartmentMargins).catch(() => {});
+      }
+      if (!initialData.locations) {
+        void getCompanyLocations().then(setLocations).catch(() => {});
       }
       return;
     }
@@ -538,12 +684,15 @@ export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialDa
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        商談ステージ・部門別規定粗利・失注理由・紹介元・顧客タグを会社ごとにカスタマイズできます。
+        商談ステージ・部門・拠点・失注理由・紹介元・顧客タグを会社ごとにカスタマイズできます。
       </p>
 
       <StageList stages={stages} onReload={reload} />
 
-      <DepartmentMarginList items={departmentMargins} onReload={reload} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <DepartmentMarginList items={departmentMargins} onReload={reload} />
+        <LocationList items={locations} onReload={reload} />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <ChipList

@@ -67,7 +67,7 @@ export async function getConstructions() {
   const { data, error } = await supabase
     .from("constructions")
     .select(
-      "id, company_id, construction_no, title, status, customer_id, contract_id, estimate_id, assigned_to, department_name, order_amount, order_cost, budget_cost, actual_cost, payment_date, payment_amount, worker_count, progress, start_date, end_date, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!constructions_assigned_to_fkey(id, display_name)",
+      "id, company_id, construction_no, title, status, customer_id, contract_id, estimate_id, assigned_to, department_name, location_id, order_amount, order_cost, budget_cost, actual_cost, payment_date, payment_amount, worker_count, progress, start_date, end_date, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!constructions_assigned_to_fkey(id, display_name)",
     )
     .order("created_at", { ascending: false })
     .limit(500);
@@ -83,6 +83,7 @@ export async function getConstructions() {
     estimate_id: string | null;
     assigned_to: string | null;
     department_name: string | null;
+    location_id: string | null;
     order_amount: number;
     order_cost: number;
     budget_cost: number;

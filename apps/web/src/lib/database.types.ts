@@ -328,6 +328,8 @@ export type Construction = {
   progress: number;
   assigned_to: string | null;
   department_name: string | null;
+  /** 担当拠点（No.80）。拠点別BI集計に使用 */
+  location_id?: string | null;
   created_at: string;
   updated_at: string;
   customer?: Customer;
@@ -666,14 +668,24 @@ export type FinancialAccountSection =
   | 'non_operating_income'
   | 'non_operating_expense';
 
-/** 製造原価報告書のサブ区分（No.90: 材料費/労務費/外注費/製造経費） */
+/** 製造原価報告書のサブ区分（No.90: 材料費/労務費/製造経費。outsourcing は旧互換） */
 export type FinancialCogsCategory = 'material' | 'labor' | 'outsourcing' | 'expense';
+
+/** 製造原価の加減算ロール（No.90） */
+export type FinancialFormulaRole =
+  | 'begin_material'
+  | 'material_purchase'
+  | 'end_material'
+  | 'begin_wip'
+  | 'end_wip';
 
 export type FinancialAccountItem = {
   id: string;
   company_id: string;
   section: FinancialAccountSection;
   cogs_category: FinancialCogsCategory | null;
+  /** 棚卸・仕掛の加減算ロール（No.90） */
+  formula_role?: FinancialFormulaRole | null;
   name: string;
   sort_order: number;
   is_active: boolean;
@@ -716,6 +728,8 @@ export type FinancialReportSettings = {
   company_id: string;
   /** 実績列の見出しラベル（No.101 例: 実績（弥生）） */
   actual_column_label: string;
+  /** 決算期の期首日 1〜28（No.104）。例: 21 → 3/21開始 */
+  period_start_day?: number;
   created_at: string;
   updated_at: string;
 };

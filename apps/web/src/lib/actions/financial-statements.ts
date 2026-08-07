@@ -16,17 +16,23 @@ import type {
   FinancialStatementLine,
 } from "@/lib/database.types";
 import {
+  buildDefaultFinancialAccountItems,
   buildFinancialPeriodLabel,
   computePl,
-  DEFAULT_FINANCIAL_ACCOUNT_ITEMS,
+  DEFAULT_FINANCIAL_FIXED_ITEMS,
+  MOCK_REVENUE_DEPARTMENTS,
+  OBSOLETE_FINANCIAL_ACCOUNT_NAMES,
   FINANCIAL_SECTION_LABELS,
   COGS_CATEGORY_LABELS,
 } from "@/lib/financial-statements-utils";
+import { DEFAULT_DEPARTMENTS, getCurrentFiscalYear } from "@/lib/bi-utils";
 
 /** 決算書機能にアクセス可能なロール（No.103） */
 const FINANCIALS_ALLOWED_ROLES = ["hq_admin", "admin", "executive"];
 
 type ActionResult = { ok: true } | { ok: false; error: string };
+
+type Sb = Awaited<ReturnType<typeof createClient>>;
 
 async function getFinancialsContext() {
   const supabase = await createClient();
@@ -45,46 +51,201 @@ async function getFinancialsContext() {
   return { supabase, companyId: profile.company_id as string, userId: user.id };
 }
 
+/** BI部門目標・規定粗利マスタから部門名を取得（No.80） */
+async function resolveCompanyDepartmentNames(
+  supabase: Sb,
+  companyId: string,
+): Promise<string[]> {
+  const year = getCurrentFiscalYear();
+  const [{ data: settings }, { data: margins }] = await Promise.all([
+    supabase
+      .from("bi_annual_settings")
+      .select("id, department_targets:bi_department_targets(department_name, sort_order)")
+      .eq("company_id", companyId)
+      .eq("fiscal_year", year)
+      .maybeSingle(),
+    supabase
+      .from("department_margin_rates")
+      .select("department_name, sort_order")
+      .eq("company_id", companyId)
+      .order("sort_order", { ascending: true }),
+  ]);
+
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const push = (n: string | null | undefined) => {
+    const t = (n ?? "").trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    names.push(t);
+  };
+
+  const targets = (settings?.department_targets ?? []) as Array<{
+    department_name: string;
+    sort_order: number;
+  }>;
+  for (const d of [...targets].sort((a, b) => a.sort_order - b.sort_order)) {
+    push(d.department_name);
+  }
+  for (const m of margins ?? []) push(m.department_name);
+
+  if (names.length === 0) {
+    for (const d of DEFAULT_DEPARTMENTS) push(d);
+  }
+  return names;
+}
+
+async function fetchAccountItems(supabase: Sb): Promise<FinancialAccountItem[]> {
+  const { data } = await supabase
+    .from("financial_account_items")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  return (data ?? []) as FinancialAccountItem[];
+}
+
+function toSeedRow(
+  companyId: string,
+  item: { section: string; cogsCategory?: string | null; formulaRole?: string | null; name: string },
+  sortOrder: number,
+) {
+  return {
+    company_id: companyId,
+    section: item.section,
+    cogs_category: item.cogsCategory ?? null,
+    formula_role: item.formulaRole ?? null,
+    name: item.name,
+    sort_order: sortOrder,
+    is_active: true,
+  };
+}
+
+/**
+ * 旧seedを新構造へ移行し、売上部門をBIと同期する（No.80/87/90）。
+ */
+async function healFinancialAccountItems(
+  supabase: Sb,
+  companyId: string,
+  existing: FinancialAccountItem[],
+): Promise<FinancialAccountItem[]> {
+  const deptNames = await resolveCompanyDepartmentNames(supabase, companyId);
+  const byName = new Map(existing.map((i) => [i.name, i]));
+  const hasV2 = existing.some((i) => i.formula_role === "begin_material");
+  const maxSort = existing.reduce((m, i) => Math.max(m, i.sort_order), 0);
+  let nextSort = maxSort + 10;
+  const toInsert: ReturnType<typeof toSeedRow>[] = [];
+
+  // 固定科目（製造原価・販管等）の不足分を追加＋formula_role補完
+  for (const seed of DEFAULT_FINANCIAL_FIXED_ITEMS) {
+    const hit = byName.get(seed.name);
+    if (!hit) {
+      toInsert.push(toSeedRow(companyId, seed, nextSort));
+      nextSort += 10;
+    } else if (seed.formulaRole && hit.formula_role !== seed.formulaRole) {
+      await supabase
+        .from("financial_account_items")
+        .update({
+          formula_role: seed.formulaRole,
+          cogs_category: seed.cogsCategory ?? hit.cogs_category,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", hit.id);
+    }
+  }
+
+  // 売上部門（BI同期）
+  for (const dept of deptNames) {
+    const hit = byName.get(dept);
+    if (!hit) {
+      toInsert.push(toSeedRow(companyId, { section: "revenue", name: dept }, nextSort));
+      nextSort += 10;
+    } else if (!hit.is_active || hit.section !== "revenue") {
+      await supabase
+        .from("financial_account_items")
+        .update({
+          is_active: true,
+          section: "revenue",
+          cogs_category: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", hit.id);
+    }
+  }
+
+  if (toInsert.length > 0) {
+    await supabase.from("financial_account_items").insert(toInsert);
+  }
+
+  // 旧v1科目・プレースホルダー部門を非アクティブ化
+  const obsoleteNames = new Set<string>(OBSOLETE_FINANCIAL_ACCOUNT_NAMES);
+  const placeholderRevenue = new Set<string>(MOCK_REVENUE_DEPARTMENTS);
+  const deptSet = new Set(deptNames);
+  const structureReady =
+    hasV2
+    || existing.some((x) => x.name === "期首材料棚卸高")
+    || toInsert.some((r) => r.name === "期首材料棚卸高");
+  const deactivateIds = existing
+    .filter((i) => {
+      if (!i.is_active) return false;
+      if (structureReady && obsoleteNames.has(i.name)) return true;
+      if (i.section === "revenue" && placeholderRevenue.has(i.name) && !deptSet.has(i.name)) {
+        return true;
+      }
+      return false;
+    })
+    .map((i) => i.id);
+
+  // 外注費 → 外注加工費へ寄せる（名称変更）
+  const oldOutsource = existing.find((i) => i.name === "外注費" && i.is_active);
+  const newOutsource = byName.get("外注加工費") ?? toInsert.find((r) => r.name === "外注加工費");
+  if (oldOutsource && newOutsource) {
+    deactivateIds.push(oldOutsource.id);
+  } else if (oldOutsource && !byName.get("外注加工費")) {
+    await supabase
+      .from("financial_account_items")
+      .update({
+        name: "外注加工費",
+        cogs_category: "expense",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", oldOutsource.id);
+  }
+
+  if (deactivateIds.length > 0) {
+    await supabase
+      .from("financial_account_items")
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .in("id", [...new Set(deactivateIds)]);
+  }
+
+  return fetchAccountItems(supabase);
+}
+
 // ============================================================
 // 勘定科目マスタ（No.87）
 // ============================================================
 
 /**
  * 勘定科目マスタを取得する。
- * 未登録の会社には標準的な建設業PLのデフォルト科目を初回自動seedする（No.87）。
+ * 未登録ならseed、旧構造なら自動heal、売上部門はBIと同期（No.80/87/90）。
  */
 export async function getFinancialAccountItems(): Promise<FinancialAccountItem[]> {
   const { supabase, companyId } = await getFinancialsContext();
   if (!companyId) return [];
 
-  const { data } = await supabase
-    .from("financial_account_items")
-    .select("*")
-    .order("sort_order", { ascending: true });
+  let items = await fetchAccountItems(supabase);
 
-  if (data && data.length > 0) return data as FinancialAccountItem[];
-
-  // 初回自動seed
-  const seedRows = DEFAULT_FINANCIAL_ACCOUNT_ITEMS.map((item, i) => ({
-    company_id: companyId,
-    section: item.section,
-    cogs_category: item.cogsCategory ?? null,
-    name: item.name,
-    sort_order: (i + 1) * 10,
-  }));
-  const { data: seeded, error } = await supabase
-    .from("financial_account_items")
-    .insert(seedRows)
-    .select("*");
-  if (error) {
-    // 並行アクセスで既にseed済みの場合などは再取得で回復
-    const { data: retry } = await supabase
-      .from("financial_account_items")
-      .select("*")
-      .order("sort_order", { ascending: true });
-    return (retry ?? []) as FinancialAccountItem[];
+  if (items.length === 0) {
+    const deptNames = await resolveCompanyDepartmentNames(supabase, companyId);
+    const seeds = buildDefaultFinancialAccountItems(deptNames);
+    const seedRows = seeds.map((item, i) => toSeedRow(companyId, item, (i + 1) * 10));
+    const { error } = await supabase.from("financial_account_items").insert(seedRows);
+    if (error) return fetchAccountItems(supabase);
+    items = await fetchAccountItems(supabase);
+  } else {
+    items = await healFinancialAccountItems(supabase, companyId, items);
   }
-  return ((seeded ?? []) as FinancialAccountItem[]).sort((a, b) => a.sort_order - b.sort_order);
+
+  return items.filter((i) => i.is_active);
 }
 
 export async function createFinancialAccountItem(input: {
@@ -218,7 +379,11 @@ export async function createFinancialStatement(input: {
     return { ok: false, error: "開始月が不正です" };
   }
 
-  const items = await getFinancialAccountItems();
+  const [items, reportSettings] = await Promise.all([
+    getFinancialAccountItems(),
+    getFinancialReportSettings(),
+  ]);
+  const startDay = reportSettings?.period_start_day ?? 1;
 
   const { data: statement, error } = await supabase
     .from("financial_statements")
@@ -226,7 +391,7 @@ export async function createFinancialStatement(input: {
       company_id: companyId,
       fiscal_year: input.fiscalYear,
       start_month: input.startMonth,
-      period_label: buildFinancialPeriodLabel(input.fiscalYear, input.startMonth),
+      period_label: buildFinancialPeriodLabel(input.fiscalYear, input.startMonth, { startDay }),
       status: "draft",
       created_by: userId,
     })
@@ -372,14 +537,32 @@ export async function getFinancialReportSettings(): Promise<FinancialReportSetti
 
 /** 実績列の見出しラベルを保存する（No.101 例: 「実績（弥生）」「実績（freee）」） */
 export async function saveFinancialActualColumnLabel(label: string): Promise<ActionResult> {
+  return saveFinancialReportSettings({ actualColumnLabel: label });
+}
+
+/** 決算書表示設定を保存（No.101 見出し / No.104 期首日） */
+export async function saveFinancialReportSettings(input: {
+  actualColumnLabel?: string;
+  periodStartDay?: number;
+}): Promise<ActionResult> {
   const { supabase, companyId } = await getFinancialsContext();
   if (!companyId) return { ok: false, error: "権限がありません" };
-  const trimmed = label.trim();
-  if (!trimmed) return { ok: false, error: "見出しラベルを入力してください" };
+
+  const current = await getFinancialReportSettings();
+  const label = (input.actualColumnLabel ?? current?.actual_column_label ?? "当期実績").trim();
+  if (!label) return { ok: false, error: "見出しラベルを入力してください" };
+
+  let startDay = input.periodStartDay ?? current?.period_start_day ?? 1;
+  if (!Number.isFinite(startDay) || startDay < 1 || startDay > 28) {
+    return { ok: false, error: "期首日は 1〜28 で指定してください" };
+  }
+  startDay = Math.floor(startDay);
+
   const { error } = await supabase.from("financial_report_settings").upsert(
     {
       company_id: companyId,
-      actual_column_label: trimmed,
+      actual_column_label: label,
+      period_start_day: startDay,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "company_id" },
@@ -624,10 +807,10 @@ export async function getFinancialActualsForBi(
     revenue: pl.sectionTotals.revenue.actual,
     costOfSales: pl.sectionTotals.cogs.actual,
     costOfSalesByCategory: {
-      material: pl.cogsCategoryTotals.material.actual,
-      labor: pl.cogsCategoryTotals.labor.actual,
+      material: pl.cogsDisplayTotals.material.actual,
+      labor: pl.cogsDisplayTotals.labor.actual,
       outsourcing: pl.cogsCategoryTotals.outsourcing.actual,
-      expense: pl.cogsCategoryTotals.expense.actual,
+      expense: pl.cogsDisplayTotals.expense.actual,
     },
     grossProfit: pl.grossProfit.actual,
     sellingGeneralAdmin: pl.sectionTotals.sga.actual,

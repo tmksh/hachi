@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileUp, Loader2, Sparkles } from "lucide-react";
+import { Download, FileUp, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { FinancialStatement } from "@/lib/database.types";
 import {
   buildFinancialPeriodLabel,
@@ -39,7 +40,7 @@ import {
 import {
   createFinancialStatement,
   importFinancialActualsFromText,
-  saveFinancialActualColumnLabel,
+  saveFinancialReportSettings,
 } from "@/lib/actions/financial-statements";
 import { extractFinancialFileText } from "@/lib/financial-file-text";
 
@@ -71,24 +72,56 @@ async function runImport(statementId: string, file: File): Promise<boolean> {
 }
 
 // ============================================================
-// 新規作成（No.93「1から作成」を主導線に、No.91 ファイル読込を併設）
+// 新規作成（モック準拠: 期間選択 → ファイル読込 / 1から作成 の2択）
 // ============================================================
 
-type CreateProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+export type CreateMethod = "import" | "scratch";
+
+type CreateFormProps = {
   onCreated: (statement: FinancialStatement) => void;
+  /** ダイアログ時のみ。空状態インラインでは省略 */
+  onCancel?: () => void;
+  initialMethod?: CreateMethod;
+  /** 会社の決算開始月（未指定時は4月） */
+  defaultStartMonth?: number;
+  /** No.104: 期首日（表示設定） */
+  periodStartDay?: number;
+  /** 親がマウントし直したときなど、フォームをリセットするキー */
+  resetKey?: string | number | boolean;
+  className?: string;
 };
 
-export function CreateStatementDialog({ open, onOpenChange, onCreated }: CreateProps) {
+/** 空状態・ダイアログ共通の作成フォーム（モック No.91-94 準拠） */
+export function CreateStatementForm({
+  onCreated,
+  onCancel,
+  initialMethod = "import",
+  defaultStartMonth = 4,
+  periodStartDay = 1,
+  resetKey,
+  className,
+}: CreateFormProps) {
   const currentYear = new Date().getFullYear();
   const [fiscalYear, setFiscalYear] = useState(currentYear);
-  const [startMonth, setStartMonth] = useState(4);
+  const [startMonth, setStartMonth] = useState(defaultStartMonth);
+  const [method, setMethod] = useState<CreateMethod>(initialMethod);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setMethod(initialMethod);
+    setStartMonth(defaultStartMonth);
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }, [initialMethod, defaultStartMonth, resetKey]);
+
   const handleCreate = async () => {
+    if (method === "import" && !file) {
+      toast.error("読み込むファイルを選択してください");
+      return;
+    }
+
     setBusy(true);
     const res = await createFinancialStatement({ fiscalYear, startMonth });
     if (!res.ok) {
@@ -98,89 +131,194 @@ export function CreateStatementDialog({ open, onOpenChange, onCreated }: CreateP
     }
     toast.success(`決算書「${res.statement.period_label}」を作成しました`);
 
-    if (file) {
+    if (method === "import" && file) {
       await runImport(res.statement.id, file);
     }
 
     setFile(null);
     if (fileRef.current) fileRef.current.value = "";
     setBusy(false);
-    onOpenChange(false);
     onCreated(res.statement);
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>決算書を新規作成</DialogTitle>
-          <DialogDescription>
-            決算期の開始月と年度を選択してください。対象期間のラベルは自動で生成されます。
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="flex gap-3">
-            <div className="flex-1 space-y-1.5">
-              <Label className="text-xs">年度（開始年）</Label>
-              <Select value={String(fiscalYear)} onValueChange={(v) => setFiscalYear(Number(v))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
+    <div className={cn("space-y-4 text-left", className)}>
+      <div className="space-y-1.5">
+        <Label className="text-xs">対象期間</Label>
+        <div className="flex gap-2">
+          <Select value={String(fiscalYear)} onValueChange={(v) => setFiscalYear(Number(v))}>
+            <SelectTrigger className="flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
                   {listFinancialFiscalYears().map((y) => (
-                    <SelectItem key={y} value={String(y)}>{y}年</SelectItem>
+                    <SelectItem key={y} value={String(y)}>
+                      {buildFinancialPeriodLabel(y, startMonth, { startDay: periodStartDay })}
+                    </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 space-y-1.5">
-              <Label className="text-xs">決算期の開始月</Label>
-              <Select value={String(startMonth)} onValueChange={(v) => setStartMonth(Number(v))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                    <SelectItem key={m} value={String(m)}>{m}月</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
-            対象期間: <span className="font-medium">{buildFinancialPeriodLabel(fiscalYear, startMonth)}</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">ラベルは自動生成されます（手入力不可）</p>
-          </div>
-
-          <div className="space-y-1.5 rounded-lg border border-dashed p-3">
-            <Label className="flex items-center gap-1.5 text-xs">
-              <Sparkles className="size-3.5 text-primary" />
-              ファイル読込（任意）
-            </Label>
-            <Input
-              ref={fileRef}
-              type="file"
-              accept={IMPORT_ACCEPT}
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="h-9 text-xs"
-            />
-            <p className="text-xs text-muted-foreground">
-              PDF / Excel / CSV の決算書類をアップロードすると、Linq（AI）が勘定科目へ自動マッピングして実績値を展開します。書式は問いません。
-            </p>
-          </div>
+            </SelectContent>
+          </Select>
+          <Select value={String(startMonth)} onValueChange={(v) => setStartMonth(Number(v))}>
+            <SelectTrigger className="w-[96px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <SelectItem key={m} value={String(m)}>{m}月開始</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          会計ソフトの年度表記とズレることがあるため、期間はここで指定します（ラベルは自動生成・手入力不可）。
+        </p>
+      </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-slate-600">どの方法で作りますか？</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setMethod("import")}
+            className={cn(
+              "rounded-xl border bg-white p-3.5 text-left transition-all",
+              method === "import"
+                ? "border-[#7C3AED] bg-[#F5F3FF] ring-1 ring-[#7C3AED]/35"
+                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+            )}
+          >
+            <div className="flex items-start gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#7C3AED] text-white">
+                <Download className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm font-semibold text-slate-900">ファイルを読み込む</span>
+                  <span className="rounded-full bg-[#EDE9FE] px-1.5 py-0.5 text-[10px] font-medium text-[#6D28D9]">
+                    Linq が読み取ります
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                  PDF・Excel・CSV をそのまま読み込ませてください。Linq が中身を理解して、勘定科目と金額を展開します。
+                </p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  OCR は使いません。書式は問いません。
+                </p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMethod("scratch");
+              setFile(null);
+              if (fileRef.current) fileRef.current.value = "";
+            }}
+            className={cn(
+              "rounded-xl border bg-white p-3.5 text-left transition-all",
+              method === "scratch"
+                ? "border-[#1664C0] bg-[#EEF5FF] ring-1 ring-[#1664C0]/30"
+                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+            )}
+          >
+            <div className="flex items-start gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1664C0] text-white">
+                <Plus className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <span className="text-sm font-semibold text-slate-900">1から作成</span>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                  空の表に直接入力していきます。読み込めるファイルが無いときはこちら。
+                </p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  あとからファイル読込で実績を置換できます。
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {method === "import" && (
+        <div className="space-y-1.5 rounded-lg border border-dashed p-3">
+          <Label className="text-xs">読み込むファイル</Label>
+          <Input
+            ref={fileRef}
+            type="file"
+            accept={IMPORT_ACCEPT}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="h-9 text-xs"
+          />
+          {file && (
+            <p className="truncate text-xs text-muted-foreground">{file.name}</p>
+          )}
+        </div>
+      )}
+
+      <div className={cn(
+        "flex items-center gap-2 pt-1",
+        onCancel ? "justify-between" : "justify-end",
+      )}>
+        {onCancel ? (
+          <Button variant="outline" className="bg-white" onClick={onCancel} disabled={busy}>
             キャンセル
           </Button>
-          <Button onClick={handleCreate} disabled={busy}>
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            {file ? "作成してファイル読込" : "1から作成"}
-          </Button>
-        </DialogFooter>
+        ) : <span />}
+        <Button
+          className="bg-[#1664C0] hover:bg-[#1454A0]"
+          onClick={handleCreate}
+          disabled={busy || (method === "import" && !file)}
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          この方法で進む
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type CreateProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (statement: FinancialStatement) => void;
+  initialMethod?: CreateMethod;
+  defaultStartMonth?: number;
+  periodStartDay?: number;
+};
+
+export function CreateStatementDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  initialMethod = "import",
+  defaultStartMonth = 4,
+  periodStartDay = 1,
+}: CreateProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl gap-0 p-0 overflow-hidden">
+        <DialogHeader className="space-y-1 border-b border-border/60 px-6 py-5">
+          <DialogTitle className="text-lg">決算書を作成</DialogTitle>
+          <DialogDescription>
+            作り方を選んでください。作成後も「ファイル読込」で実績を置換できます（No.102）。
+          </DialogDescription>
+        </DialogHeader>
+        {open && (
+          <div className="px-6 py-5">
+            <CreateStatementForm
+              initialMethod={initialMethod}
+              defaultStartMonth={defaultStartMonth}
+              periodStartDay={periodStartDay}
+              resetKey={open}
+              onCancel={() => onOpenChange(false)}
+              onCreated={(statement) => {
+                onOpenChange(false);
+                onCreated(statement);
+              }}
+            />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -305,19 +443,32 @@ type SettingsProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentLabel: string;
-  onSaved: (label: string) => void;
+  /** No.104: 期首日（1〜28） */
+  currentPeriodStartDay?: number;
+  onSaved: (next: { label: string; periodStartDay: number }) => void;
 };
 
-export function ReportSettingsDialog({ open, onOpenChange, currentLabel, onSaved }: SettingsProps) {
+export function ReportSettingsDialog({
+  open,
+  onOpenChange,
+  currentLabel,
+  currentPeriodStartDay = 1,
+  onSaved,
+}: SettingsProps) {
   const [label, setLabel] = useState(currentLabel);
+  const [periodStartDay, setPeriodStartDay] = useState(String(currentPeriodStartDay));
   const [busy, setBusy] = useState(false);
 
   const handleSave = async () => {
     setBusy(true);
-    const res = await saveFinancialActualColumnLabel(label);
+    const day = Number(periodStartDay);
+    const res = await saveFinancialReportSettings({
+      actualColumnLabel: label,
+      periodStartDay: day,
+    });
     if (res.ok) {
-      toast.success("実績列の見出しを保存しました");
-      onSaved(label.trim());
+      toast.success("表示設定を保存しました");
+      onSaved({ label: label.trim(), periodStartDay: day });
       onOpenChange(false);
     } else {
       toast.error(res.error);
@@ -329,7 +480,10 @@ export function ReportSettingsDialog({ open, onOpenChange, currentLabel, onSaved
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (o) setLabel(currentLabel);
+        if (o) {
+          setLabel(currentLabel);
+          setPeriodStartDay(String(currentPeriodStartDay));
+        }
         if (!busy) onOpenChange(o);
       }}
     >
@@ -337,17 +491,40 @@ export function ReportSettingsDialog({ open, onOpenChange, currentLabel, onSaved
         <DialogHeader>
           <DialogTitle>決算書の表示設定</DialogTitle>
           <DialogDescription>
-            実績列の見出しを会社ごとに設定できます（例: 「実績（弥生）」「実績（freee）」）。
+            実績列の見出し（No.101）と、期間ラベルの期首日（No.104）を会社ごとに設定できます。
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-1.5">
-          <Label className="text-xs">実績列の見出し</Label>
-          <Input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="当期実績"
-            maxLength={20}
-          />
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">実績列の見出し</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="実績（弥生）"
+              maxLength={20}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              例: 実績（弥生）／実績（freee）／実績（マネーフォワード）
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">期首日（1〜28）</Label>
+            <Select value={periodStartDay} onValueChange={setPeriodStartDay}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <SelectItem key={d} value={String(d)}>
+                    {d}日（{d === 1 ? "月初〜月末" : `例: 3/${d}〜翌3/${d - 1}`}）
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              手入力の期間ラベルは禁止です。新規作成時のラベルに反映されます。
+            </p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>

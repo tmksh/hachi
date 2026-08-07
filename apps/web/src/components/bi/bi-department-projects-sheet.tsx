@@ -12,16 +12,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, EyeOff } from "lucide-react";
 import {
   getBiDepartmentProjects,
+  getBiLocationProjects,
   type BiDepartmentProject,
 } from "@/lib/actions/bi";
 import { getDepartmentMarginRates } from "@/lib/actions/deals";
 import { buildBiDepartmentProjectsMock } from "@/lib/bi-mock-data";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import { fiscalYearLabel, DEFAULT_FISCAL_MONTH_START } from "@/lib/bi-utils";
 import { cn } from "@/lib/utils";
 
-/** 顧客名を表示できるロール（No.84） */
-const CUSTOMER_NAME_VISIBLE_ROLES = ["hq_admin", "admin", "executive"];
 const CUSTOMER_NAME_HIDDEN = "（非表示）";
 
 function formatYmd(d: Date): string {
@@ -44,11 +44,13 @@ function periodLabel(fiscalYear: number, fiscalMonthStart: number): string {
 
 /**
  * 部門クリックで右からスライドインする 案件/工事一覧パネル（No.75）。
- * 顧客名は hq_admin / admin / executive のみ表示（No.84・実データはサーバー側でマスク）。
+ * 顧客名は権限マトリクス「BI顧客名表示」(bi_customer_name) で制御（No.84・実データはサーバー側でマスク）。
  */
 export function BiDepartmentProjectsSheet({
   departmentName,
+  locationId = null,
   departmentLabel,
+  displayName,
   fiscalYear,
   fiscalMonthStart = DEFAULT_FISCAL_MONTH_START,
   useMock,
@@ -60,9 +62,13 @@ export function BiDepartmentProjectsSheet({
   fmtMan,
   onClose,
 }: {
-  /** null のときは閉じる */
+  /** 部門名。拠点モード時は null */
   departmentName: string | null;
+  /** 拠点ID。部門モード時は null（No.80） */
+  locationId?: string | null;
   departmentLabel?: string | null;
+  /** タイトル用の表示名（拠点名など） */
+  displayName?: string | null;
   fiscalYear: number;
   fiscalMonthStart?: number;
   /** BI 本体がモック表示の年度か（同じ見た目のモック行を出す） */
@@ -75,13 +81,19 @@ export function BiDepartmentProjectsSheet({
   onClose: () => void;
 }) {
   const { role } = useAuth();
+  const { canAccess } = useCompanyPermissions();
   const [rows, setRows] = useState<BiDepartmentProject[]>([]);
   const [canViewCustomer, setCanViewCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [standardMarginRate, setStandardMarginRate] = useState<number | null>(null);
+  const openKey = departmentName ?? locationId;
+  const isLocation = Boolean(locationId);
 
   useEffect(() => {
-    if (!departmentName) return;
+    if (!departmentName) {
+      setStandardMarginRate(null);
+      return;
+    }
     let cancelled = false;
     getDepartmentMarginRates()
       .then((list) => {
@@ -98,14 +110,15 @@ export function BiDepartmentProjectsSheet({
   }, [departmentName]);
 
   useEffect(() => {
-    if (!departmentName) return;
+    if (!openKey) return;
     let cancelled = false;
 
     if (useMock) {
-      const canView = CUSTOMER_NAME_VISIBLE_ROLES.includes(role ?? "");
+      const canView = role ? canAccess("bi_customer_name", [role]) : false;
       setCanViewCustomer(canView);
+      const mockKey = departmentName ?? displayName ?? openKey;
       setRows(
-        buildBiDepartmentProjectsMock(departmentName).map((r) => ({
+        buildBiDepartmentProjectsMock(mockKey).map((r) => ({
           ...r,
           customerName: canView ? r.customerName : CUSTOMER_NAME_HIDDEN,
         })),
@@ -115,7 +128,10 @@ export function BiDepartmentProjectsSheet({
     }
 
     setLoading(true);
-    getBiDepartmentProjects(departmentName, fiscalYear)
+    const fetch = isLocation
+      ? getBiLocationProjects(locationId!, fiscalYear)
+      : getBiDepartmentProjects(departmentName!, fiscalYear);
+    fetch
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
@@ -127,7 +143,7 @@ export function BiDepartmentProjectsSheet({
     return () => {
       cancelled = true;
     };
-  }, [departmentName, fiscalYear, useMock, role]);
+  }, [openKey, departmentName, locationId, displayName, fiscalYear, useMock, role, isLocation, canAccess]);
 
   const tableRevenue = rows.reduce((s, r) => s + r.revenue, 0);
   const tableGp = rows.reduce((s, r) => s + r.grossProfit, 0);
@@ -138,15 +154,17 @@ export function BiDepartmentProjectsSheet({
     : 0;
   const threshold = standardMarginRate ?? 50;
   const belowCount = rows.filter((r) => r.grossProfitRate < threshold - 1e-9).length;
-  const titleLabel = [departmentName, departmentLabel].filter(Boolean).join(" ");
+  const titleName = displayName ?? departmentName;
+  const titleLabel = [titleName, departmentLabel].filter(Boolean).join(" ");
 
   return (
-    <Sheet open={!!departmentName} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Sheet open={!!openKey} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader className="pb-1">
           <SheetTitle>{titleLabel}</SheetTitle>
           <SheetDescription>
             案件一覧　{periodLabel(fiscalYear, fiscalMonthStart)}
+            {isLocation ? <span className="ml-1 text-[11px]">※拠点別</span> : null}
           </SheetDescription>
           {!canViewCustomer && (
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

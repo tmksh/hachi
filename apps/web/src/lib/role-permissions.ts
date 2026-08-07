@@ -78,6 +78,8 @@ export function buildDefaultRolePermissions(): RolePermissions {
   result.settings_workflow = ["hq_admin"];
   result.settings_crm = ["hq_admin"];
   result.reserve_fee = ["hq_admin"];
+  // BI部門別案件一覧の顧客名表示（No.84）。既定は本部管理者・管理者・経営層
+  result.bi_customer_name = ["hq_admin", "admin", "executive"];
   return result;
 }
 

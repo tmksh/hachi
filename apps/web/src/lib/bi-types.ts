@@ -16,6 +16,17 @@ export type BiDepartmentTarget = {
   sort_order: number;
 };
 
+/** 拠点別目標・販管費（No.80） */
+export type BiLocationTarget = {
+  id: string;
+  location_id: string;
+  location_name: string;
+  target_revenue: number;
+  /** 拠点別販管費予算（万円） */
+  sga_budget: number;
+  sort_order: number;
+};
+
 export type BiAnnualSettings = {
   id: string;
   fiscal_year: number;
@@ -26,6 +37,8 @@ export type BiAnnualSettings = {
   overhead_mode: "breakdown" | "lump_sum";
   overhead_items: BiOverheadItem[];
   department_targets: BiDepartmentTarget[];
+  /** 拠点別売上目標・販管費（No.80） */
+  location_targets: BiLocationTarget[];
   /** 予備費率（0〜1）。会社確保分。BI上は社員にも表示し、利益から控除して保守表示 */
   reserve_fee_rate: number;
   /** 決算で予備費を利益に戻したか */
@@ -54,6 +67,15 @@ export type BiDeptActual = {
   grossProfit: number;
 };
 
+/** 拠点別実績（No.80・工事の location_id 集計） */
+export type BiLocationActual = {
+  id: string;
+  name: string;
+  label: string;
+  revenue: number;
+  grossProfit: number;
+};
+
 export type BiMonthlyActual = {
   month: string;
   revenue: number;
@@ -75,6 +97,8 @@ export type BiDeptMonthlySeries = {
 
 export type BiActuals = {
   deptActuals: BiDeptActual[];
+  /** 拠点別実績（No.80）。工事に紐づく location_id で集計 */
+  locationActuals: BiLocationActual[];
   monthly: BiMonthlyActual[];
   monthlyByDept: BiDeptMonthlySeries[];
   monthlyOverheadAllocations: number[];
@@ -93,6 +117,14 @@ export type BiActuals = {
     grossProfitRatePt: number | null;
     revenueAchievePct: number | null;
   };
+};
+
+/** 拠点マスタ（No.80） */
+export type CompanyLocation = {
+  id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
 };
 
 /** 製造間接費のモック年額（万円）。月別推移グラフの按分と一致 */

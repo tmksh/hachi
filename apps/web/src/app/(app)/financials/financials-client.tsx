@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   CheckCircle2,
   FilePlus2,
   FileUp,
-  Landmark,
   ListTree,
   Loader2,
   RotateCcw,
@@ -42,6 +41,7 @@ import {
   deleteFinancialStatement,
   type FinancialLineUpdate,
 } from "@/lib/actions/financial-statements";
+import { getCompanyFiscalMonthStart } from "@/lib/actions/profiles";
 import {
   buildEditableValues,
   parseAmount,
@@ -53,9 +53,11 @@ import { PlTable, CostReportSheet } from "./pl-table";
 import { AccountMasterDialog } from "./account-master-dialog";
 import {
   CreateStatementDialog,
+  CreateStatementForm,
   ImportStatementDialog,
   ReportSettingsDialog,
 } from "./statement-dialogs";
+import { buildFinancialsMockPreview } from "./financials-mock-data";
 
 type Props = {
   initialItems: FinancialAccountItem[];
@@ -76,6 +78,11 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   const [actualLabel, setActualLabel] = useState(
     initialSettings?.actual_column_label?.trim() || "当期実績",
   );
+  const [periodStartDay, setPeriodStartDay] = useState(
+    initialSettings?.period_start_day && initialSettings.period_start_day >= 1
+      ? initialSettings.period_start_day
+      : 1,
+  );
   // No.97: 法人税の概算表示（デフォルトOFF）
   const [showEstimatedTax, setShowEstimatedTax] = useState(false);
   const [costSheetOpen, setCostSheetOpen] = useState(false);
@@ -86,8 +93,18 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [fiscalMonthStart, setFiscalMonthStart] = useState(4);
+  /** No.85: 初期は空白（作成導線）。サンプルは明示表示 */
+  const [showSample, setShowSample] = useState(false);
 
   const readOnly = statement?.status === "final";
+  const mock = useMemo(() => buildFinancialsMockPreview(items), [items]);
+  const isEmpty = statements.length === 0 && !showSample;
+  const isMockPreview = statements.length === 0 && showSample;
+
+  useEffect(() => {
+    void getCompanyFiscalMonthStart().then(setFiscalMonthStart).catch(() => {});
+  }, []);
 
   const loadStatement = useCallback(async (id: string) => {
     setLoading(true);
@@ -198,173 +215,249 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
     (i) => parseAmount((values[i.id] ?? EMPTY_LINE_VALUE).actual) !== 0,
   );
 
+  const viewItems = isMockPreview ? mock.items : items;
+  const viewValues = isMockPreview ? mock.values : values;
+  const viewReadOnly = isMockPreview || readOnly;
+
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      {/* ヘッダー */}
+    <div className="space-y-4 p-4 md:p-6 min-h-screen bg-[#F8F9FB]">
+      {/* ヘッダー（Okta寄り: 余白広め・薄いカード） */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Landmark className="size-5 text-primary" />
-          <h1 className="text-lg font-semibold">決算書</h1>
-          <span className="text-xs text-muted-foreground">損益計算書（PL）・製造原価報告書</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">決算書</h1>
+          {isMockPreview ? (
+            <>
+              <span className="text-sm text-slate-500">{mock.periodLabel}</span>
+              <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                速報値
+              </span>
+              <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                モック
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-slate-500">損益計算書（PL）・製造原価報告書</span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setMasterOpen(true)}>
+          <Button variant="outline" size="sm" className="bg-white" onClick={() => setMasterOpen(true)}>
             <ListTree className="size-4" />
             勘定科目マスタ
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
+          <Button variant="outline" size="sm" className="bg-white" onClick={() => setSettingsOpen(true)}>
             <Settings2 className="size-4" />
             表示設定
           </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <FilePlus2 className="size-4" />
-            新規作成
-          </Button>
+          {statements.length > 0 && (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <FilePlus2 className="size-4" />
+              新規作成
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-        {/* 決算書一覧（年度ごと） */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground">決算書一覧</p>
-          {statements.length === 0 && (
-            <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-              決算書がまだありません
-            </p>
-          )}
-          <div className="space-y-1.5">
+      {isEmpty ? (
+        /* No.85: 最初は空白。作成フォームのみ */
+        <div className="mx-auto w-full max-w-xl space-y-3">
+          <div className="rounded-xl border bg-white px-5 py-6 shadow-sm sm:px-6">
+            <div className="mb-4">
+              <p className="text-base font-semibold text-slate-900">決算書を作成</p>
+              <p className="mt-0.5 text-sm text-slate-500">
+                作り方を選んでください。作成後もファイル読込で実績を置換できます。
+              </p>
+            </div>
+            <CreateStatementForm
+              defaultStartMonth={fiscalMonthStart}
+              periodStartDay={periodStartDay}
+              onCreated={async (created) => {
+                setShowSample(false);
+                await refreshStatements();
+                setSelectedId(created.id);
+              }}
+            />
+          </div>
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setShowSample(true)}
+              className="text-xs font-medium text-[#1664C0] hover:underline"
+            >
+              サンプル表を見る（UI確認用）
+            </button>
+          </div>
+        </div>
+      ) : isMockPreview ? (
+        <div className="space-y-3">
+          <div className="frost-card flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{mock.periodLabel}</p>
+              <p className="text-xs text-slate-500">
+                UI確認用のモックです。売上原価をクリックすると製造原価報告書が開きます。
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  id="tax-toggle-mock"
+                  checked={showEstimatedTax}
+                  onCheckedChange={setShowEstimatedTax}
+                />
+                <Label htmlFor="tax-toggle-mock" className="text-xs text-slate-500">
+                  法人税を概算表示
+                </Label>
+              </div>
+              <Button size="sm" variant="outline" className="bg-white" onClick={() => setShowSample(false)}>
+                サンプルを閉じる
+              </Button>
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <FilePlus2 className="size-4" />
+                本番データを作成
+              </Button>
+            </div>
+          </div>
+          <PlTable
+            items={viewItems}
+            values={viewValues}
+            onChange={() => {}}
+            readOnly
+            actualLabel={actualLabel}
+            showEstimatedTax={showEstimatedTax}
+            onOpenCostReport={() => setCostSheetOpen(true)}
+            onAddAccount={() => setMasterOpen(true)}
+          />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-xs font-semibold text-slate-500">年度</span>
             {statements.map((s) => (
               <button
                 key={s.id}
+                type="button"
                 onClick={() => setSelectedId(s.id)}
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-left transition-colors hover:bg-accent",
-                  selectedId === s.id && "border-primary bg-primary/5",
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors bg-white",
+                  selectedId === s.id
+                    ? "border-[#1664C0]/40 bg-[#EEF5FF] text-[#1664C0]"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50",
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{s.fiscal_year}年度</span>
-                  <Badge
-                    variant={s.status === "final" ? "default" : "secondary"}
-                    className="text-[10px]"
-                  >
-                    {s.status === "final" ? "確定" : "ドラフト"}
-                  </Badge>
-                </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">{s.period_label}</p>
+                {s.fiscal_year}年度
+                <Badge
+                  variant={s.status === "final" ? "default" : "secondary"}
+                  className="h-4 px-1.5 text-[10px]"
+                >
+                  {s.status === "final" ? "確定" : "ドラフト"}
+                </Badge>
               </button>
             ))}
           </div>
-        </div>
 
-        {/* 決算書本体 */}
-        <div className="min-w-0 space-y-3">
-          {!selectedId ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-20 text-center">
-              <Landmark className="size-10 text-muted-foreground/50" />
-              <div>
-                <p className="font-medium">決算書を作成しましょう</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  期間を選んで1から作成するか、会計ソフトの決算書類（PDF / Excel / CSV）を読み込めます。
-                </p>
+          <div className="min-w-0 space-y-3">
+            {!selectedId || loading || !statement ? (
+              <div className="flex items-center justify-center rounded-xl border bg-white py-20">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
               </div>
-              <Button onClick={() => setCreateOpen(true)}>
-                <FilePlus2 className="size-4" />
-                決算書を新規作成
-              </Button>
-            </div>
-          ) : loading || !statement ? (
-            <div className="flex items-center justify-center rounded-xl border py-20">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              {/* 選択中の決算書ツールバー */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">{statement.period_label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {statement.status === "final"
-                        ? "確定済み（編集するにはドラフトに戻してください）"
-                        : "ドラフト（編集可能）"}
-                    </p>
+            ) : (
+              <>
+                <div className="frost-card flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-900">{statement.period_label}</p>
+                        {statement.status === "final" ? (
+                          <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                            確定
+                          </span>
+                        ) : (
+                          <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            速報値
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {statement.status === "final"
+                          ? "確定済み（編集するにはドラフトに戻してください）"
+                          : "ドラフト（編集可能）"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Switch
+                        id="tax-toggle"
+                        checked={showEstimatedTax}
+                        onCheckedChange={setShowEstimatedTax}
+                      />
+                      <Label htmlFor="tax-toggle" className="text-xs text-slate-500">
+                        法人税を概算表示（実効税率約30%）
+                      </Label>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Switch
-                      id="tax-toggle"
-                      checked={showEstimatedTax}
-                      onCheckedChange={setShowEstimatedTax}
-                    />
-                    <Label htmlFor="tax-toggle" className="text-xs text-muted-foreground">
-                      法人税を概算表示（実効税率約30%）
-                    </Label>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {!readOnly && (
-                    <>
-                      <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                        <FileUp className="size-4" />
-                        ファイル読込
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!readOnly && (
+                      <>
+                        <Button variant="outline" size="sm" className="bg-white" onClick={() => setImportOpen(true)}>
+                          <FileUp className="size-4" />
+                          ファイル読込
+                        </Button>
+                        <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>
+                          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                          保存
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-white"
+                          onClick={() => setFinalizeConfirmOpen(true)}
+                        >
+                          <CheckCircle2 className="size-4" />
+                          確定する
+                        </Button>
+                      </>
+                    )}
+                    {readOnly && (
+                      <Button variant="outline" size="sm" className="bg-white" onClick={handleRevertToDraft}>
+                        <RotateCcw className="size-4" />
+                        ドラフトに戻す
                       </Button>
-                      <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>
-                        {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                        保存
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setFinalizeConfirmOpen(true)}
-                      >
-                        <CheckCircle2 className="size-4" />
-                        確定する
-                      </Button>
-                    </>
-                  )}
-                  {readOnly && (
-                    <Button variant="outline" size="sm" onClick={handleRevertToDraft}>
-                      <RotateCcw className="size-4" />
-                      ドラフトに戻す
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
                     </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteConfirmOpen(true)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  </div>
                 </div>
-              </div>
 
-              {/* PL表（No.86: 1枚構成） */}
-              <PlTable
-                items={items}
-                values={values}
-                onChange={handleValueChange}
-                readOnly={!!readOnly}
-                actualLabel={actualLabel}
-                showEstimatedTax={showEstimatedTax}
-                onOpenCostReport={() => setCostSheetOpen(true)}
-              />
-              <p className="text-xs text-muted-foreground">
-                段階利益（売上総利益・営業利益・経常利益・税引前当期純利益）と各合計行は自動計算のため入力できません。金額は円単位で入力してください。
-              </p>
-            </>
-          )}
+                <PlTable
+                  items={viewItems}
+                  values={viewValues}
+                  onChange={handleValueChange}
+                  readOnly={viewReadOnly}
+                  actualLabel={actualLabel}
+                  showEstimatedTax={showEstimatedTax}
+                  onOpenCostReport={() => setCostSheetOpen(true)}
+                  onAddAccount={() => setMasterOpen(true)}
+                />
+                <p className="text-xs text-slate-500">
+                  「=」付きの行は自動計算のため入力できません。金額は円単位です。
+                </p>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 製造原価報告書（右からスライドイン） */}
       <CostReportSheet
         open={costSheetOpen}
         onOpenChange={setCostSheetOpen}
-        items={items}
-        values={values}
-        onChange={handleValueChange}
-        readOnly={!!readOnly}
+        items={viewItems}
+        values={viewValues}
+        onChange={isMockPreview ? () => {} : handleValueChange}
+        readOnly={viewReadOnly}
         actualLabel={actualLabel}
       />
 
@@ -372,6 +465,8 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
       <CreateStatementDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
+        defaultStartMonth={fiscalMonthStart}
+        periodStartDay={periodStartDay}
         onCreated={async (created) => {
           await refreshStatements();
           if (selectedId === created.id) {
@@ -400,7 +495,11 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         currentLabel={actualLabel}
-        onSaved={setActualLabel}
+        currentPeriodStartDay={periodStartDay}
+        onSaved={({ label, periodStartDay: day }) => {
+          setActualLabel(label);
+          setPeriodStartDay(day);
+        }}
       />
 
       {/* 確定の確認 */}

@@ -104,6 +104,13 @@ export function buildBiDashboardMock(
   const monthlySga = Math.round(MOCK_SGA_BUDGET_MAN / 12);
   const prevMonthly = buildMockPrevMonthly(fiscalMonthStart, monthly);
 
+  const mockLocations = [
+    { id: "mock-loc-hq", name: "本社", target_revenue: 2200, sga_budget: 0, revenue: 1400, grossProfit: 820 },
+    { id: "mock-loc-tokyo", name: "東京支店", target_revenue: 2000, sga_budget: 0, revenue: 1100, grossProfit: 640 },
+    { id: "mock-loc-osaka", name: "大阪支店", target_revenue: 1600, sga_budget: 0, revenue: 680, grossProfit: 390 },
+    { id: "mock-loc-nagoya", name: "名古屋支店", target_revenue: 1300, sga_budget: 0, revenue: 340, grossProfit: 213 },
+  ] as const;
+
   const settings: BiAnnualSettings = {
     id: "mock",
     fiscal_year: getCurrentFiscalYear(fiscalMonthStart),
@@ -118,6 +125,14 @@ export function buildBiDashboardMock(
       ...d,
       sort_order: i,
     })),
+    location_targets: mockLocations.map((l, i) => ({
+      id: `mock-loc-target-${i}`,
+      location_id: l.id,
+      location_name: l.name,
+      target_revenue: l.target_revenue,
+      sga_budget: l.sga_budget,
+      sort_order: i,
+    })),
     reserve_fee_rate: 0,
     reserve_released: false,
     reserve_released_at: null,
@@ -126,6 +141,13 @@ export function buildBiDashboardMock(
 
   const actuals: BiActuals = {
     deptActuals: MOCK_DEPT_ACTUALS.map((d) => ({ ...d })),
+    locationActuals: mockLocations.map((l, i) => ({
+      id: l.id,
+      name: l.name,
+      label: ["A拠点", "B拠点", "C拠点", "D拠点"][i] ?? "—",
+      revenue: l.revenue,
+      grossProfit: l.grossProfit,
+    })),
     monthly,
     monthlyByDept: [],
     monthlyOverheadAllocations: Array(12).fill(monthlyOverhead),
@@ -280,8 +302,9 @@ export function buildBiDepartmentProjectsMock(departmentName: string): Array<{
     });
   }
 
-  const dept = MOCK_DEPT_ACTUALS.find((d) => d.name === departmentName);
-  if (!dept) return [];
+  // 拠点名など部門プリセット外でもモック行を返す（No.80）
+  const dept = MOCK_DEPT_ACTUALS.find((d) => d.name === departmentName)
+    ?? { name: departmentName, label: "", revenue: 900, grossProfit: 520 };
 
   const customers = ["田中様", "佐藤様", "鈴木建設", "山本様", "高橋不動産"];
   const shares = [0.34, 0.26, 0.18, 0.13, 0.09];

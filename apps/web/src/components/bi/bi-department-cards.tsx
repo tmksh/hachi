@@ -36,6 +36,8 @@ export type BiDeptCardData = {
   color: string;
 };
 
+export type BiAxisMode = "department" | "location";
+
 type BiDepartmentCardsProps = {
   fiscalYear: number;
   departments: BiDeptCardData[];
@@ -46,10 +48,12 @@ type BiDepartmentCardsProps = {
   yoyRatioClass: (ratio: number | null) => string;
   /** 部門クリック時（PJ一覧パネルの表示など） */
   onSelect?: (departmentName: string) => void;
+  /** No.80: 部門 / 拠点の軸（並び替えキーにも使う） */
+  axis?: BiAxisMode;
 };
 
-function storageKey(fiscalYear: number) {
-  return `bi-dept-order:${fiscalYear}`;
+function storageKey(fiscalYear: number, axis: BiAxisMode = "department") {
+  return `bi-dept-order:${axis}:${fiscalYear}`;
 }
 
 /** 達成率から、ひと目でわかる評価 */
@@ -113,7 +117,7 @@ function SortableDeptCard({
         onSelect && "cursor-pointer transition-shadow hover:shadow-md",
         isDragging && "opacity-60 shadow-lg",
       )}
-      onClick={() => onSelect?.(dept.name)}
+      onClick={() => onSelect?.(dept.id)}
     >
       {/* 部門名 + 評価 */}
       <div className="flex items-start justify-between gap-2">
@@ -242,6 +246,7 @@ export function BiDepartmentCards({
   fmtRatio,
   yoyRatioClass,
   onSelect,
+  axis = "department",
 }: BiDepartmentCardsProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -257,7 +262,7 @@ export function BiDepartmentCards({
   useEffect(() => {
     const ids = departments.map((d) => d.id);
     try {
-      const raw = localStorage.getItem(storageKey(fiscalYear));
+      const raw = localStorage.getItem(storageKey(fiscalYear, axis));
       if (!raw) {
         setOrder(ids);
         return;
@@ -271,18 +276,18 @@ export function BiDepartmentCards({
     } catch {
       setOrder(ids);
     }
-  }, [departments, fiscalYear]);
+  }, [departments, fiscalYear, axis]);
 
   const persistOrder = useCallback(
     (next: string[]) => {
       setOrder(next);
       try {
-        localStorage.setItem(storageKey(fiscalYear), JSON.stringify(next));
+        localStorage.setItem(storageKey(fiscalYear, axis), JSON.stringify(next));
       } catch {
         /* ignore */
       }
     },
-    [fiscalYear],
+    [fiscalYear, axis],
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -298,11 +303,13 @@ export function BiDepartmentCards({
     .map((id) => deptById.get(id))
     .filter((d): d is BiDeptCardData => Boolean(d));
 
+  const entityLabel = axis === "location" ? "拠点" : "部門";
+
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground px-0.5">
         右上の≡をドラッグすると並び順を変えられます
-        {onSelect ? "。カードをクリックすると部門のPJ一覧を表示します" : ""}
+        {onSelect ? `。カードをクリックすると${entityLabel}のPJ一覧を表示します` : ""}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={order} strategy={rectSortingStrategy}>

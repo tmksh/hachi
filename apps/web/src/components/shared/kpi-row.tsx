@@ -29,6 +29,20 @@ interface KpiRowProps {
 
 const KPI_ICON_INNER = "h-3.5 w-3.5 text-white";
 
+/** 円表示など桁が多い値向けに文字サイズを落とす */
+function valueSizeClass(value: string | number, stacked: boolean): string {
+  const len = String(value).length;
+  if (stacked) {
+    if (len >= 14) return "text-sm";
+    if (len >= 11) return "text-base";
+    if (len >= 9) return "text-lg";
+    return "text-xl";
+  }
+  if (len >= 12) return "text-sm";
+  if (len >= 9) return "text-base";
+  return "text-xl";
+}
+
 function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return null;
   const min = Math.min(...data);
@@ -59,12 +73,13 @@ function useResponsiveColumns(requested: 2 | 3 | 4 | 5 | 6) {
     const el = ref.current;
     if (!el) return;
 
+    // 円表示（¥12,345,678）でも1セルに収まるよう、6列は広めの閾値
     const breakpoints: Record<2 | 3 | 4 | 5 | 6, number> = {
       2: 0,
       3: 480,
       4: 560,
-      5: 720,
-      6: 860,
+      5: 780,
+      6: 1100,
     };
     const min = breakpoints[requested];
 
@@ -138,7 +153,7 @@ export function KpiRow({
                   key={i}
                   className={cn(
                     TEAL_CARD_SM,
-                    "relative px-3.5 py-3 min-h-[104px] flex flex-col gap-1.5 min-w-0 overflow-visible group hover:shadow-md transition-shadow",
+                    "relative px-3.5 py-3 min-h-[104px] flex flex-col gap-1.5 min-w-0 overflow-hidden group hover:shadow-md transition-shadow",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -146,7 +161,7 @@ export function KpiRow({
                       {item.label}
                     </span>
                     {illust ? (
-                      <div className="absolute right-0.5 top-0.5 h-16 w-16 shrink-0">
+                      <div className="absolute right-0.5 top-0.5 h-14 w-14 shrink-0 opacity-90 pointer-events-none">
                         {illust}
                       </div>
                     ) : Icon ? (
@@ -157,15 +172,16 @@ export function KpiRow({
                   </div>
                   <p
                     className={cn(
-                      "text-xl font-bold tabular-nums tracking-tight leading-none text-slate-900",
+                      "font-bold tabular-nums tracking-tight leading-tight text-slate-900 min-w-0 pr-10 break-all",
+                      valueSizeClass(item.value, true),
                       item.valueClassName,
                     )}
                   >
                     {item.value}
                   </p>
-                  <div className="flex items-end justify-between gap-2 mt-auto">
+                  <div className="flex items-end justify-between gap-2 mt-auto min-w-0">
                     {item.sub ? (
-                      <span className="text-[11px] text-slate-500 leading-tight min-w-0">
+                      <span className="text-[11px] text-slate-500 leading-tight min-w-0 line-clamp-2 break-all">
                         {item.sub}
                       </span>
                     ) : <span />}
@@ -197,7 +213,8 @@ export function KpiRow({
                 </span>
                 <p
                   className={cn(
-                    "text-xl font-bold tabular-nums tracking-tight leading-none ml-auto whitespace-nowrap shrink-0 text-slate-900",
+                    "font-bold tabular-nums tracking-tight leading-none ml-auto min-w-0 truncate text-slate-900",
+                    valueSizeClass(item.value, false),
                     item.valueClassName,
                   )}
                 >
@@ -207,7 +224,7 @@ export function KpiRow({
                   <MiniSparkline data={item.sparkline} color={item.sparklineColor ?? "var(--brand-dark)"} />
                 ) : null}
                 {item.sub ? (
-                  <span className="text-xs shrink-0 whitespace-nowrap text-slate-500">
+                  <span className="text-xs shrink min-w-0 truncate text-slate-500">
                     {item.sub}
                   </span>
                 ) : null}

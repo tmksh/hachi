@@ -64,7 +64,7 @@ import {
   type FinancialActualsForBi,
 } from "@/lib/actions/financial-statements";
 import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
-import { BiDepartmentCards } from "@/components/bi/bi-department-cards";
+import { BiDepartmentCards, type BiAxisMode } from "@/components/bi/bi-department-cards";
 import { BiDepartmentProjectsSheet } from "@/components/bi/bi-department-projects-sheet";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { cn } from "@/lib/utils";
@@ -396,8 +396,10 @@ export function BiClient({
   const [consultStep, setConsultStep] = useState<"idle" | "suggest" | "done">("idle");
   /** 表示単位切替（No.82）。内部データは変えず表示のみ変換 */
   const [displayUnit, setDisplayUnit] = useState<BiDisplayUnit>("man");
-  /** 部門PJ一覧パネル（No.75）で表示中の部門名 */
+  /** 部門/拠点PJ一覧パネル（No.75/80）で表示中のキー */
   const [deptDetailName, setDeptDetailName] = useState<string | null>(null);
+  /** No.80: 部門軸 / 拠点軸 */
+  const [axisMode, setAxisMode] = useState<BiAxisMode>("department");
   /** 換算人数（No.77/78: 正社員=1.0 / パート=0.5） */
   const [headcount, setHeadcount] = useState<BiHeadcountSummary | null>(null);
   /** 全社サマリーの表示モード（No.77/78: 滝チャート内で切替） */
@@ -538,7 +540,8 @@ export function BiClient({
   const forecastStartIndex        = getForecastStartIndex(fiscalMonthStart);
 
   const deptActuals               = effectiveActuals?.deptActuals               ?? FALLBACK_DEPT_ACTUALS;
-  const streamPalette = buildBrandSeriesPalette(brandHex, Math.max(deptActuals.length, 4));
+  const locationActuals           = effectiveActuals?.locationActuals           ?? [];
+  const streamPalette = buildBrandSeriesPalette(brandHex, Math.max(deptActuals.length, locationActuals.length, 4));
   const DEPT_CHART_COLORS = streamPalette.map((p) => p.color);
   const monthlyActuals            = effectiveActuals?.monthly                   ?? makeFallbackMonthly(fiscalMonthStart);
   const monthlyOverheadAllocations = effectiveActuals?.monthlyOverheadAllocations ?? Array(12).fill(0);
@@ -553,6 +556,12 @@ export function BiClient({
     effectiveSettings.department_targets.forEach((d) => {
       deptTargetMap[d.department_name]   = d.target_revenue;
       deptGpTargetMap[d.department_name] = d.target_gross_profit;
+    });
+  }
+  const locTargetMap: Record<string, { target: number; sga: number }> = {};
+  if (effectiveSettings?.location_targets?.length) {
+    effectiveSettings.location_targets.forEach((l) => {
+      locTargetMap[l.location_id] = { target: l.target_revenue, sga: l.sga_budget };
     });
   }
 
@@ -746,6 +755,37 @@ export function BiClient({
     };
   });
 
+  // 拠点カード（No.80）: 売上・粗利は工事の location_id、販管費は拠点別予算
+  const prevLocMap = new Map(
+    (effectivePrevActuals?.locationActuals ?? []).map((l) => [l.id, l]),
+  );
+  const locationCards = locationActuals.map((l, i) => {
+    const targets = locTargetMap[l.id];
+    const target = targets?.target ?? null;
+    const locSga = targets?.sga ?? 0;
+    const rate = target != null && target > 0 ? pct(l.revenue, target) : 0;
+    const gpRate = pct(l.grossProfit, l.revenue);
+    const prevRev = prevLocMap.get(l.id)?.revenue ?? 0;
+    return {
+      id: l.id,
+      name: l.name,
+      label: l.label,
+      revenue: l.revenue,
+      grossProfit: l.grossProfit,
+      target,
+      gpTarget: null as number | null,
+      achieveRate: rate,
+      yoyRatio: prevRev > 0 ? r1((l.revenue / prevRev) * 100) : null,
+      prevRevenue: prevRev,
+      gpRate,
+      deptSga: locSga,
+      deptOp: l.grossProfit - locSga,
+      color: DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length],
+    };
+  });
+
+  const axisCards = axisMode === "location" ? locationCards : deptCards;
+
   const execDonut = deptCards
     .filter((d) => d.revenue > 0)
     .map((d) => ({ label: d.name, value: d.revenue, color: d.color }));
@@ -881,23 +921,28 @@ export function BiClient({
         onSaved={loadBiData}
       />
 
-      {/* ── No.95: 決算書の確定値（final の決算書がある年度のみ表示） ── */}
+      {/* ── No.95/76: 決算書確定値。会計ベースと工事粗利ベースを明示分離 ── */}
       {finActuals && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-emerald-900">
-              決算書 確定値（{finActuals.periodLabel}）
+              決算書 確定値（会計ベース）· {finActuals.periodLabel}
             </p>
-            <p className="text-[11px] text-emerald-700">
-              ※会計ベース。下の集計（工事粗利ベース・速報）とは定義が異なる場合があります
-            </p>
+            <span className="rounded-md border border-emerald-300 bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+              正とする定義: 会計上の売上総利益
+            </span>
           </div>
-          <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <p className="text-[11px] text-emerald-800 leading-relaxed">
+            下のKPI・グラフは<strong>工事粗利ベース</strong>（売価−直接原価）です。
+            決算書の売上総利益は人件費の製造原価／販管振分（No.98）や予定配賦（No.99）を含むため一致しません。
+            両方を並べるときは定義ラベルを必ず確認してください。
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "売上高", value: finActuals.revenue },
-              { label: "売上総利益", value: finActuals.grossProfit },
-              { label: "営業利益", value: finActuals.operatingIncome },
-              { label: "経常利益", value: finActuals.ordinaryIncome },
+              { label: "売上高（会計）", value: finActuals.revenue },
+              { label: "売上総利益（会計）", value: finActuals.grossProfit },
+              { label: "営業利益（会計）", value: finActuals.operatingIncome },
+              { label: "経常利益（会計）", value: finActuals.ordinaryIncome },
             ].map((it) => (
               <div key={it.label}>
                 <p className="text-[11px] text-emerald-700">{it.label}</p>
@@ -1330,21 +1375,45 @@ export function BiClient({
       {/* ─────────────────────────────────────────────────────── */}
       <SectionHeader
         icon={PieIcon}
-        title="部門別"
+        title={axisMode === "location" ? "拠点別" : "部門別"}
         right={
-          <div className="flex items-center gap-2">
-            <Switch id="theoretical" checked={showTheoretical} onCheckedChange={setShowTheoretical} />
-            <Label htmlFor="theoretical" className="text-xs text-slate-500 cursor-pointer">
-              費用の目安を{showTheoretical ? "表示中" : "非表示"}
-            </Label>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* No.80: 部門 / 拠点トグル */}
+            <div className="flex items-center rounded-full border border-border/60 p-0.5 gap-0.5 bg-muted/30">
+              {([["department", "部門"], ["location", "拠点"]] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    setAxisMode(mode);
+                    setDeptDetailName(null);
+                  }}
+                  className={cn(
+                    "px-3 py-1 text-[11px] rounded-full transition-colors",
+                    axisMode === mode
+                      ? "bg-[var(--brand-dark)] text-white font-semibold shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="theoretical" checked={showTheoretical} onCheckedChange={setShowTheoretical} />
+              <Label htmlFor="theoretical" className="text-xs text-slate-500 cursor-pointer">
+                費用の目安を{showTheoretical ? "表示中" : "非表示"}
+              </Label>
+            </div>
           </div>
         }
       />
 
-      {/* 部門カード（並び替え可・クリックでPJ一覧 No.75）— ファーストビューで完結するデフォルト */}
+      {/* 部門/拠点カード（並び替え可・クリックでPJ一覧 No.75/80） */}
       <BiDepartmentCards
         fiscalYear={fiscalYear}
-        departments={deptCards}
+        departments={axisCards}
+        axis={axisMode}
         showTheoretical={showTheoretical}
         fmtMan={fmtMan}
         fmtSigned={fmtSigned}
@@ -1353,16 +1422,26 @@ export function BiClient({
         onSelect={setDeptDetailName}
       />
 
-      {/* 部門PJ一覧スライドパネル（No.75/84） */}
+      {/* 部門/拠点PJ一覧スライドパネル（No.75/80/84） */}
       <BiDepartmentProjectsSheet
-        departmentName={deptDetailName}
-        departmentLabel={deptCards.find((d) => d.name === deptDetailName)?.label}
+        departmentName={axisMode === "department" ? deptDetailName : null}
+        locationId={axisMode === "location" ? deptDetailName : null}
+        departmentLabel={
+          axisMode === "department"
+            ? deptCards.find((d) => d.name === deptDetailName)?.label
+            : locationCards.find((d) => d.id === deptDetailName)?.label
+        }
+        displayName={
+          axisMode === "department"
+            ? deptDetailName
+            : locationCards.find((d) => d.id === deptDetailName)?.name ?? deptDetailName
+        }
         fiscalYear={fiscalYear}
         fiscalMonthStart={fiscalMonthStart}
         useMock={useDashboardMock}
-        achieveRate={deptCards.find((d) => d.name === deptDetailName)?.achieveRate}
-        deptRevenue={deptCards.find((d) => d.name === deptDetailName)?.revenue}
-        deptGrossProfit={deptCards.find((d) => d.name === deptDetailName)?.grossProfit}
+        achieveRate={axisCards.find((d) => d.id === deptDetailName)?.achieveRate}
+        deptRevenue={axisCards.find((d) => d.id === deptDetailName)?.revenue}
+        deptGrossProfit={axisCards.find((d) => d.id === deptDetailName)?.grossProfit}
         fmtMan={fmtMan}
         onClose={() => setDeptDetailName(null)}
       />
@@ -1853,6 +1932,10 @@ export function BiClient({
         <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--brand-dark)]" />
         <span>
           売上総利益のマイナスは<strong className="text-[var(--brand-dark)]">仕様です</strong>。粗利の積み上げが製造間接費（年額 {overheadBudget != null ? fmtMan(overheadBudget) : "未設定"}）を超えるまで赤字表示となり、損益分岐点までの距離を示します。
+          {" "}
+          <span className="text-muted-foreground/90">
+            （No.99）現場の工事粗利と決算の売上総利益がずれる主因のひとつが、この予定配賦です。フェーズ1では案件への自動乗算はせず、全社年額として控除しています。
+          </span>
         </span>
       </div>
 
