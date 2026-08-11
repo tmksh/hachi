@@ -42,6 +42,14 @@ import {
   type FinancialLineUpdate,
 } from "@/lib/actions/financial-statements";
 import { getCompanyFiscalMonthStart } from "@/lib/actions/profiles";
+import type { FinancialDisplayUnit } from "@/lib/financial-statements-utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   buildEditableValues,
   parseAmount,
@@ -74,6 +82,7 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reverting, setReverting] = useState(false);
 
   const [actualLabel, setActualLabel] = useState(
     initialSettings?.actual_column_label?.trim() || "当期実績",
@@ -85,6 +94,8 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   );
   // No.97: 法人税の概算表示（デフォルトOFF）
   const [showEstimatedTax, setShowEstimatedTax] = useState(false);
+  // No.82: 決算書は千円表示が既定（入力保存は常に円）
+  const [displayUnit, setDisplayUnit] = useState<FinancialDisplayUnit>("thousand");
   const [costSheetOpen, setCostSheetOpen] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -188,16 +199,32 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   }, [statement, dirty, handleSave, refreshStatements, loadStatement]);
 
   const handleRevertToDraft = useCallback(async () => {
-    if (!statement) return;
-    const res = await setFinancialStatementStatus(statement.id, "draft");
-    if (res.ok) {
-      toast.success("ドラフトに戻しました");
+    if (!statement) {
+      toast.error("決算書が選択されていません");
+      return;
+    }
+    if (reverting) return;
+    setReverting(true);
+    try {
+      const res = await setFinancialStatementStatus(statement.id, "draft");
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      // 一覧・詳細を待たず先に UI を編集可能にする（更新0件の成功誤認を防ぐ）
+      setStatement((prev) => (prev ? { ...prev, status: "draft", finalized_at: null } : prev));
+      setStatements((prev) =>
+        prev.map((s) => (s.id === statement.id ? { ...s, status: "draft" as const, finalized_at: null } : s)),
+      );
+      toast.success("ドラフトに戻しました。編集できるようになりました");
       await refreshStatements();
       await loadStatement(statement.id);
-    } else {
-      toast.error(res.error);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ドラフトに戻せませんでした");
+    } finally {
+      setReverting(false);
     }
-  }, [statement, refreshStatements, loadStatement]);
+  }, [statement, reverting, refreshStatements, loadStatement]);
 
   const handleDelete = useCallback(async () => {
     if (!statement) return;
@@ -220,7 +247,7 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   const viewReadOnly = isMockPreview || readOnly;
 
   return (
-    <div className="space-y-4 p-4 md:p-6 min-h-screen bg-[#F8F9FB]">
+    <div className="space-y-4 p-4 md:p-6 min-h-screen">
       {/* ヘッダー（Okta寄り: 余白広め・薄いカード） */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -244,6 +271,18 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
             <ListTree className="size-4" />
             勘定科目マスタ
           </Button>
+          <Select
+            value={displayUnit}
+            onValueChange={(v) => setDisplayUnit(v as FinancialDisplayUnit)}
+          >
+            <SelectTrigger className="h-8 w-[100px] bg-white text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="thousand">千円</SelectItem>
+              <SelectItem value="yen">円</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" className="bg-white" onClick={() => setSettingsOpen(true)}>
             <Settings2 className="size-4" />
             表示設定
@@ -259,12 +298,12 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
 
       {isEmpty ? (
         /* No.85: 最初は空白。作成フォームのみ */
-        <div className="mx-auto w-full max-w-xl space-y-3">
+        <div className="mx-auto w-full max-w-2xl space-y-3">
           <div className="rounded-xl border bg-white px-5 py-6 shadow-sm sm:px-6">
             <div className="mb-4">
               <p className="text-base font-semibold text-slate-900">決算書を作成</p>
               <p className="mt-0.5 text-sm text-slate-500">
-                作り方を選んでください。作成後もファイル読込で実績を置換できます。
+                作り方を選んでください。作成後は見積作成と同系統の空の表が開き、あとからファイル読込で実績を置換できます。
               </p>
             </div>
             <CreateStatementForm
@@ -323,6 +362,7 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
             readOnly
             actualLabel={actualLabel}
             showEstimatedTax={showEstimatedTax}
+            displayUnit={displayUnit}
             onOpenCostReport={() => setCostSheetOpen(true)}
             onAddAccount={() => setMasterOpen(true)}
           />
@@ -388,8 +428,8 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
                         checked={showEstimatedTax}
                         onCheckedChange={setShowEstimatedTax}
                       />
-                      <Label htmlFor="tax-toggle" className="text-xs text-slate-500">
-                        法人税を概算表示（実効税率約30%）
+                      <Label htmlFor="tax-toggle" className="text-xs text-slate-500" title="申告用の税種別計算ではなく、税引前利益×約30%の簡易概算です（No.97）">
+                        法人税を概算表示（約30%）
                       </Label>
                     </div>
                   </div>
@@ -416,8 +456,14 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
                       </>
                     )}
                     {readOnly && (
-                      <Button variant="outline" size="sm" className="bg-white" onClick={handleRevertToDraft}>
-                        <RotateCcw className="size-4" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-white"
+                        disabled={reverting}
+                        onClick={() => void handleRevertToDraft()}
+                      >
+                        {reverting ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
                         ドラフトに戻す
                       </Button>
                     )}
@@ -432,6 +478,20 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
                   </div>
                 </div>
 
+                <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] leading-relaxed text-slate-600 space-y-1">
+                  <p>
+                    <b>No.98 人件費振分:</b> 労務費を製造原価／販管費のどちらに置くかは勘定科目マスタで設定します（明細行単位の自動振分は対象外）。
+                  </p>
+                  <p>
+                    <b>No.99 予定配賦:</b> 部門製造間接費の案件配賦はBI側の予定配賦（期首設定）で扱います。決算書の数値そのものには按分しません。
+                  </p>
+                  {showEstimatedTax && (
+                    <p>
+                      <b>No.97 法人税:</b> 表示中の概算は税引前×約30%です。加算・減算や税種別（法人税／住民税等）の申告計算は含みません。
+                    </p>
+                  )}
+                </div>
+
                 <PlTable
                   items={viewItems}
                   values={viewValues}
@@ -439,11 +499,12 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
                   readOnly={viewReadOnly}
                   actualLabel={actualLabel}
                   showEstimatedTax={showEstimatedTax}
+                  displayUnit={displayUnit}
                   onOpenCostReport={() => setCostSheetOpen(true)}
                   onAddAccount={() => setMasterOpen(true)}
                 />
                 <p className="text-xs text-slate-500">
-                  「=」付きの行は自動計算のため入力できません。金額は円単位です。
+                  「=」付きの行は自動計算のため入力できません。表は見積作成と同系統の入力です（Tabで移動・Enterで確定）。保存値は円、表示は{displayUnit === "thousand" ? "千円" : "円"}です。
                 </p>
               </>
             )}
@@ -459,6 +520,7 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
         onChange={isMockPreview ? () => {} : handleValueChange}
         readOnly={viewReadOnly}
         actualLabel={actualLabel}
+        displayUnit={displayUnit}
       />
 
       {/* 各種ダイアログ */}
@@ -499,6 +561,10 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
         onSaved={({ label, periodStartDay: day }) => {
           setActualLabel(label);
           setPeriodStartDay(day);
+          // No.104: 期首日変更後の period_label 再生成を画面に反映
+          void refreshStatements().then(() => {
+            if (selectedId) void loadStatement(selectedId);
+          });
         }}
       />
 

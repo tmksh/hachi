@@ -500,15 +500,28 @@ export async function setFinancialStatementStatus(
 ): Promise<ActionResult> {
   const { supabase, companyId } = await getFinancialsContext();
   if (!companyId) return { ok: false, error: "権限がありません" };
-  const { error } = await supabase
+
+  const { data, error } = await supabase
     .from("financial_statements")
     .update({
       status,
       finalized_at: status === "final" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .select("id, status")
+    .maybeSingle();
+
   if (error) return { ok: false, error: error.message };
+  if (!data) {
+    return {
+      ok: false,
+      error: status === "draft"
+        ? "ドラフトに戻せませんでした（権限または対象が見つかりません）"
+        : "確定できませんでした（権限または対象が見つかりません）",
+    };
+  }
   return { ok: true };
 }
 
@@ -558,6 +571,7 @@ export async function saveFinancialReportSettings(input: {
   }
   startDay = Math.floor(startDay);
 
+  const prevStartDay = current?.period_start_day ?? 1;
   const { error } = await supabase.from("financial_report_settings").upsert(
     {
       company_id: companyId,
@@ -568,6 +582,25 @@ export async function saveFinancialReportSettings(input: {
     { onConflict: "company_id" },
   );
   if (error) return { ok: false, error: error.message };
+
+  // No.104: 期首日を変えたら既存決算書の期間ラベルも再生成する
+  if (prevStartDay !== startDay) {
+    const { data: statements } = await supabase
+      .from("financial_statements")
+      .select("id, fiscal_year, start_month")
+      .eq("company_id", companyId);
+    for (const s of statements ?? []) {
+      const periodLabel = buildFinancialPeriodLabel(s.fiscal_year, s.start_month, {
+        startDay,
+      });
+      await supabase
+        .from("financial_statements")
+        .update({ period_label: periodLabel, updated_at: new Date().toISOString() })
+        .eq("id", s.id)
+        .eq("company_id", companyId);
+    }
+  }
+
   return { ok: true };
 }
 

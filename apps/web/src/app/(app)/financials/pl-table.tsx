@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,8 +27,10 @@ import {
   fmtYen,
   fmtYoyRatio,
   isOutsourcingAccount,
+  type FinancialDisplayUnit,
   type PlAmounts,
   type PlComputation,
+  type PlLineEntry,
 } from "@/lib/financial-statements-utils";
 import {
   buildLinesForCompute,
@@ -44,27 +46,81 @@ type ValueChangeHandler = (
   value: string,
 ) => void;
 
+/** 見積明細と同系統の枠なしセル（No.85） */
+const CELL_NUM =
+  "h-8 w-full min-w-24 bg-transparent border-0 shadow-none outline-none px-1 text-right text-xs tabular-nums rounded-sm focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+const CELL_TEXT =
+  "h-8 w-full min-w-40 bg-transparent border-0 shadow-none outline-none px-1 text-xs rounded-sm focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-slate-300";
+
+/**
+ * エクセルライク金額入力（見積 IntegerInput の挙動を流用）。
+ * 内部保存は常に円。表示単位が千円のときは ÷1000 で見せる。
+ */
 function AmountInput({
   value,
   onChange,
   disabled,
+  displayUnit = "yen",
 }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  displayUnit?: FinancialDisplayUnit;
 }) {
+  const divisor = displayUnit === "thousand" ? 1000 : 1;
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState("");
+  const escapeBaseline = useRef("");
+
+  const yen = parseAmount(value);
+  const idleDisplay = (() => {
+    if (!value.trim() || yen === 0) return "";
+    if (divisor === 1) return value;
+    return String(Math.round(yen / divisor));
+  })();
+
   return (
     <Input
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      value={focused ? text : idleDisplay}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setText(raw);
+        if (!raw.trim()) {
+          onChange("");
+          return;
+        }
+        onChange(String(parseAmount(raw) * divisor));
+      }}
+      onFocus={(e) => {
+        const next =
+          !value.trim() || yen === 0
+            ? ""
+            : divisor === 1
+              ? value
+              : String(Math.round(yen / divisor));
+        escapeBaseline.current = next;
+        setText(next);
+        setFocused(true);
+        requestAnimationFrame(() => e.currentTarget.select());
+      }}
+      onBlur={() => setFocused(false)}
+      onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setText(escapeBaseline.current);
+          if (!escapeBaseline.current.trim()) onChange("");
+          else onChange(String(parseAmount(escapeBaseline.current) * divisor));
+          e.currentTarget.blur();
+        }
+      }}
       disabled={disabled}
       inputMode="numeric"
       placeholder="0"
-      className={cn(
-        "h-8 w-full min-w-24 rounded-md border-border/70 bg-white px-2 text-right text-xs tabular-nums shadow-none",
-        "focus-visible:border-ring/50 focus-visible:ring-2 focus-visible:ring-ring/20",
-        disabled && "bg-transparent border-transparent shadow-none disabled:opacity-100",
-      )}
+      className={cn(CELL_NUM, disabled && "disabled:opacity-100")}
     />
   );
 }
@@ -119,6 +175,7 @@ function EditableItemRow({
   onChange,
   readOnly,
   revenueActual,
+  displayUnit,
   depth = 1,
 }: {
   item: FinancialAccountItem;
@@ -126,6 +183,7 @@ function EditableItemRow({
   onChange: ValueChangeHandler;
   readOnly: boolean;
   revenueActual: number;
+  displayUnit: FinancialDisplayUnit;
   /** インデント段（1=通常科目） */
   depth?: number;
 }) {
@@ -135,8 +193,8 @@ function EditableItemRow({
   const highlightOutsourcing = isOutsourcingAccount(item);
   return (
     <TableRow className={cn(
-      "border-border/50",
-      highlightOutsourcing && "bg-orange-50/70 dark:bg-orange-950/20",
+      "border-border/50 hover:bg-muted/10",
+      highlightOutsourcing && "bg-orange-50/70 hover:bg-orange-50/80 dark:bg-orange-950/20",
     )}>
       <TableCell
         className={cn(
@@ -147,31 +205,34 @@ function EditableItemRow({
       >
         {item.name}
       </TableCell>
-      <TableCell className="py-1.5 px-2">
-        <AmountInput value={v.budget} onChange={(x) => onChange(item.id, "budget", x)} disabled={readOnly} />
+      <TableCell className="py-1 px-1">
+        <AmountInput value={v.budget} onChange={(x) => onChange(item.id, "budget", x)} disabled={readOnly} displayUnit={displayUnit} />
       </TableCell>
-      <TableCell className="py-1.5 px-2">
-        <AmountInput value={v.actual} onChange={(x) => onChange(item.id, "actual", x)} disabled={readOnly} />
+      <TableCell className="py-1 px-1">
+        <AmountInput value={v.actual} onChange={(x) => onChange(item.id, "actual", x)} disabled={readOnly} displayUnit={displayUnit} />
       </TableCell>
       <TableCell className="py-2 px-2 text-right text-xs tabular-nums text-slate-500">
         {fmtCompositionRatio(actual, revenueActual)}
       </TableCell>
-      <TableCell className="py-1.5 px-2">
-        <AmountInput value={v.prior} onChange={(x) => onChange(item.id, "prior", x)} disabled={readOnly} />
+      <TableCell className="py-1 px-1">
+        <AmountInput value={v.prior} onChange={(x) => onChange(item.id, "prior", x)} disabled={readOnly} displayUnit={displayUnit} />
       </TableCell>
       <TableCell className="py-2 px-2 text-right text-xs tabular-nums text-slate-500">
         {fmtYoyRatio(actual, prior)}
       </TableCell>
-      <TableCell className="py-1.5 px-2">
+      <TableCell className="py-1 px-1">
         <Input
           value={v.note}
           onChange={(e) => onChange(item.id, "note", e.target.value)}
           disabled={readOnly}
           placeholder=""
-          className={cn(
-            "h-8 w-full min-w-40 rounded-md border-border/70 bg-white px-2 text-xs shadow-none",
-            readOnly && "border-transparent bg-transparent disabled:opacity-100",
-          )}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+          className={cn(CELL_TEXT, readOnly && "disabled:opacity-100")}
         />
       </TableCell>
     </TableRow>
@@ -185,6 +246,7 @@ function ComputedRow({
   label,
   amounts,
   revenueActual,
+  displayUnit,
   variant = "subtotal",
   note,
   onClick,
@@ -193,6 +255,7 @@ function ComputedRow({
   label: string;
   amounts: PlAmounts;
   revenueActual: number;
+  displayUnit: FinancialDisplayUnit;
   variant?: "subtotal" | "profit" | "estimate";
   note?: string;
   onClick?: () => void;
@@ -229,16 +292,16 @@ function ComputedRow({
         </span>
       </TableCell>
       <TableCell className={cn("px-3 py-2.5 text-right text-sm tabular-nums", isProfit && "text-[#1664C0]")}>
-        {fmtYen(amounts.budget)}
+        {fmtYen(amounts.budget, displayUnit)}
       </TableCell>
       <TableCell className={cn("px-3 py-2.5 text-right text-sm tabular-nums", isProfit && "text-[#1664C0]")}>
-        {fmtYen(amounts.actual)}
+        {fmtYen(amounts.actual, displayUnit)}
       </TableCell>
       <TableCell className="px-2 py-2.5 text-right text-xs tabular-nums text-slate-500">
         {fmtCompositionRatio(amounts.actual, revenueActual)}
       </TableCell>
       <TableCell className={cn("px-3 py-2.5 text-right text-sm tabular-nums", isProfit && "text-[#1664C0]")}>
-        {fmtYen(amounts.prior)}
+        {fmtYen(amounts.prior, displayUnit)}
       </TableCell>
       <TableCell className="px-2 py-2.5 text-right text-xs tabular-nums text-slate-500">
         {fmtYoyRatio(amounts.actual, amounts.prior)}
@@ -257,6 +320,8 @@ export type PlTableProps = {
   actualLabel: string;
   /** 法人税概算表示トグル（No.97: デフォルトOFF） */
   showEstimatedTax: boolean;
+  /** 表示単位（No.82: 既定は千円） */
+  displayUnit?: FinancialDisplayUnit;
   onOpenCostReport: () => void;
   /** 科目追加（勘定科目マスタを開く） */
   onAddAccount?: () => void;
@@ -270,6 +335,7 @@ export function PlTable({
   readOnly,
   actualLabel,
   showEstimatedTax,
+  displayUnit = "thousand",
   onOpenCostReport,
   onAddAccount,
 }: PlTableProps) {
@@ -285,6 +351,7 @@ export function PlTable({
         onChange={onChange}
         readOnly={readOnly}
         revenueActual={revenueActual}
+        displayUnit={displayUnit}
       />
     ));
 
@@ -296,34 +363,35 @@ export function PlTable({
           <TableBody>
             <SectionHeaderRow label="売上高" />
             {renderEntries(pl.sectionEntries.revenue)}
-            <ComputedRow label="= 売上高合計" amounts={pl.sectionTotals.revenue} revenueActual={revenueActual} />
+            <ComputedRow label="= 売上高合計" amounts={pl.sectionTotals.revenue} revenueActual={revenueActual} displayUnit={displayUnit} />
 
             <SectionHeaderRow label="売上原価" />
             <ComputedRow
               label="売上原価"
               amounts={pl.productManufacturingCost}
               revenueActual={revenueActual}
+              displayUnit={displayUnit}
               onClick={onOpenCostReport}
               actionLabel="製造原価報告書"
               note="クリックで内訳を表示"
             />
-            <ComputedRow label="売上総利益" amounts={pl.grossProfit} revenueActual={revenueActual} variant="profit" note="自動計算（入力不可）" />
+            <ComputedRow label="売上総利益" amounts={pl.grossProfit} revenueActual={revenueActual} displayUnit={displayUnit} variant="profit" note="自動計算（入力不可）" />
 
             <SectionHeaderRow label="販売費及び一般管理費" />
             {renderEntries(pl.sectionEntries.sga)}
-            <ComputedRow label="= 販売費及び一般管理費合計" amounts={pl.sectionTotals.sga} revenueActual={revenueActual} />
-            <ComputedRow label="営業利益" amounts={pl.operatingIncome} revenueActual={revenueActual} variant="profit" note="自動計算（入力不可）" />
+            <ComputedRow label="= 販売費及び一般管理費合計" amounts={pl.sectionTotals.sga} revenueActual={revenueActual} displayUnit={displayUnit} />
+            <ComputedRow label="営業利益" amounts={pl.operatingIncome} revenueActual={revenueActual} displayUnit={displayUnit} variant="profit" note="自動計算（入力不可）" />
 
             <SectionHeaderRow label="営業外収益" />
             {renderEntries(pl.sectionEntries.non_operating_income)}
-            <ComputedRow label="= 営業外収益合計" amounts={pl.sectionTotals.non_operating_income} revenueActual={revenueActual} />
+            <ComputedRow label="= 営業外収益合計" amounts={pl.sectionTotals.non_operating_income} revenueActual={revenueActual} displayUnit={displayUnit} />
 
             <SectionHeaderRow label="営業外費用" />
             {renderEntries(pl.sectionEntries.non_operating_expense)}
-            <ComputedRow label="= 営業外費用合計" amounts={pl.sectionTotals.non_operating_expense} revenueActual={revenueActual} />
+            <ComputedRow label="= 営業外費用合計" amounts={pl.sectionTotals.non_operating_expense} revenueActual={revenueActual} displayUnit={displayUnit} />
 
-            <ComputedRow label="経常利益" amounts={pl.ordinaryIncome} revenueActual={revenueActual} variant="profit" note="自動計算（入力不可）" />
-            <ComputedRow label="税引前当期純利益" amounts={pl.pretaxIncome} revenueActual={revenueActual} variant="profit" note="自動計算（入力不可）" />
+            <ComputedRow label="経常利益" amounts={pl.ordinaryIncome} revenueActual={revenueActual} displayUnit={displayUnit} variant="profit" note="自動計算（入力不可）" />
+            <ComputedRow label="税引前当期純利益" amounts={pl.pretaxIncome} revenueActual={revenueActual} displayUnit={displayUnit} variant="profit" note="自動計算（入力不可）" />
 
             {showEstimatedTax && (
               <>
@@ -331,13 +399,15 @@ export function PlTable({
                   label="法人税等（概算）"
                   amounts={pl.estimatedTax}
                   revenueActual={revenueActual}
+                  displayUnit={displayUnit}
                   variant="estimate"
-                  note="税引前利益 × 実効税率約30%の概算値"
+                  note="税引前×約30%の簡易概算（申告用の税種別計算ではない）"
                 />
                 <ComputedRow
                   label="当期純利益（概算）"
                   amounts={pl.estimatedNetIncome}
                   revenueActual={revenueActual}
+                  displayUnit={displayUnit}
                   variant="estimate"
                   note="概算法人税控除後"
                 />
@@ -348,7 +418,8 @@ export function PlTable({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <p className="text-[11px] text-slate-500">
-          階層: 区分 → 科目 → 合計（「=」は自動計算・手入力不可）
+          見積作成と同系統の表入力（Tab移動・Enter確定）。階層: 区分 → 科目 → 合計。「=」は自動計算。
+          表示単位: {displayUnit === "thousand" ? "千円" : "円"}
         </p>
         {onAddAccount && !readOnly && (
           <button
@@ -372,6 +443,7 @@ export type CostReportSheetProps = {
   onChange: ValueChangeHandler;
   readOnly: boolean;
   actualLabel: string;
+  displayUnit?: FinancialDisplayUnit;
 };
 
 /**
@@ -387,6 +459,7 @@ export function CostReportSheet({
   onChange,
   readOnly,
   actualLabel,
+  displayUnit = "thousand",
 }: CostReportSheetProps) {
   const pl = computePl(items, buildLinesForCompute(items, values));
   const revenueActual = pl.sectionTotals.revenue.actual;
@@ -434,12 +507,14 @@ export function CostReportSheet({
                           onChange={onChange}
                           readOnly={readOnly}
                           revenueActual={revenueActual}
+                          displayUnit={displayUnit}
                         />
                       ))}
                       <ComputedRow
                         label={`= ${cat.label}`}
                         amounts={pl.cogsDisplayTotals[cat.key]}
                         revenueActual={revenueActual}
+                        displayUnit={displayUnit}
                         variant="subtotal"
                       />
                     </Fragment>
@@ -450,6 +525,7 @@ export function CostReportSheet({
                   label="= 総製造費用"
                   amounts={pl.totalManufacturingCost}
                   revenueActual={revenueActual}
+                  displayUnit={displayUnit}
                   variant="profit"
                   note="材料費＋労務費＋製造経費"
                 />
@@ -462,6 +538,7 @@ export function CostReportSheet({
                     onChange={onChange}
                     readOnly={readOnly}
                     revenueActual={revenueActual}
+                    displayUnit={displayUnit}
                   />
                 ))}
                 {pl.wipEntries.begin.length === 0 && (
@@ -469,6 +546,7 @@ export function CostReportSheet({
                     label="+ 期首仕掛品棚卸高"
                     amounts={beginWip}
                     revenueActual={revenueActual}
+                    displayUnit={displayUnit}
                     note="科目未登録"
                   />
                 )}
@@ -480,6 +558,7 @@ export function CostReportSheet({
                     onChange={onChange}
                     readOnly={readOnly}
                     revenueActual={revenueActual}
+                    displayUnit={displayUnit}
                   />
                 ))}
                 {pl.wipEntries.end.length === 0 && (
@@ -487,6 +566,7 @@ export function CostReportSheet({
                     label="− 期末仕掛品棚卸高"
                     amounts={endWip}
                     revenueActual={revenueActual}
+                    displayUnit={displayUnit}
                     note="科目未登録"
                   />
                 )}
@@ -495,6 +575,7 @@ export function CostReportSheet({
                   label="= 当期製品製造原価"
                   amounts={pl.productManufacturingCost}
                   revenueActual={revenueActual}
+                  displayUnit={displayUnit}
                   variant="profit"
                   note="→ PLの売上原価へ反映"
                 />

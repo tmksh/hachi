@@ -201,9 +201,6 @@ export function CreateStatementForm({
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
                   PDF・Excel・CSV をそのまま読み込ませてください。Linq が中身を理解して、勘定科目と金額を展開します。
                 </p>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  OCR は使いません。書式は問いません。
-                </p>
               </div>
             </div>
           </button>

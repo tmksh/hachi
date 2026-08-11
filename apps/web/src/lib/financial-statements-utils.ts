@@ -470,10 +470,13 @@ export function computePl(
 
 // ── 表示フォーマット ─────────────────────────────────────────────────
 
-export function fmtYen(v: number): string {
-  const rounded = Math.round(v);
-  if (rounded < 0) return `▲${Math.abs(rounded).toLocaleString()}`;
-  return rounded.toLocaleString();
+/** 決算書の表示単位（No.82: 千円表示対応） */
+export type FinancialDisplayUnit = "yen" | "thousand";
+
+export function fmtYen(v: number, unit: FinancialDisplayUnit = "yen"): string {
+  const scaled = unit === "thousand" ? Math.round(v / 1000) : Math.round(v);
+  if (scaled < 0) return `▲${Math.abs(scaled).toLocaleString()}`;
+  return scaled.toLocaleString();
 }
 
 export function fmtCompositionRatio(value: number, revenueTotal: number): string {

@@ -565,17 +565,29 @@ export function BiClient({
     });
   }
 
-  const totalRevenue          = deptActuals.reduce((s, d) => s + d.revenue, 0);
-  const totalGrossProfitActual = deptActuals.reduce((s, d) => s + d.grossProfit, 0);
+  // 工事台帳ベース（部門合算）。No.95: 確定済み決算書があるときは全社KPIを会計値で上書きする。
+  const constructionRevenue = deptActuals.reduce((s, d) => s + d.revenue, 0);
+  const constructionGrossProfitActual = deptActuals.reduce((s, d) => s + d.grossProfit, 0);
+  const useAccountingKpis = Boolean(finActuals);
+  const accountingRevenueMan = finActuals ? finActuals.revenue / 10_000 : 0;
+  const accountingGrossProfitMan = finActuals ? finActuals.grossProfit / 10_000 : 0;
+  const accountingOperatingIncomeMan = finActuals ? finActuals.operatingIncome / 10_000 : 0;
+  const accountingSgaMan = finActuals ? finActuals.sellingGeneralAdmin / 10_000 : 0;
+
+  const totalRevenue = useAccountingKpis ? accountingRevenueMan : constructionRevenue;
+  const totalGrossProfitActual = useAccountingKpis
+    ? accountingGrossProfitMan
+    : constructionGrossProfitActual;
 
   // ── 予備費（非表示%）──────────────────────────────────────────────
   // 会社指定の予備費率で売上から控除額を算出。通常時は利益から控除して保守表示し、
   // 決算で戻す（reserve_released=true）と実値に戻る。管理者は実値トグルで一時的に確認可。
+  // 会計ベースKPI時は予備費控除しない（決算書側で既に最終利益になっている）。
   const reserveRate     = effectiveSettings?.reserve_fee_rate ?? 0;
   const reserveReleased = effectiveSettings?.reserve_released ?? false;
-  const reserveAmount   = Math.round(totalRevenue * reserveRate);
+  const reserveAmount   = Math.round((useAccountingKpis ? constructionRevenue : totalRevenue) * reserveRate);
   // 控除中か（率>0 かつ 未決算 かつ 実値トグルOFF）
-  const reserveActive   = reserveRate > 0 && !reserveReleased && !showActualReserve;
+  const reserveActive   = !useAccountingKpis && reserveRate > 0 && !reserveReleased && !showActualReserve;
   const totalGrossProfit = totalGrossProfitActual - (reserveActive ? reserveAmount : 0);
 
   const grossProfitRate  = pct(totalGrossProfit, totalRevenue);
@@ -586,13 +598,23 @@ export function BiClient({
   const elapsedMonths = fiscalYear === getCurrentFiscalYear(fiscalMonthStart)
     ? Math.max(1, Math.min(getForecastStartIndex(fiscalMonthStart), 12))
     : 12;
-  const overheadYtd = Math.round(overheadForCalc * elapsedMonths / 12);
-  const sgaYtd      = Math.round(sgaForCalc * elapsedMonths / 12);
+  const overheadYtd = useAccountingKpis
+    ? 0
+    : Math.round(overheadForCalc * elapsedMonths / 12);
+  const sgaYtd = useAccountingKpis
+    ? accountingSgaMan
+    : Math.round(sgaForCalc * elapsedMonths / 12);
 
-  const grossProfitTotal = totalGrossProfit - overheadYtd;
+  // 会計ベースでは売上総利益＝決算書の売上総利益、営業利益＝決算書の営業利益を正とする（No.95）
+  const grossProfitTotal = useAccountingKpis
+    ? accountingGrossProfitMan
+    : totalGrossProfit - overheadYtd;
   const gptRate          = pct(grossProfitTotal, totalRevenue);
-  const operatingProfit  = grossProfitTotal - sgaYtd;
+  const operatingProfit  = useAccountingKpis
+    ? accountingOperatingIncomeMan
+    : grossProfitTotal - sgaYtd;
   const opRate           = pct(operatingProfit, totalRevenue);
+  const kpiBasisLabel = useAccountingKpis ? "※会計ベース（決算書）" : "※工事粗利ベース";
 
   // 1人当たり（No.77/78）: 滝チャートの各金額を換算人数で割る
   const headcountWeight = headcount?.weight ?? 0;
@@ -921,7 +943,7 @@ export function BiClient({
         onSaved={loadBiData}
       />
 
-      {/* ── No.95/76: 決算書確定値。会計ベースと工事粗利ベースを明示分離 ── */}
+      {/* ── No.95/76: 確定済み決算書があるとき全社KPIは会計値を正とする ── */}
       {finActuals && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -929,13 +951,13 @@ export function BiClient({
               決算書 確定値（会計ベース）· {finActuals.periodLabel}
             </p>
             <span className="rounded-md border border-emerald-300 bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-              正とする定義: 会計上の売上総利益
+              全社KPI・滝チャートは会計値を使用
             </span>
           </div>
           <p className="text-[11px] text-emerald-800 leading-relaxed">
-            下のKPI・グラフは<strong>工事粗利ベース</strong>（売価−直接原価）です。
-            決算書の売上総利益は人件費の製造原価／販管振分（No.98）や予定配賦（No.99）を含むため一致しません。
-            両方を並べるときは定義ラベルを必ず確認してください。
+            売上・粗利・営業利益の<strong>全社指標</strong>は決算書の確定値で計算しています（No.95）。
+            部門カード・月次グラフは引き続き<strong>工事粗利ベース</strong>（売価−直接原価）です。
+            人件費振分（No.98）や予定配賦（No.99）の違いで部門合算と一致しない場合があります。
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
@@ -976,25 +998,29 @@ export function BiClient({
           {
             label: "粗利率",
             value: `${grossProfitRate}%`,
-            sub: `${deltaLabel(grossProfitRateDelta) ?? "完工工事の平均"} ※工事粗利ベース`,
+            sub: `${useAccountingKpis ? "会計上の売上総利益率" : (deltaLabel(grossProfitRateDelta) ?? "完工工事の平均")} ${kpiBasisLabel}`,
             illustration: "/bi/icons/bi-icon-yoy.png?v=4",
           },
           {
             label: "粗利額（実績/目標）",
             value: fmtMan(totalGrossProfit),
-            sub: `目標 ${fmtTargetMan(targetGp)} ※工事粗利ベース`,
+            sub: `目標 ${fmtTargetMan(targetGp)} ${kpiBasisLabel}`,
             illustration: "/bi/icons/bi-icon-gross.png?v=4",
           },
           {
-            label: "予定配賦",
-            value: settingsConfigured ? fmtMan(overheadForCalc) : "未設定",
-            sub: "製造間接費（年額）",
+            label: useAccountingKpis ? "販管費（会計）" : "予定配賦",
+            value: useAccountingKpis
+              ? fmtMan(accountingSgaMan)
+              : settingsConfigured
+                ? fmtMan(overheadForCalc)
+                : "未設定",
+            sub: useAccountingKpis ? "決算書の販管費合計" : "製造間接費（年額）",
             illustration: "/bi/icons/bi-icon-overhead.png?v=4",
           },
           {
             label: "営業利益 / 利益率",
             value: fmtSigned(operatingProfit),
-            sub: `営業利益率 ${r1(Math.abs(opRate))}%`,
+            sub: `営業利益率 ${r1(Math.abs(opRate))}% ${kpiBasisLabel}`,
             illustration: "/bi/icons/bi-icon-op.png?v=4",
             valueClassName: operatingProfit < 0 ? "text-rose-500" : undefined,
           },
@@ -1066,7 +1092,11 @@ export function BiClient({
         right={
           <span className="text-[11px] text-muted-foreground">
             {fiscalYearLabel(fiscalYear)}
-            {finActuals ? "・決算書確定済（表示は工事台帳ベース）" : isCurrentFY ? "・速報値（決算確定前）" : ""}
+            {finActuals
+              ? "・決算書確定済（全社は会計ベース）"
+              : isCurrentFY
+                ? "・速報値（決算確定前）"
+                : ""}
           </span>
         }
       />
@@ -1078,7 +1108,9 @@ export function BiClient({
             <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs sm:text-sm text-muted-foreground">
-                上から順に引くと、いちばん下の「営業利益」になります
+                {useAccountingKpis
+                  ? "決算書の段階利益に沿って表示しています（会計ベース）"
+                  : "上から順に引くと、いちばん下の「営業利益」になります"}
               </p>
               {/* No.77/78: 全社 / 1人当たり（滝チャート内タブ） */}
               <div className="flex items-center rounded-full border border-border/60 p-0.5 gap-0.5 bg-muted/30 shrink-0">
@@ -1115,13 +1147,13 @@ export function BiClient({
                   <p className="text-sm font-semibold text-foreground">粗利額</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     売上の {grossProfitRate}% が残っています
-                    {/* No.76: 粗利の定義は経営合意待ちのため当面の基準を明示 */}
-                    <span className="ml-1 text-muted-foreground/80">※工事粗利ベース</span>
+                    <span className="ml-1 text-muted-foreground/80">{kpiBasisLabel}</span>
                   </p>
                 </div>
                 <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">{fmtMan(perCapita(totalGrossProfit))}</p>
               </div>
 
+              {!useAccountingKpis && (
               <div
                 className="flex items-end justify-between gap-3 py-2.5 px-3 -mx-1 rounded-lg"
                 style={{ background: `linear-gradient(120deg, ${CHART_PRIMARY}33 0%, ${CHART_ACCENT} 100%)` }}
@@ -1137,12 +1169,14 @@ export function BiClient({
                   {settingsConfigured ? fmtMan(perCapita(overheadYtd)) : "未設定"}
                 </p>
               </div>
+              )}
 
               <div className="flex items-end justify-between gap-3 py-2.5 border-t border-border/60">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">ここまでの残り</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {summaryMode === "perCapita" ? "1人当たり売上総利益" : "売上総利益"}
+                    {useAccountingKpis ? "（会計）" : ""}
                   </p>
                 </div>
                 <p className="text-xl font-bold tabular-nums shrink-0 tracking-tight text-foreground">
@@ -1157,12 +1191,13 @@ export function BiClient({
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--brand-dark)]">売るための経費を引く</p>
                   <p className="text-[11px] text-[var(--brand-dark)]/70 mt-0.5">
-                    販管費（営業・広告などの予算）
-                    {elapsedMonths < 12 ? `・経過${elapsedMonths}ヶ月分を月割り` : ""}
+                    {useAccountingKpis
+                      ? "販管費（決算書実績）"
+                      : `販管費（営業・広告などの予算）${elapsedMonths < 12 ? `・経過${elapsedMonths}ヶ月分を月割り` : ""}`}
                   </p>
                 </div>
                 <p className="text-lg font-bold tabular-nums shrink-0 text-[var(--brand-dark)]">
-                  {settingsConfigured ? fmtMan(perCapita(sgaYtd)) : "未設定"}
+                  {useAccountingKpis || settingsConfigured ? fmtMan(perCapita(sgaYtd)) : "未設定"}
                 </p>
               </div>
             </div>

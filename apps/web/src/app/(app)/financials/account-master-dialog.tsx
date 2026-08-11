@@ -2,7 +2,30 @@
 
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Check, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  GripVertical,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +70,7 @@ import {
   reorderFinancialAccountItems,
   updateFinancialAccountItem,
 } from "@/lib/actions/financial-statements";
+import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
@@ -54,6 +78,115 @@ type Props = {
   items: FinancialAccountItem[];
   onItemsChanged: (items: FinancialAccountItem[]) => void;
 };
+
+/** グループ内の並び替え結果を全体の ID 順へ反映する */
+function applyGroupReorder(
+  sorted: FinancialAccountItem[],
+  groupItems: FinancialAccountItem[],
+  activeId: string,
+  overId: string,
+): string[] | null {
+  const groupIds = groupItems.map((i) => i.id);
+  const oldIndex = groupIds.indexOf(activeId);
+  const newIndex = groupIds.indexOf(overId);
+  if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return null;
+
+  const newGroupIds = arrayMove(groupIds, oldIndex, newIndex);
+  const groupIdSet = new Set(groupIds);
+  let gi = 0;
+  return sorted.map((item) => (groupIdSet.has(item.id) ? newGroupIds[gi++]! : item.id));
+}
+
+function SortableAccountRow({
+  item,
+  busy,
+  editingId,
+  editingName,
+  onEditingNameChange,
+  onRename,
+  onCancelEdit,
+  onStartEdit,
+  onDelete,
+}: {
+  item: FinancialAccountItem;
+  busy: boolean;
+  editingId: string | null;
+  editingName: string;
+  onEditingNameChange: (value: string) => void;
+  onRename: (id: string) => void;
+  onCancelEdit: () => void;
+  onStartEdit: (item: FinancialAccountItem) => void;
+  onDelete: (item: FinancialAccountItem) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: busy || editingId === item.id,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 20 : undefined,
+      }}
+      className={cn(
+        "flex items-center gap-1.5 rounded-md border bg-card px-2 py-1",
+        isDragging && "opacity-70 shadow-md",
+      )}
+    >
+      {editingId === item.id ? (
+        <>
+          <Input
+            value={editingName}
+            onChange={(e) => onEditingNameChange(e.target.value)}
+            className="h-7 flex-1 text-sm"
+            autoFocus
+          />
+          <Button size="icon" variant="ghost" className="size-7" disabled={busy} onClick={() => onRename(item.id)}>
+            <Check className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="size-7" onClick={onCancelEdit}>
+            <X className="size-3.5" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="inline-flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing disabled:pointer-events-none disabled:opacity-50"
+            disabled={busy}
+            aria-label={`${item.name}をドラッグして並び替え`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+          <span className="flex-1 truncate text-sm">{item.name}</span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            disabled={busy}
+            onClick={() => onStartEdit(item)}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7 text-destructive hover:text-destructive"
+            disabled={busy}
+            onClick={() => onDelete(item)}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
 
 /** 勘定科目マスタの管理（No.87: 追加・編集・並び替え） */
 export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged }: Props) {
@@ -64,6 +197,10 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<FinancialAccountItem | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
 
   const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -110,26 +247,37 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
     setBusy(false);
   };
 
-  const handleMove = async (item: FinancialAccountItem, direction: -1 | 1) => {
-    // 同一区分（cogsはサブ区分も一致）内で入れ替え、全体順を保存する
-    const siblings = sorted.filter(
-      (i) => i.section === item.section && i.cogs_category === item.cogs_category,
-    );
-    const pos = siblings.findIndex((i) => i.id === item.id);
-    const swapWith = siblings[pos + direction];
-    if (!swapWith) return;
+  const handleGroupDragEnd = async (
+    groupItems: FinancialAccountItem[],
+    event: DragEndEvent,
+  ) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || busy) return;
 
-    const globalOrder = sorted.map((i) => i.id);
-    const a = globalOrder.indexOf(item.id);
-    const b = globalOrder.indexOf(swapWith.id);
-    [globalOrder[a], globalOrder[b]] = [globalOrder[b], globalOrder[a]];
+    const nextOrder = applyGroupReorder(
+      sorted,
+      groupItems,
+      String(active.id),
+      String(over.id),
+    );
+    if (!nextOrder) return;
+
+    // 楽観更新（即時反映）
+    const orderIndex = new Map(nextOrder.map((id, i) => [id, (i + 1) * 10]));
+    onItemsChanged(
+      items.map((item) => ({
+        ...item,
+        sort_order: orderIndex.get(item.id) ?? item.sort_order,
+      })),
+    );
 
     setBusy(true);
-    const res = await reorderFinancialAccountItems(globalOrder);
+    const res = await reorderFinancialAccountItems(nextOrder);
     if (res.ok) {
       await refresh();
     } else {
       toast.error(res.error);
+      await refresh();
     }
     setBusy(false);
   };
@@ -159,72 +307,38 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
           科目がありません
         </p>
       )}
-      {groupItems.map((item, idx) => (
-        <div
-          key={item.id}
-          className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1"
+      {groupItems.length > 0 && (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={(e) => void handleGroupDragEnd(groupItems, e)}
         >
-          {editingId === item.id ? (
-            <>
-              <Input
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                className="h-7 flex-1 text-sm"
-                autoFocus
-              />
-              <Button size="icon" variant="ghost" className="size-7" disabled={busy} onClick={() => handleRename(item.id)}>
-                <Check className="size-3.5" />
-              </Button>
-              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingId(null)}>
-                <X className="size-3.5" />
-              </Button>
-            </>
-          ) : (
-            <>
-              <span className="flex-1 truncate text-sm">{item.name}</span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-7"
-                disabled={busy || idx === 0}
-                onClick={() => handleMove(item, -1)}
-              >
-                <ArrowUp className="size-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-7"
-                disabled={busy || idx === groupItems.length - 1}
-                onClick={() => handleMove(item, 1)}
-              >
-                <ArrowDown className="size-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-7"
-                disabled={busy}
-                onClick={() => {
-                  setEditingId(item.id);
-                  setEditingName(item.name);
-                }}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-7 text-destructive hover:text-destructive"
-                disabled={busy}
-                onClick={() => setDeleteTarget(item)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </>
-          )}
-        </div>
-      ))}
+          <SortableContext
+            items={groupItems.map((i) => i.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-1">
+              {groupItems.map((item) => (
+                <SortableAccountRow
+                  key={item.id}
+                  item={item}
+                  busy={busy}
+                  editingId={editingId}
+                  editingName={editingName}
+                  onEditingNameChange={setEditingName}
+                  onRename={(id) => void handleRename(id)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onStartEdit={(target) => {
+                    setEditingId(target.id);
+                    setEditingName(target.name);
+                  }}
+                  onDelete={setDeleteTarget}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
     </div>
   );
 
@@ -235,7 +349,7 @@ export function AccountMasterDialog({ open, onOpenChange, items, onItemsChanged 
           <DialogHeader>
             <DialogTitle>勘定科目マスタの管理</DialogTitle>
             <DialogDescription>
-              区分 → 科目 → 合計の3階層で管理します。人件費は製造原価（労務費）と販管費のどちらにも登録でき、振り分け先で粗利率が大きく変わります（No.98）。
+              区分 → 科目 → 合計の3階層で管理します。人件費は製造原価（労務費）と販管費のどちらにも登録でき、振り分け先で粗利率が大きく変わります（No.98）。左のハンドルをドラッグして並び替えできます。
             </DialogDescription>
           </DialogHeader>
 
