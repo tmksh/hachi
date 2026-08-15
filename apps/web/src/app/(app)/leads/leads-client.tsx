@@ -47,6 +47,7 @@ import {
 } from "@/lib/actions/leads";
 import type { InboundLead } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
+import { getPublicAppOrigin } from "@/lib/public-app-origin";
 import { Copy, Link2, RefreshCw, FlaskConical } from "lucide-react";
 
 const STATUS_LABELS: Record<InboundLead["status"], string> = {
@@ -125,7 +126,9 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
     setOrigin(window.location.origin);
   }, []);
 
-  const webhookUrl = webhook.path ? `${origin}${webhook.path}` : null;
+  const publicOrigin = getPublicAppOrigin() || origin;
+  const webhookUrl = webhook.path ? `${publicOrigin}${webhook.path}` : null;
+  const webhookTestUrl = webhook.path ? `${origin || publicOrigin}${webhook.path}` : null;
 
   function copyText(label: string, value: string) {
     void navigator.clipboard.writeText(value).then(
@@ -285,8 +288,8 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
     startTransition(async () => {
       try {
         // シークレットが画面にあるときは実WebhookへPOST（本経路の確認）
-        if (webhookUrl && freshSecret) {
-          const res = await fetch(webhookUrl, {
+        if (webhookTestUrl && freshSecret) {
+          const res = await fetch(webhookTestUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
