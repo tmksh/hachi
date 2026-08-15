@@ -98,11 +98,13 @@ function fmtAlways(n: number): string {
 }
 function compute(row: ContractorRow) {
   const budget_total = row.budget + row.add_contracts.reduce((s, v) => s + v, 0);
+  // 管理用予算が入っている行は、差額・確定計算の基準を管理用予算に切り替える（② No.31）
+  const basis = row.management_budget > 0 ? row.management_budget : budget_total;
   const confirmed    = row.order_amount + row.add_orders.reduce((s, v) => s + v, 0);
-  const budget_rem   = budget_total - confirmed;
+  const budget_rem   = basis - confirmed;
   const total_billed = Object.values(row.monthly).reduce((s: number, v) => s + (v ?? 0), 0);
   const billing_rem  = confirmed - total_billed;
-  return { budget_total, confirmed, budget_rem, total_billed, billing_rem };
+  return { budget_total, confirmed, budget_rem, total_billed, billing_rem, basis };
 }
 function newEmptyRow(contractCols = 2, orderCols = 3): ContractorRow {
   return {
@@ -1147,7 +1149,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                     c.budget_rem < 0  ? "bg-rose-50 text-red-600 font-semibold" :
                     c.budget_rem > 0  ? "bg-green-50 text-emerald-700" : ""
                   )}>
-                    {c.budget_total > 0 ? fmtAlways(c.budget_rem) : ""}
+                    {(row.management_budget > 0 || c.budget_total > 0) ? fmtAlways(c.budget_rem) : ""}
                   </td>
                   {/* 月次請求 */}
                   {months.map(m => (

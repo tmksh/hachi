@@ -18,7 +18,7 @@ import {
 import {
   Receipt, Plus, Loader2, CalendarClock, ExternalLink,
   ArrowLeft, PackageCheck, Trash2, Wand2, FileText, Send, UserPlus,
-  CheckCircle2, Undo2, CloudUpload, ChevronDown, ChevronUp,
+  CheckCircle2, Undo2, CloudUpload, ChevronDown, ChevronUp, Link2,
 } from "lucide-react";
 import { createInvoiceFromConstruction, generateMonthlyInvoices } from "@/lib/actions/invoices";
 import {
@@ -35,6 +35,7 @@ import {
   sendContractorOrderToCloudSign,
   createCraftsmanByName,
 } from "@/lib/actions/contractor-orders";
+import { getOrCreatePartnerOrderLink } from "@/lib/actions/partner-portal";
 import { getCraftsmen } from "@/lib/actions/craftsmen";
 import { getProfiles } from "@/lib/actions/profiles";
 import { useAuth } from "@/hooks/use-auth";
@@ -453,6 +454,21 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
       toast.error(e instanceof Error ? e.message : "差戻しに失敗しました");
     } finally {
       setActingId(null);
+    }
+  };
+
+  const handleCopyPartnerLink = async (order: OrderRow) => {
+    const res = await getOrCreatePartnerOrderLink(order.id);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    const url = `${window.location.origin}${res.url}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("協力業者用URLをコピーしました");
+    } catch {
+      toast.message(url);
     }
   };
 
@@ -915,6 +931,13 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                               </button>
                             </>
                           )}
+                          <button
+                            className="text-[10px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap inline-flex items-center gap-1"
+                            onClick={() => void handleCopyPartnerLink(order)}
+                            title="外部協力業者向けURLをコピー"
+                          >
+                            <Link2 className="h-3 w-3" />業者URL
+                          </button>
                           {order.status === "approved" && (
                             <button
                               className="text-[10px] font-semibold px-2 py-1 rounded bg-sky-500 text-white hover:bg-sky-600 transition-colors whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-50"

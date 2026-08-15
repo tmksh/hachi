@@ -37,6 +37,7 @@ import {
   FileText,
   CalendarDays,
   MessageCircle,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -67,14 +68,30 @@ import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
-/** 回覧はDB既読が正本。localStorageの「非表示」は回覧以外にだけ適用する */
-function filterDismissedNotifications(notifs: Notification[]): Notification[] {
-  let dismissed: string[] = [];
+const DISMISSED_NOTIFS_KEY = "hachi_dismissed_notifs";
+
+function readDismissedNotifIds(): string[] {
   try {
-    dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-  } catch { /* ignore */ }
+    const raw = JSON.parse(localStorage.getItem(DISMISSED_NOTIFS_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistDismissedNotifIds(ids: string[]) {
+  localStorage.setItem(DISMISSED_NOTIFS_KEY, JSON.stringify([...new Set(ids)].slice(-400)));
+}
+
+/** 既読・削除した通知は種別を問わず再表示しない（④ No.15） */
+function filterDismissedNotifications(notifs: Notification[]): Notification[] {
+  const dismissed = readDismissedNotifIds();
   if (dismissed.length === 0) return notifs;
-  return notifs.filter((n) => n.type === "announcement" || !dismissed.includes(n.id));
+  return notifs.filter((n) => !dismissed.includes(n.id));
+}
+
+function dismissNotificationIds(ids: string[]) {
+  persistDismissedNotifIds([...readDismissedNotifIds(), ...ids]);
 }
 
 const GROUP_ICONS = {
@@ -695,19 +712,14 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   size="sm"
                   className="h-7 text-xs text-muted-foreground"
                   onClick={() => {
+                    const ids = notifications.map((n) => n.id);
                     const annIds = notifications
                       .filter((n) => n.type === "announcement")
                       .map((n) => n.id.replace("ann_", ""));
-                    const otherIds = notifications
-                      .filter((n) => n.type !== "announcement")
-                      .map((n) => n.id);
-                    // 回覧はDB既読へ。それ以外はローカル非表示。
-                    void Promise.all(annIds.map((id) => markAnnouncementAsRead(id))).catch(() => {});
                     try {
-                      const dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-                      const next = [...new Set([...dismissed, ...otherIds])];
-                      localStorage.setItem("hachi_dismissed_notifs", JSON.stringify(next.slice(-200)));
+                      dismissNotificationIds(ids);
                     } catch { /* ignore */ }
+                    void Promise.all(annIds.map((id) => markAnnouncementAsRead(id))).catch(() => {});
                     setNotifications([]);
                   }}
                 >
@@ -725,27 +737,37 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
             ) : (
               notifications.map((n) => (
                 <div key={n.id} className="relative group">
+                  <button
+                    type="button"
+                    aria-label="この通知を削除"
+                    className="absolute right-1 top-1 z-10 hidden size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      try {
+                        dismissNotificationIds([n.id]);
+                      } catch { /* ignore */ }
+                      if (n.type === "announcement") {
+                        void markAnnouncementAsRead(n.id.replace("ann_", "")).catch(() => {});
+                      }
+                      setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
                   <Link
                     href={n.href}
                     onClick={() => {
                       try {
-                        const dismissed = JSON.parse(localStorage.getItem("hachi_dismissed_notifs") ?? "[]") as string[];
-                        localStorage.setItem(
-                          "hachi_dismissed_notifs",
-                          JSON.stringify([...new Set([...dismissed, n.id])].slice(-200)),
-                        );
+                        dismissNotificationIds([n.id]);
                       } catch { /* ignore */ }
                       if (n.type === "announcement") {
-                        const annId = n.id.replace("ann_", "");
-                        markAnnouncementAsRead(annId).then(() => {
-                          setNotifications((prev) => prev.filter((x) => x.id !== n.id));
-                        }).catch(() => {});
-                      } else {
-                        setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+                        void markAnnouncementAsRead(n.id.replace("ann_", "")).catch(() => {});
                       }
+                      setNotifications((prev) => prev.filter((x) => x.id !== n.id));
                       setNotifOpen(false);
                     }}
-                    className="flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-accent transition-colors"
+                    className="flex items-start gap-3 px-3 py-3 pr-8 rounded-xl hover:bg-accent transition-colors"
                   >
                     <div className={`mt-0.5 shrink-0 h-8 w-8 rounded-lg flex items-center justify-center ${n.type === "workflow" ? "bg-amber-100" : n.type === "calendar" ? "bg-sky-100" : n.is_urgent ? "bg-rose-100" : ""}`}
                       style={(!n.type || (n.type !== "workflow" && n.type !== "calendar" && !n.is_urgent)) ? { backgroundColor: "rgba(var(--brand-dark-rgb), 0.12)" } : undefined}

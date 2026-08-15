@@ -231,9 +231,20 @@ export function AppIntegrationsTab({ initialData }: { initialData?: AppIntegrati
 
   const handleSaveEvents = async (provider: AppIntegrationProvider) => {
     try {
-      await updateAppIntegrationEvents(provider, selectedEvents);
+      const hasNewCredentials = Object.values(credentials).some((value) => value.trim());
+      if (hasNewCredentials) {
+        await connectAppIntegration({
+          provider,
+          credentials,
+          settings,
+          events: selectedEvents,
+        });
+        toast.success("連携設定を更新しました");
+      } else {
+        await updateAppIntegrationEvents(provider, selectedEvents);
+        toast.success("通知設定を更新しました");
+      }
       await reload();
-      toast.success("通知設定を更新しました");
       closeConnect();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "更新に失敗しました");

@@ -218,5 +218,16 @@ export async function bulkCreateContractorOrders(
     .insert(payload)
     .select(ORDER_SELECT);
   if (error) throw new Error(error.message);
+  const { ensurePartnerTokenForOrder } = await import("@/lib/actions/partner-portal");
+  await Promise.all(
+    (data ?? []).map((order) =>
+      ensurePartnerTokenForOrder({
+        companyId,
+        constructionId,
+        orderId: order.id,
+        label: order.title,
+      }).catch(() => {}),
+    ),
+  );
   return (data ?? []) as ContractorOrder[];
 }

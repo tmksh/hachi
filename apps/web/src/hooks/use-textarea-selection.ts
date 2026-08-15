@@ -64,19 +64,34 @@ export function useTextareaSelection() {
       }
     };
 
-    const onPointerUp = () => scheduleSync();
+    const onPointerUp = (e: PointerEvent) => {
+      const el = elementRef.current;
+      const target = e.target as Node | null;
+      if (el && target && (el === target || el.contains(target))) {
+        scheduleSync();
+        return;
+      }
+      scheduleSync();
+    };
 
     const onClick = (e: MouseEvent) => {
       const el = elementRef.current;
       if (!el) return;
       const target = e.target as Node;
-      if (el.contains(target)) return;
+      if (el.contains(target)) {
+        scheduleSync();
+        return;
+      }
       if ((target as HTMLElement).closest?.("[data-text-selection-toolbar]")) return;
-      clear();
+      // 選択確定の click と外側クリックが競合しないよう、1フレーム遅らせて判定
+      requestAnimationFrame(() => {
+        if (!readTextareaSelection(elementRef.current)) clear();
+      });
     };
 
     document.addEventListener("selectionchange", onSelectionChange);
     document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("mouseup", onPointerUp as EventListener);
     document.addEventListener("click", onClick, true);
 
     if (mounted) scheduleSync();
@@ -84,6 +99,7 @@ export function useTextareaSelection() {
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
       document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("mouseup", onPointerUp as EventListener);
       document.removeEventListener("click", onClick, true);
     };
   }, [applySelection, clear, mounted]);

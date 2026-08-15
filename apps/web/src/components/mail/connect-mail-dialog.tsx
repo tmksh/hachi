@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +51,7 @@ export function ConnectMailDialog({
   const [loading, setLoading] = useState(false);
   const [forwardAddress, setForwardAddress] = useState("");
   const [copied, setCopied] = useState(false);
+  const [gmailRedirectUri, setGmailRedirectUri] = useState("");
 
   // IMAP form state
   const [emailAddress, setEmailAddress] = useState("");
@@ -64,12 +65,23 @@ export function ConnectMailDialog({
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPass, setSmtpPass] = useState("");
 
+  useEffect(() => {
+    if (!open) return;
+    void fetch("/api/gmail/oauth-status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.redirectUri === "string") setGmailRedirectUri(data.redirectUri);
+      })
+      .catch(() => {});
+  }, [open]);
+
   const reset = () => {
     setStep("select_provider");
     setSelectedProvider(null);
     setLoading(false);
     setForwardAddress("");
     setCopied(false);
+    setGmailRedirectUri("");
     setEmailAddress("");
     setDisplayName("");
     setImapHost("");
@@ -142,6 +154,10 @@ export function ConnectMailDialog({
     setImapPort("993");
     setSmtpHost("sv%%.xserver.jp");
     setSmtpPort("465");
+    if (emailAddress) {
+      setImapUser((prev) => prev || emailAddress);
+      setSmtpUser((prev) => prev || emailAddress);
+    }
     toast.info("sv%% のサーバー番号を実際の番号に変更してください");
   };
 
@@ -171,6 +187,10 @@ export function ConnectMailDialog({
       toast.error("メールアドレス・IMAPホスト・ユーザー名・パスワードは必須です");
       return;
     }
+    if (imapHost.includes("%%") || smtpHost.includes("%%")) {
+      toast.error("ホスト名の sv%% を実際のサーバー番号に変更してください");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/imap/connect", {
@@ -181,17 +201,25 @@ export function ConnectMailDialog({
           display_name: displayName || undefined,
           imap_host: imapHost,
           imap_port: Number(imapPort),
-          imap_username: imapUser,
+          imap_username: imapUser || emailAddress,
           imap_password: imapPass,
           smtp_host: smtpHost || undefined,
           smtp_port: smtpPort ? Number(smtpPort) : undefined,
-          smtp_username: smtpUser || undefined,
-          smtp_password: smtpPass || undefined,
+          smtp_username: smtpUser || emailAddress,
+          smtp_password: smtpPass || imapPass,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success("IMAPアカウントを連携しました");
+      if (data.sync_error) {
+        toast.success("IMAPアカウントを連携しました", {
+          description: `スレッド同期は未完了です: ${data.sync_error}`,
+        });
+      } else {
+        toast.success("IMAPアカウントを連携しました", {
+          description: `${data.synced ?? 0} 件のスレッドを同期しました（受信トレイ ${data.total ?? 0} 件）`,
+        });
+      }
       handleClose(false);
       onConnected();
     } catch (e) {
@@ -243,6 +271,26 @@ export function ConnectMailDialog({
               </div>
               <Badge variant="secondary" className="text-xs">OAuth</Badge>
             </button>
+            {gmailRedirectUri && (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground space-y-1">
+                <p>Google Cloud Console の「承認済みのリダイレクト URI」に次を登録してください。</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 break-all font-mono text-[10px] text-foreground">{gmailRedirectUri}</code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(gmailRedirectUri);
+                      toast.success("リダイレクトURIをコピーしました");
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() => handleSelectProvider("imap")}
@@ -291,7 +339,12 @@ export function ConnectMailDialog({
                 <Label className="text-xs">メールアドレス *</Label>
                 <Input
                   value={emailAddress}
-                  onChange={(e) => setEmailAddress(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEmailAddress(v);
+                    setImapUser((prev) => (!prev || prev === emailAddress ? v : prev));
+                    setSmtpUser((prev) => (!prev || prev === emailAddress ? v : prev));
+                  }}
                   placeholder="you@example.com"
                 />
               </div>
@@ -387,7 +440,7 @@ export function ConnectMailDialog({
               className="w-full"
             >
               {loading ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" />接続確認中...</>
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />接続・同期中...</>
               ) : (
                 "接続して連携"
               )}

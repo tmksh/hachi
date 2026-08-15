@@ -60,19 +60,37 @@ export function gmailCallbackUri(origin: string): string {
   return `${origin.replace(/\/$/, "")}/api/gmail/callback`;
 }
 
+const PRODUCTION_OAUTH_ORIGIN = "https://bridge-linq.com";
+
+function isLocalOrigin(value: string): boolean {
+  return /localhost|127\.0\.0\.1/i.test(value);
+}
+
 /**
  * OAuth の redirect_uri に使う origin。
- * サブドメイン（{slug}.bridge-linq.com）ごとに URI が変わると Google Console と不一致になるため、
- * 本番では NEXT_PUBLIC_APP_URL（なければ https://{NEXT_PUBLIC_APP_DOMAIN}）を固定で使う。
+ * サブドメイン / www ごとに URI が変わると Google Console と不一致になるため、
+ * 本番ドメイン配下は apex（https://bridge-linq.com）に固定する。
  */
 export function resolveOAuthRedirectOrigin(requestOrigin: string): string {
+  const explicit = stripQuotes(process.env.GOOGLE_OAUTH_REDIRECT_ORIGIN ?? "").replace(/\/$/, "");
+  if (explicit) return explicit.replace(/\/$/, "");
+
   const configured = stripQuotes(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-  if (configured && !/localhost|127\.0\.0\.1/i.test(configured)) {
+  if (configured && !isLocalOrigin(configured)) {
     return configured;
   }
   const domain = stripQuotes(process.env.NEXT_PUBLIC_APP_DOMAIN ?? "");
-  if (domain && !/localhost|127\.0\.0\.1/i.test(domain)) {
-    return `https://${domain.replace(/^https?:\/\//, "")}`;
+  if (domain && !isLocalOrigin(domain)) {
+    return `https://${domain.replace(/^https?:\/\//, "").replace(/^www\./, "")}`;
+  }
+
+  try {
+    const host = new URL(requestOrigin).hostname.toLowerCase();
+    if (host === "bridge-linq.com" || host === "www.bridge-linq.com" || host.endsWith(".bridge-linq.com")) {
+      return PRODUCTION_OAUTH_ORIGIN;
+    }
+  } catch {
+    /* ignore */
   }
   return requestOrigin.replace(/\/$/, "");
 }

@@ -620,6 +620,13 @@ export async function createContractorOrder(input: {
     .select("*, craftsman:craftsmen(id, name)")
     .single();
   if (error) throw error;
+  const { ensurePartnerTokenForOrder } = await import("@/lib/actions/partner-portal");
+  await ensurePartnerTokenForOrder({
+    companyId: profile.company_id,
+    constructionId: input.constructionId,
+    orderId: data.id,
+    label: data.title,
+  }).catch(() => {});
   return data;
 }
 

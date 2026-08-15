@@ -253,9 +253,14 @@ export async function testAppIntegration(
       return actionFail(error ?? "連携が見つかりません", "連携が見つかりません");
     }
 
+    const credentials = { ...((data.credentials ?? {}) as Record<string, string>) };
+    if (provider === "slack" && credentials.webhook_url) {
+      credentials.webhook_url = credentials.webhook_url.trim().replace(/^[\s"'<>]+|[\s"'<>]+$/g, "");
+    }
+
     await sendIntegrationTest(
       data.provider as AppIntegrationProvider,
-      (data.credentials ?? {}) as Record<string, string>,
+      credentials,
       (data.settings ?? {}) as Record<string, string>,
     );
     return actionOk({ sent: true as const });

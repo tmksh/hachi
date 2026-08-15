@@ -63,7 +63,10 @@ const SYNC_ENDPOINT: Record<MailProvider, string | null> = {
   forward: null,
 };
 
-function resolveInitialThreads(threads: Thread[]) {
+function resolveInitialThreads(threads: Thread[], accounts: EmailAccount[]) {
+  if (accounts.length > 0) {
+    return { threads: threads ?? [], useMock: false };
+  }
   if (!threads || threads.length === 0) {
     return { threads: MOCK_MAIL_THREADS as unknown as Thread[], useMock: true };
   }
@@ -78,7 +81,7 @@ export function MailClient({
   initialThreads: Thread[];
 }) {
   const searchParams = useSearchParams();
-  const initialResolved = resolveInitialThreads(initialThreads);
+  const initialResolved = resolveInitialThreads(initialThreads, initialAccounts);
   const [threads, setThreads] = useState<Thread[]>(initialResolved.threads);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -123,7 +126,10 @@ export function MailClient({
         getEmailThreads().catch(() => []),
       ]);
       setAccounts(accs);
-      if (!data || data.length === 0) {
+      if (accs.length > 0) {
+        setThreads(data ?? []);
+        setUseMock(false);
+      } else if (!data || data.length === 0) {
         setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
         setUseMock(true);
       } else {
@@ -131,8 +137,8 @@ export function MailClient({
         setUseMock(false);
       }
     } catch {
-      setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
-      setUseMock(true);
+      setThreads([]);
+      setUseMock(false);
     } finally {
       setLoading(false);
     }
@@ -320,7 +326,9 @@ export function MailClient({
                 ))}
               </div>
             ) : threads.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">メールはありません</div>
+              <div className="p-8 text-center text-muted-foreground">
+                {hasAccounts ? "同期済みのメールはありません。受信トレイが空か、右上の「同期」で再取得できます。" : "メールはありません"}
+              </div>
             ) : (
               <div className="divide-y max-h-[600px] overflow-y-auto">
                 {threads.map((t) => (

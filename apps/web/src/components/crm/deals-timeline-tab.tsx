@@ -302,7 +302,7 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               onChange={(e) => setSummaryDraft(e.target.value)}
               {...summarySelectionHandlers}
               rows={4}
-              className="relative z-0"
+              className="relative z-0 select-text [field-sizing:fixed]"
               placeholder="商談の要点・次のアクションなどを記録..."
             />
             <TextSelectionToolbar visible={Boolean(selection.trim())} anchorRect={anchorRect}>

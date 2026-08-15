@@ -1,9 +1,25 @@
-function matchHost(url: string, hosts: string[]): boolean {
+function normalizeWebhookUrl(url: string): string {
+  return url.trim().replace(/^[\s"'<>]+|[\s"'<>]+$/g, "");
+}
+
+function isSlackWebhookUrl(url: string): boolean {
   try {
-    const parsed = new URL(url.trim());
+    const parsed = new URL(normalizeWebhookUrl(url));
     if (parsed.protocol !== "https:") return false;
-    return hosts.some(
-      (host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    const slackHost =
+      host === "hooks.slack.com"
+      || host.endsWith(".hooks.slack.com")
+      || host === "slack.com"
+      || host.endsWith(".slack.com");
+    if (!slackHost) return false;
+    return (
+      path.includes("/services/")
+      || path.includes("/triggers/")
+      || path.includes("/workflows/")
+      || host === "hooks.slack.com"
+      || host.endsWith(".hooks.slack.com")
     );
   } catch {
     return false;
@@ -11,9 +27,9 @@ function matchHost(url: string, hosts: string[]): boolean {
 }
 
 export function validateSlackWebhookUrl(url: string): void {
-  const trimmed = url.trim();
+  const trimmed = normalizeWebhookUrl(url);
   if (!trimmed) throw new Error("Webhook URL を入力してください");
-  if (!matchHost(trimmed, ["hooks.slack.com"])) {
+  if (!isSlackWebhookUrl(trimmed)) {
     throw new Error("Slack 用の Webhook URL 形式ではありません");
   }
 }
@@ -25,7 +41,7 @@ export async function postSlackWebhookMessage(
 ): Promise<void> {
   validateSlackWebhookUrl(webhookUrl);
 
-  const res = await fetch(webhookUrl.trim(), {
+  const res = await fetch(normalizeWebhookUrl(webhookUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: `*${title}*\n${body}` }),
