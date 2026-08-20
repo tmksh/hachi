@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FileDown, X } from "lucide-react";
@@ -187,25 +188,40 @@ type EstimatePdfPreviewDialogProps = {
   data: EstimatePdfPreviewData;
 };
 
+const nameCell: CSSProperties = {
+  border: "1px solid #cbd5e1",
+  padding: "7px 10px",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
+};
+const numCell: CSSProperties = {
+  border: "1px solid #cbd5e1",
+  padding: "7px 10px",
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+};
+const unitCell: CSSProperties = {
+  border: "1px solid #cbd5e1",
+  padding: "7px 10px",
+  textAlign: "center",
+  whiteSpace: "nowrap",
+};
+
 export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimatePdfPreviewDialogProps) {
   const isCost = data.mode === "cost_breakdown";
   const title = isCost ? "原価内訳書" : "見　積　書";
   const previewLabel = isCost ? "原価内訳書プレビュー" : "見積書プレビュー";
   const itemCount = data.items.length + (isCost ? 2 : 0);
-
-  // 画面プレビューは横幅を広めに。印刷時は mode に応じて幅を調整
-  const dialogMaxW = "sm:max-w-[960px]";
-  const paperMaxW = "max-w-[900px]";
   const paperFontSize = isCost ? "13px" : "12px";
-  const paperPadding = "40px 44px";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`w-full max-w-[97vw] ${dialogMaxW} p-0 gap-0 overflow-hidden`}
+        className="flex flex-col gap-0 p-0 overflow-hidden max-h-[92vh] w-[min(calc(100%-1.5rem),calc(210mm+2.5rem))] max-w-[min(calc(100%-1.5rem),calc(210mm+2.5rem))] sm:max-w-[min(calc(100%-1.5rem),calc(210mm+2.5rem))]"
         showCloseButton={false}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-100 border-b">
+        <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-100 border-b shrink-0">
           <DialogTitle className="text-xs font-semibold text-slate-600 min-w-0 truncate">
             {previewLabel} — {data.estimate_no ?? "下書き"}
           </DialogTitle>
@@ -222,12 +238,12 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[90vh] bg-slate-200 py-6 px-4 flex justify-center w-full">
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-200 py-6 px-4">
           <div
             id="quote-print-area"
             data-pdf-mode={data.mode}
-            className={`bg-white shadow-lg text-slate-900 font-sans w-full ${paperMaxW} min-h-[842px] box-border`}
-            style={{ padding: paperPadding, fontSize: paperFontSize, lineHeight: "1.55" }}
+            className="bg-white shadow-lg text-slate-900 font-sans mx-auto w-full max-w-[210mm] min-h-[297mm] box-border"
+            style={{ padding: "12mm 14mm", fontSize: paperFontSize, lineHeight: "1.55" }}
           >
             <div className="space-y-5">
               <div className="text-center pb-2 border-b-2 border-slate-900">
@@ -237,22 +253,22 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
                 )}
               </div>
 
-              <div className="flex justify-between items-start gap-4">
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: "13px", fontWeight: "bold", borderBottom: "1px solid #0f172a", paddingBottom: "4px", marginBottom: "6px" }}>
+              <div className="flex justify-between items-start gap-4 min-w-0">
+                <div className="min-w-0" style={{ flex: 1 }}>
+                  <p style={{ fontSize: "13px", fontWeight: "bold", borderBottom: "1px solid #0f172a", paddingBottom: "4px", marginBottom: "6px", overflowWrap: "anywhere" }}>
                     {data.customer_company_name ?? data.customer_name ?? "　"} 御中
                   </p>
-                  <p style={{ color: "#475569" }}>件名: {data.title ?? "—"}</p>
-                  <div className="mt-4 border border-slate-300 px-4 py-2 bg-slate-50 flex justify-between items-center">
+                  <p style={{ color: "#475569", overflowWrap: "anywhere" }}>件名: {data.title ?? "—"}</p>
+                  <div className="mt-4 border border-slate-300 px-4 py-2 bg-slate-50 flex justify-between items-center gap-3 min-w-0">
                     <span style={{ fontWeight: 600 }}>
                       {isCost ? "原価合計" : "お見積金額（税込）"}
                     </span>
-                    <span style={{ fontSize: "16px", fontWeight: "bold", fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ fontSize: "16px", fontWeight: "bold", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                       ¥{(isCost ? data.cost_total : data.total).toLocaleString()}
                     </span>
                   </div>
                 </div>
-                <div style={{ textAlign: "right", color: "#475569", minWidth: "180px" }}>
+                <div className="shrink-0" style={{ textAlign: "right", color: "#475569" }}>
                   <p>発行日: {new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}</p>
                   <p>見積番号: {data.estimate_no ?? "—"}</p>
                   {!isCost && <p>有効期限: 発行日より30日間</p>}
@@ -267,18 +283,34 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
 
               <div style={{ border: "1px solid #cbd5e1", padding: "8px 10px" }}>
                 <p style={{ fontWeight: 600, marginBottom: "4px", color: "#475569" }}>備考</p>
-                <p style={{ color: "#334155", whiteSpace: "pre-wrap" }}>{data.notes || "　"}</p>
+                <p style={{ color: "#334155", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{data.notes || "　"}</p>
               </div>
             </div>
           </div>
         </div>
       </DialogContent>
       <style jsx global>{`
+        @page {
+          size: A4;
+          margin: 12mm;
+        }
         @media print {
+          body * {
+            visibility: hidden;
+          }
+          #quote-print-area,
+          #quote-print-area * {
+            visibility: visible;
+          }
           #quote-print-area {
-            width: 900px !important;
+            position: absolute;
+            inset: 0;
+            width: auto !important;
             max-width: none !important;
-            min-height: 842px !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
           }
         }
       `}</style>
@@ -292,7 +324,7 @@ function CustomerEstimateTable({ data, itemCount }: { data: EstimatePdfPreviewDa
     if (item.is_text_row) {
       return (
         <tr key={item.id}>
-          <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", color: "#64748b", fontStyle: "italic" }}>
+          <td colSpan={5} style={{ ...nameCell, color: "#64748b", fontStyle: "italic" }}>
             {item.name || "—"}
           </td>
         </tr>
@@ -300,11 +332,11 @@ function CustomerEstimateTable({ data, itemCount }: { data: EstimatePdfPreviewDa
     }
     return (
       <tr key={item.id}>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>{item.name || "—"}</td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity}</td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{item.unit ?? "式"}</td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_price.toLocaleString()}</td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{item.selling_amount.toLocaleString()}</td>
+        <td style={nameCell}>{item.name || "—"}</td>
+        <td style={numCell}>{item.quantity}</td>
+        <td style={unitCell}>{item.unit ?? "式"}</td>
+        <td style={numCell}>¥{item.selling_price.toLocaleString()}</td>
+        <td style={numCell}>¥{item.selling_amount.toLocaleString()}</td>
       </tr>
     );
   };
@@ -314,30 +346,37 @@ function CustomerEstimateTable({ data, itemCount }: { data: EstimatePdfPreviewDa
     if (cat.use_direct && cat.selling_amount > 0) {
       return (
         <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{cat.quantity}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{cat.unit ?? "式"}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.selling_price.toLocaleString()}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.selling_amount.toLocaleString()}</td>
+          <td style={{ ...nameCell, fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+          <td style={numCell}>{cat.quantity}</td>
+          <td style={unitCell}>{cat.unit ?? "式"}</td>
+          <td style={numCell}>¥{cat.selling_price.toLocaleString()}</td>
+          <td style={numCell}>¥{cat.selling_amount.toLocaleString()}</td>
         </tr>
       );
     }
     return (
       <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-        <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+        <td colSpan={5} style={{ ...nameCell, fontWeight: 600, color: "#334155" }}>{cat.name}</td>
       </tr>
     );
   };
 
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: "12px" }}>
+      <colgroup>
+        <col />
+        <col style={{ width: "64px" }} />
+        <col style={{ width: "52px" }} />
+        <col style={{ width: "22%" }} />
+        <col style={{ width: "22%" }} />
+      </colgroup>
       <thead>
         <tr style={{ background: "#f1f5f9" }}>
           <th style={{ border: "1px solid #cbd5e1", textAlign: "left", padding: "8px 10px" }}>品名</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "64px" }}>数量</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "center", padding: "8px 10px", width: "52px" }}>単位</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "120px" }}>単価</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "120px" }}>金額</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px" }}>数量</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "center", padding: "8px 10px" }}>単位</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px" }}>単価</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px" }}>金額</th>
         </tr>
       </thead>
       <tbody>
@@ -380,7 +419,7 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
     if (item.is_text_row) {
       return (
         <tr key={item.id} style={{ background: "#fffbeb" }}>
-          <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", color: "#78716c", fontStyle: "italic" }}>
+          <td colSpan={5} style={{ ...nameCell, color: "#78716c", fontStyle: "italic" }}>
             {item.name || "—"}
           </td>
         </tr>
@@ -388,7 +427,7 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
     }
     return (
       <tr key={item.id} style={item.is_reserve_row ? { background: "#fffbeb" } : undefined}>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px" }}>
+        <td style={nameCell}>
           {item.is_reserve_row && (
             <span
               style={{
@@ -409,14 +448,14 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
           )}
           {item.name || "—"}
         </td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{item.quantity || "—"}</td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>
+        <td style={numCell}>{item.quantity || "—"}</td>
+        <td style={unitCell}>
           {item.selling_amount === 0 && item.cost_amount > 0 ? "小計" : (item.unit ?? "式")}
         </td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+        <td style={numCell}>
           {item.selling_amount === 0 && item.cost_amount > 0 ? "—" : `¥${item.cost_price.toLocaleString()}`}
         </td>
-        <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+        <td style={numCell}>
           ¥{item.cost_amount.toLocaleString()}
         </td>
       </tr>
@@ -428,30 +467,37 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
     if (cat.use_direct && cat.cost_amount > 0) {
       return (
         <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{cat.quantity || "—"}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "center" }}>{cat.unit ?? "式"}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.cost_price.toLocaleString()}</td>
-          <td style={{ border: "1px solid #cbd5e1", padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>¥{cat.cost_amount.toLocaleString()}</td>
+          <td style={{ ...nameCell, fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+          <td style={numCell}>{cat.quantity || "—"}</td>
+          <td style={unitCell}>{cat.unit ?? "式"}</td>
+          <td style={numCell}>¥{cat.cost_price.toLocaleString()}</td>
+          <td style={numCell}>¥{cat.cost_amount.toLocaleString()}</td>
         </tr>
       );
     }
     return (
       <tr key={`cat-${cat.id}`} style={{ background: "#f8fafc" }}>
-        <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "7px 10px", fontWeight: 600, color: "#334155" }}>{cat.name}</td>
+        <td colSpan={5} style={{ ...nameCell, fontWeight: 600, color: "#334155" }}>{cat.name}</td>
       </tr>
     );
   };
 
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: "12px" }}>
+      <colgroup>
+        <col />
+        <col style={{ width: "64px" }} />
+        <col style={{ width: "52px" }} />
+        <col style={{ width: "22%" }} />
+        <col style={{ width: "22%" }} />
+      </colgroup>
       <thead>
         <tr style={{ background: "#f1f5f9" }}>
           <th style={{ border: "1px solid #cbd5e1", textAlign: "left", padding: "8px 10px" }}>品名</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "64px" }}>数量</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "center", padding: "8px 10px", width: "52px" }}>単位</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "120px" }}>原単価</th>
-          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px", width: "120px" }}>原価</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px" }}>数量</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "center", padding: "8px 10px" }}>単位</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px" }}>原単価</th>
+          <th style={{ border: "1px solid #cbd5e1", textAlign: "right", padding: "8px 10px" }}>原価</th>
         </tr>
       </thead>
       <tbody>

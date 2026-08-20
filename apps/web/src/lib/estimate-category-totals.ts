@@ -15,13 +15,9 @@ type CategoryLike = {
   selling_price?: number | null;
 };
 
-/** 配下の詳細行（非テキスト）に金額があるか＝詳細行優先か */
+/** 配下に詳細行（非テキスト）が1件でもあれば詳細行優先（金額0でも上書き） */
 export function isCategoryOverridden(items: ItemLike[]): boolean {
-  return items.some(
-    (item) =>
-      !item.is_text_row &&
-      (Number(item.cost_amount ?? 0) > 0 || Number(item.selling_amount ?? 0) > 0),
-  );
+  return items.some((item) => !item.is_text_row);
 }
 
 /** 大項目に直接入力された値があるか */
@@ -57,7 +53,7 @@ export function effectiveCategoryAmounts(
     return {
       cost_amount: calcItems.reduce((s, i) => s + Number(i.cost_amount ?? 0), 0),
       selling_amount: calcItems.reduce((s, i) => s + Number(i.selling_amount ?? 0), 0),
-      overridden: hasCategoryDirectInput(category),
+      overridden: true,
     };
   }
   return { ...categoryDirectAmounts(category), overridden: false };

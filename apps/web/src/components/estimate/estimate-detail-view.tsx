@@ -7,13 +7,14 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IntegerInput } from "@/components/ui/integer-input";
-import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle, Sparkles } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, FileDown, BookOpen, X, GripVertical, ChevronRight, ChevronDown, AlertTriangle, Sparkles, Trash2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -24,24 +25,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-/** 行ドラッグ用: 入力欄・ボタン上では DnD を開始しない */
-function isInteractiveDragTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  return Boolean(
-    target.closest(
-      'input, textarea, select, button, a, label, [contenteditable="true"], [role="combobox"], [role="option"], [data-no-dnd]',
-    ),
-  );
-}
-
+/** 行ドラッグ用: ハンドル以外では DnD を開始しない（No.59） */
 class RowPointerSensor extends PointerSensor {
   static activators = [
     {
       eventName: "onPointerDown" as const,
       handler: ({ nativeEvent: event }: React.PointerEvent) => {
         if (!event.isPrimary || event.button !== 0) return false;
-        if (isInteractiveDragTarget(event.target)) return false;
-        return true;
+        if (!(event.target instanceof Element)) return false;
+        return Boolean(event.target.closest("[data-drag-handle]"));
       },
     },
   ];
@@ -51,6 +43,8 @@ import {
   addEstimateCategory,
   addEstimateItem,
   updateEstimateItem,
+  deleteEstimateItem,
+  deleteEstimateCategory,
   updateEstimateCategoryName,
   updateEstimateCategoryDetails,
   reorderEstimateCategories,
@@ -330,9 +324,16 @@ function VendorInput({
   });
   const shown = filtered.slice(0, 20);
 
+  const vendorPrimaryName = (c: VendorCandidate) => c.company_name?.trim() || c.name;
+  const vendorSecondaryName = (c: VendorCandidate) => {
+    const company = c.company_name?.trim();
+    if (company && c.name.trim() && c.name.trim() !== company) return c.name;
+    return null;
+  };
+
   const select = (c: VendorCandidate) => {
     setOpen(false);
-    onCommit({ craftsmanId: c.id, name: c.name });
+    onCommit({ craftsmanId: c.id, name: vendorPrimaryName(c) });
   };
 
   const clear = () => {
@@ -404,7 +405,12 @@ function VendorInput({
                   c.id === craftsmanId && "bg-muted/40",
                 )}
               >
-                <span className="truncate min-w-0 flex-1">{c.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{vendorPrimaryName(c)}</span>
+                  {vendorSecondaryName(c) && (
+                    <span className="block truncate text-[10px] text-muted-foreground">{vendorSecondaryName(c)}</span>
+                  )}
+                </span>
                 {c.kind === "system" && (
                   <Badge
                     variant="outline"
@@ -450,25 +456,56 @@ function systemCostLabel(candidates: VendorCandidate[], craftsmanId: string | nu
 
 // ---- 並べ替え（DnD・No.59） -------------------------------------------------
 
-function SortableCategoryTbody({
+/**
+ * 大項目ドラッグ中は明細行を衝突対象から除外する。
+ * tbody 全体をドロップ領域にすると、詳細が複数行ある大項目の中心が
+ * 配下明細に重なり、並べ替えが発火しなくなる。
+ */
+const estimateDndCollision: CollisionDetection = (args) => {
+  const activeType = args.active.data.current?.type;
+  const activeCategoryId = args.active.data.current?.categoryId;
+  const droppableContainers = args.droppableContainers.filter((container) => {
+    const t = container.data.current?.type;
+    if (activeType === "category") return t === "category";
+    if (activeType === "item") {
+      return t === "item" && container.data.current?.categoryId === activeCategoryId;
+    }
+    return true;
+  });
+  return closestCenter({ ...args, droppableContainers });
+};
+
+function SortableCategoryGroup({
   id,
   children,
 }: {
   id: string;
-  children: (handleProps: Record<string, unknown>) => React.ReactNode;
+  children: (api: {
+    handleProps: Record<string, unknown>;
+    setHeaderRef: (node: HTMLElement | null) => void;
+    headerStyle: React.CSSProperties;
+    isDragging: boolean;
+    followStyle: React.CSSProperties | undefined;
+  }) => React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data: { type: "category" },
   });
+  const headerStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
   return (
-    <tbody
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group/cat", isDragging && "opacity-60")}
-    >
-      {children({ ...attributes, ...(listeners ?? {}) })}
-    </tbody>
+    <>
+      {children({
+        handleProps: { ...attributes, ...(listeners ?? {}) },
+        setHeaderRef: setNodeRef,
+        headerStyle,
+        isDragging,
+        followStyle: isDragging ? headerStyle : undefined,
+      })}
+    </>
   );
 }
 
@@ -536,10 +573,15 @@ function EstimateItemRow({
   item,
   candidates,
   onUpdate,
+  onDelete,
+  followStyle,
 }: {
   item: EstimateItem;
   candidates: VendorCandidate[];
   onUpdate: (item: EstimateItem, totals?: EstimateTotalsPatch) => void;
+  onDelete?: (item: EstimateItem) => void;
+  /** 親大項目のドラッグ中は同じ変位を追従し、自身の DnD は無効化する */
+  followStyle?: React.CSSProperties;
 }) {
   const [draft, setDraft] = useState(item);
   const [saving, setSaving] = useState(false);
@@ -560,9 +602,10 @@ function EstimateItemRow({
   } = useSortable({
     id: item.id,
     data: { type: "item", categoryId: item.category_id ?? "none" },
-    disabled: isTemp,
+    disabled: isTemp || Boolean(followStyle),
   });
-  const sortableStyle = { transform: CSS.Transform.toString(transform), transition };
+  const sortableStyle = followStyle ?? { transform: CSS.Transform.toString(transform), transition };
+  const rowDragging = isDragging || Boolean(followStyle);
 
   const commit = async (field: keyof EstimateItemUpdatePatch, rawValue: string | number | null) => {
     if (isTemp || saving) return;
@@ -637,15 +680,23 @@ function EstimateItemRow({
         ref={setNodeRef}
         style={sortableStyle}
         className={cn(
-          "border-t border-border/40 bg-slate-50/60 hover:bg-muted/10 cursor-grab active:cursor-grabbing",
+          "border-t border-border/40 bg-slate-50/60 hover:bg-muted/10",
           saving && "opacity-70",
-          isDragging && "opacity-60",
+          rowDragging && "opacity-60 relative z-10",
         )}
-        {...attributes}
-        {...listeners}
       >
         <td className="px-2 py-1.5" colSpan={10}>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-drag-handle
+              className="shrink-0 p-0.5 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+              aria-label="並べ替え"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </button>
             <Badge variant="outline" className="text-[10px] shrink-0 border-slate-300 text-slate-600">
               {isStandaloneText ? "独立テキスト行" : "テキスト行"}
             </Badge>
@@ -659,7 +710,18 @@ function EstimateItemRow({
             />
           </div>
         </td>
-        <td className="px-2 py-1.5 text-muted-foreground text-[10px] whitespace-nowrap">売価ゼロ</td>
+        <td className="px-1 py-1.5 text-right whitespace-nowrap">
+          <button
+            type="button"
+            data-no-dnd
+            disabled={isTemp || saving}
+            className="p-0.5 text-slate-400 hover:text-rose-600 disabled:opacity-40"
+            aria-label="テキスト行を削除"
+            onClick={() => onDelete?.(item)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </td>
       </tr>
     );
   }
@@ -669,16 +731,24 @@ function EstimateItemRow({
       ref={setNodeRef}
       style={sortableStyle}
       className={cn(
-        "border-t border-border/40 hover:bg-muted/10 cursor-grab active:cursor-grabbing",
+        "border-t border-border/40 hover:bg-muted/10",
         isReserveRow && "bg-amber-50/40",
         saving && "opacity-70",
-        isDragging && "opacity-60",
+        rowDragging && "opacity-60 relative z-10",
       )}
-      {...attributes}
-      {...listeners}
     >
       <td className="px-2 py-1.5 whitespace-nowrap">
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-drag-handle
+            className="shrink-0 p-0.5 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+            aria-label="並べ替え"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
           {isReserveRow && (
             <Badge variant="outline" className="text-[9px] py-0 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
               {systemCostLabel(candidates, draft.vendor_craftsman_id)}
@@ -776,18 +846,30 @@ function EstimateItemRow({
         {isReserveRow ? "—" : `${(draft.gross_profit_rate ?? 0).toFixed(1)}%`}
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
-        {isReserveRow ? (
-          <span className="text-[10px] text-amber-700 whitespace-nowrap">顧客PDF非表示</span>
-        ) : (
-          <input
-            className={cn(ITEM_CELL, "text-muted-foreground")}
-            value={draft.notes ?? ""}
-            placeholder="—"
-            disabled={isTemp}
-            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-            onBlur={() => void commit("notes", draft.notes ?? "")}
-          />
-        )}
+        <div className="flex items-center gap-1">
+          {isReserveRow ? (
+            <span className="text-[10px] text-amber-700 whitespace-nowrap">顧客PDF非表示</span>
+          ) : (
+            <input
+              className={cn(ITEM_CELL, "text-muted-foreground")}
+              value={draft.notes ?? ""}
+              placeholder="—"
+              disabled={isTemp}
+              onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+              onBlur={() => void commit("notes", draft.notes ?? "")}
+            />
+          )}
+          <button
+            type="button"
+            data-no-dnd
+            disabled={isTemp || saving}
+            className="shrink-0 p-0.5 text-slate-400 hover:text-rose-600 disabled:opacity-40"
+            aria-label="明細を削除"
+            onClick={() => onDelete?.(item)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -803,7 +885,11 @@ function CategoryHeaderRow({
   onToggle,
   onRenamed,
   onCategoryPatched,
+  onDelete,
   handleProps,
+  setNodeRef,
+  style,
+  isDragging,
 }: {
   category: EstimateCategory;
   catItems: EstimateItem[];
@@ -812,7 +898,11 @@ function CategoryHeaderRow({
   onToggle: () => void;
   onRenamed: (next: EstimateCategory) => void;
   onCategoryPatched: (next: EstimateCategory, totals?: EstimateTotalsPatch) => void;
+  onDelete?: (category: EstimateCategory) => void;
   handleProps: Record<string, unknown>;
+  setNodeRef: (node: HTMLElement | null) => void;
+  style?: React.CSSProperties;
+  isDragging?: boolean;
 }) {
   const [draft, setDraft] = useState(category);
   const [saving, setSaving] = useState(false);
@@ -873,15 +963,26 @@ function CategoryHeaderRow({
 
   return (
     <tr
+      ref={setNodeRef}
+      style={style}
       className={cn(
-        "bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70 cursor-grab active:cursor-grabbing",
+        "bg-slate-200/80 border-t border-border/40 hover:bg-slate-300/70",
         isReserveCategory && "bg-amber-100/70",
         saving && "opacity-70",
+        isDragging && "opacity-60 relative z-10",
       )}
-      {...handleProps}
     >
       <td className="px-2 py-2 font-semibold text-slate-700">
         <div className="flex items-center gap-1.5 min-w-0">
+          <button
+            type="button"
+            data-drag-handle
+            className="shrink-0 p-0.5 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+            aria-label="大項目を並べ替え"
+            {...handleProps}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             className="text-slate-400 w-4 shrink-0 text-center hover:text-slate-700"
@@ -893,6 +994,15 @@ function CategoryHeaderRow({
           </button>
           <CategoryNameInput category={category} onRenamed={onRenamed} />
           <span className="text-[10px] text-muted-foreground font-normal shrink-0">{catItems.length}項目</span>
+          {eff.overridden && (
+            <Badge
+              variant="outline"
+              className="text-[9px] py-0 shrink-0 border-amber-400 text-amber-800 bg-amber-50"
+              title="大項目の直接入力より配下の詳細行が優先されています"
+            >
+              詳細項目により上書き
+            </Badge>
+          )}
         </div>
       </td>
       <td className="px-2 py-2 whitespace-nowrap">
@@ -919,7 +1029,7 @@ function CategoryHeaderRow({
           className={ITEM_CELL_NUM}
           value={Number(draft.quantity) || 0}
           placeholder="0"
-          disabled={isTemp}
+          disabled={isTemp || eff.overridden}
           onValueChange={(qty) => setDraft((d) => ({ ...d, quantity: qty }))}
           onBlur={(qty) => commitField("quantity", Number(qty) || 0)}
         />
@@ -929,7 +1039,7 @@ function CategoryHeaderRow({
           className={ITEM_CELL_UNIT}
           value={draft.unit ?? ""}
           placeholder="—"
-          disabled={isTemp}
+          disabled={isTemp || eff.overridden}
           onChange={(e) => setDraft((d) => ({ ...d, unit: e.target.value }))}
           onBlur={() => commitField("unit", (draft.unit ?? "").trim() || null)}
         />
@@ -939,7 +1049,7 @@ function CategoryHeaderRow({
           className={cn(ITEM_CELL_NUM, "text-amber-700")}
           value={Number(draft.cost_price) || 0}
           placeholder="0"
-          disabled={isTemp}
+          disabled={isTemp || eff.overridden}
           onValueChange={(v) => setDraft((d) => ({ ...d, cost_price: v }))}
           onBlur={(v) => commitField("cost_price", Number(v) || 0)}
         />
@@ -957,7 +1067,7 @@ function CategoryHeaderRow({
             className={cn(ITEM_CELL_NUM, "text-blue-700")}
             value={Number(draft.selling_price) || 0}
             placeholder="0"
-            disabled={isTemp}
+            disabled={isTemp || eff.overridden}
             onValueChange={(v) => setDraft((d) => ({ ...d, selling_price: v }))}
             onBlur={(v) => commitField("selling_price", Number(v) || 0)}
           />
@@ -967,16 +1077,17 @@ function CategoryHeaderRow({
         ¥{isReserveCategory ? 0 : eff.selling_amount.toLocaleString()}
       </td>
       <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-xs">{effRate.toFixed(1)}%</td>
-      <td className="px-2 py-2 whitespace-nowrap">
-        {eff.overridden && (
-          <Badge
-            variant="outline"
-            className="text-[9px] py-0 border-slate-400 text-slate-600 bg-white/60"
-            title="大項目の直接入力より配下の詳細行が優先されています"
-          >
-            詳細項目により上書き
-          </Badge>
-        )}
+      <td className="px-1 py-2 text-right whitespace-nowrap">
+        <button
+          type="button"
+          data-no-dnd
+          disabled={isTemp || saving}
+          className="p-0.5 text-slate-400 hover:text-rose-600 disabled:opacity-40"
+          aria-label="大項目を削除"
+          onClick={() => onDelete?.(category)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </td>
     </tr>
   );
@@ -1072,9 +1183,16 @@ export function EstimateDetailView({
     const aData = active.data.current as { type?: string; categoryId?: string } | undefined;
     const oData = over.data.current as { type?: string; categoryId?: string } | undefined;
 
-    if (aData?.type === "category" && oData?.type === "category") {
+    if (aData?.type === "category") {
+      const overCategoryId =
+        oData?.type === "category"
+          ? String(over.id)
+          : oData?.type === "item" && oData.categoryId && oData.categoryId !== "none"
+            ? oData.categoryId
+            : null;
+      if (!overCategoryId || overCategoryId === String(active.id)) return;
       const oldIndex = categories.findIndex((c) => c.id === active.id);
-      const newIndex = categories.findIndex((c) => c.id === over.id);
+      const newIndex = categories.findIndex((c) => c.id === overCategoryId);
       if (oldIndex < 0 || newIndex < 0) return;
       const next = arrayMove(categories, oldIndex, newIndex);
       onEstimateChange({ ...estimate, categories: next });
@@ -1420,6 +1538,48 @@ export function EstimateDetailView({
       items: items.map((i) => (i.id === updatedItem.id ? updatedItem : i)),
       ...(totals ?? {}),
     });
+  };
+
+  const handleItemDelete = async (item: EstimateItem) => {
+    if (item.id.startsWith("temp-")) return;
+    if (!window.confirm("この行を削除しますか？")) return;
+    const prevItems = items;
+    onEstimateChange({ ...estimate, items: items.filter((i) => i.id !== item.id) });
+    try {
+      const { totals } = await deleteEstimateItem(item.id);
+      onEstimateChange({
+        ...estimate,
+        items: items.filter((i) => i.id !== item.id),
+        ...(totals ?? {}),
+      });
+    } catch (e) {
+      onEstimateChange({ ...estimate, items: prevItems });
+      toast.error(e instanceof Error ? e.message : "削除に失敗しました");
+    }
+  };
+
+  const handleCategoryDelete = async (category: EstimateCategory) => {
+    if (category.id.startsWith("temp-")) return;
+    if (!window.confirm("この大項目と配下の明細を削除しますか？")) return;
+    const prevCategories = categories;
+    const prevItems = items;
+    onEstimateChange({
+      ...estimate,
+      categories: categories.filter((c) => c.id !== category.id),
+      items: items.filter((i) => i.category_id !== category.id),
+    });
+    try {
+      const { totals } = await deleteEstimateCategory(category.id);
+      onEstimateChange({
+        ...estimate,
+        categories: categories.filter((c) => c.id !== category.id),
+        items: items.filter((i) => i.category_id !== category.id),
+        ...(totals ?? {}),
+      });
+    } catch (e) {
+      onEstimateChange({ ...estimate, categories: prevCategories, items: prevItems });
+      toast.error(e instanceof Error ? e.message : "削除に失敗しました");
+    }
   };
 
   const applyBulkMargin = async (mode: "cost" | "sell", rateStr: string) => {
@@ -1802,7 +1962,7 @@ export function EstimateDetailView({
               ここにドロップして大項目を追加
             </div>
           )}
-        <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
+        <DndContext sensors={dndSensors} collisionDetection={estimateDndCollision} onDragEnd={(e) => void handleDragEnd(e)}>
         <table className="w-full text-xs border-collapse min-w-[1100px] table-fixed">
           <colgroup>
             <col className="w-[9%]" />
@@ -1933,12 +2093,13 @@ export function EstimateDetailView({
             </tr>
           </thead>
           <SortableContext items={categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          <tbody>
           {itemsByCategory.map(({ category, items: catItems }) => {
             const collapsed = collapsedIds.has(category.id);
             const isAddingHere = inlineAdd === category.id;
             return (
-              <SortableCategoryTbody key={category.id} id={category.id}>
-                {(handleProps) => (
+              <SortableCategoryGroup key={category.id} id={category.id}>
+                {({ handleProps, setHeaderRef, headerStyle, isDragging, followStyle }) => (
                   <>
                 <CategoryHeaderRow
                   category={category}
@@ -1959,15 +2120,26 @@ export function EstimateDetailView({
                       ...(totals ?? {}),
                     });
                   }}
+                  onDelete={(cat) => void handleCategoryDelete(cat)}
                   handleProps={handleProps}
+                  setNodeRef={setHeaderRef}
+                  style={headerStyle}
+                  isDragging={isDragging}
                 />
                 <SortableContext items={catItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                   {!collapsed && catItems.map((item) => (
-                    <EstimateItemRow key={item.id} item={item} candidates={vendorCandidates} onUpdate={handleItemUpdate} />
+                    <EstimateItemRow
+                      key={item.id}
+                      item={item}
+                      candidates={vendorCandidates}
+                      onUpdate={handleItemUpdate}
+                      onDelete={(row) => void handleItemDelete(row)}
+                      followStyle={followStyle}
+                    />
                   ))}
                 </SortableContext>
                 {!collapsed && isAddingHere && (
-                  <tr className="border-t border-primary/20 bg-primary/5">
+                  <tr className="border-t border-primary/20 bg-primary/5" style={followStyle}>
                     <td className="px-2 py-1.5" colSpan={11}>
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground shrink-0">＋</span>
@@ -1997,7 +2169,7 @@ export function EstimateDetailView({
                   </tr>
                 )}
                 {!collapsed && !isAddingHere && inlineAdd === null && (
-                  <tr>
+                  <tr style={followStyle}>
                     <td colSpan={11} className="p-0">
                       <div className="px-3 py-2 border-t border-dashed border-border/40 flex flex-wrap items-center gap-2">
                         <button
@@ -2020,9 +2192,10 @@ export function EstimateDetailView({
                 )}
                   </>
                 )}
-              </SortableCategoryTbody>
+              </SortableCategoryGroup>
             );
           })}
+          </tbody>
           </SortableContext>
 
           {/* 未分類項目（独立テキスト行含む） */}
@@ -2030,7 +2203,13 @@ export function EstimateDetailView({
             <tbody>
               <SortableContext items={uncategorized.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                 {uncategorized.map((item) => (
-                  <EstimateItemRow key={item.id} item={item} candidates={vendorCandidates} onUpdate={handleItemUpdate} />
+                  <EstimateItemRow
+                    key={item.id}
+                    item={item}
+                    candidates={vendorCandidates}
+                    onUpdate={handleItemUpdate}
+                    onDelete={(row) => void handleItemDelete(row)}
+                  />
                 ))}
               </SortableContext>
             </tbody>

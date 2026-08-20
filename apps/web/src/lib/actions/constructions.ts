@@ -1406,6 +1406,52 @@ export async function addEstimateItem(
   return item;
 }
 
+/** 明細行（計算行・テキスト行）を削除する（No.69） */
+export async function deleteEstimateItem(itemId: string) {
+  const supabase = await createClient();
+  const { data: item, error: findError } = await supabase
+    .from("estimate_items")
+    .select("id, estimate_id")
+    .eq("id", itemId)
+    .single();
+  throwIfSupabaseError(findError);
+  if (!item) throw new Error("明細が見つかりません");
+
+  await assertEstimateAccess(item.estimate_id);
+
+  const { error } = await supabase.from("estimate_items").delete().eq("id", itemId);
+  throwIfSupabaseError(error);
+
+  const totals = await recalculateEstimateTotals(supabase, item.estimate_id);
+  return { totals };
+}
+
+/** 大項目と配下明細を削除する（No.68/69） */
+export async function deleteEstimateCategory(categoryId: string) {
+  const supabase = await createClient();
+  const { data: category, error: findError } = await supabase
+    .from("estimate_categories")
+    .select("id, estimate_id")
+    .eq("id", categoryId)
+    .single();
+  throwIfSupabaseError(findError);
+  if (!category) throw new Error("大項目が見つかりません");
+
+  await assertEstimateAccess(category.estimate_id);
+
+  const { error: itemsError } = await supabase
+    .from("estimate_items")
+    .delete()
+    .eq("category_id", categoryId);
+  throwIfSupabaseError(itemsError);
+
+  const { error } = await supabase.from("estimate_categories").delete().eq("id", categoryId);
+  throwIfSupabaseError(error);
+
+  const totals = await recalculateEstimateTotals(supabase, category.estimate_id);
+  return { totals };
+}
+
 export type EstimateItemUpdatePatch = {
   name?: string;
   specification?: string | null;

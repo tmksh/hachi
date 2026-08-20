@@ -394,25 +394,23 @@ export function PlTable({
             <ComputedRow label="税引前当期純利益" amounts={pl.pretaxIncome} revenueActual={revenueActual} displayUnit={displayUnit} variant="profit" note="自動計算（入力不可）" />
 
             {showEstimatedTax && (
-              <>
-                <ComputedRow
-                  label="法人税等（概算）"
-                  amounts={pl.estimatedTax}
-                  revenueActual={revenueActual}
-                  displayUnit={displayUnit}
-                  variant="estimate"
-                  note="税引前×約30%の簡易概算（申告用の税種別計算ではない）"
-                />
-                <ComputedRow
-                  label="当期純利益（概算）"
-                  amounts={pl.estimatedNetIncome}
-                  revenueActual={revenueActual}
-                  displayUnit={displayUnit}
-                  variant="estimate"
-                  note="概算法人税控除後"
-                />
-              </>
+              <ComputedRow
+                label="法人税等（概算）"
+                amounts={pl.estimatedTax}
+                revenueActual={revenueActual}
+                displayUnit={displayUnit}
+                variant="estimate"
+                note="税引前×約30%の簡易概算（申告用の税種別計算ではない）"
+              />
             )}
+            <ComputedRow
+              label={showEstimatedTax ? "当期純利益（概算）" : "当期純利益"}
+              amounts={showEstimatedTax ? pl.estimatedNetIncome : pl.pretaxIncome}
+              revenueActual={revenueActual}
+              displayUnit={displayUnit}
+              variant="profit"
+              note={showEstimatedTax ? "概算法人税控除後" : "自動計算（入力不可）"}
+            />
           </TableBody>
         </Table>
       </div>
