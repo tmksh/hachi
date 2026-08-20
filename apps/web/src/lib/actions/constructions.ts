@@ -149,7 +149,7 @@ export async function getConstruction(id: string) {
   ] = await Promise.all([
     supabase
       .from("constructions")
-      .select("*, customer:customers(id, name, company_name, address), contract:contracts(id, contract_no, title, amount, contract_date, start_date, end_date, notes, status, estimate_id), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
+      .select("*, customer:customers(*), contract:contracts(id, contract_no, title, amount, contract_date, start_date, end_date, notes, status, estimate_id), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
       .eq("id", id)
       .single(),
     supabase

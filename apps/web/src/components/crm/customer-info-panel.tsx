@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ExternalLink, Users } from "lucide-react";
 import { CustomerEntryForm } from "@/components/crm/customer-entry-form";
 import type { Customer } from "@/lib/database.types";
+import type { CustomerEntryMasters } from "@/lib/actions/customers";
 
 type CustomerInfoContext = "crm" | "contract" | "construction";
 
@@ -17,11 +18,13 @@ export function CustomerInfoPanel({
   context = "crm",
   onSaved,
   initialCustomer,
+  initialMasters,
 }: {
   customerId: string;
   context?: CustomerInfoContext;
   onSaved?: () => void;
   initialCustomer?: Customer;
+  initialMasters?: CustomerEntryMasters;
 }) {
   return (
     <div className="space-y-4">
@@ -50,6 +53,7 @@ export function CustomerInfoPanel({
         mode="edit"
         customerId={customerId}
         initialCustomer={initialCustomer}
+        initialMasters={initialMasters}
         onSaved={onSaved}
         showCard={context === "crm"}
       />

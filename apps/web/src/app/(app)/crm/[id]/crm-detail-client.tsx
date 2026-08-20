@@ -30,7 +30,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomer, deleteCustomer, getCustomerRelated, updateCustomer } from "@/lib/actions/customers";
+import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
 import type { Customer } from "@/lib/database.types";
+import type { CustomerEntryMasters } from "@/lib/actions/customers";
 
 type CustomerDetail = Customer & { assigned_to_profile: { id: string; display_name: string } | null };
 type Related = Awaited<ReturnType<typeof getCustomerRelated>>;
@@ -85,6 +87,7 @@ function RelatedRow({ onClick, children }: { onClick?: () => void; children: Rea
 type CrmDetailClientProps = {
   initialData: CustomerDetail | null;
   initialRelated: Related | null;
+  initialMasters?: CustomerEntryMasters;
 };
 
 const ALLOWED_TABS = ["overview", "entry", "deals", "recording", "todo", "scheduling", "documents"];
@@ -94,7 +97,8 @@ function normalizeMainTab(tab: string | null) {
   return tab;
 }
 
-function CrmDetailPageContent({ initialData, initialRelated }: CrmDetailClientProps) {
+function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: CrmDetailClientProps) {
+  useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();

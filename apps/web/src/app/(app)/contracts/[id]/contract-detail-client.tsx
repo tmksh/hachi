@@ -8,14 +8,18 @@ import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { ContractDetailTabs } from "@/components/contracts/contract-detail-tabs";
 import { ArrowLeft } from "lucide-react";
 import { getContract } from "@/lib/actions/contracts";
+import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
+import type { CustomerEntryMasters } from "@/lib/actions/customers";
 
 type ContractDetail = Awaited<ReturnType<typeof getContract>>;
 
 type ContractDetailClientProps = {
   initialData: ContractDetail | null;
+  initialMasters?: CustomerEntryMasters;
 };
 
-export function ContractDetailClient({ initialData }: ContractDetailClientProps) {
+export function ContractDetailClient({ initialData, initialMasters }: ContractDetailClientProps) {
+  useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
   const [data, setData] = useState<ContractDetail | null>(initialData);
 

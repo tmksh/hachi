@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import type { Customer } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
+import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
 
 const CUSTOMER_LIST_SELECT =
   "id, company_id, name, company_name, email, phone, customer_type, status, source, assigned_to, address, department, prospect_grade, inquiry_category, inquiry_date, created_at, updated_at, deleted_at, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
@@ -75,6 +76,69 @@ export async function getCustomer(id: string) {
     .single();
   if (error) throw error;
   return data as Customer & { assigned_to_profile: { id: string; display_name: string } | null };
+}
+
+export type CustomerEntryMasters = {
+  profiles: { id: string; display_name: string }[];
+  tagMasters: { id: string; label: string }[];
+  leadSources: { id: string; label: string }[];
+  departments: string[];
+};
+
+function emptyMasters(departments: string[] = []): CustomerEntryMasters {
+  return { profiles: [], tagMasters: [], leadSources: [], departments };
+}
+
+/** 顧客フォーム用マスタを 1 ラウンドトリップで取得（部門は BI 全設定を読まない） */
+export async function getCustomerEntryMasters(): Promise<CustomerEntryMasters> {
+  const supabase = await createClient();
+  const user = await getAuthUser();
+  if (!user) return emptyMasters([...DEFAULT_DEPARTMENTS]);
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile) return emptyMasters([...DEFAULT_DEPARTMENTS]);
+
+  const year = getCurrentFiscalYear();
+  const [profilesRes, tagsRes, sourcesRes, deptRes] = await Promise.all([
+    supabase.from("profiles").select("id, display_name").order("display_name"),
+    supabase
+      .from("customer_tag_masters")
+      .select("id, label")
+      .eq("company_id", profile.company_id)
+      .order("sort_order"),
+    supabase
+      .from("lead_sources")
+      .select("id, label")
+      .eq("company_id", profile.company_id)
+      .order("sort_order"),
+    supabase
+      .from("bi_annual_settings")
+      .select("department_targets:bi_department_targets(department_name, sort_order)")
+      .eq("company_id", profile.company_id)
+      .eq("fiscal_year", year)
+      .maybeSingle(),
+  ]);
+
+  const targets = (deptRes.data?.department_targets ?? []) as {
+    department_name: string;
+    sort_order: number;
+  }[];
+  const departments = targets.length
+    ? [...targets]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((d) => d.department_name)
+    : [...DEFAULT_DEPARTMENTS];
+
+  return {
+    profiles: (profilesRes.data ?? []).map((p) => ({ id: p.id, display_name: p.display_name })),
+    tagMasters: (tagsRes.data ?? []).map((t) => ({ id: t.id, label: t.label })),
+    leadSources: (sourcesRes.data ?? []).map((s) => ({ id: s.id, label: s.label })),
+    departments,
+  };
 }
 
 export async function createCustomer(input: Omit<Customer, "id" | "company_id" | "created_at" | "updated_at" | "deleted_at">) {

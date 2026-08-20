@@ -378,6 +378,7 @@ function CustomerTab({
         <CustomerInfoPanel
           customerId={data.customer_id}
           context="contract"
+          initialCustomer={data.customer ?? undefined}
           onSaved={onRefresh}
         />
       ) : (

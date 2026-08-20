@@ -25,6 +25,9 @@ import {
 } from "@/lib/actions/constructions";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
+import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
+import type { Customer } from "@/lib/database.types";
+import type { CustomerEntryMasters } from "@/lib/actions/customers";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
 import { useAuth } from "@/hooks/use-auth";
@@ -337,6 +340,7 @@ type ConstructionDetailClientProps = {
   initialChangeOrders: ChangeOrderRow[];
   initialClosingDayLabel: string;
   initialInvoices: InvoiceRow[];
+  initialMasters?: CustomerEntryMasters;
 };
 
 function ConstructionDetailPageContent({
@@ -345,7 +349,9 @@ function ConstructionDetailPageContent({
   initialChangeOrders,
   initialClosingDayLabel,
   initialInvoices,
+  initialMasters,
 }: ConstructionDetailClientProps) {
+  useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
   const searchParams = useSearchParams();
   const { profile } = useAuth();
@@ -512,6 +518,7 @@ function ConstructionDetailPageContent({
             <CustomerInfoPanel
               customerId={customer.id}
               context="construction"
+              initialCustomer={customer as Customer}
               onSaved={reload}
             />
           ) : (

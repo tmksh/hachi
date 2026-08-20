@@ -5,6 +5,7 @@ import {
 import { getChangeOrders } from "@/lib/actions/change-orders";
 import { getCompany } from "@/lib/actions/profiles";
 import { getInvoicesForConstruction } from "@/lib/actions/invoices";
+import { getCustomerEntryMasters } from "@/lib/actions/customers";
 import { ConstructionDetailClient } from "./construction-detail-client";
 
 export default async function ConstructionDetailPage({
@@ -14,12 +15,18 @@ export default async function ConstructionDetailPage({
 }) {
   const { id } = await params;
 
-  const [initialData, initialDocs, initialChangeOrders, company, initialInvoices] = await Promise.all([
+  const [initialData, initialDocs, initialChangeOrders, company, initialInvoices, initialMasters] = await Promise.all([
     getConstruction(id).catch(() => null),
     getConstructionContractDocs(id).catch(() => []),
     getChangeOrders(id).catch(() => []),
     getCompany().catch(() => null),
     getInvoicesForConstruction(id).catch(() => []),
+    getCustomerEntryMasters().catch(() => ({
+      profiles: [],
+      tagMasters: [],
+      leadSources: [],
+      departments: [],
+    })),
   ]);
 
   const settings = company?.settings as Record<string, unknown> | undefined;
@@ -33,6 +40,7 @@ export default async function ConstructionDetailPage({
       initialChangeOrders={initialChangeOrders}
       initialClosingDayLabel={initialClosingDayLabel}
       initialInvoices={initialInvoices}
+      initialMasters={initialMasters}
     />
   );
 }

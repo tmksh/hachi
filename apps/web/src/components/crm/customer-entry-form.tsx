@@ -12,12 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Save, Sparkles, Trash2 } from "lucide-react";
-import { getCustomer, updateCustomer, createCustomer } from "@/lib/actions/customers";
-import { getProfiles } from "@/lib/actions/profiles";
-import { getCustomerTagMasters, getLeadSources } from "@/lib/actions/deals";
-import { getBiDepartmentNames } from "@/lib/actions/bi";
+import { getCustomer, updateCustomer, createCustomer, type CustomerEntryMasters } from "@/lib/actions/customers";
 import { suggestLeadAssignee } from "@/lib/actions/sales-flow";
 import { suggestCustomFieldsFromInquiry } from "@/lib/actions/crm-features";
+import { useCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
 import type { Customer } from "@/lib/database.types";
 
 const FIELD_SELECT_TRIGGER = "w-full min-w-0";
@@ -42,6 +40,7 @@ type CustomerEntryFormProps = {
   initialTagMasters?: { id: string; label: string }[];
   initialLeadSources?: { id: string; label: string }[];
   initialDepartments?: string[];
+  initialMasters?: CustomerEntryMasters;
 };
 
 type FormState = {
@@ -151,13 +150,24 @@ export function CustomerEntryForm({
   initialTagMasters,
   initialLeadSources,
   initialDepartments,
+  initialMasters,
 }: CustomerEntryFormProps) {
   const [loading, setLoading] = useState(mode === "edit" && !initialCustomer);
   const [saving, setSaving] = useState(false);
-  const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>(initialProfiles ?? []);
-  const [tagMasters, setTagMasters] = useState<{ id: string; label: string }[]>(initialTagMasters ?? []);
-  const [leadSources, setLeadSources] = useState<{ id: string; label: string }[]>(initialLeadSources ?? []);
-  const [departments, setDepartments] = useState<string[]>(initialDepartments ?? []);
+  const ssrMasters: CustomerEntryMasters | undefined = initialMasters
+    ?? (initialProfiles && initialTagMasters && initialLeadSources && initialDepartments
+      ? {
+          profiles: initialProfiles,
+          tagMasters: initialTagMasters,
+          leadSources: initialLeadSources,
+          departments: initialDepartments,
+        }
+      : undefined);
+  const { data: masters } = useCustomerEntryMasters(ssrMasters);
+  const profiles = masters?.profiles ?? initialProfiles ?? [];
+  const tagMasters = masters?.tagMasters ?? initialTagMasters ?? [];
+  const leadSources = masters?.leadSources ?? initialLeadSources ?? [];
+  const departments = masters?.departments ?? initialDepartments ?? [];
   const [assignSuggesting, setAssignSuggesting] = useState(false);
   const [aiFieldSuggesting, setAiFieldSuggesting] = useState(false);
   const [assignCandidates, setAssignCandidates] = useState<Array<{
@@ -248,26 +258,6 @@ export function CustomerEntryForm({
   useEffect(() => {
     if (initialCustomer) setForm(customerToForm(initialCustomer));
   }, [initialCustomer]);
-
-  useEffect(() => {
-    // SSR でマスターが渡っていれば追加 fetch しない
-    if (initialProfiles && initialTagMasters && initialLeadSources && initialDepartments) return;
-    Promise.all([
-      initialProfiles
-        ? Promise.resolve(initialProfiles)
-        : getProfiles().then((p) => p.map((x) => ({ id: x.id, display_name: x.display_name }))),
-      initialTagMasters ? Promise.resolve(initialTagMasters) : getCustomerTagMasters(),
-      initialLeadSources ? Promise.resolve(initialLeadSources) : getLeadSources(),
-      initialDepartments ? Promise.resolve(initialDepartments) : getBiDepartmentNames(),
-    ])
-      .then(([p, tags, sources, deps]) => {
-        setProfiles(p as { id: string; display_name: string }[]);
-        setTagMasters(tags as { id: string; label: string }[]);
-        setLeadSources(sources as { id: string; label: string }[]);
-        setDepartments(deps as string[]);
-      })
-      .catch(() => {});
-  }, [initialProfiles, initialTagMasters, initialLeadSources, initialDepartments]);
 
   useEffect(() => {
     if (mode !== "edit" || !customerId || initialCustomer) return;
