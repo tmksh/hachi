@@ -232,7 +232,7 @@ export function mergeDefaults(
     const cur = current[f.name];
     if (cur === undefined || cur === null || cur === "") continue;
     if (f.type === "toggle") {
-      merged[f.name] = cur === 0 || cur === false || cur === "0" ? 0 : 1;
+      merged[f.name] = cur === 0 || cur === "0" ? 0 : 1;
       continue;
     }
     merged[f.name] = cur;
