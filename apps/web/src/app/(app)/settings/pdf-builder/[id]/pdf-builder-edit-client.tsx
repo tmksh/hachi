@@ -567,7 +567,7 @@ export function PdfBuilderEditClient({
                     >
                       <span className="pointer-events-none absolute left-0.5 top-0.5 max-w-full truncate rounded bg-primary/80 px-1 text-[9px] leading-tight text-white">
                         {f.label}
-                        {f.binding !== "manual" && f.binding !== "fixed" ? ` · ${bindingDisplayLabel(f)}` : ""}
+                        {f.binding !== "manual" && f.type !== "fixed" ? ` · ${bindingDisplayLabel(f)}` : ""}
                       </span>
                       {selectedId === f.id && (
                         <span
