@@ -1317,9 +1317,21 @@ export function SettingsClient({
                     ...SYSTEM_PERMISSION_ROLES.map((role) => ({ key: role, label: ROLE_LABELS[role], palette: getCustomerAvatarColor(role) })),
                     ...customRoles.map((cr) => ({ key: cr.id, label: cr.name, palette: getCustomerAvatarColor(cr.id) })),
                   ];
-                  const featureRows = [
+                  const featureRows: Array<{
+                    key: string;
+                    label: string;
+                    group: string | null;
+                    groupStart: boolean;
+                    gi: number;
+                  }> = [
                     ...NAV_GROUPS.flatMap((g, gi) => {
-                      const rows = g.items.map((item, idx) => ({
+                      const rows: Array<{
+                        key: string;
+                        label: string;
+                        group: string | null;
+                        groupStart: boolean;
+                        gi: number;
+                      }> = g.items.map((item, idx) => ({
                         key: item.key,
                         label: item.label,
                         group: idx === 0 ? g.label : null,

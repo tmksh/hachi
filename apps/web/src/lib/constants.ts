@@ -143,6 +143,7 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   contracts:          ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   constructions:      ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "executive"],
   fulfillment:        ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive"],
+  fulfillment_approve: ["hq_admin", "admin", "administration", "executive"],
   ledger:             ["hq_admin", "contractor_admin", "admin", "administration", "executive"],
   "account-items":    ["hq_admin", "admin", "administration", "executive"],
   invoices:           ["hq_admin", "contractor_admin", "admin", "administration", "executive"],
