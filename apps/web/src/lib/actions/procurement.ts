@@ -471,7 +471,7 @@ export async function completeInspection(input: {
       invoice_token_expires_at: `${expires}T23:59:59.000Z`,
     });
 
-    let mail = { sent: false as boolean, to: undefined as string | undefined, error: undefined as string | undefined };
+    let mail: { sent: boolean; to?: string; error?: string } = { sent: false };
     if (input.sendEmail) {
       mail = await notifyVendorInvoiceUrl(order, invoiceUrl, expires, user.id);
     }
