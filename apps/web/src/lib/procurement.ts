@@ -474,7 +474,10 @@ export function encodeZenginSjis(text: string): Uint8Array {
 }
 
 export function downloadZenginFile(filename: string, text: string): void {
-  const blob = new Blob([encodeZenginSjis(text)], { type: "text/plain" });
+  const bytes = encodeZenginSjis(text);
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  const blob = new Blob([copy], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
