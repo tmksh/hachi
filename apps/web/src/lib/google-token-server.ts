@@ -53,7 +53,7 @@ export async function getValidGoogleAccessToken(
     return {
       ok: false,
       reason: "refresh_failed",
-      message: "Googleトークンの有効期限が切れています。カレンダー画面から再連携してください",
+      message: "Googleトークンの有効期限が切れています。設定 → 外部連携から再連携してください",
     };
   }
 
@@ -85,7 +85,7 @@ export async function getValidGoogleAccessToken(
       return {
         ok: false,
         reason: "refresh_failed",
-        message: "Googleトークンの更新に失敗しました。カレンダー画面から再連携してください",
+        message: "Googleトークンの更新に失敗しました。設定 → 外部連携から再連携してください",
       };
     }
 

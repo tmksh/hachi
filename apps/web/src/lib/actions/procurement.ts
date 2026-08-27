@@ -11,8 +11,10 @@ import type { ContractorOrder } from "@/lib/database.types";
 import {
   PROCUREMENT_ACCOUNT_ITEMS,
   addDaysIso,
+  parseTransferSender,
   todayIso,
 } from "@/lib/procurement";
+import type { TransferSender } from "@/lib/procurement";
 import { canAccessFeature, mergeRolePermissions, type RolePermissions } from "@/lib/role-permissions";
 
 export type ProcurementAttachment = {
@@ -24,21 +26,12 @@ export type ProcurementAttachment = {
 
 const ORDER_SELECT = `
   *,
-  craftsman:craftsmen(id, name, email, bank_name, bank_branch, bank_account_type, bank_account_number, bank_account_kana),
+  craftsman:craftsmen(*),
   construction:constructions(id, title, construction_no)
 `;
 
 export type ProcurementOrder = ContractorOrder & {
   construction?: { id: string; title: string; construction_no: string } | null;
-};
-
-export type TransferSender = {
-  bankName: string;
-  branchName: string;
-  accountType: string;
-  accountNumber: string;
-  senderCode: string;
-  senderName: string;
 };
 
 async function getAuthContext() {
@@ -211,18 +204,10 @@ export async function getProcurementMasters(): Promise<{
     supabase.from("companies").select("name, settings").eq("id", companyId).maybeSingle(),
   ]);
   const settings = (company?.settings ?? {}) as Record<string, unknown>;
-  const transfer = (settings.transfer ?? {}) as Record<string, unknown>;
   return {
     departments: locations.map((l) => l.name),
     accountItems: PROCUREMENT_ACCOUNT_ITEMS.map((i) => i.name),
-    sender: {
-      bankName: String(transfer.bankName ?? transfer.bank_name ?? ""),
-      branchName: String(transfer.branchName ?? transfer.bank_branch ?? ""),
-      accountType: String(transfer.accountType ?? transfer.bank_account_type ?? "普通"),
-      accountNumber: String(transfer.accountNumber ?? transfer.bank_account_number ?? ""),
-      senderCode: String(transfer.senderCode ?? transfer.sender_code ?? ""),
-      senderName: String(transfer.senderName ?? transfer.sender_name ?? company?.name ?? ""),
-    },
+    sender: parseTransferSender(settings, company?.name ?? ""),
   };
 }
 

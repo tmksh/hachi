@@ -114,6 +114,17 @@ export async function updateCompany(input: {
   pdf_templates?: Record<string, unknown>;
   /** 会計年度始まり月 1〜12 (例: 4=4月始まり) */
   fiscal_month_start?: number;
+  /** 全銀・帳票の振込元（依頼人） */
+  transfer?: {
+    bankCode?: string;
+    bankName?: string;
+    branchCode?: string;
+    branchName?: string;
+    accountType?: string;
+    accountNumber?: string;
+    senderCode?: string;
+    senderName?: string;
+  };
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -144,6 +155,12 @@ export async function updateCompany(input: {
     ...(input.custom_roles !== undefined ? { custom_roles: input.custom_roles } : {}),
     ...(input.pdf_templates !== undefined ? { pdf_templates: input.pdf_templates } : {}),
     ...(input.fiscal_month_start !== undefined ? { fiscal_month_start: input.fiscal_month_start } : {}),
+    ...(input.transfer !== undefined ? {
+      transfer: {
+        ...(((current?.settings as Record<string, unknown> | null)?.transfer as Record<string, unknown> | undefined) ?? {}),
+        ...input.transfer,
+      },
+    } : {}),
   };
 
   const updatePayload: Record<string, unknown> = { settings: newSettings };

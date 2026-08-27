@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save, X, Plus } from "lucide-react";
 import { getCraftsman, updateCraftsman } from "@/lib/actions/craftsmen";
+import { splitLeadingCode } from "@/lib/procurement";
 
 type Craftsman = Awaited<ReturnType<typeof getCraftsman>>;
 
@@ -93,8 +94,14 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
   const [serviceAreas, setServiceAreas] = useState<string[]>(initialCraftsman.service_areas ?? []);
   const [contractRate, setContractRate] = useState(initialCraftsman.contract_rate != null ? String(initialCraftsman.contract_rate) : "");
   const [paymentNotes, setPaymentNotes] = useState(initialCraftsman.payment_notes ?? "");
-  const [bankName, setBankName] = useState(initialCraftsman.bank_name ?? "");
-  const [bankBranch, setBankBranch] = useState(initialCraftsman.bank_branch ?? "");
+  const parsedBank = splitLeadingCode(initialCraftsman.bank_name, 4);
+  const parsedBranch = splitLeadingCode(initialCraftsman.bank_branch, 3);
+  const [bankName, setBankName] = useState(parsedBank.rest || initialCraftsman.bank_name || "");
+  const [bankNameKana, setBankNameKana] = useState(initialCraftsman.bank_name_kana ?? "");
+  const [bankCode, setBankCode] = useState(initialCraftsman.bank_code ?? parsedBank.code);
+  const [bankBranch, setBankBranch] = useState(parsedBranch.rest || initialCraftsman.bank_branch || "");
+  const [bankBranchKana, setBankBranchKana] = useState(initialCraftsman.bank_branch_kana ?? "");
+  const [bankBranchCode, setBankBranchCode] = useState(initialCraftsman.bank_branch_code ?? parsedBranch.code);
   const [bankAccountType, setBankAccountType] = useState(initialCraftsman.bank_account_type ?? "普通");
   const [bankAccountNumber, setBankAccountNumber] = useState(initialCraftsman.bank_account_number ?? "");
   const [bankAccountKana, setBankAccountKana] = useState(initialCraftsman.bank_account_kana ?? "");
@@ -116,7 +123,11 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
         contract_rate: contractRate !== "" ? Number(contractRate) : null,
         payment_notes: paymentNotes || null,
         bank_name: bankName || null,
+        bank_name_kana: bankNameKana || null,
+        bank_code: bankCode || null,
         bank_branch: bankBranch || null,
+        bank_branch_kana: bankBranchKana || null,
+        bank_branch_code: bankBranchCode || null,
         bank_account_type: bankAccountType || null,
         bank_account_number: bankAccountNumber || null,
         bank_account_kana: bankAccountKana || null,
@@ -207,25 +218,47 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
               />
             </div>
             <div className="space-y-2">
-              <Label>振込先銀行</Label>
+              <Label>銀行コード（4桁）</Label>
+              <Input inputMode="numeric" maxLength={4} value={bankCode} onChange={e => setBankCode(e.target.value)} placeholder="0005" />
+            </div>
+            <div className="space-y-2">
+              <Label>銀行名（半角カナ）</Label>
+              <Input value={bankNameKana} onChange={e => setBankNameKana(e.target.value)} placeholder="ﾐﾂﾋﾞｼﾕｰｴﾌｼﾞｴｲ" />
+            </div>
+            <div className="space-y-2">
+              <Label>支店コード（3桁）</Label>
+              <Input inputMode="numeric" maxLength={3} value={bankBranchCode} onChange={e => setBankBranchCode(e.target.value)} placeholder="267" />
+            </div>
+            <div className="space-y-2">
+              <Label>支店名（半角カナ）</Label>
+              <Input value={bankBranchKana} onChange={e => setBankBranchKana(e.target.value)} placeholder="ﾂﾙﾏｲ" />
+            </div>
+            <div className="space-y-2">
+              <Label>振込先銀行（表示用）</Label>
               <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="三菱UFJ銀行" />
             </div>
             <div className="space-y-2">
-              <Label>支店</Label>
-              <Input value={bankBranch} onChange={e => setBankBranch(e.target.value)} placeholder="新宿支店" />
+              <Label>支店（表示用）</Label>
+              <Input value={bankBranch} onChange={e => setBankBranch(e.target.value)} placeholder="鶴舞支店" />
             </div>
             <div className="space-y-2">
               <Label>預金種目</Label>
-              <Input value={bankAccountType} onChange={e => setBankAccountType(e.target.value)} placeholder="普通" />
+              <Select value={bankAccountType === "当座" ? "当座" : "普通"} onValueChange={setBankAccountType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="普通">普通</SelectItem>
+                  <SelectItem value="当座">当座</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label>口座番号</Label>
-              <Input value={bankAccountNumber} onChange={e => setBankAccountNumber(e.target.value)} placeholder="1234567" />
+              <Label>口座番号（7桁）</Label>
+              <Input inputMode="numeric" maxLength={7} value={bankAccountNumber} onChange={e => setBankAccountNumber(e.target.value)} placeholder="0039867" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label>受取人名（カナ）</Label>
-              <Input value={bankAccountKana} onChange={e => setBankAccountKana(e.target.value)} placeholder="ﾀﾅｶｹﾝｾﾂ" />
-              <p className="text-[11px] text-muted-foreground">帳票データ（全銀）の振込先に使います。未登録だと出力できません。</p>
+              <Label>受取人名（半角カナ）</Label>
+              <Input value={bankAccountKana} onChange={e => setBankAccountKana(e.target.value)} placeholder="ﾀﾅｶｹﾝｾﾂ(ｶ" />
+              <p className="text-[11px] text-muted-foreground">帳票データ（全銀）の振込先に使います。銀行コード・支店コード・口座が無いと出力できません。</p>
             </div>
           </div>
         </CardContent>

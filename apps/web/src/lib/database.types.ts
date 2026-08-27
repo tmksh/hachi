@@ -155,7 +155,11 @@ export type Craftsman = {
   contract_rate: number | null;
   payment_notes: string | null;
   bank_name?: string | null;
+  bank_name_kana?: string | null;
+  bank_code?: string | null;
   bank_branch?: string | null;
+  bank_branch_kana?: string | null;
+  bank_branch_code?: string | null;
   bank_account_type?: string | null;
   bank_account_number?: string | null;
   bank_account_kana?: string | null;
@@ -422,7 +426,11 @@ export type ContractorOrder = {
     name: string;
     email?: string | null;
     bank_name?: string | null;
+    bank_name_kana?: string | null;
+    bank_code?: string | null;
     bank_branch?: string | null;
+    bank_branch_kana?: string | null;
+    bank_branch_code?: string | null;
     bank_account_type?: string | null;
     bank_account_number?: string | null;
     bank_account_kana?: string | null;

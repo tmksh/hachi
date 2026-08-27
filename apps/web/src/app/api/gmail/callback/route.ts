@@ -3,8 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestOrigin } from "@/lib/request-origin";
 import { encrypt } from "@/lib/crypto";
 import {
+  canonicalizeReturnOrigin,
   decodeGmailOAuthState,
   gmailCallbackUri,
+  isAllowedOAuthRedirectUri,
   resolveOAuthRedirectOrigin,
   validateGoogleOAuthCredentials,
 } from "@/lib/google-oauth-config";
@@ -18,7 +20,11 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   const decoded = state ? decodeGmailOAuthState(state) : null;
-  const returnOrigin = (decoded?.returnOrigin || requestOrigin).replace(/\/$/, "");
+  const returnOrigin = canonicalizeReturnOrigin(decoded?.returnOrigin || requestOrigin);
+  const tokenRedirectUri =
+    decoded?.redirectUri && isAllowedOAuthRedirectUri(decoded.redirectUri)
+      ? decoded.redirectUri
+      : gmailCallbackUri(oauthOrigin);
   const userId = decoded?.uid;
 
   if (error || !code || !userId) {
@@ -39,7 +45,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: validated.creds.clientId,
         client_secret: validated.creds.clientSecret,
-        redirect_uri: gmailCallbackUri(oauthOrigin),
+        redirect_uri: tokenRedirectUri,
         grant_type: "authorization_code",
       }),
     });

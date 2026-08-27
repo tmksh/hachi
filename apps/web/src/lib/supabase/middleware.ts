@@ -6,6 +6,7 @@ import {
   mergeRolePermissions,
   type RolePermissions,
 } from "@/lib/role-permissions";
+import { decodeGmailOAuthState, isGoogleOAuthCallbackPath } from "@/lib/google-oauth-config";
 
 /** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
 const LEGACY_ROUTE_PREFIXES = [
@@ -77,9 +78,28 @@ function extractSubdomain(request: NextRequest): string | null {
   return slug;
 }
 
+function rescueGoogleOAuthFromLogin(request: NextRequest): NextResponse | null {
+  if (request.nextUrl.pathname !== "/login") return null;
+  const code = request.nextUrl.searchParams.get("code");
+  const state = request.nextUrl.searchParams.get("state");
+  if (!code || !state) return null;
+  const decoded = decodeGmailOAuthState(state);
+  if (!decoded?.uid || (!decoded.redirectUri && !decoded.returnPath && !decoded.returnOrigin)) {
+    return null;
+  }
+  const dest = request.nextUrl.clone();
+  dest.pathname = decoded.redirectUri?.includes("/api/gmail/callback")
+    ? "/api/gmail/callback"
+    : "/api/google-calendar/callback";
+  return NextResponse.redirect(dest);
+}
+
 export async function updateSession(request: NextRequest) {
   const canonicalRedirect = redirectToCanonicalDomain(request);
   if (canonicalRedirect) return canonicalRedirect;
+
+  const oauthRescue = rescueGoogleOAuthFromLogin(request);
+  if (oauthRescue) return oauthRescue;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -129,7 +149,13 @@ export async function updateSession(request: NextRequest) {
     }
 
     // 未ログインで /login 以外にアクセス → サブドメインの /login へ
-    if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth") && !pathname.startsWith("/onboarding")) {
+    if (
+      !user
+      && !pathname.startsWith("/login")
+      && !pathname.startsWith("/api/auth")
+      && !pathname.startsWith("/onboarding")
+      && !isGoogleOAuthCallbackPath(pathname)
+    ) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
@@ -181,6 +207,8 @@ export async function updateSession(request: NextRequest) {
     "/admin/login",
     "/api/auth/callback",
     "/api/auth/accept-invite",
+    "/api/gmail/callback",
+    "/api/google-calendar/callback",
     "/api/webhooks/",
     "/unauthorized",
     "/reset-password",

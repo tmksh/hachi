@@ -9,8 +9,9 @@ export function getRequestOrigin(request: Request | NextRequest): string {
   const fwdHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
   const fwdProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
   if (fwdHost) {
-    const proto = fwdProto || "https";
-    return `${proto}://${fwdHost}`;
+    const proto = fwdProto || (fwdHost.startsWith("localhost") || fwdHost.startsWith("127.0.0.1") ? "http" : "https");
+    const host = /^localhost$|^127\.0\.0\.1$/i.test(fwdHost) ? `${fwdHost}:3000` : fwdHost;
+    return `${proto}://${host}`;
   }
   return new URL(request.url).origin;
 }

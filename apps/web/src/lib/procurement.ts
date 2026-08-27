@@ -187,15 +187,118 @@ export function deriveLedgerStatus(order: {
   return "none";
 }
 
-export function bankLabel(input: {
+export type TransferSender = {
+  bankCode: string;
+  bankName: string;
+  branchCode: string;
+  branchName: string;
+  accountType: string;
+  accountNumber: string;
+  senderCode: string;
+  senderName: string;
+};
+
+export const EMPTY_TRANSFER_SENDER: TransferSender = {
+  bankCode: "",
+  bankName: "",
+  branchCode: "",
+  branchName: "",
+  accountType: "普通",
+  accountNumber: "",
+  senderCode: "",
+  senderName: "",
+};
+
+export function parseTransferSender(
+  settings: Record<string, unknown> | null | undefined,
+  _companyName = "",
+): TransferSender {
+  const transfer = (settings?.transfer ?? {}) as Record<string, unknown>;
+  return {
+    bankCode: String(transfer.bankCode ?? transfer.bank_code ?? ""),
+    bankName: String(transfer.bankName ?? transfer.bank_name ?? ""),
+    branchCode: String(transfer.branchCode ?? transfer.branch_code ?? ""),
+    branchName: String(transfer.branchName ?? transfer.branch_name ?? transfer.bank_branch ?? ""),
+    accountType: String(transfer.accountType ?? transfer.bank_account_type ?? "普通"),
+    accountNumber: String(transfer.accountNumber ?? transfer.bank_account_number ?? ""),
+    senderCode: String(transfer.senderCode ?? transfer.sender_code ?? ""),
+    senderName: String(transfer.senderName ?? transfer.sender_name ?? ""),
+  };
+}
+
+export function isZenginSenderReady(sender: TransferSender): boolean {
+  return Boolean(
+    digitField(sender.senderCode, 10)
+    && toZenginKana(sender.senderName).trim()
+    && digitField(sender.bankCode, 4)
+    && toZenginKana(sender.bankName).trim()
+    && digitField(sender.branchCode, 3)
+    && toZenginKana(sender.branchName).trim()
+    && digitField(sender.accountNumber, 7),
+  );
+}
+
+export type ZenginAccountInput = {
+  bank_code?: string | null;
   bank_name?: string | null;
+  bank_name_kana?: string | null;
   bank_branch?: string | null;
+  bank_branch_code?: string | null;
+  bank_branch_kana?: string | null;
   bank_account_type?: string | null;
   bank_account_number?: string | null;
-}): string | null {
-  if (!input.bank_name || !input.bank_account_number) return null;
-  const type = input.bank_account_type || "普通";
-  return `${input.bank_name} ${input.bank_branch ?? ""} ${type} ${input.bank_account_number}`.replace(/\s+/g, " ").trim();
+  bank_account_kana?: string | null;
+};
+
+export type ZenginAccount = {
+  bankCode: string;
+  bankNameKana: string;
+  branchCode: string;
+  branchNameKana: string;
+  accountType: string;
+  accountNumber: string;
+  accountKana: string;
+};
+
+export function splitLeadingCode(raw: string | null | undefined, len: number): { code: string; rest: string } {
+  const s = (raw ?? "").trim();
+  const m = s.match(new RegExp(`^(\\d{${len}})(?:\\s+|$)(.*)$`));
+  if (m) return { code: m[1], rest: m[2].trim() };
+  return { code: "", rest: s };
+}
+
+export function resolveZenginAccount(input: ZenginAccountInput): ZenginAccount {
+  const bank = splitLeadingCode(input.bank_name, 4);
+  const branch = splitLeadingCode(input.bank_branch, 3);
+  return {
+    bankCode: digitField(input.bank_code, 4) ?? digitField(bank.code, 4) ?? "",
+    bankNameKana: (input.bank_name_kana ?? "").trim() || bank.rest || (input.bank_name ?? "").trim(),
+    branchCode: digitField(input.bank_branch_code, 3) ?? digitField(branch.code, 3) ?? "",
+    branchNameKana: (input.bank_branch_kana ?? "").trim() || branch.rest || (input.bank_branch ?? "").trim(),
+    accountType: input.bank_account_type || "普通",
+    accountNumber: digitField(input.bank_account_number, 7) ?? "",
+    accountKana: (input.bank_account_kana ?? "").trim(),
+  };
+}
+
+export function isZenginAccountReady(account: ZenginAccount): boolean {
+  return Boolean(
+    account.bankCode
+    && account.branchCode
+    && account.accountNumber
+    && toZenginKana(account.bankNameKana).trim()
+    && toZenginKana(account.branchNameKana).trim(),
+  );
+}
+
+export function bankLabel(input: ZenginAccountInput): string | null {
+  if (!input.bank_name && !input.bank_code && !input.bank_account_number) return null;
+  if (!input.bank_account_number) return null;
+  const z = resolveZenginAccount(input);
+  const type = z.accountType || "普通";
+  const bank = [z.bankCode, z.bankNameKana || input.bank_name].filter(Boolean).join(" ");
+  const branch = [z.branchCode, z.branchNameKana || input.bank_branch].filter(Boolean).join(" ");
+  return `${bank} ${branch} ${type} ${input.bank_account_number}`.replace(/\s+/g, " ").trim();
 }
 
 export function defaultTransferFee(amountIncl: number): number {
@@ -203,39 +306,101 @@ export function defaultTransferFee(amountIncl: number): number {
   return amountIncl >= 30_000 ? 440 : 220;
 }
 
+function digitField(value: string | null | undefined, len: number): string | null {
+  const d = String(value ?? "").replace(/\D/g, "");
+  if (!d) return null;
+  return d.slice(-len).padStart(len, "0");
+}
+
 function pad(s: string, len: number): string {
   const t = s.slice(0, len);
   return t + " ".repeat(Math.max(0, len - t.length));
 }
 
-function toHalfWidthKana(input: string): string {
-  return input
-    .replace(/[！-～]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
-    .replace(/　/g, " ")
-    .replace(/[ぁ-ん]/g, (ch) => {
-      const map: Record<string, string> = {
-        あ: "ｱ", い: "ｲ", う: "ｳ", え: "ｴ", お: "ｵ",
-        か: "ｶ", き: "ｷ", く: "ｸ", け: "ｹ", こ: "ｺ",
-        さ: "ｻ", し: "ｼ", す: "ｽ", せ: "ｾ", そ: "ｿ",
-        た: "ﾀ", ち: "ﾁ", つ: "ﾂ", て: "ﾃ", と: "ﾄ",
-        な: "ﾅ", に: "ﾆ", ぬ: "ﾇ", ね: "ﾈ", の: "ﾉ",
-        は: "ﾊ", ひ: "ﾋ", ふ: "ﾌ", へ: "ﾍ", ほ: "ﾎ",
-        ま: "ﾏ", み: "ﾐ", む: "ﾑ", め: "ﾒ", も: "ﾓ",
-        や: "ﾔ", ゆ: "ﾕ", よ: "ﾖ",
-        ら: "ﾗ", り: "ﾘ", る: "ﾙ", れ: "ﾚ", ろ: "ﾛ",
-        わ: "ﾜ", を: "ｦ", ん: "ﾝ",
-      };
-      return map[ch] ?? ch;
-    });
+const KANA_TO_HW: Record<string, string> = {
+  あ: "ｱ", い: "ｲ", う: "ｳ", え: "ｴ", お: "ｵ",
+  か: "ｶ", き: "ｷ", く: "ｸ", け: "ｹ", こ: "ｺ",
+  さ: "ｻ", し: "ｼ", す: "ｽ", せ: "ｾ", そ: "ｿ",
+  た: "ﾀ", ち: "ﾁ", つ: "ﾂ", て: "ﾃ", と: "ﾄ",
+  な: "ﾅ", に: "ﾆ", ぬ: "ﾇ", ね: "ﾈ", の: "ﾉ",
+  は: "ﾊ", ひ: "ﾋ", ふ: "ﾌ", へ: "ﾍ", ほ: "ﾎ",
+  ま: "ﾏ", み: "ﾐ", む: "ﾑ", め: "ﾒ", も: "ﾓ",
+  や: "ﾔ", ゆ: "ﾕ", よ: "ﾖ",
+  ら: "ﾗ", り: "ﾘ", る: "ﾙ", れ: "ﾚ", ろ: "ﾛ",
+  わ: "ﾜ", を: "ｦ", ん: "ﾝ",
+  ぁ: "ｧ", ぃ: "ｨ", ぅ: "ｩ", ぇ: "ｪ", ぉ: "ｫ",
+  ゃ: "ｬ", ゅ: "ｭ", ょ: "ｮ", っ: "ｯ", ゎ: "ﾜ",
+  が: "ｶﾞ", ぎ: "ｷﾞ", ぐ: "ｸﾞ", げ: "ｹﾞ", ご: "ｺﾞ",
+  ざ: "ｻﾞ", じ: "ｼﾞ", ず: "ｽﾞ", ぜ: "ｾﾞ", ぞ: "ｿﾞ",
+  だ: "ﾀﾞ", ぢ: "ﾁﾞ", づ: "ﾂﾞ", で: "ﾃﾞ", ど: "ﾄﾞ",
+  ば: "ﾊﾞ", び: "ﾋﾞ", ぶ: "ﾌﾞ", べ: "ﾍﾞ", ぼ: "ﾎﾞ",
+  ぱ: "ﾊﾟ", ぴ: "ﾋﾟ", ぷ: "ﾌﾟ", ぺ: "ﾍﾟ", ぽ: "ﾎﾟ",
+  ゔ: "ｳﾞ",
+  ア: "ｱ", イ: "ｲ", ウ: "ｳ", エ: "ｴ", オ: "ｵ",
+  カ: "ｶ", キ: "ｷ", ク: "ｸ", ケ: "ｹ", コ: "ｺ",
+  サ: "ｻ", シ: "ｼ", ス: "ｽ", セ: "ｾ", ソ: "ｿ",
+  タ: "ﾀ", チ: "ﾁ", ツ: "ﾂ", テ: "ﾃ", ト: "ﾄ",
+  ナ: "ﾅ", ニ: "ﾆ", ヌ: "ﾇ", ネ: "ﾈ", ノ: "ﾉ",
+  ハ: "ﾊ", ヒ: "ﾋ", フ: "ﾌ", ヘ: "ﾍ", ホ: "ﾎ",
+  マ: "ﾏ", ミ: "ﾐ", ム: "ﾑ", メ: "ﾒ", モ: "ﾓ",
+  ヤ: "ﾔ", ユ: "ﾕ", ヨ: "ﾖ",
+  ラ: "ﾗ", リ: "ﾘ", ル: "ﾙ", レ: "ﾚ", ロ: "ﾛ",
+  ワ: "ﾜ", ヲ: "ｦ", ン: "ﾝ",
+  ァ: "ｧ", ィ: "ｨ", ゥ: "ｩ", ェ: "ｪ", ォ: "ｫ",
+  ャ: "ｬ", ュ: "ｭ", ョ: "ｮ", ッ: "ｯ", ヮ: "ﾜ", ヵ: "ｶ", ヶ: "ｹ",
+  ガ: "ｶﾞ", ギ: "ｷﾞ", グ: "ｸﾞ", ゲ: "ｹﾞ", ゴ: "ｺﾞ",
+  ザ: "ｻﾞ", ジ: "ｼﾞ", ズ: "ｽﾞ", ゼ: "ｾﾞ", ゾ: "ｿﾞ",
+  ダ: "ﾀﾞ", ヂ: "ﾁﾞ", ヅ: "ﾂﾞ", デ: "ﾃﾞ", ド: "ﾄﾞ",
+  バ: "ﾊﾞ", ビ: "ﾋﾞ", ブ: "ﾌﾞ", ベ: "ﾍﾞ", ボ: "ﾎﾞ",
+  パ: "ﾊﾟ", ピ: "ﾋﾟ", プ: "ﾌﾟ", ペ: "ﾍﾟ", ポ: "ﾎﾟ",
+  ヴ: "ｳﾞ",
+  ー: "ｰ", "―": "ｰ", "‐": "-", "−": "-",
+  "・": "･", "「": "｢", "」": "｣",
+  "（": "(", "）": ")",
+};
+
+export function toZenginKana(input: string): string {
+  let out = "";
+  for (const ch of input) {
+    const mapped = KANA_TO_HW[ch];
+    if (mapped) {
+      out += mapped;
+      continue;
+    }
+    const code = ch.charCodeAt(0);
+    if (code === 0x3000) {
+      out += " ";
+      continue;
+    }
+    if (code >= 0xff01 && code <= 0xff5e) {
+      out += String.fromCharCode(code - 0xfee0);
+      continue;
+    }
+    if (code < 0x80 || (code >= 0xff61 && code <= 0xff9f)) {
+      out += ch;
+    }
+  }
+  return out;
 }
 
-export type ZenginSender = {
-  bankName: string;
-  branchName: string;
-  accountType: string;
-  accountNumber: string;
-  senderCode: string;
-  senderName: string;
+function padKana(input: string, len: number): string {
+  return pad(toZenginKana(input), len);
+}
+
+function zenginAccountTypeCode(type: string | undefined): "1" | "2" {
+  const t = (type ?? "").trim();
+  if (t === "2" || t.includes("当座")) return "2";
+  return "1";
+}
+
+function mmdd(isoDate: string): string {
+  const compact = isoDate.replaceAll("-", "");
+  if (compact.length >= 8) return compact.slice(4, 8);
+  if (compact.length === 4) return compact;
+  return pad(compact, 4);
+}
+
+export type ZenginSender = TransferSender & {
   transferDate: string;
 };
 
@@ -243,51 +408,79 @@ export type ZenginRow = {
   vendorName: string;
   accountKana: string;
   amount: number;
+  bankCode?: string;
   bankName?: string;
+  branchCode?: string;
   branchName?: string;
   accountType?: string;
   accountNumber?: string;
 };
 
-/** 全銀協フォーマットに近い固定長テキスト（UTF-8。銀行取込前にSJIS変換が必要な場合あり） */
+/** 全銀協 総合振込（1行120バイト・SJIS・LF）。先方サンプルと同じ桁。 */
 export function buildZenginText(sender: ZenginSender, rows: ZenginRow[]): string {
-  const date = sender.transferDate.replaceAll("-", "").slice(2, 8);
-  const type = sender.accountType.includes("当座") ? "2" : "1";
-  const header = [
+  const header = pad([
     "1",
     "21",
     "0",
-    pad(sender.senderCode.replace(/\D/g, "").padStart(10, "0"), 10),
-    pad(toHalfWidthKana(sender.senderName || "BRIDGE"), 40),
-    pad(date, 4),
-    pad("", 40),
-  ].join("");
+    digitField(sender.senderCode, 10) ?? "0000000000",
+    padKana(sender.senderName, 40),
+    mmdd(sender.transferDate),
+    digitField(sender.bankCode, 4) ?? "0000",
+    padKana(sender.bankName, 15),
+    digitField(sender.branchCode, 3) ?? "000",
+    padKana(sender.branchName, 15),
+    zenginAccountTypeCode(sender.accountType),
+    digitField(sender.accountNumber, 7) ?? "0000000",
+    pad("", 17),
+  ].join(""), 120);
 
   const data = rows.map((row) => {
-    const amt = String(Math.max(0, Math.round(row.amount))).padStart(10, "0");
-    return [
+    const amt = String(Math.max(0, Math.round(row.amount))).padStart(10, "0").slice(-10);
+    return pad([
       "2",
-      pad((row.bankName ?? "").replace(/\D/g, "").padStart(4, "0"), 4),
-      pad((row.branchName ?? "").replace(/\D/g, "").padStart(3, "0"), 3),
+      digitField(row.bankCode, 4) ?? "0000",
+      padKana(row.bankName ?? "", 15),
+      digitField(row.branchCode, 3) ?? "000",
+      padKana(row.branchName ?? "", 15),
       pad("", 4),
-      type,
-      pad((row.accountNumber ?? "").replace(/\D/g, ""), 7),
-      pad(toHalfWidthKana(row.accountKana || row.vendorName), 30),
+      zenginAccountTypeCode(row.accountType),
+      digitField(row.accountNumber, 7) ?? "0000000",
+      padKana(row.accountKana || row.vendorName, 30),
       amt,
-      "1",
-      pad("", 20),
-    ].join("");
+      pad("", 30),
+    ].join(""), 120);
   });
 
   const total = rows.reduce((s, r) => s + Math.max(0, Math.round(r.amount)), 0);
-  const trailer = [
+  const trailer = pad([
     "8",
     String(rows.length).padStart(6, "0"),
     String(total).padStart(12, "0"),
     pad("", 101),
-  ].join("");
-  const end = `9${" ".repeat(119)}`;
-  return [header, ...data, trailer, end].join("\r\n");
+  ].join(""), 120);
+  const end = pad("9", 120);
+  return [header, ...data, trailer, end].join("\n");
+}
+
+export function encodeZenginSjis(text: string): Uint8Array {
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c === 0x0a || c < 0x80) bytes[i] = c;
+    else if (c >= 0xff61 && c <= 0xff9f) bytes[i] = c - 0xff61 + 0xa1;
+    else bytes[i] = 0x20;
+  }
+  return bytes;
+}
+
+export function downloadZenginFile(filename: string, text: string): void {
+  const blob = new Blob([encodeZenginSjis(text)], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function downloadTextFile(filename: string, content: string, mime = "text/plain;charset=utf-8"): void {

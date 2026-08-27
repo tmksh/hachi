@@ -17,6 +17,7 @@ import { CrmMasterTab, type CrmMasterInitialData } from "@/components/settings/c
 import { CraftsmenMasterTab, type CraftsmenMasterInitialData } from "@/components/settings/craftsmen-master-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { AppIntegrationsTab, type AppIntegrationsInitialData } from "@/components/settings/app-integrations-tab";
+import { GoogleCalendarSettingsCard } from "@/components/settings/google-calendar-settings";
 
 const tabSkeleton = () => <Skeleton className="h-48 w-full rounded-xl" />;
 
@@ -96,6 +97,7 @@ import type { Company, Profile } from "@/lib/database.types";
 import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, ASSIGNABLE_TEAM_ROLES, SYSTEM_PERMISSION_ROLES, type Role } from "@/lib/constants";
 import { useCompanyPermissions, type CustomRole, type RolePermissions } from "@/hooks/use-company-permissions";
 import { mergeRolePermissions, withPermissionsSchema } from "@/lib/role-permissions";
+import { parseTransferSender, type TransferSender } from "@/lib/procurement";
 import { FontSizeSelector } from "@/components/settings/font-size-selector";
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
@@ -107,7 +109,7 @@ const MAIN_DEFAULT_SUB: Record<string, string> = {
   personal: "profile",
   organization: "members",
   master: "crm_master",
-  integrations_group: "app_integrations",
+  integrations_group: "external_integrations",
 };
 
 function SettingsSubSelect({
@@ -173,6 +175,7 @@ function companyFormState(c: Company | null) {
       s.role_permissions ? (s.role_permissions as RolePermissions) : null,
     ),
     customRoles: Array.isArray(s.custom_roles) ? (s.custom_roles as CustomRole[]) : [],
+    transfer: parseTransferSender(s, c?.name ?? ""),
   };
 }
 
@@ -195,10 +198,14 @@ export function SettingsClient({
   const searchParams = useSearchParams();
   const initInnerTab = searchParams.get("tab") ?? "profile";
   const personalTabs = new Set(["profile", "security", "notifications", "mail_signature", "pdf_builder"]);
-  const [mainTab, setMainTab] = useState("personal");
-  const [subTab, setSubTab] = useState(personalTabs.has(initInnerTab) ? initInnerTab : "profile");
+  const integrationTabs = new Set(["external_integrations", "app_integrations", "integrations"]);
+  const initMain = integrationTabs.has(initInnerTab) ? "integrations_group" : "personal";
+  const [mainTab, setMainTab] = useState(initMain);
+  const [subTab, setSubTab] = useState(
+    personalTabs.has(initInnerTab) || integrationTabs.has(initInnerTab) ? initInnerTab : "profile",
+  );
   /** 一度開いた大タブは unmount しない（再取得・再マウント待ちを防ぐ） */
-  const [visitedMain, setVisitedMain] = useState<Set<string>>(() => new Set(["personal"]));
+  const [visitedMain, setVisitedMain] = useState<Set<string>>(() => new Set(["personal", initMain]));
   /** 権限マトリクスは重いのでメンバー一覧の後に描画 */
   const [permsReady, setPermsReady] = useState(false);
 
@@ -232,6 +239,7 @@ export function SettingsClient({
   const [fiscalMonthStart, setFiscalMonthStart] = useState<number>(formDefaults.fiscalMonthStart);
   const [cloudsignEnabled, setCloudsignEnabled] = useState(formDefaults.cloudsignEnabled);
   const [cloudsignApiKey, setCloudsignApiKey] = useState(formDefaults.cloudsignApiKey);
+  const [transfer, setTransfer] = useState<TransferSender>(formDefaults.transfer);
   const [savingCompany, setSavingCompany] = useState(false);
 
   // 見込度 A/B/C の確度%（bi_company_config に保存）
@@ -380,6 +388,7 @@ export function SettingsClient({
           enabled: cloudsignEnabled,
           api_key: cloudsignApiKey || undefined,
         },
+        transfer,
       });
       if (biConfig) await saveBiCompanyConfig(biConfig);
       setCompany(updated);
@@ -689,11 +698,11 @@ export function SettingsClient({
                 <TabsTrigger value="master" className={SETTINGS_TAB_TRIGGER}>
                   <BookOpen className="h-3.5 w-3.5" />マスタ
                 </TabsTrigger>
-                <TabsTrigger value="integrations_group" className={SETTINGS_TAB_TRIGGER}>
-                  <Link2 className="h-3.5 w-3.5" />連携
-                </TabsTrigger>
               </>
             )}
+            <TabsTrigger value="integrations_group" className={SETTINGS_TAB_TRIGGER}>
+              <Link2 className="h-3.5 w-3.5" />外部連携
+            </TabsTrigger>
           </TabsList>
 
           {mainTab === "personal" && (
@@ -733,13 +742,18 @@ export function SettingsClient({
             />
           )}
 
-          {mainTab === "integrations_group" && canManageMembers && (
+          {mainTab === "integrations_group" && (
             <SettingsSubSelect
               value={subTab}
               onChange={setSubTab}
               items={[
-                { value: "app_integrations", label: "アプリ連携" },
-                { value: "integrations", label: "API / Webhook" },
+                { value: "external_integrations", label: "Googleカレンダー" },
+                ...(canManageMembers
+                  ? [
+                      { value: "app_integrations", label: "アプリ連携" },
+                      { value: "integrations", label: "API / Webhook" },
+                    ]
+                  : []),
               ]}
             />
           )}
@@ -942,6 +956,93 @@ export function SettingsClient({
                               placeholder="クラウドサイン APIキー"
                             />
                           )}
+                        </div>
+                        <div className="space-y-3 sm:col-span-3 pt-2 border-t border-border">
+                          <div>
+                            <Label>全銀・振込元（依頼人）</Label>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              帳票データ作成の全銀ファイルのヘッダーに使います。銀行に届け出た依頼人コードと半角カナで入力してください。
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>依頼人コード（10桁）</Label>
+                              <Input
+                                inputMode="numeric"
+                                maxLength={10}
+                                value={transfer.senderCode}
+                                onChange={(e) => setTransfer((s) => ({ ...s, senderCode: e.target.value }))}
+                                placeholder="1011732487"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>依頼人名（半角カナ）</Label>
+                              <Input
+                                value={transfer.senderName}
+                                onChange={(e) => setTransfer((s) => ({ ...s, senderName: e.target.value }))}
+                                placeholder="ｴｲﾄﾃﾞｻﾞｲﾝｶﾌﾞｼｷｶﾞｲｼｬ"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>仕向銀行コード（4桁）</Label>
+                              <Input
+                                inputMode="numeric"
+                                maxLength={4}
+                                value={transfer.bankCode}
+                                onChange={(e) => setTransfer((s) => ({ ...s, bankCode: e.target.value }))}
+                                placeholder="0005"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>仕向銀行名（半角カナ）</Label>
+                              <Input
+                                value={transfer.bankName}
+                                onChange={(e) => setTransfer((s) => ({ ...s, bankName: e.target.value }))}
+                                placeholder="ﾐﾂﾋﾞｼﾕｰｴﾌｼﾞｴｲ"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>仕向支店コード（3桁）</Label>
+                              <Input
+                                inputMode="numeric"
+                                maxLength={3}
+                                value={transfer.branchCode}
+                                onChange={(e) => setTransfer((s) => ({ ...s, branchCode: e.target.value }))}
+                                placeholder="267"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>仕向支店名（半角カナ）</Label>
+                              <Input
+                                value={transfer.branchName}
+                                onChange={(e) => setTransfer((s) => ({ ...s, branchName: e.target.value }))}
+                                placeholder="ﾂﾙﾏｲ"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>預金種目</Label>
+                              <Select
+                                value={transfer.accountType === "当座" ? "当座" : "普通"}
+                                onValueChange={(v) => setTransfer((s) => ({ ...s, accountType: v }))}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="普通">普通</SelectItem>
+                                  <SelectItem value="当座">当座</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>口座番号（7桁）</Label>
+                              <Input
+                                inputMode="numeric"
+                                maxLength={7}
+                                value={transfer.accountNumber}
+                                onChange={(e) => setTransfer((s) => ({ ...s, accountNumber: e.target.value }))}
+                                placeholder="0039867"
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <div className="flex justify-end">
@@ -1625,11 +1726,12 @@ export function SettingsClient({
       </TabsContent>
     )}
 
-    {/* ── 連携グループ ─── */}
-    {canManageMembers && visitedMain.has("integrations_group") && (
+    {/* ── 外部連携 ─── */}
+    {visitedMain.has("integrations_group") && (
       <TabsContent value="integrations_group" forceMount className="mt-0 data-[state=inactive]:hidden">
-          {subTab === "app_integrations" && <AppIntegrationsTab initialData={initialAppIntegrations} />}
-          {subTab === "integrations" && <IntegrationsTab />}
+          {subTab === "external_integrations" && <GoogleCalendarSettingsCard />}
+          {canManageMembers && subTab === "app_integrations" && <AppIntegrationsTab initialData={initialAppIntegrations} />}
+          {canManageMembers && subTab === "integrations" && <IntegrationsTab />}
       </TabsContent>
     )}
 

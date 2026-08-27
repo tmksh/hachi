@@ -14,20 +14,25 @@ import {
 } from "@/components/ui/select";
 import { AlertTriangle, ArrowUpDown, Printer, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { ProcurementOrder, TransferSender } from "@/lib/actions/procurement";
+import type { ProcurementOrder } from "@/lib/actions/procurement";
 import {
   CSV_OUTPUT_COLUMNS,
   bankLabel,
   buildZenginText,
   defaultTransferFee,
   downloadTextFile,
+  downloadZenginFile,
   formatDateSlash,
   inclOf,
+  isZenginAccountReady,
+  isZenginSenderReady,
   printHtml,
+  resolveZenginAccount,
   taxOf,
   toCsv,
   yen,
   type CsvOutputColumnKey,
+  type TransferSender,
 } from "@/lib/procurement";
 
 type Format = "zengin" | "csv";
@@ -158,10 +163,17 @@ export function LedgerClient({ initialOrders, masters }: Props) {
       department: string;
       accountItem: string;
       exportable: boolean;
+      bankCode: string;
+      bankNameKana: string;
+      branchCode: string;
+      branchNameKana: string;
+      accountType: string;
+      accountNumber: string;
     }>();
     for (const o of filtered) {
+      const account = resolveZenginAccount(o.craftsman ?? {});
       const bank = bankLabel(o.craftsman ?? {});
-      const key = `${o.craftsman?.name ?? "未登録"}|${bank ?? "none"}`;
+      const key = `${o.craftsman?.id ?? o.craftsman?.name ?? "未登録"}|${account.bankCode}|${account.accountNumber}`;
       const billed = inclOf(Number(o.amount ?? 0));
       const cur = map.get(key);
       if (cur) {
@@ -172,12 +184,18 @@ export function LedgerClient({ initialOrders, masters }: Props) {
           id: key,
           vendorName: o.craftsman?.name ?? "未登録業者",
           bank,
-          kana: o.craftsman?.bank_account_kana ?? "",
+          kana: account.accountKana,
           billed,
           count: 1,
           department: o.department ?? "",
           accountItem: o.account_item ?? "",
-          exportable: Boolean(bank),
+          exportable: isZenginAccountReady(account),
+          bankCode: account.bankCode,
+          bankNameKana: account.bankNameKana,
+          branchCode: account.branchCode,
+          branchNameKana: account.branchNameKana,
+          accountType: account.accountType,
+          accountNumber: account.accountNumber,
         });
       }
     }
@@ -219,6 +237,10 @@ export function LedgerClient({ initialOrders, masters }: Props) {
   };
 
   const exportZengin = () => {
+    if (!isZenginSenderReady(sender)) {
+      toast.error("依頼人情報が不足しています。会社設定の全銀・振込元を入力してください");
+      return;
+    }
     const rows = checkedZengin.filter((g) => g.exportable).map((g) => {
       const fee = defaultTransferFee(g.billed);
       const amount = feeBurden === "recipient" ? Math.max(0, g.billed - fee) : g.billed;
@@ -226,14 +248,20 @@ export function LedgerClient({ initialOrders, masters }: Props) {
         vendorName: g.vendorName,
         accountKana: g.kana,
         amount,
+        bankCode: g.bankCode,
+        bankName: g.bankNameKana,
+        branchCode: g.branchCode,
+        branchName: g.branchNameKana,
+        accountType: g.accountType,
+        accountNumber: g.accountNumber,
       };
     });
     if (rows.length === 0) {
-      toast.error("出力できる行がありません");
+      toast.error("出力できる行がありません。業者マスタに銀行コード・支店コード・口座を登録してください");
       return;
     }
     const text = buildZenginText({ ...sender, transferDate }, rows);
-    downloadTextFile(`zengin_${transferDate.replaceAll("-", "")}.txt`, text);
+    downloadZenginFile(`zengin_${transferDate.replaceAll("-", "")}.txt`, text);
     toast.success("全銀フォーマットを書き出しました");
   };
 
@@ -323,22 +351,37 @@ export function LedgerClient({ initialOrders, masters }: Props) {
         <section className="rounded-xl border bg-card p-4 space-y-3 h-full">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">依頼人情報（自社の振込元）</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-              onClick={() => setSender(masters.sender)}
-            >
-              会社設定から取得
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="ghost" size="sm" className="text-xs">
+                <Link href="/settings">会社設定で編集</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setSender(masters.sender)}
+              >
+                会社設定から取得
+              </Button>
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground -mt-1">
+            ここは今回の書き出し用です。普段使う値は設定 → 会社情報の「全銀・振込元」に保存します。
+          </p>
+          {!isZenginSenderReady(sender) && (
+            <p className="text-xs text-red-700">
+              依頼人コード・カナ名・銀行コード・支店コード・口座が揃うと、先方サンプルと同じ全銀形式で出せます。
+            </p>
+          )}
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="仕向銀行" value={sender.bankName} onChange={(v) => setSender((s) => ({ ...s, bankName: v }))} />
-            <Field label="仕向支店" value={sender.branchName} onChange={(v) => setSender((s) => ({ ...s, branchName: v }))} />
-            <Field label="預金種目" value={sender.accountType} onChange={(v) => setSender((s) => ({ ...s, accountType: v }))} />
-            <Field label="口座番号" value={sender.accountNumber} onChange={(v) => setSender((s) => ({ ...s, accountNumber: v }))} />
             <Field label="依頼人コード（10桁）" value={sender.senderCode} onChange={(v) => setSender((s) => ({ ...s, senderCode: v }))} />
             <Field label="依頼人名（半角カナ）" value={sender.senderName} onChange={(v) => setSender((s) => ({ ...s, senderName: v }))} />
+            <Field label="仕向銀行コード（4桁）" value={sender.bankCode} onChange={(v) => setSender((s) => ({ ...s, bankCode: v }))} />
+            <Field label="仕向銀行名（半角カナ）" value={sender.bankName} onChange={(v) => setSender((s) => ({ ...s, bankName: v }))} />
+            <Field label="仕向支店コード（3桁）" value={sender.branchCode} onChange={(v) => setSender((s) => ({ ...s, branchCode: v }))} />
+            <Field label="仕向支店名（半角カナ）" value={sender.branchName} onChange={(v) => setSender((s) => ({ ...s, branchName: v }))} />
+            <Field label="預金種目" value={sender.accountType} onChange={(v) => setSender((s) => ({ ...s, accountType: v }))} />
+            <Field label="口座番号（7桁）" value={sender.accountNumber} onChange={(v) => setSender((s) => ({ ...s, accountNumber: v }))} />
           </div>
         </section>
       )}
@@ -426,7 +469,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm text-red-800 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
-            {unexportable.length}件が出力できません。振込先口座が未登録です。
+            {unexportable.length}件が出力できません。業者マスタに銀行コード・支店コード・口座番号を登録してください。
           </p>
           <Button variant="outline" size="sm" onClick={() => setShowUnexportable((v) => !v)}>
             {showUnexportable ? "出力可能な行を表示" : `該当${unexportable.length}件を表示`}

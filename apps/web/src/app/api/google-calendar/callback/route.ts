@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestOrigin } from "@/lib/request-origin";
 import {
+  appendQuery,
   calendarCallbackUri,
+  canonicalizeReturnOrigin,
   decodeGmailOAuthState,
+  isAllowedOAuthRedirectUri,
   resolveOAuthRedirectOrigin,
   validateGoogleOAuthCredentials,
 } from "@/lib/google-oauth-config";
@@ -17,18 +20,29 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   const decoded = state ? decodeGmailOAuthState(state) : null;
-  const returnOrigin = (decoded?.returnOrigin || requestOrigin).replace(/\/$/, "");
+  const returnOrigin = canonicalizeReturnOrigin(decoded?.returnOrigin || requestOrigin);
+  const tokenRedirectUri =
+    decoded?.redirectUri && isAllowedOAuthRedirectUri(decoded.redirectUri)
+      ? decoded.redirectUri
+      : calendarCallbackUri(oauthOrigin);
   const userId = decoded?.uid;
-  const returnPath = "/calendar";
+  const rawReturn = decoded?.returnPath ?? "";
+  const returnPath =
+    rawReturn.startsWith("/") && !rawReturn.startsWith("//")
+      ? rawReturn
+      : "/settings?tab=external_integrations";
+
+  const back = (params: Record<string, string>) =>
+    NextResponse.redirect(`${returnOrigin}${appendQuery(returnPath, params)}`);
 
   if (error || !code || !userId) {
-    return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=access_denied`);
+    return back({ gcal_error: "access_denied" });
   }
 
   try {
     const validated = validateGoogleOAuthCredentials();
     if (!validated.ok) {
-      return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=oauth_not_configured`);
+      return back({ gcal_error: "oauth_not_configured" });
     }
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -38,7 +52,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: validated.creds.clientId,
         client_secret: validated.creds.clientSecret,
-        redirect_uri: calendarCallbackUri(oauthOrigin),
+        redirect_uri: tokenRedirectUri,
         grant_type: "authorization_code",
       }),
     });
@@ -47,12 +61,12 @@ export async function GET(request: NextRequest) {
       const err = await tokenRes.text();
       console.error("[google-calendar/callback] token exchange failed:", err);
       if (/invalid_client/i.test(err)) {
-        return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=invalid_client`);
+        return back({ gcal_error: "invalid_client" });
       }
       if (/redirect_uri_mismatch/i.test(err)) {
-        return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=redirect_uri_mismatch`);
+        return back({ gcal_error: "redirect_uri_mismatch" });
       }
-      return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=token_exchange`);
+      return back({ gcal_error: "token_exchange" });
     }
 
     const tokens = (await tokenRes.json()) as {
@@ -63,14 +77,14 @@ export async function GET(request: NextRequest) {
     };
 
     if (!tokens.access_token) {
-      return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=token_exchange`);
+      return back({ gcal_error: "token_exchange" });
     }
 
     const hasCalendarWrite =
       !tokens.scope ||
       /calendar(\.events)?/.test(tokens.scope);
     if (!hasCalendarWrite) {
-      return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=missing_calendar_scope`);
+      return back({ gcal_error: "missing_calendar_scope" });
     }
 
     const admin = createAdminClient();
@@ -93,12 +107,12 @@ export async function GET(request: NextRequest) {
 
     if (updateError) {
       console.error("[google-calendar/callback] profile update failed:", updateError);
-      return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=db_error`);
+      return back({ gcal_error: "db_error" });
     }
 
-    return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_connected=1`);
+    return back({ gcal_connected: "1" });
   } catch (e) {
     console.error("[google-calendar/callback] error:", e);
-    return NextResponse.redirect(`${returnOrigin}${returnPath}?gcal_error=unknown`);
+    return back({ gcal_error: "unknown" });
   }
 }

@@ -108,6 +108,16 @@ export function CraftsmanDetailClient({ initialData }: CraftsmanDetailClientProp
         <Card><CardHeader className="pb-3"><CardTitle className="text-sm">支払い</CardTitle></CardHeader>
           <CardContent><p className="text-sm text-muted-foreground">{data.payment_notes ?? "支払い予定・履歴は編集画面から登録できます"}</p></CardContent>
         </Card>
+        <Card className="lg:col-span-2"><CardHeader className="pb-3"><CardTitle className="text-sm">振込先（全銀）</CardTitle></CardHeader>
+          <CardContent className="grid sm:grid-cols-2 gap-2 text-sm">
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">銀行コード</span><span className="font-mono">{data.bank_code || "—"}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">銀行名カナ</span><span>{data.bank_name_kana || data.bank_name || "—"}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">支店コード</span><span className="font-mono">{data.bank_branch_code || "—"}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">支店名カナ</span><span>{data.bank_branch_kana || data.bank_branch || "—"}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">種目 / 口座</span><span>{data.bank_account_type || "普通"} {data.bank_account_number || "—"}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">受取人カナ</span><span>{data.bank_account_kana || "—"}</span></div>
+          </CardContent>
+        </Card>
       </div>
       {data.notes && <Card><CardHeader className="pb-3"><CardTitle className="text-sm">備考</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">{data.notes}</p></CardContent></Card>}
     </div>

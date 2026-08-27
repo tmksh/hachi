@@ -133,6 +133,29 @@ export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman,
     .eq("id", id)
     .select()
     .single();
+  if (error && /bank_code|bank_name_kana|bank_branch_code|bank_branch_kana/i.test(error.message)) {
+    const {
+      bank_code,
+      bank_name_kana,
+      bank_branch_code,
+      bank_branch_kana,
+      ...rest
+    } = input;
+    const packedName = [bank_code, bank_name_kana || rest.bank_name].filter(Boolean).join(" ");
+    const packedBranch = [bank_branch_code, bank_branch_kana || rest.bank_branch].filter(Boolean).join(" ");
+    const { data: fallback, error: fallbackErr } = await supabase
+      .from("craftsmen")
+      .update({
+        ...rest,
+        bank_name: packedName || rest.bank_name || null,
+        bank_branch: packedBranch || rest.bank_branch || null,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (fallbackErr) throw fallbackErr;
+    return fallback as Craftsman;
+  }
   if (error) throw error;
   return data as Craftsman;
 }

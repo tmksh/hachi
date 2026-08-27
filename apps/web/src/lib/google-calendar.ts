@@ -98,7 +98,7 @@ export async function createGoogleCalendarEventDetailed(
       if (res.status === 403) {
         return {
           error:
-            "Googleカレンダーへの書き込み権限がありません。カレンダー画面から「再連携」し、カレンダーへのアクセスを許可してください",
+            "Googleカレンダーへの書き込み権限がありません。設定 → 外部連携から「再連携」し、カレンダーへのアクセスを許可してください",
         };
       }
       return {

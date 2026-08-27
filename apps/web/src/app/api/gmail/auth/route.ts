@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getRequestOrigin } from "@/lib/request-origin";
 import {
+  canonicalizeReturnOrigin,
   encodeGmailOAuthState,
   gmailCallbackUri,
   googleOAuthIssueToErrorCode,
@@ -36,16 +37,19 @@ export async function GET(request: Request) {
     "https://www.googleapis.com/auth/userinfo.profile",
   ].join(" ");
 
+  const redirectUri = gmailCallbackUri(oauthOrigin);
   const params = new URLSearchParams({
     client_id: validated.creds.clientId,
-    // サブドメイン横断で固定の redirect_uri（Google Console 登録と一致させる）
-    redirect_uri: gmailCallbackUri(oauthOrigin),
+    redirect_uri: redirectUri,
     response_type: "code",
     scope: scopes,
     access_type: "offline",
     prompt: "consent",
-    // 完了後はテナント側 origin へ戻す
-    state: encodeGmailOAuthState({ uid: user.id, returnOrigin: requestOrigin }),
+    state: encodeGmailOAuthState({
+      uid: user.id,
+      returnOrigin: canonicalizeReturnOrigin(requestOrigin),
+      redirectUri,
+    }),
   });
 
   return NextResponse.redirect(

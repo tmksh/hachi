@@ -61,21 +61,12 @@ import {
   Trash2,
   Link2,
   CheckCircle2,
-  RefreshCw,
-  LogOut,
   Users,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   getCalendarEvents,
   updateCalendarEvent,
   deleteCalendarEvent,
-  disconnectGoogleCalendar,
   getCompanyMembersWithCalendar,
   getCompanyMembers,
 } from "@/lib/actions/calendar";
@@ -169,8 +160,6 @@ export function CalendarClient({
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleAccountEmail, setGoogleAccountEmail] = useState<string | null>(null);
   const [googleToken, setGoogleToken] = useState<string | null>(null);
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
-  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeEvent, setActiveEvent] = useState<AnyEv | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -205,11 +194,9 @@ export function CalendarClient({
 
     if (connected) {
       googleTokenRef.current = undefined;
-      setConnectingGoogle(false);
       setReloadKey((k) => k + 1);
       toast.success("Googleカレンダーと連携しました（書き込み権限を含む）");
     } else if (error) {
-      setConnectingGoogle(false);
       const messages: Record<string, string> = {
         access_denied: "Googleカレンダー連携がキャンセルされました",
         missing_calendar_scope: "カレンダーへの書き込み権限が付与されませんでした。再度「再連携」してください",
@@ -439,31 +426,6 @@ export function CalendarClient({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeStart, rangeEnd]);
 
-  /* Google 連携を開始 / 再連携（Supabase OAuth ではなく専用フローで calendar スコープを確実に取得） */
-  const connectGoogle = useCallback(() => {
-    setConnectingGoogle(true);
-    const returnPath = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/api/google-calendar/auth?return=${encodeURIComponent(returnPath)}`;
-  }, []);
-
-  const disconnectGoogle = useCallback(async () => {
-    if (!confirm("Google カレンダーの連携を解除しますか？")) return;
-    setDisconnectingGoogle(true);
-    try {
-      await disconnectGoogleCalendar();
-      googleTokenRef.current = null;
-      setGoogleToken(null);
-      setGoogleConnected(false);
-      setGoogleEvents([]);
-      setGoogleAccountEmail(null);
-      toast.success("Google カレンダーの連携を解除しました");
-    } catch {
-      toast.error("解除に失敗しました");
-    } finally {
-      setDisconnectingGoogle(false);
-    }
-  }, []);
-
   const visibleEvents = useMemo(() => {
     const local = events.filter((e) => !hiddenCats.has(e.category ?? ""));
     // ローカルに google_event_id がある予定は Google 側コピーを除外（DnD 後の二重表示防止）
@@ -608,10 +570,6 @@ export function CalendarClient({
           <ConnectedAccountsPanel
             googleConnected={googleConnected}
             googleAccountEmail={googleAccountEmail}
-            connectingGoogle={connectingGoogle}
-            disconnectingGoogle={disconnectingGoogle}
-            onConnectGoogle={connectGoogle}
-            onDisconnectGoogle={disconnectGoogle}
           />
 
           {/* Team members' calendars */}
@@ -934,10 +892,6 @@ function MiniCalendar({
 type ConnectedAccountsPanelProps = {
   googleConnected: boolean;
   googleAccountEmail: string | null;
-  connectingGoogle: boolean;
-  disconnectingGoogle: boolean;
-  onConnectGoogle: () => void;
-  onDisconnectGoogle: () => void;
 };
 
 function GoogleLogo({ className }: { className?: string }) {
@@ -954,10 +908,6 @@ function GoogleLogo({ className }: { className?: string }) {
 function ConnectedAccountsPanel({
   googleConnected,
   googleAccountEmail,
-  connectingGoogle,
-  disconnectingGoogle,
-  onConnectGoogle,
-  onDisconnectGoogle,
 }: ConnectedAccountsPanelProps) {
   return (
     <Card>
@@ -967,8 +917,7 @@ function ConnectedAccountsPanel({
           <h3 className="text-xs font-semibold">連携アカウント</h3>
         </div>
 
-        {/* Google */}
-        <div className="flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-muted/40 transition-colors">
+        <div className="flex items-center gap-2 px-1.5 py-1.5 rounded-md">
           <GoogleLogo className="h-4 w-4 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium leading-tight whitespace-nowrap">Google カレンダー</div>
@@ -979,61 +928,25 @@ function ConnectedAccountsPanel({
             </div>
           </div>
           {googleConnected ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  disabled={connectingGoogle || disconnectingGoogle}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
-                >
-                  {connectingGoogle || disconnectingGoogle ? (
-                    <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-2.5 w-2.5" />
-                  )}
-                  連携中
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs">
-                <DropdownMenuItem
-                  className="text-[12px] gap-2"
-                  onClick={onConnectGoogle}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  再連携（トークン更新）
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-[12px] gap-2 text-destructive focus:text-destructive"
-                  onClick={onDisconnectGoogle}
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  連携を解除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="h-2.5 w-2.5" />
+              連携中
+            </span>
           ) : (
-            <button
-              onClick={onConnectGoogle}
-              disabled={connectingGoogle}
-              className="text-[10px] font-medium text-primary hover:underline disabled:opacity-50"
+            <Link
+              href="/settings?tab=external_integrations"
+              className="text-[10px] font-medium text-primary hover:underline whitespace-nowrap"
             >
-              {connectingGoogle ? "接続中..." : "連携する"}
-            </button>
+              設定で連携
+            </Link>
           )}
         </div>
-
-        {/* 将来の連携サービス用プレースホルダ */}
-        <div className="flex items-center gap-2 px-1.5 py-1.5 rounded-md opacity-60">
-          <div className="h-4 w-4 shrink-0 rounded-sm bg-[#0078D4] flex items-center justify-center">
-            <span className="text-[8px] font-bold text-white">M</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium leading-tight">Microsoft 365</div>
-            <div className="text-[10px] text-muted-foreground">近日対応予定</div>
-          </div>
-          <span className="text-[10px] text-muted-foreground border border-border rounded-full px-1.5 py-0.5">
-            準備中
-          </span>
-        </div>
+        <Link
+          href="/settings?tab=external_integrations"
+          className="block text-[10px] text-muted-foreground hover:text-foreground px-1.5"
+        >
+          連携・解除・トークン更新は設定 → 外部連携
+        </Link>
       </CardContent>
     </Card>
   );

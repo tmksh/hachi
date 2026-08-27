@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getRequestOrigin } from "@/lib/request-origin";
 import {
   calendarCallbackUri,
+  canonicalizeReturnOrigin,
   encodeGmailOAuthState,
   googleOAuthIssueToErrorCode,
   resolveOAuthRedirectOrigin,
@@ -13,7 +14,7 @@ import { GOOGLE_CALENDAR_SCOPES } from "@/lib/google-oauth-scopes";
 export async function GET(request: NextRequest) {
   const requestOrigin = getRequestOrigin(request);
   const oauthOrigin = resolveOAuthRedirectOrigin(requestOrigin);
-  const returnPath = request.nextUrl.searchParams.get("return") ?? "/calendar";
+  const returnPath = request.nextUrl.searchParams.get("return") ?? "/settings?tab=external_integrations";
 
   const supabase = await createClient();
   const {
@@ -32,15 +33,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const redirectUri = calendarCallbackUri(oauthOrigin);
   const params = new URLSearchParams({
     client_id: validated.creds.clientId,
-    redirect_uri: calendarCallbackUri(oauthOrigin),
+    redirect_uri: redirectUri,
     response_type: "code",
     scope: GOOGLE_CALENDAR_SCOPES,
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",
-    state: encodeGmailOAuthState({ uid: user.id, returnOrigin: requestOrigin }),
+    state: encodeGmailOAuthState({
+      uid: user.id,
+      returnOrigin: canonicalizeReturnOrigin(requestOrigin),
+      returnPath: returnPath.startsWith("/") && !returnPath.startsWith("//") ? returnPath : "/settings?tab=external_integrations",
+      redirectUri,
+    }),
   });
 
   return NextResponse.redirect(

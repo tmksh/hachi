@@ -1,4 +1,5 @@
 import { getCompanyOrders, getProcurementMasters } from "@/lib/actions/procurement";
+import { EMPTY_TRANSFER_SENDER } from "@/lib/procurement";
 import { LedgerClient } from "./ledger-client";
 
 export default async function LedgerPage() {
@@ -7,14 +8,7 @@ export default async function LedgerPage() {
     getProcurementMasters().catch(() => ({
       departments: [] as string[],
       accountItems: [] as string[],
-      sender: {
-        bankName: "",
-        branchName: "",
-        accountType: "普通",
-        accountNumber: "",
-        senderCode: "",
-        senderName: "",
-      },
+      sender: EMPTY_TRANSFER_SENDER,
     })),
   ]);
   return <LedgerClient initialOrders={orders} masters={masters} />;

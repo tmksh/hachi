@@ -205,7 +205,7 @@ export function SchedulingTab({ customerId }: { customerId: string }) {
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {calendarLinked
                 ? "Googleカレンダーとアプリ内予定を参照して空き時間から提案します。"
-                : "アプリ内カレンダーの予定を参照します。Google連携はカレンダー画面から設定できます。"}
+                : "アプリ内カレンダーの予定を参照します。Google連携は設定 → 外部連携から行えます。"}
             </p>
             <div className="rounded-md border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-2 text-[11px] text-emerald-950 leading-relaxed">
               <div className="flex gap-2">

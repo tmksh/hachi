@@ -61,8 +61,7 @@ import { BombAlert } from "@/components/layout/bomb-alert";
 
 /** 緊急回覧: 未読1件で BombAlert（仕様どおり） */
 const ANNOUNCEMENT_BOMB_THRESHOLD = 1;
-/** 社内チャット: 未読≥10で BombAlert（マウント＝ログイン単位で1回） */
-const CHAT_BOMB_THRESHOLD = 10;
+const ANN_BOMB_SESSION_KEY = "hachi_bomb_ann_ids";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
@@ -92,6 +91,20 @@ function filterDismissedNotifications(notifs: Notification[]): Notification[] {
 
 function dismissNotificationIds(ids: string[]) {
   persistDismissedNotifIds([...readDismissedNotifIds(), ...ids]);
+}
+
+function readSessionIds(key: string): string[] {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(key) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberSessionIds(key: string, ids: string[]) {
+  const next = [...new Set([...readSessionIds(key), ...ids])].slice(-200);
+  sessionStorage.setItem(key, JSON.stringify(next));
 }
 
 const GROUP_ICONS = {
@@ -136,21 +149,12 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   const [showBombAlert, setShowBombAlert] = useState(false);
   const [bombUrgentCount, setBombUrgentCount] = useState(0);
   const bombChecked = useRef(false);
-  const chatBombFired = useRef(false);
 
   useEffect(() => {
     const fetchUnread = async () => {
       try {
         const count = await getUnreadMessageCount();
         setChatUnreadCount((prev) => (prev === count ? prev : count));
-        // 未読チャット≥10で爆弾アラート（このマウント＝ログイン後の画面で1回）
-        if (count >= CHAT_BOMB_THRESHOLD && !chatBombFired.current) {
-          chatBombFired.current = true;
-          // 旧・1日1回キーが残っていても再ログインで再発火できるよう掃除
-          try { localStorage.removeItem("hachi_chat_bomb_check"); } catch { /* ignore */ }
-          setBombUrgentCount(count);
-          setShowBombAlert(true);
-        }
       } catch {}
     };
 
@@ -213,14 +217,16 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
         const urgent = filtered.filter(
           (n) => n.is_urgent && n.type === "announcement",
         );
-        // 旧 localStorage 抑制キーは未読中の再ログインを妨げるため掃除
+        const alreadyShown = new Set(readSessionIds(ANN_BOMB_SESSION_KEY));
+        const unseen = urgent.filter((n) => !alreadyShown.has(n.id));
         try {
           localStorage.removeItem("hachi_bomb_shown_ann");
           localStorage.removeItem("hachi_bomb_check");
+          localStorage.removeItem("hachi_chat_bomb_check");
         } catch { /* ignore */ }
-        // 未読の緊急回覧があれば表示（マウント単位で1回。再ログインで再表示）
-        if (urgent.length >= ANNOUNCEMENT_BOMB_THRESHOLD) {
-          setBombUrgentCount(urgent.length);
+        if (unseen.length >= ANNOUNCEMENT_BOMB_THRESHOLD) {
+          rememberSessionIds(ANN_BOMB_SESSION_KEY, unseen.map((n) => n.id));
+          setBombUrgentCount(unseen.length);
           setShowBombAlert(true);
         }
       }).catch(() => {});
