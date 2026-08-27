@@ -24,6 +24,9 @@ export const NAV_GROUPS = [
     items: [
       { key: "contracts", label: "契約管理", href: "/contracts" },
       { key: "constructions", label: "工事管理", href: "/constructions" },
+      { key: "fulfillment", label: "納品・検収", href: "/fulfillment" },
+      { key: "ledger", label: "帳票データ作成", href: "/ledger" },
+      { key: "account-items", label: "勘定科目の確定", href: "/account-items" },
     ],
   },
   {
@@ -108,6 +111,9 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   "/quotes":      ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   "/craftsmen":   ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   "/contracts":   ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
+  "/fulfillment": ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive"],
+  "/ledger":      ["hq_admin", "contractor_admin", "admin", "administration", "executive"],
+  "/account-items": ["hq_admin", "admin", "administration", "executive"],
   "/workflow":    ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive", "employee", "designer"],
   "/marketing":   [],
 };
@@ -136,6 +142,9 @@ export const NAV_ITEM_ROLES: Record<string, Role[]> = {
   craftsmen:          ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   contracts:          ["hq_admin", "contractor_admin", "admin", "sales", "executive"],
   constructions:      ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "executive"],
+  fulfillment:        ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive"],
+  ledger:             ["hq_admin", "contractor_admin", "admin", "administration", "executive"],
+  "account-items":    ["hq_admin", "admin", "administration", "executive"],
   invoices:           ["hq_admin", "contractor_admin", "admin", "administration", "executive"],
   budget:             ["hq_admin", "contractor_admin", "admin", "executive"],
   workflow:           ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive", "employee", "designer"],

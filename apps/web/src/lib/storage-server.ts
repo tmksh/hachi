@@ -51,3 +51,15 @@ export async function getSignedStorageUrl(
   if (error || !data) throw error ?? new Error("署名付きURL取得失敗");
   return data.signedUrl;
 }
+
+/** サービスロールで署名URLを発行（業者アップロードなど RLS 外の参照用） */
+export async function getSignedStorageUrlAsAdmin(
+  bucket: StorageBucket,
+  path: string,
+  expiresIn = 3600,
+): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(bucket).createSignedUrl(path, expiresIn);
+  if (error || !data) throw error ?? new Error("署名付きURL取得失敗");
+  return data.signedUrl;
+}

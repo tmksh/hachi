@@ -547,6 +547,8 @@ function ConstructionDetailPageContent({
           <ContractTab
             constructionId={id as string}
             customerId={customer?.id}
+            constructionNo={data.construction_no}
+            fillCustomer={customer as Customer | null}
             initialDocs={docs}
             ctx={{
               construction: {

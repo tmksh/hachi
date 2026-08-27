@@ -579,6 +579,9 @@ export async function createContractorOrder(input: {
   paymentCount?: string;
   workContent?: string;
   specialNotes?: string;
+  department?: string;
+  accountItem?: string;
+  accountItemSource?: string;
   customPaymentSchedule?: Array<{ phase: string; rate: number; amount: number; due_date: string | null }>;
 }) {
   const supabase = await createClient();
@@ -596,6 +599,9 @@ export async function createContractorOrder(input: {
         input.startDate,
         input.endDate,
       );
+
+  const { nextPoNo } = await import("@/lib/actions/procurement");
+  const poNo = await nextPoNo(profile.company_id).catch(() => null);
 
   const { data, error } = await supabase
     .from("contractor_orders")
@@ -616,10 +622,46 @@ export async function createContractorOrder(input: {
       work_content: input.workContent || null,
       special_notes: input.specialNotes || null,
       payment_schedule: schedule,
+      po_no: poNo,
+      department: input.department || null,
+      account_item: input.accountItem || null,
+      account_item_source: input.accountItemSource || (input.accountItem ? "manual" : null),
     })
     .select("*, craftsman:craftsmen(id, name)")
     .single();
-  if (error) throw error;
+  if (error) {
+    const { data: fallback, error: fallbackErr } = await supabase
+      .from("contractor_orders")
+      .insert({
+        company_id: profile.company_id,
+        construction_id: input.constructionId,
+        craftsman_id: input.craftsmanId || null,
+        title: input.title,
+        amount: input.amount,
+        status: "draft",
+        notes: input.notes || null,
+        order_date: input.orderDate || new Date().toISOString().split("T")[0],
+        start_date: input.startDate || null,
+        end_date: input.endDate || null,
+        completion_date: input.completionDate || null,
+        payment_date: input.paymentDate || null,
+        payment_count: paymentCount,
+        work_content: input.workContent || null,
+        special_notes: input.specialNotes || null,
+        payment_schedule: schedule,
+      })
+      .select("*, craftsman:craftsmen(id, name)")
+      .single();
+    if (fallbackErr) throw error;
+    const { ensurePartnerTokenForOrder } = await import("@/lib/actions/partner-portal");
+    await ensurePartnerTokenForOrder({
+      companyId: profile.company_id,
+      constructionId: input.constructionId,
+      orderId: fallback.id,
+      label: fallback.title,
+    }).catch(() => {});
+    return fallback;
+  }
   const { ensurePartnerTokenForOrder } = await import("@/lib/actions/partner-portal");
   await ensurePartnerTokenForOrder({
     companyId: profile.company_id,
@@ -632,7 +674,14 @@ export async function createContractorOrder(input: {
 
 export async function updateContractorOrder(
   id: string,
-  input: { status?: "draft" | "submitted" | "approved" | "rejected"; notes?: string }
+  input: {
+    status?: "draft" | "submitted" | "approved" | "rejected";
+    notes?: string;
+    department?: string | null;
+    account_item?: string | null;
+    account_item_source?: string | null;
+    payment_date?: string | null;
+  }
 ) {
   const supabase = await createClient();
   const { error } = await supabase.from("contractor_orders").update(input).eq("id", id);

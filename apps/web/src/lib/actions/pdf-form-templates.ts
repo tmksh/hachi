@@ -135,6 +135,26 @@ export async function deactivatePdfFormTemplate(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** 顧客の「その他項目」で使われている項目名 */
+export async function getCustomerCustomFieldKeys(): Promise<string[]> {
+  const { supabase, companyId } = await getCompanyContext();
+  const { data } = await supabase
+    .from("customers")
+    .select("custom_fields")
+    .eq("company_id", companyId)
+    .is("deleted_at", null)
+    .limit(800);
+  const keys = new Set<string>();
+  for (const row of data ?? []) {
+    const fields = (row.custom_fields ?? {}) as Record<string, string>;
+    for (const key of Object.keys(fields)) {
+      const trimmed = key.trim();
+      if (trimmed) keys.add(trimmed);
+    }
+  }
+  return [...keys].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
 /** Storage 上の PDF への署名付きURLを返す（表示・差し込み用） */
 export async function getPdfFormTemplateUrl(storagePath: string): Promise<string | null> {
   try {

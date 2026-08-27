@@ -64,7 +64,7 @@ export default function PartnerPortalPage() {
             <>
               <div className="rounded-lg border p-4 space-y-2 text-sm">
                 <p className="font-medium">{order.orderTitle}</p>
-                <p className="text-muted-foreground">工事名: {order.constructionTitle}</p>
+                <p className="text-muted-foreground">名称: {order.constructionTitle}</p>
                 {(order.startDate || order.endDate) && (
                   <p className="text-muted-foreground">
                     工期: {order.startDate ?? "—"} 〜 {order.endDate ?? "—"}

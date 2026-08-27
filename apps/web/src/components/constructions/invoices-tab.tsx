@@ -15,16 +15,30 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Receipt, Plus, Loader2, CalendarClock, ExternalLink,
-  ArrowLeft, PackageCheck, Trash2, Wand2, FileText, Send, UserPlus,
-  CheckCircle2, Undo2, CloudUpload, ChevronDown, ChevronUp, Link2,
+  ArrowLeft, PackageCheck, Trash2, Wand2, FileText, Send,
+  CheckCircle2, Undo2, CloudUpload, ChevronDown, ChevronUp, Link2, MoreHorizontal,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getProcurementMasters } from "@/lib/actions/procurement";
+import { updateOrderAccountItem } from "@/lib/actions/procurement";
+import {
+  ORDER_DISPLAY_STATUS_META,
+  PROCUREMENT_ACCOUNT_ITEMS,
+  deriveOrderDisplayStatus,
+  isAccountingRole,
+  suggestAccountItem,
+  yen,
+} from "@/lib/procurement";
 import { createInvoiceFromConstruction, generateMonthlyInvoices } from "@/lib/actions/invoices";
 import {
   createContractorOrder,
   deleteContractorOrder,
-  updateContractorOrder,
   createOrdersFromEstimate,
   getConstructionEstimate,
 } from "@/lib/actions/constructions";
@@ -33,7 +47,6 @@ import {
   approveContractorOrder,
   rejectContractorOrder,
   sendContractorOrderToCloudSign,
-  createCraftsmanByName,
 } from "@/lib/actions/contractor-orders";
 import { getOrCreatePartnerOrderLink } from "@/lib/actions/partner-portal";
 import { getCraftsmen } from "@/lib/actions/craftsmen";
@@ -220,13 +233,6 @@ export type OrderRow = ContractorOrder & {
   submitted_at?: string | null;
 };
 
-const ORDER_STATUS_MAP = {
-  draft:     { label: "下書き",   cls: "bg-gray-100 text-gray-600" },
-  submitted: { label: "承認待ち", cls: "bg-blue-100 text-blue-700" },
-  approved:  { label: "承認済",   cls: "bg-green-100 text-green-700" },
-  rejected:  { label: "差戻し",   cls: "bg-red-100 text-red-600" },
-} as const;
-
 const PAYMENT_COUNT_OPTIONS = ["1回", "2回", "3回", "4回", "6回", "12回", "その他"];
 
 const APPROVER_ROLES = ["hq_admin", "admin", "executive", "contractor_admin"] as const;
@@ -250,6 +256,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
 }) {
   const { profile, hasRole } = useAuth();
   const canApprove = hasRole(...APPROVER_ROLES);
+  const canEditAccount = isAccountingRole(profile?.role) || hasRole("hq_admin", "admin", "administration");
 
   const [orders, setOrders] = useState<OrderRow[]>(initialOrders);
   const [showCreateForm, setShowCreateForm] = useState(() => !!(initialForm?.title || initialForm?.amount));
@@ -272,13 +279,19 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     paymentCount: "1回",
     workContent: initialForm?.workContent ?? "",
     specialNotes: "",
+    department: "",
+    accountItem: "",
+    accountItemSource: "",
   });
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [accountItems, setAccountItems] = useState<string[]>(PROCUREMENT_ACCOUNT_ITEMS.map((i) => i.name));
+  const [listStatus, setListStatus] = useState("all");
+  const [listDept, setListDept] = useState("all");
+  const [unsetAccountOnly, setUnsetAccountOnly] = useState(false);
   const [customSchedule, setCustomSchedule] = useState<PaymentScheduleItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [registeringCraftsman, setRegisteringCraftsman] = useState(false);
-
   // 承認申請ダイアログ
   const [submitTarget, setSubmitTarget] = useState<OrderRow | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -315,6 +328,12 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     if (showCreateForm) {
       if (estimateId) void loadEstimateItems();
       if (craftsmen.length === 0) getCraftsmen().then(setCraftsmen).catch(() => {});
+      if (departments.length === 0) {
+        getProcurementMasters().then((m) => {
+          setDepartments(m.departments);
+          if (m.accountItems.length) setAccountItems(m.accountItems);
+        }).catch(() => {});
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCreateForm]);
@@ -325,26 +344,27 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     if (form.craftsmanId || !form.craftsmanName.trim()) return;
     const matched = matchCraftsman(form.craftsmanName, craftsmen);
     if (matched) {
-      setForm(f => ({ ...f, craftsmanId: matched.id, craftsmanName: matched.name, title: f.title || matched.name }));
+      const suggested = suggestAccountItem(matched.name);
+      setForm(f => ({
+        ...f,
+        craftsmanId: matched.id,
+        craftsmanName: matched.name,
+        title: f.title || matched.name,
+        accountItem: f.accountItem || suggested.item,
+        accountItemSource: f.accountItemSource || suggested.source,
+      }));
+    } else if (form.craftsmanName) {
+      const suggested = suggestAccountItem(form.craftsmanName);
+      setForm(f => ({
+        ...f,
+        accountItem: f.accountItem || suggested.item,
+        accountItemSource: f.accountItemSource || suggested.source,
+      }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [craftsmen, showCreateForm]);
 
   const craftsmanUnmatched = !form.craftsmanId && form.craftsmanName.trim() !== "";
-
-  const handleRegisterCraftsman = async () => {
-    setRegisteringCraftsman(true);
-    try {
-      const created = await createCraftsmanByName(form.craftsmanName);
-      setCraftsmen(prev => [created, ...prev]);
-      setForm(f => ({ ...f, craftsmanId: created.id, craftsmanName: created.name }));
-      toast.success(`「${created.name}」を業者マスタに登録しました`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "業者マスタへの登録に失敗しました");
-    } finally {
-      setRegisteringCraftsman(false);
-    }
-  };
 
   const filteredEstimateItems = form.craftsmanName
     ? estimateItems.filter(i => (i.notes ?? "").trim() === form.craftsmanName.trim())
@@ -370,6 +390,9 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
       paymentCount: "1回",
       workContent: "",
       specialNotes: "",
+      department: departments[0] ?? "",
+      accountItem: "",
+      accountItemSource: "",
     });
     setCustomSchedule([]);
     setShowCreateForm(true);
@@ -383,23 +406,6 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
       await deleteContractorOrder(id);
       setOrders(prev => prev.filter(o => o.id !== id));
     } catch (e) { console.error(e); } finally { setDeletingId(null); }
-  }
-
-  async function handleStatusChange(id: string, status: "draft" | "submitted" | "approved" | "rejected") {
-    const prev = orders;
-    const target = prev.find(o => o.id === id);
-    if (!target || target.status === status) return;
-    setOrders(prev.map(o => o.id === id ? { ...o, status } : o));
-    try {
-      await updateContractorOrder(id, { status });
-      toast.success(`ステータスを「${ORDER_STATUS_MAP[status].label}」に変更しました`);
-    } catch (e) {
-      console.error(e);
-      setOrders(prev);
-      toast.error("ステータスの更新に失敗しました", {
-        description: "権限または通信エラーの可能性があります",
-      });
-    }
   }
 
   const openSubmitDialog = (order: OrderRow) => {
@@ -502,7 +508,16 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     }
   }
 
-  const total = orders.reduce((s, o) => s + o.amount, 0);
+  const visibleOrders = orders.filter((o) => {
+    const display = deriveOrderDisplayStatus(o);
+    if (listStatus !== "all" && display !== listStatus) return false;
+    if (listDept !== "all" && (o.department ?? "") !== listDept) return false;
+    if (unsetAccountOnly && o.account_item) return false;
+    return true;
+  });
+  const total = visibleOrders.reduce((s, o) => s + o.amount, 0);
+  const unsetAccountCount = orders.filter((o) => !o.account_item).length;
+  const unsetVendorCount = orders.filter((o) => !o.craftsman?.name).length;
 
   /* ---- 発注書作成フォーム（フルパネル） ---- */
   if (showCreateForm) {
@@ -526,18 +541,40 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
           {/* Row 1: 発注先業者 | 発注日 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>発注先業者</Label>
-              <div className="flex gap-2">
+              <Label className="flex items-center gap-2">
+                発注先業者
+                {craftsmanUnmatched && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">未登録</span>
+                )}
+              </Label>
+              {craftsmanUnmatched ? (
+                <div className="space-y-1.5">
+                  <div className="h-10 rounded-md border bg-muted/40 px-3 flex items-center text-sm">
+                    {form.craftsmanName}
+                  </div>
+                  <p className="text-[11px] text-orange-600">
+                    「{form.craftsmanName}」は業者マスタに登録されていません。表示するだけで、担当者は登録も変更もできません（マスタの管理は管理者・事務）。
+                  </p>
+                </div>
+              ) : (
                 <Select
                   value={form.craftsmanId || undefined}
                   onValueChange={v => {
                     const id = v === "__none__" ? "" : v;
                     const name = craftsmen.find(c => c.id === id)?.name ?? "";
-                    setForm(f => ({ ...f, craftsmanId: id, craftsmanName: name, title: name || f.title }));
+                    const suggested = suggestAccountItem(name);
+                    setForm(f => ({
+                      ...f,
+                      craftsmanId: id,
+                      craftsmanName: name,
+                      title: name || f.title,
+                      accountItem: suggested.item,
+                      accountItemSource: suggested.source,
+                    }));
                   }}
                 >
                   <SelectTrigger className="flex-1">
-                    <SelectValue placeholder={craftsmanUnmatched ? `（マスタ未登録: ${form.craftsmanName}）` : "業者を選択"} />
+                    <SelectValue placeholder="業者を選択" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">指定なし</SelectItem>
@@ -546,23 +583,6 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                     ))}
                   </SelectContent>
                 </Select>
-                {craftsmanUnmatched && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-1 shrink-0 text-xs"
-                    onClick={handleRegisterCraftsman}
-                    disabled={registeringCraftsman}
-                  >
-                    {registeringCraftsman ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-                    業者マスタに登録
-                  </Button>
-                )}
-              </div>
-              {craftsmanUnmatched && (
-                <p className="text-[11px] text-amber-600">
-                  「{form.craftsmanName}」は業者マスタに未登録です。一覧から選択するか、マスタに登録してください。
-                </p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -606,6 +626,49 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                   {PAYMENT_COUNT_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 space-y-3">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>部門</Label>
+                <Select
+                  value={form.department || undefined}
+                  onValueChange={v => setForm(f => ({ ...f, department: v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="部門を選択" /></SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">帳票データの部門別集計に使います。</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-2">
+                  勘定科目
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">任意</span>
+                </Label>
+                <Select
+                  value={form.accountItem || undefined}
+                  onValueChange={v => setForm(f => ({ ...f, accountItem: v, accountItemSource: "manual" }))}
+                >
+                  <SelectTrigger>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      <SelectValue placeholder="未設定（経理が後から確定）" />
+                      {form.accountItemSource === "ai" && form.accountItem && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 shrink-0">✦ AIが入れた候補</span>
+                      )}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accountItems.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              勘定科目は任意です。担当者が空でも作成でき、未設定は経理の「勘定科目の確定」で後からまとめます。帳票データ（全銀）に出す前に未設定があると警告します。
             </div>
           </div>
 
@@ -668,7 +731,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
           <div className="space-y-1.5">
             <Label>
               明細項目
-              <span className="text-[11px] text-muted-foreground font-normal ml-2">（見積もりより自動取得）</span>
+              <span className="text-[11px] text-muted-foreground font-normal ml-2">（見積もりより自動取得。勘定科目は発注書単位で1つ）</span>
             </Label>
             {loadingItems ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
@@ -790,6 +853,9 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                   paymentCount: form.paymentCount || undefined,
                   workContent: form.workContent || undefined,
                   specialNotes: form.specialNotes || undefined,
+                  department: form.department || undefined,
+                  accountItem: form.accountItem || undefined,
+                  accountItemSource: form.accountItemSource || undefined,
                   customPaymentSchedule: scheduledItems,
                 });
                 setOrders(prev => [created as OrderRow, ...prev]);
@@ -814,8 +880,51 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{orders.length} 件（行クリックで詳細を表示）</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={listStatus} onValueChange={setListStatus}>
+            <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="ステータス" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">ステータス: すべて</SelectItem>
+              {Object.entries(ORDER_DISPLAY_STATUS_META).map(([k, v]) => (
+                <SelectItem key={k} value={k}>{v.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={listDept}
+            onValueChange={setListDept}
+            onOpenChange={(open) => {
+              if (open && departments.length === 0) {
+                getProcurementMasters().then((m) => setDepartments(m.departments)).catch(() => {});
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="部門" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">部門: すべて</SelectItem>
+              {departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            onClick={() => setUnsetAccountOnly((v) => !v)}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium transition-colors",
+              unsetAccountOnly
+                ? "bg-amber-50 border-amber-300 text-amber-900"
+                : "bg-white border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className={cn(
+              "h-3.5 w-3.5 rounded-[3px] border flex items-center justify-center",
+              unsetAccountOnly ? "bg-amber-500 border-amber-500 text-white" : "border-slate-300 bg-white",
+            )}>
+              {unsetAccountOnly && <CheckCircle2 className="h-3 w-3" />}
+            </span>
+            勘定科目が未設定のみ
+          </button>
+        </div>
         <div className="flex gap-2">
           {estimateId && (
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleImportFromEstimate} disabled={importing}>
@@ -823,7 +932,10 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
               見積から一括作成
             </Button>
           )}
-          <Button size="sm" className="gap-1.5 text-xs" onClick={openCreateForm}>
+          <Button asChild variant="outline" size="sm" className="text-xs">
+            <Link href="/fulfillment">納品・検収</Link>
+          </Button>
+          <Button size="sm" className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={openCreateForm}>
             <Plus className="h-3.5 w-3.5" />発注書を追加
           </Button>
         </div>
@@ -838,20 +950,33 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
       ) : (
         <Card variant="inset">
           <CardContent className="p-0">
-            <div className="px-2 pb-2 pt-0.5">
-            <table className="w-full text-sm" style={{ borderCollapse: "separate", borderSpacing: "0 4px" }}>
+            <div className="px-4 py-3 border-b border-border/70">
+              <p className="text-sm font-semibold">発注書・請書</p>
+            </div>
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr>
-                  <th className="text-left px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">件名</th>
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-28">業者</th>
-                  <th className="text-center px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-24">ステータス</th>
-                  <th className="text-right px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-28">発注金額</th>
-                  <th className="w-56" />
+                <tr className="bg-slate-50 border-b border-border/70">
+                  <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider whitespace-nowrap">発注No</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider">件名（工種・内容）</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider w-36 whitespace-nowrap">業者名</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider w-24 whitespace-nowrap">部門</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider w-32 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      勘定科目
+                      <span className="text-[9px] font-semibold px-1 py-px rounded bg-slate-200 text-slate-600">任意</span>
+                    </span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider w-28 whitespace-nowrap">発注金額</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider w-24 whitespace-nowrap">支払予定日</th>
+                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-muted-foreground tracking-wider w-20 whitespace-nowrap">ステータス</th>
+                  <th className="w-40" />
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => {
-                  const st = ORDER_STATUS_MAP[order.status as keyof typeof ORDER_STATUS_MAP] ?? ORDER_STATUS_MAP.draft;
+                {visibleOrders.map((order) => {
+                  const display = deriveOrderDisplayStatus(order);
+                  const st = ORDER_DISPLAY_STATUS_META[display];
                   const schedule = order.payment_schedule?.length
                     ? order.payment_schedule
                     : buildPaymentSchedule(order.amount, order.payment_count ?? "1回", order.start_date, order.end_date);
@@ -860,46 +985,72 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                   return (
                     <React.Fragment key={order.id}>
                     <tr
-                      className="glass-row group cursor-pointer"
+                      className="group cursor-pointer border-b border-border/60 hover:bg-slate-50/80"
                       onClick={() => setExpandedId(isExpanded ? null : order.id)}
                       title="クリックで詳細を表示"
                     >
-                      <td className="px-4 py-3 rounded-l-[10px]">
+                      <td className="px-4 py-3 font-mono text-xs text-blue-700 whitespace-nowrap">
+                        {order.po_no ?? "—"}
+                      </td>
+                      <td className="px-3 py-3">
                         <p className="font-medium flex items-center gap-1.5">
                           {order.title}
+                          {order.work_content ? `（${order.work_content}）` : ""}
                           {isExpanded
                             ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
                             : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
                         </p>
                         {order.notes && <p className="text-xs text-muted-foreground mt-0.5">{order.notes}</p>}
                       </td>
-                      <td className="px-3 py-3 text-sm text-muted-foreground">
-                        {order.craftsman?.name ?? "—"}
+                      <td className="px-3 py-3 text-sm">
+                        {order.craftsman?.name ?? (
+                          <span className="inline-flex items-center text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                            ⚠️ 業者が未設定
+                          </span>
+                        )}
                       </td>
-                      <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
-                        <Select
-                          value={order.status}
-                          onValueChange={(v) => handleStatusChange(order.id, v as "draft" | "submitted" | "approved" | "rejected")}
-                        >
-                          <SelectTrigger
-                            title="クリックでステータスを変更"
-                            className={`h-7 text-[11px] font-semibold pl-2.5 pr-1.5 gap-1 cursor-pointer rounded-full border ${st.cls} hover:brightness-95 hover:shadow-sm transition-all`}
+                      <td className="px-3 py-3 text-xs">{order.department ?? "—"}</td>
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        {canEditAccount ? (
+                          <Select
+                            value={order.account_item || "__unset"}
+                            onValueChange={async (v) => {
+                              const next = v === "__unset" ? null : v;
+                              setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, account_item: next, account_item_source: "accounting" } : o));
+                              try {
+                                await updateOrderAccountItem(order.id, next);
+                              } catch {
+                                toast.error("勘定科目の更新に失敗しました");
+                              }
+                            }}
                           >
-                            <span>{st.label}</span>
-                          </SelectTrigger>
-                          <SelectContent align="center">
-                            {Object.entries(ORDER_STATUS_MAP).map(([val, { label, cls }]) => (
-                              <SelectItem key={val} value={val} className="text-xs">
-                                <span className={`px-1.5 py-0.5 rounded-full ${cls}`}>{label}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                            <SelectTrigger className={cn(
+                              "h-7 w-auto min-w-[4.5rem] text-[11px] shadow-none",
+                              order.account_item
+                                ? "border-transparent bg-transparent px-1"
+                                : "border-amber-200 bg-amber-50 text-amber-800 font-semibold",
+                            )}>
+                              <SelectValue placeholder="未設定" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__unset">未設定</SelectItem>
+                              {accountItems.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : order.account_item ? (
+                          <span className="text-xs">{order.account_item}</span>
+                        ) : (
+                          <span className="inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">未設定</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                        ¥{order.amount.toLocaleString()}
+                      <td className="px-3 py-3 text-right tabular-nums font-semibold whitespace-nowrap">
+                        {yen(order.amount)}
                       </td>
-                      <td className="pr-2 py-3 rounded-r-[10px]" onClick={e => e.stopPropagation()}>
+                      <td className="px-3 py-3 text-xs whitespace-nowrap">{order.payment_date ? order.payment_date.replaceAll("-", "/") : "—"}</td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                      </td>
+                      <td className="pr-3 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1 justify-end">
                           {order.status === "draft" && (
                             <button
@@ -931,14 +1082,10 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                               </button>
                             </>
                           )}
-                          <button
-                            className="text-[10px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap inline-flex items-center gap-1"
-                            onClick={() => void handleCopyPartnerLink(order)}
-                            title="外部協力業者向けURLをコピー"
-                          >
-                            <Link2 className="h-3 w-3" />業者URL
-                          </button>
-                          {order.status === "approved" && (
+                          {display === "sent" && (
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">署名待ち</span>
+                          )}
+                          {order.status === "approved" && display !== "sent" && display !== "concluded" && (
                             <button
                               className="text-[10px] font-semibold px-2 py-1 rounded bg-sky-500 text-white hover:bg-sky-600 transition-colors whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-50"
                               onClick={() => handleSendCloudSign(order)}
@@ -949,28 +1096,37 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                               CloudSign送信
                             </button>
                           )}
-                          <button
-                            className="text-[10px] font-semibold px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap opacity-0 group-hover:opacity-100"
-                            onClick={() => setPdfPreviewOrder(order)}
-                            title="発注書をプレビュー"
-                          >
-                            PDF確認
-                          </button>
-                          <button
-                            className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                            onClick={() => handleDelete(order.id)}
-                            disabled={deletingId === order.id}
-                          >
-                            {deletingId === order.id
-                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              : <Trash2 className="h-3.5 w-3.5" />}
-                          </button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="p-1 rounded hover:bg-slate-100 text-slate-500"
+                                title="その他の操作"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => void handleCopyPartnerLink(order)}>
+                                <Link2 className="h-3.5 w-3.5" />業者URL
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setPdfPreviewOrder(order)}>
+                                <FileText className="h-3.5 w-3.5" />PDF確認
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                disabled={deletingId === order.id}
+                                onClick={() => handleDelete(order.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />削除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr className="bg-muted/20">
-                        <td colSpan={5} className="px-4 py-3">
+                        <td colSpan={9} className="px-4 py-3">
                           <div className="space-y-3 text-xs">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
                               <div><span className="text-muted-foreground">発注先：</span>{order.craftsman?.name ?? "指定なし"}</div>
@@ -1022,10 +1178,26 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                 })}
               </tbody>
               <tfoot>
-                <tr>
-                  <td colSpan={3} className="px-4 pt-1 pb-3 text-sm font-semibold text-right text-muted-foreground">合計発注額</td>
-                  <td className="px-4 pt-1 pb-3 text-right tabular-nums font-bold">¥{total.toLocaleString()}</td>
-                  <td />
+                <tr className="border-t border-border bg-slate-50/80">
+                  <td colSpan={5} className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">{visibleOrders.length}件</span>
+                      {unsetAccountCount > 0 && (
+                        <span className="inline-flex items-center font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800">
+                          ⚠️ 勘定科目未確定 {unsetAccountCount}件
+                        </span>
+                      )}
+                      {unsetVendorCount > 0 && (
+                        <span className="inline-flex items-center font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-600 border border-red-200">
+                          ⚠️ 業者が未設定 {unsetVendorCount}件
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td colSpan={4} className="px-4 py-3 text-right whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground mr-2">合計発注額</span>
+                    <span className="tabular-nums font-bold text-blue-700">{yen(total)}</span>
+                  </td>
                 </tr>
               </tfoot>
             </table>

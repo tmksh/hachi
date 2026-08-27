@@ -161,7 +161,7 @@ export function ContractWorkflowTab({
           <div className="rounded-lg border bg-muted/30 p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
             <div><span className="text-muted-foreground text-xs">テンプレート</span><p className="font-medium">{template?.name ?? "工事請負契約書"}</p></div>
             <div><span className="text-muted-foreground text-xs">発注者（甲）</span><p className="font-medium">{String(form.kou_name ?? data.customer?.name ?? "—")}</p></div>
-            <div><span className="text-muted-foreground text-xs">工事名称</span><p className="font-medium">{String(form.work_name ?? data.title)}</p></div>
+            <div><span className="text-muted-foreground text-xs">名称</span><p className="font-medium">{String(form.work_name ?? data.title)}</p></div>
             <div><span className="text-muted-foreground text-xs">契約金額</span><p className="font-medium tabular-nums">¥{totalAmount.toLocaleString()}</p></div>
             {(form.start_date || form.end_date || data.start_date || data.end_date) && (
               <div className="sm:col-span-2">
@@ -279,7 +279,7 @@ export function ContractWorkflowTab({
                 <p>契約書の内容を確定し、ポータルで設定した承認ルートどおりに申請します。</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>テンプレート: {template?.name ?? "—"}</li>
-                  <li>工事名称: {String(form.work_name ?? data.title)}</li>
+                  <li>名称: {String(form.work_name ?? data.title)}</li>
                   <li>契約金額: ¥{totalAmount.toLocaleString()}</li>
                 </ul>
                 {wfTypes.length > 0 ? (

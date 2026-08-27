@@ -238,7 +238,7 @@ function ConstructionNewPageContent({
       return;
     }
     if (!title.trim()) {
-      toast.error("工事名を入力してください");
+      toast.error("名称を入力してください");
       return;
     }
 
@@ -369,7 +369,7 @@ function ConstructionNewPageContent({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-3 gap-y-2.5">
             <div className="space-y-1 sm:col-span-2 lg:col-span-3 xl:col-span-4">
-              <Label className="text-xs">工事名 *</Label>
+              <Label className="text-xs">名称 *</Label>
               <Input
                 className="h-8"
                 value={title}

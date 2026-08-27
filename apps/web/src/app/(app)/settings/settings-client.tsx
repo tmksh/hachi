@@ -1318,7 +1318,26 @@ export function SettingsClient({
                     ...customRoles.map((cr) => ({ key: cr.id, label: cr.name, palette: getCustomerAvatarColor(cr.id) })),
                   ];
                   const featureRows = [
-                    ...NAV_GROUPS.flatMap((g, gi) => g.items.map((item, idx) => ({ key: item.key, label: item.label, group: idx === 0 ? g.label : null, groupStart: idx === 0, gi }))),
+                    ...NAV_GROUPS.flatMap((g, gi) => {
+                      const rows = g.items.map((item, idx) => ({
+                        key: item.key,
+                        label: item.label,
+                        group: idx === 0 ? g.label : null,
+                        groupStart: idx === 0,
+                        gi,
+                      }));
+                      const fulfillIdx = rows.findIndex((r) => r.key === "fulfillment");
+                      if (fulfillIdx >= 0) {
+                        rows.splice(fulfillIdx + 1, 0, {
+                          key: "fulfillment_approve",
+                          label: "納品・検収の経理承認",
+                          group: null,
+                          groupStart: false,
+                          gi,
+                        });
+                      }
+                      return rows;
+                    }),
                     { key: "settings_member", label: "メンバー管理", group: "設定・管理", groupStart: true, gi: 99 },
                     { key: "settings_company", label: "会社情報編集", group: null, groupStart: false, gi: 99 },
                     { key: "settings_attendance", label: "勤怠設定", group: null, groupStart: false, gi: 99 },

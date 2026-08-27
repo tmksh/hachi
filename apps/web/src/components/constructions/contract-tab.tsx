@@ -34,7 +34,8 @@ import {
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
 import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
 import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
-import type { FillContext, PdfFormTemplate } from "@/lib/pdf-form-template";
+import { buildFillContext, type PdfFormTemplate } from "@/lib/pdf-form-template";
+import type { Customer } from "@/lib/database.types";
 import { PdfFormFiller } from "@/components/settings/pdf-form-filler";
 
 type ContractDoc = {
@@ -53,6 +54,8 @@ type ContractDoc = {
 interface Props {
   constructionId: string;
   customerId?: string | null;
+  constructionNo?: string | null;
+  fillCustomer?: Customer | null;
   initialDocs: ContractDoc[];
   ctx: RenderContext;
 }
@@ -65,7 +68,7 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   cancelled:  { label: "キャンセル", cls: "bg-red-100 text-red-600"     },
 };
 
-export function ContractTab({ constructionId, customerId, initialDocs, ctx }: Props) {
+export function ContractTab({ constructionId, customerId, constructionNo, fillCustomer, initialDocs, ctx }: Props) {
   const [docs, setDocs] = useState<ContractDoc[]>(initialDocs);
   const [picker, setPicker] = useState(false);
   const [editing, setEditing] = useState<ContractDoc | null>(null);
@@ -79,14 +82,14 @@ export function ContractTab({ constructionId, customerId, initialDocs, ctx }: Pr
     getPdfFormTemplates().then(setFormTemplates).catch(() => {});
   }, []);
 
-  const fillCtx: FillContext = useMemo(() => ({
+  const fillCtx = useMemo(() => buildFillContext({
     constructionTitle: ctx.construction?.title ?? null,
+    constructionNo: constructionNo ?? null,
     orderAmount: ctx.construction?.order_amount ?? null,
     startDate: ctx.construction?.start_date ?? null,
     endDate: ctx.construction?.end_date ?? null,
-    customerName: ctx.customer?.name ?? null,
-    customerAddress: ctx.customer?.address ?? null,
-  }), [ctx]);
+    customer: fillCustomer ?? ctx.customer ?? null,
+  }), [ctx, constructionNo, fillCustomer]);
 
   function handleSelectTemplate(tpl: ContractTemplate) {
     setPicker(false);
@@ -275,7 +278,8 @@ function ContractEditor({
   useEffect(() => {
     if (!companyCtx) return;
     setForm((prev) => mergeDefaults(tpl, renderCtx, prev));
-  }, [companyCtx, tpl, renderCtx]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyCtx, tpl]);
 
   useEffect(() => {
     setForm((prev) => mergeDefaults(tpl, renderCtx, prev));

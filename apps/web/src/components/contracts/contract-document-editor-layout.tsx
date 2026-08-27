@@ -40,7 +40,7 @@ export function ContractDocumentEditorLayout({
           </div>
           {groupFields(tpl.fields).map(({ group, fields }) => (
             <ContractFormSection
-              key={group.title}
+              key={`${group.title}-${fields.map((f) => f.name).join("-")}`}
               title={group.title}
               description={group.description}
               fields={fields}

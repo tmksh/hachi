@@ -93,6 +93,11 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
   const [serviceAreas, setServiceAreas] = useState<string[]>(initialCraftsman.service_areas ?? []);
   const [contractRate, setContractRate] = useState(initialCraftsman.contract_rate != null ? String(initialCraftsman.contract_rate) : "");
   const [paymentNotes, setPaymentNotes] = useState(initialCraftsman.payment_notes ?? "");
+  const [bankName, setBankName] = useState(initialCraftsman.bank_name ?? "");
+  const [bankBranch, setBankBranch] = useState(initialCraftsman.bank_branch ?? "");
+  const [bankAccountType, setBankAccountType] = useState(initialCraftsman.bank_account_type ?? "普通");
+  const [bankAccountNumber, setBankAccountNumber] = useState(initialCraftsman.bank_account_number ?? "");
+  const [bankAccountKana, setBankAccountKana] = useState(initialCraftsman.bank_account_kana ?? "");
 
   const handleSave = async () => {
     if (!name.trim()) { toast.error("名前を入力してください"); return; }
@@ -110,6 +115,11 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
         service_areas: serviceAreas,
         contract_rate: contractRate !== "" ? Number(contractRate) : null,
         payment_notes: paymentNotes || null,
+        bank_name: bankName || null,
+        bank_branch: bankBranch || null,
+        bank_account_type: bankAccountType || null,
+        bank_account_number: bankAccountNumber || null,
+        bank_account_kana: bankAccountKana || null,
       });
       toast.success("更新しました");
       router.push(`/craftsmen/${id}`);
@@ -195,6 +205,27 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
                 onChange={e => setPaymentNotes(e.target.value)}
                 placeholder="例: 翌月末払い、月末締め翌25日払い"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>振込先銀行</Label>
+              <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="三菱UFJ銀行" />
+            </div>
+            <div className="space-y-2">
+              <Label>支店</Label>
+              <Input value={bankBranch} onChange={e => setBankBranch(e.target.value)} placeholder="新宿支店" />
+            </div>
+            <div className="space-y-2">
+              <Label>預金種目</Label>
+              <Input value={bankAccountType} onChange={e => setBankAccountType(e.target.value)} placeholder="普通" />
+            </div>
+            <div className="space-y-2">
+              <Label>口座番号</Label>
+              <Input value={bankAccountNumber} onChange={e => setBankAccountNumber(e.target.value)} placeholder="1234567" />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>受取人名（カナ）</Label>
+              <Input value={bankAccountKana} onChange={e => setBankAccountKana(e.target.value)} placeholder="ﾀﾅｶｹﾝｾﾂ" />
+              <p className="text-[11px] text-muted-foreground">帳票データ（全銀）の振込先に使います。未登録だと出力できません。</p>
             </div>
           </div>
         </CardContent>

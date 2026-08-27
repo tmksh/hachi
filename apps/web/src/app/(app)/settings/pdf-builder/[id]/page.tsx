@@ -1,4 +1,5 @@
 import {
+  getCustomerCustomFieldKeys,
   getPdfFormTemplates,
   getPdfFormTemplateUrl,
 } from "@/lib/actions/pdf-form-templates";
@@ -19,8 +20,10 @@ export default async function PdfBuilderEditPage({
 
   const templates = await getPdfFormTemplates();
   const initialTemplate = isNew ? null : templates.find((t) => t.id === id) ?? null;
-  const initialPdfUrl =
-    initialTemplate ? await getPdfFormTemplateUrl(initialTemplate.storagePath) : null;
+  const [initialPdfUrl, customFieldKeys] = await Promise.all([
+    initialTemplate ? getPdfFormTemplateUrl(initialTemplate.storagePath) : Promise.resolve(null),
+    getCustomerCustomFieldKeys().catch(() => [] as string[]),
+  ]);
 
   return (
     <PdfBuilderEditClient
@@ -28,6 +31,7 @@ export default async function PdfBuilderEditPage({
       initDocType={initDocType}
       initialTemplate={initialTemplate}
       initialPdfUrl={initialPdfUrl}
+      customFieldKeys={customFieldKeys}
     />
   );
 }

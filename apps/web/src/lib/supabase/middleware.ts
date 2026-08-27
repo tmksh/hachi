@@ -10,7 +10,7 @@ import {
 /** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
 const LEGACY_ROUTE_PREFIXES = [
   "/bi", "/bi2", "/crm", "/deals", "/quotes", "/craftsmen",
-  "/contracts", "/constructions", "/invoices", "/budget", "/marketing",
+  "/contracts", "/constructions", "/fulfillment", "/ledger", "/account-items", "/invoices", "/budget", "/marketing",
 ];
 
 // ── サブドメイン予約語（これらは会社 slug として使えない） ───────────────────────

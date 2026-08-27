@@ -56,7 +56,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "kou_address",     label: "甲の住所",           type: "text",     required: true,  placeholder: "東京都世田谷区..." },
       { name: "otsu_name",       label: "請負者（乙）",       type: "text",     required: true,  placeholder: "○○建設株式会社" },
       { name: "otsu_address",    label: "乙の住所",           type: "text",     required: true,  placeholder: "東京都新宿区..." },
-      { name: "work_name",       label: "工事名称",           type: "text",     required: true,  placeholder: "○○邸 新築工事" },
+      { name: "work_name",       label: "名称",               type: "text",     required: true,  placeholder: "○○邸 新築 / サイン制作 など" },
       { name: "work_location",   label: "工事場所",           type: "text",     placeholder: "工事を行う場所（甲の住所と同じ場合は空欄可）" },
       { name: "amount_excl_tax", label: "請負金額（税抜・円）", type: "number" },
       { name: "tax_rate",        label: "消費税率（%）",      type: "number" },
@@ -65,7 +65,9 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "payment_terms",   label: "支払条件",           type: "textarea", placeholder: "着工時30%、上棟時30%、完成引渡時40%" },
       { name: "warranty_years",  label: "瑕疵担保期間（年）", type: "number",   placeholder: "10" },
       { name: "warranty_include",label: "瑕疵担保条項を含める", type: "toggle" },
-      { name: "special_notes",   label: "特記事項",           type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea", placeholder: "テンプレート既定の特記事項" },
+      { name: "special_notes",   label: "特記事項（この案件で変わる部分）", type: "textarea", placeholder: "案件ごとに変わる特記事項" },
+      { name: "esign_only",      label: "電子文書として締結する", type: "toggle" },
     ],
   },
   {
@@ -85,7 +87,9 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "start_date",    label: "業務開始日",       type: "date",     synced: true },
       { name: "end_date",      label: "業務完了日",       type: "date",     synced: true },
       { name: "scope",         label: "業務範囲",         type: "textarea", placeholder: "基本設計、実施設計、確認申請、工事監理" },
-      { name: "special_notes", label: "特記事項",         type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea" },
+      { name: "special_notes", label: "特記事項（この案件で変わる部分）", type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "esign_only",    label: "電子文書として締結する", type: "toggle" },
     ],
   },
   {
@@ -98,14 +102,16 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "kou_address",     label: "甲の住所",       type: "text",     required: true },
       { name: "otsu_name",       label: "請負者（乙）",   type: "text",     required: true },
       { name: "otsu_address",    label: "乙の住所",       type: "text",     required: true },
-      { name: "original_work",   label: "原契約工事名",   type: "text",     required: true },
+      { name: "original_work",   label: "原契約名称",   type: "text",     required: true },
       { name: "original_date",   label: "原契約締結日",   type: "date" },
-      { name: "work_name",       label: "工事名称",       type: "text",     required: true, placeholder: "○○邸 新築工事" },
+      { name: "work_name",       label: "名称",           type: "text",     required: true, placeholder: "○○邸 新築工事" },
       { name: "change_summary",  label: "変更内容",       type: "textarea", required: true, placeholder: "・○○の追加\n・□□の仕様変更" },
       { name: "amount_excl_tax", label: "追加金額（税抜・円）", type: "number" },
       { name: "tax_rate",        label: "消費税率（%）",  type: "number" },
       { name: "end_date",        label: "変更後工期終了日", type: "date",   synced: true },
-      { name: "special_notes",   label: "特記事項",       type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea" },
+      { name: "special_notes",   label: "特記事項（この案件で変わる部分）", type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "esign_only",      label: "電子文書として締結する", type: "toggle" },
     ],
   },
 ];
@@ -164,8 +170,16 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
       case "payment_terms":
         v[f.name] = "着工時30%、上棟時30%、完成引渡時40%";
         break;
+      case "special_notes_fixed":
+        v[f.name] = template.id === "construction_contract"
+          ? "本契約は、工期の着手日から効力を成す。\n本契約に定めのない事項は、関係法令および信義誠実の原則により協議のうえ定める。"
+          : "本契約に定めのない事項は、関係法令および信義誠実の原則により協議のうえ定める。";
+        break;
       case "special_notes":
         v[f.name] = "";
+        break;
+      case "esign_only":
+        v[f.name] = 1;
         break;
       default:
         v[f.name] = (f.type === "number" || f.type === "toggle") ? 0 : "";
@@ -194,7 +208,10 @@ export function syncFromContext(form: FormValues, ctx: RenderContext): FormValue
     next.kou_address = ctx.customer.address;
     if (!next.work_location) next.work_location = ctx.customer.address;
   }
-  if (ctx.construction?.title) next.work_name = ctx.construction.title;
+  if (ctx.construction?.title) {
+    next.work_name = ctx.construction.title;
+    if (!next.original_work) next.original_work = ctx.construction.title;
+  }
   if (ctx.construction?.order_amount != null) next.amount_excl_tax = ctx.construction.order_amount;
   if (ctx.construction?.start_date) next.start_date = ctx.construction.start_date;
   if (ctx.construction?.end_date) next.end_date = ctx.construction.end_date;
@@ -213,8 +230,12 @@ export function mergeDefaults(
   const merged: FormValues = { ...defaults };
   for (const f of template.fields) {
     const cur = current[f.name];
-    const hasValue = cur !== undefined && cur !== "" && cur !== 0;
-    if (hasValue) merged[f.name] = cur;
+    if (cur === undefined || cur === null || cur === "") continue;
+    if (f.type === "toggle") {
+      merged[f.name] = cur === 0 || cur === false || cur === "0" ? 0 : 1;
+      continue;
+    }
+    merged[f.name] = cur;
   }
   return merged;
 }
@@ -239,6 +260,33 @@ function getNum(v: FormValues, k: string): number {
   return typeof x === "number" ? x : Number(x) || 0;
 }
 
+function specialNotesBlock(values: FormValues): string {
+  const fixed = getStr(values, "special_notes_fixed");
+  const extra = getStr(values, "special_notes");
+  const parts: string[] = [];
+  if (fixed) {
+    parts.push(`<p class="text-[11px] text-gray-500 mb-1">（テンプレート固定）</p><p class="whitespace-pre-line">${fixed}</p>`);
+  }
+  if (extra) {
+    parts.push(`<p class="text-[11px] text-gray-500 mt-2 mb-1">（本件）</p><p class="whitespace-pre-line">${extra}</p>`);
+  }
+  if (parts.length === 0) {
+    parts.push(`<p class="whitespace-pre-line min-h-[48px]"></p>`);
+  }
+  return `<div>
+    <h3 class="font-bold mb-2">【特記事項】</h3>
+    ${parts.join("")}
+    <p class="border-b border-gray-300 pb-2"></p>
+  </div>`;
+}
+
+function closingClause(values: FormValues): string {
+  const esign = getNum(values, "esign_only") !== 0;
+  return esign
+    ? `<p class="text-sm mt-6">上記の契約を証するため、電子文書を作成し、甲乙双方がこれを保管する。</p>`
+    : `<p class="text-sm mt-6">上記の契約を証するため、本書2通を作成し、甲乙記名捺印の上、各1通を保有する。</p>`;
+}
+
 export function renderPreview(template: ContractTemplate, values: FormValues, ctx: RenderContext): string {
   const startDate = getStr(values, "start_date") || ctx.construction?.start_date || "—";
   const endDate   = getStr(values, "end_date")   || ctx.construction?.end_date   || "—";
@@ -248,7 +296,6 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     const amount = fmtAmount(getNum(values, "amount_excl_tax"), getNum(values, "tax_rate"));
     const warrantyYears   = getNum(values, "warranty_years") || 10;
     const warrantyInclude = getNum(values, "warranty_include") !== 0;
-    const specialNotes = getStr(values, "special_notes");
     return `
 <div class="space-y-6 text-[13px] leading-relaxed">
   <h2 class="text-center text-xl font-bold tracking-wider mb-6">工事請負契約書</h2>
@@ -256,7 +303,7 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
 
   <div>
     <h3 class="font-bold mb-2">【第1条】工事概要</h3>
-    <p>工事名称：${getStr(values, "work_name") || "—"}</p>
+    <p>名称：${getStr(values, "work_name") || "—"}</p>
     <p>工事場所：${getStr(values, "work_location") || getStr(values, "kou_address") || "—"}</p>
     <p>工　　期：${period}</p>
   </div>
@@ -278,12 +325,9 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p>乙は、本工事の引渡し後${warrantyYears}年間、瑕疵担保責任を負うものとする。</p>
   </div>` : ""}
 
-  <div>
-    <h3 class="font-bold mb-2">【特記事項】</h3>
-    <p class="whitespace-pre-line border-b border-gray-300 pb-2 min-h-[48px]">${specialNotes || ""}</p>
-  </div>
+  ${specialNotesBlock(values)}
 
-  <p class="text-sm mt-6">上記の契約を証するため、本書2通を作成し、甲乙記名捺印の上、各1通を保有する。</p>
+  ${closingClause(values)}
 
   <p class="text-right text-sm">契約日：${getStr(values, "contract_date") || "—"}</p>
 
@@ -304,7 +348,6 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
 
   if (template.id === "design_supervision") {
     const amount = fmtAmount(getNum(values, "amount_excl_tax"), getNum(values, "tax_rate"));
-    const specialNotes = getStr(values, "special_notes");
     return `
 <div class="space-y-6 text-[13px] leading-relaxed">
   <h2 class="text-center text-xl font-bold tracking-wider mb-6">設計監理業務委託契約書</h2>
@@ -334,12 +377,9 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p class="whitespace-pre-line">${getStr(values, "payment_terms") || "—"}</p>
   </div>
 
-  <div>
-    <h3 class="font-bold mb-2">【特記事項】</h3>
-    <p class="whitespace-pre-line border-b border-gray-300 pb-2 min-h-[48px]">${specialNotes || ""}</p>
-  </div>
+  ${specialNotesBlock(values)}
 
-  <p class="text-sm mt-6">上記の契約を証するため、本書2通を作成し、甲乙記名捺印の上、各1通を保有する。</p>
+  ${closingClause(values)}
 
   <p class="text-right text-sm">契約日：${getStr(values, "contract_date") || "—"}</p>
 
@@ -360,14 +400,13 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
 
   if (template.id === "change_order") {
     const amount = fmtAmount(getNum(values, "amount_excl_tax"), getNum(values, "tax_rate"));
-    const specialNotes = getStr(values, "special_notes");
     return `
 <div class="space-y-6 text-[13px] leading-relaxed">
   <h2 class="text-center text-xl font-bold tracking-wider mb-6">追加変更工事契約書</h2>
   <p>${getStr(values, "kou_name") || "［甲］"}（以下「甲」という）と${getStr(values, "otsu_name") || "［乙］"}（以下「乙」という）は、________工事請負契約書（以下「原契約」という）に基づく下記工事について、追加変更契約を締結する。</p>
 
   <div>
-    <h3 class="font-bold mb-2">【第1条】工事名称</h3>
+    <h3 class="font-bold mb-2">【第1条】名称</h3>
     <p>${getStr(values, "work_name") || "—"}</p>
   </div>
 
@@ -388,12 +427,9 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p>変更後工期終了日：${endDate}</p>
   </div>
 
-  <div>
-    <h3 class="font-bold mb-2">【特記事項】</h3>
-    <p class="whitespace-pre-line border-b border-gray-300 pb-2 min-h-[48px]">${specialNotes || ""}</p>
-  </div>
+  ${specialNotesBlock(values)}
 
-  <p class="text-sm mt-6">上記の契約を証するため、本書2通を作成し、甲乙記名捺印の上、各1通を保有する。</p>
+  ${closingClause(values)}
 
   <p class="text-right text-sm">契約日：${getStr(values, "contract_date") || "—"}</p>
 

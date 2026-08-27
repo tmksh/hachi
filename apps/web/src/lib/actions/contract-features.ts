@@ -831,7 +831,7 @@ export async function submitContractWorkflow(
       template_id: draft?.template_id ?? null,
       契約書: template?.name ?? contract.title ?? title,
       発注者: form.kou_name ?? customerName ?? "",
-      工事名称: form.work_name ?? contract.title ?? title,
+      名称: form.work_name ?? contract.title ?? title,
     };
     if (form.start_date || form.end_date) {
       payload.工期 = `${form.start_date ?? "—"} ～ ${form.end_date ?? "—"}`;

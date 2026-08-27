@@ -154,6 +154,11 @@ export type Craftsman = {
   service_areas: string[];
   contract_rate: number | null;
   payment_notes: string | null;
+  bank_name?: string | null;
+  bank_branch?: string | null;
+  bank_account_type?: string | null;
+  bank_account_number?: string | null;
+  bank_account_kana?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -383,9 +388,45 @@ export type ContractorOrder = {
   work_content: string | null;
   special_notes: string | null;
   payment_schedule: PaymentScheduleItem[];
+  po_no?: string | null;
+  department?: string | null;
+  account_item?: string | null;
+  account_item_source?: string | null;
+  ledger_status?: string | null;
+  delivery_date?: string | null;
+  delivery_content?: string | null;
+  delivery_partial?: string | null;
+  inspection_result?: string | null;
+  inspection_date?: string | null;
+  inspection_comment?: string | null;
+  inspector_name?: string | null;
+  vendor_invoice_no?: string | null;
+  vendor_invoice_date?: string | null;
+  vendor_registration_no?: string | null;
+  vendor_invoice_remarks?: string | null;
+  vendor_invoice_submitted_at?: string | null;
+  director_confirmed_at?: string | null;
+  accounting_approved_at?: string | null;
+  invoice_token?: string | null;
+  invoice_token_expires_at?: string | null;
+  clouds_sign_sent_at?: string | null;
+  concluded_at?: string | null;
+  delivery_attachments?: Array<{ path: string; name: string; contentType?: string; size?: number }> | null;
+  vendor_invoice_pdf_path?: string | null;
+  parent_order_id?: string | null;
+  lot_no?: number | null;
   created_at: string;
   updated_at: string;
-  craftsman?: { id: string; name: string };
+  craftsman?: {
+    id: string;
+    name: string;
+    email?: string | null;
+    bank_name?: string | null;
+    bank_branch?: string | null;
+    bank_account_type?: string | null;
+    bank_account_number?: string | null;
+    bank_account_kana?: string | null;
+  };
 };
 
 export type AttendanceEntry = {

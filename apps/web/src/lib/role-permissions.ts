@@ -40,6 +40,9 @@ export const ROUTE_FEATURE_KEYS: Array<{ prefix: string; featureKey: string }> =
   { prefix: "/craftsmen", featureKey: "craftsmen" },
   { prefix: "/contracts", featureKey: "contracts" },
   { prefix: "/constructions", featureKey: "constructions" },
+  { prefix: "/fulfillment", featureKey: "fulfillment" },
+  { prefix: "/ledger", featureKey: "ledger" },
+  { prefix: "/account-items", featureKey: "account-items" },
   { prefix: "/invoices", featureKey: "invoices" },
   { prefix: "/budget", featureKey: "budget" },
   { prefix: "/calendar", featureKey: "calendar" },
@@ -57,7 +60,7 @@ export function buildDefaultRolePermissions(): RolePermissions {
   const result: RolePermissions = {};
   const allKeys = [
     "dashboard", "bi", "bi2", "leads", "crm", "deals", "quotes", "craftsmen",
-    "contracts", "constructions", "invoices", "budget",
+    "contracts", "constructions", "fulfillment", "ledger", "account-items", "invoices", "budget",
     "calendar", "mail", "attendance", "workflow", "circulation", "documents",
   ];
   allKeys.forEach((key) => {
@@ -68,6 +71,10 @@ export function buildDefaultRolePermissions(): RolePermissions {
   });
   // 決算書（No.85/103）: 本部管理者・管理者・経営層のみ
   result.financials = ["hq_admin", "admin", "executive"];
+  result.fulfillment = ["hq_admin", "contractor_admin", "admin", "sales", "field_manager", "administration", "executive"];
+  result.ledger = ["hq_admin", "contractor_admin", "admin", "administration", "executive"];
+  result["account-items"] = ["hq_admin", "admin", "administration", "executive"];
+  result.fulfillment_approve = ["hq_admin", "admin", "administration", "executive"];
   result["marketing-email"] = ["hq_admin"];
   result["marketing-sns"] = ["hq_admin"];
   result["marketing-roi"] = ["hq_admin"];

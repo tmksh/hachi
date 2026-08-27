@@ -39,7 +39,8 @@ const FIELD_GROUP_DEFS: FieldGroup[] = [
   { title: "工事・業務", names: ["work_name", "work_location", "original_work", "change_summary", "scope"] },
   { title: "金額・工期", description: "工期は工程表と連携されます", names: ["amount_excl_tax", "tax_rate", "start_date", "end_date"] },
   { title: "支払・条件", names: ["payment_terms", "warranty_years", "warranty_include"] },
-  { title: "その他", names: ["special_notes"] },
+  { title: "特記事項", names: ["special_notes_fixed", "special_notes"] },
+  { title: "締結方法", names: ["esign_only"] },
 ];
 
 export function groupFields(fields: TemplateField[]): { group: FieldGroup; fields: TemplateField[] }[] {
@@ -88,7 +89,9 @@ export function ContractFormField({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className={cn("text-xs font-medium", isChecked ? "text-green-600" : "text-muted-foreground")}>
-            {isChecked ? "有効" : "無効"}
+            {field.name === "esign_only"
+              ? (isChecked ? "電子文書" : "書面（2通）")
+              : (isChecked ? "有効" : "無効")}
           </span>
           <Switch checked={isChecked} onCheckedChange={v => onChange(v ? 1 : 0)} />
         </div>

@@ -127,7 +127,7 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="工事名・顧客名で検索..."
+            placeholder="名称・顧客名で検索..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -190,7 +190,7 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
                   <TableRow>
                     <TableHead>顧客名</TableHead>
                     <TableHead>工事番号</TableHead>
-                    <TableHead>件名</TableHead>
+                    <TableHead>名称</TableHead>
                     <TableHead className="text-right">受注額</TableHead>
                     <TableHead>工期</TableHead>
                     <TableHead className="w-[120px]">進捗</TableHead>

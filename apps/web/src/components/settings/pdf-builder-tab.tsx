@@ -58,7 +58,7 @@ export function PdfBuilderTab() {
             契約書テンプレート
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            自社のPDFをアップロードして、顧客名・工事名・金額などを自動入力するテンプレートを作成します。
+            自社のPDFをアップロードして、顧客名・名称・金額などを自動入力するテンプレートを作成します。
           </p>
         </div>
         <Button size="sm" asChild className="shrink-0">

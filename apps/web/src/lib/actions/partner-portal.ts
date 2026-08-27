@@ -90,7 +90,26 @@ export async function acceptPartnerOrder(token: string): Promise<ActionResult<{ 
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.rpc("accept_partner_order_by_token", { p_token: token.trim() });
-    if (!error && data === true) return actionOk({ accepted: true as const });
+    if (!error && data === true) {
+      try {
+        const admin = createAdminClient();
+        const { data: access } = await admin
+          .from("partner_access_tokens")
+          .select("contractor_order_id")
+          .eq("token", token.trim())
+          .maybeSingle();
+        if (access?.contractor_order_id) {
+          await admin
+            .from("contractor_orders")
+            .update({
+              concluded_at: new Date().toISOString(),
+              ledger_status: "ordered",
+            })
+            .eq("id", access.contractor_order_id);
+        }
+      } catch { /* 受領自体は成功扱い */ }
+      return actionOk({ accepted: true as const });
+    }
 
     const admin = createAdminClient();
     const { data: access } = await admin
@@ -118,6 +137,20 @@ export async function acceptPartnerOrder(token: string): Promise<ActionResult<{ 
           .update({ label: `[accepted] ${label}` })
           .eq("id", access.id);
       }
+    }
+    const { data: tokenRow } = await admin
+      .from("partner_access_tokens")
+      .select("contractor_order_id")
+      .eq("id", access.id)
+      .maybeSingle();
+    if (tokenRow?.contractor_order_id) {
+      await admin
+        .from("contractor_orders")
+        .update({
+          concluded_at: new Date().toISOString(),
+          ledger_status: "ordered",
+        })
+        .eq("id", tokenRow.contractor_order_id);
     }
     return actionOk({ accepted: true as const });
   } catch (e) {

@@ -23,7 +23,46 @@ export async function getContract(id: string) {
     .eq("id", id)
     .single();
   if (error) throw error;
-  return data;
+
+  const { data: linked } = await supabase
+    .from("constructions")
+    .select("id, title, construction_no, start_date, end_date, order_amount")
+    .eq("contract_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let start = data.start_date ?? linked?.start_date ?? null;
+  let end = data.end_date ?? linked?.end_date ?? null;
+  if (linked?.id && (!start || !end)) {
+    const { data: tasks } = await supabase
+      .from("construction_tasks")
+      .select("start_date, end_date")
+      .eq("construction_id", linked.id);
+    const starts = (tasks ?? []).map((t) => t.start_date).filter(Boolean).sort();
+    const ends = (tasks ?? []).map((t) => t.end_date).filter(Boolean).sort();
+    start = start || starts[0] || null;
+    end = end || ends[ends.length - 1] || null;
+  }
+
+  let customerAssigneeName: string | null = null;
+  const assignedTo = (data.customer as { assigned_to?: string | null } | null)?.assigned_to;
+  if (assignedTo) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", assignedTo)
+      .maybeSingle();
+    customerAssigneeName = profile?.display_name ?? null;
+  }
+
+  return {
+    ...data,
+    linked_construction: linked,
+    start_date: start,
+    end_date: end,
+    customer_assignee_name: customerAssigneeName,
+  };
 }
 
 export async function createContract(input: {

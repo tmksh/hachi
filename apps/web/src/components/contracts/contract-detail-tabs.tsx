@@ -42,7 +42,7 @@ import { getCompany } from "@/lib/actions/profiles";
 import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
 import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
-import type { FillContext, PdfFormTemplate } from "@/lib/pdf-form-template";
+import { buildFillContext, type PdfFormTemplate } from "@/lib/pdf-form-template";
 import { PdfFormFillerPanel } from "@/components/settings/pdf-form-filler";
 import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
 import { cn } from "@/lib/utils";
@@ -412,18 +412,19 @@ function DocumentsTab({
   const draft = parseContractDraft(data.notes);
   const [templateId, setTemplateId] = useState(draft?.template_id ?? CONTRACT_TEMPLATES[0]?.id ?? "");
   const tpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId);
+  const linked = data.linked_construction;
   const baseCtx: RenderContext = useMemo(() => ({
     construction: {
-      title: data.title,
-      start_date: data.start_date ?? null,
-      end_date: data.end_date ?? null,
-      order_amount: data.amount ?? null,
+      title: linked?.title || data.title,
+      start_date: data.start_date ?? linked?.start_date ?? null,
+      end_date: data.end_date ?? linked?.end_date ?? null,
+      order_amount: data.amount || linked?.order_amount || null,
     },
     customer: data.customer ? {
       name: data.customer.name,
       address: data.customer.address ?? null,
     } : null,
-  }), [data]);
+  }), [data, linked]);
   const [companyCtx, setCompanyCtx] = useState<RenderContext["company"]>(null);
   const renderCtx: RenderContext = useMemo(
     () => ({ ...baseCtx, company: companyCtx }),
@@ -446,14 +447,15 @@ function DocumentsTab({
 
   const selectedWfType = wfTypes.find((t) => t.id === selectedTypeId) ?? wfTypes[0] ?? null;
 
-  const fillCtx: FillContext = useMemo(() => ({
-    constructionTitle: data.title ?? null,
-    orderAmount: data.amount ?? null,
-    startDate: data.start_date ?? null,
-    endDate: data.end_date ?? null,
-    customerName: data.customer?.name ?? null,
-    customerAddress: data.customer?.address ?? null,
-  }), [data]);
+  const fillCtx = useMemo(() => buildFillContext({
+    constructionTitle: linked?.title || data.title || null,
+    constructionNo: linked?.construction_no ?? null,
+    orderAmount: data.amount || linked?.order_amount || null,
+    startDate: data.start_date ?? linked?.start_date ?? null,
+    endDate: data.end_date ?? linked?.end_date ?? null,
+    customer: data.customer ?? null,
+    customerAssigneeName: data.customer_assignee_name ?? null,
+  }), [data, linked]);
 
   const persistDraft = useCallback(async (nextForm: FormValues, nextTemplateId = templateId) => {
     setSaving(true);
@@ -467,13 +469,12 @@ function DocumentsTab({
       notesPayload.contract_draft = { template_id: nextTemplateId, form: nextForm };
       await updateContract(contractId, { notes: JSON.stringify(notesPayload) });
       setSavedAt(new Date().toLocaleTimeString().slice(0, 5));
-      onRefresh?.();
     } catch {
       toast.error("保存に失敗しました");
     } finally {
       setSaving(false);
     }
-  }, [contractId, data.notes, onRefresh, templateId]);
+  }, [contractId, data.notes, templateId]);
 
   useEffect(() => {
     getPdfFormTemplates().then(setFormTemplates).catch(() => {});
@@ -499,7 +500,7 @@ function DocumentsTab({
     }).catch(() => setCompanyReady(true));
   }, []);
 
-  // 自社情報ロード後：空欄を補完してドラフト保存
+  // 自社情報ロード後：空欄を補完してドラフト保存（入力中のトグルは上書きしない）
   useEffect(() => {
     if (!companyReady || !tpl) return;
     setForm((prev) => {
@@ -508,12 +509,15 @@ function DocumentsTab({
       if (changed) void persistDraft(next);
       return next;
     });
-  }, [companyReady, companyCtx, tpl, renderCtx, persistDraft]);
+    // renderCtx 全体は依存に入れない。トグルOFF(0)を空欄扱いして戻すのを防ぐ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyReady, companyCtx, tpl]);
 
   useEffect(() => {
     if (!tpl) return;
     setForm((prev) => mergeDefaults(tpl, renderCtx, prev));
-  }, [templateId, tpl, renderCtx]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, tpl]);
 
   const setField = (name: string, value: string | number) => {
     const next = { ...form, [name]: value };
@@ -696,7 +700,7 @@ function DocumentsTab({
                 <p>契約書の内容を確定し、ポータルで設定した承認ルートどおりに申請できます。後で対応する場合は下書きのまま一覧に戻れます。</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>テンプレート: {tpl.name}</li>
-                  <li>工事名称: {String(form.work_name ?? data.title)}</li>
+                  <li>名称: {String(form.work_name ?? data.title)}</li>
                 </ul>
                 {wfTypes.length > 0 ? (
                   <div className="space-y-2 pt-1">

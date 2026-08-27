@@ -153,6 +153,10 @@ export async function sendContractorOrderToCloudSign(orderId: string): Promise<{
     signers: [{ name: craftsman?.name ?? "発注先", email: craftsman?.email ?? "", order: 1 }],
     metadata: { contractor_order_id: order.id },
   });
+  await supabase
+    .from("contractor_orders")
+    .update({ clouds_sign_sent_at: new Date().toISOString() })
+    .eq("id", orderId);
   return { ok: true, message: result.message };
 }
 

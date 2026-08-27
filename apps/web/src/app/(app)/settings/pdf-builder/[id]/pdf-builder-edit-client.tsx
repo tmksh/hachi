@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -48,8 +50,10 @@ import {
 import {
   BINDING_LABELS,
   BINDINGS_FOR_TYPE,
+  CUSTOMER_BINDINGS,
   FIELD_TYPE_LABELS,
   PDF_FORM_DOC_TYPE_LABELS,
+  bindingDisplayLabel,
   newFieldDefaults,
   type PdfFieldType,
   type PdfFieldBinding,
@@ -63,20 +67,41 @@ type PaletteItem = {
   label: string;
   type: PdfFieldType;
   binding: PdfFieldBinding;
+  bindingKey?: string;
   icon: React.ElementType;
 };
 
-/** 自動入力項目：置くだけでデータソースに紐付く */
-const AUTO_PALETTE: PaletteItem[] = [
-  { label: "顧客名", type: "text", binding: "customer_name", icon: User },
-  { label: "顧客住所", type: "textarea", binding: "customer_address", icon: MapPin },
-  { label: "工事名", type: "text", binding: "construction_title", icon: Wrench },
+/** 案件・日付 */
+const PROJECT_PALETTE: PaletteItem[] = [
+  { label: "名称", type: "text", binding: "construction_title", icon: Wrench },
   { label: "工事番号", type: "text", binding: "construction_no", icon: Hash },
   { label: "受注金額（税抜）", type: "number", binding: "order_amount", icon: Wallet },
   { label: "受注金額（税込）", type: "number", binding: "order_amount_tax", icon: Wallet },
   { label: "工期開始", type: "date", binding: "start_date", icon: Calendar },
   { label: "工期終了", type: "date", binding: "end_date", icon: CalendarRange },
   { label: "本日日付", type: "date", binding: "today", icon: CalendarClock },
+];
+
+const CUSTOMER_PALETTE: PaletteItem[] = [
+  { label: "契約者氏名", type: "text", binding: "customer_name", icon: User },
+  { label: "会社名", type: "text", binding: "customer_company_name", icon: User },
+  { label: "法人/個人", type: "text", binding: "customer_type", icon: User },
+  { label: "電話番号", type: "text", binding: "customer_phone", icon: User },
+  { label: "メールアドレス", type: "text", binding: "customer_email", icon: User },
+  { label: "EIGHT-ID", type: "text", binding: "customer_eight_id", icon: Hash },
+  { label: "部門", type: "text", binding: "customer_department", icon: User },
+  { label: "年齢", type: "number", binding: "customer_age", icon: Hash },
+  { label: "住所", type: "textarea", binding: "customer_address", icon: MapPin },
+  { label: "知ったきっかけ", type: "text", binding: "customer_source", icon: User },
+  { label: "問い合わせ分類", type: "text", binding: "customer_inquiry_category", icon: User },
+  { label: "問い合わせ日", type: "date", binding: "customer_inquiry_date", icon: Calendar },
+  { label: "問い合わせ内容", type: "textarea", binding: "customer_inquiry_content", icon: AlignLeft },
+  { label: "担当者", type: "text", binding: "customer_assignee", icon: User },
+  { label: "予算感（下限）", type: "number", binding: "customer_budget_min", icon: Wallet },
+  { label: "予算感（上限）", type: "number", binding: "customer_budget_max", icon: Wallet },
+  { label: "見込度", type: "text", binding: "customer_prospect_grade", icon: User },
+  { label: "特需", type: "text", binding: "customer_special_demand", icon: User },
+  { label: "備考", type: "textarea", binding: "customer_notes", icon: AlignLeft },
 ];
 
 /** 自由項目：手入力・固定文など */
@@ -92,16 +117,38 @@ function uid() {
   return `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function PaletteButtons({ items, onAdd }: { items: PaletteItem[]; onAdd: (item: PaletteItem) => void }) {
+  return (
+    <div className="space-y-1.5">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            key={`${item.binding}:${item.bindingKey ?? item.label}`}
+            onClick={() => onAdd(item)}
+            className="flex w-full items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50/40 px-2.5 py-2 text-left text-xs transition-colors hover:bg-emerald-50"
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <span className="truncate">{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PdfBuilderEditClient({
   id,
   initDocType,
   initialTemplate,
   initialPdfUrl,
+  customFieldKeys = [],
 }: {
   id: string;
   initDocType: PdfFormDocType;
   initialTemplate: PdfFormTemplate | null;
   initialPdfUrl: string | null;
+  customFieldKeys?: string[];
 }) {
   const router = useRouter();
   const isNew = id === "new";
@@ -197,6 +244,7 @@ export function PdfBuilderEditClient({
       ...newFieldDefaults(item.type, activePage),
       label: item.label,
       binding: item.binding,
+      bindingKey: item.bindingKey,
     };
     setFields((prev) => [...prev, f]);
     setSelectedId(f.id);
@@ -396,28 +444,44 @@ export function PdfBuilderEditClient({
       ) : (
         <div className="flex flex-1 overflow-hidden">
           {/* 左：項目パレット */}
-          <aside className="w-52 shrink-0 overflow-y-auto border-r p-3">
+          <aside className="w-56 shrink-0 overflow-y-auto border-r p-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
-              <Sparkles className="h-3 w-3" />自動入力項目
+              <Sparkles className="h-3 w-3" />案件
             </div>
             <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
               置くだけでデータが自動で入ります。
             </p>
-            <div className="space-y-1.5">
-              {AUTO_PALETTE.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.label}
-                    onClick={() => addField(item)}
-                    className="flex w-full items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50/40 px-2.5 py-2 text-left text-xs transition-colors hover:bg-emerald-50"
-                  >
-                    <Icon className="h-3.5 w-3.5 text-emerald-600" />
-                    {item.label}
-                  </button>
-                );
-              })}
+            <PaletteButtons items={PROJECT_PALETTE} onAdd={addField} />
+
+            <div className="mt-4 mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+              <User className="h-3 w-3" />顧客情報
             </div>
+            <PaletteButtons items={CUSTOMER_PALETTE} onAdd={addField} />
+
+            <div className="mt-4 mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+              その他項目
+            </div>
+            <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
+              顧客画面で追加した項目です。
+            </p>
+            <PaletteButtons
+              items={[
+                ...customFieldKeys.map((key) => ({
+                  label: key,
+                  type: "text" as const,
+                  binding: "customer_custom" as const,
+                  bindingKey: key,
+                  icon: Type,
+                })),
+                {
+                  label: "項目名を指定",
+                  type: "text" as const,
+                  binding: "customer_custom" as const,
+                  icon: Type,
+                },
+              ]}
+              onAdd={addField}
+            />
 
             <div className="mt-4 mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <PenLine className="h-3 w-3" />自由項目
@@ -503,6 +567,7 @@ export function PdfBuilderEditClient({
                     >
                       <span className="pointer-events-none absolute left-0.5 top-0.5 max-w-full truncate rounded bg-primary/80 px-1 text-[9px] leading-tight text-white">
                         {f.label}
+                        {f.binding !== "manual" && f.binding !== "fixed" ? ` · ${bindingDisplayLabel(f)}` : ""}
                       </span>
                       {selectedId === f.id && (
                         <span
@@ -563,20 +628,80 @@ export function PdfBuilderEditClient({
                     <Select
                       value={selectedField.binding}
                       onValueChange={(v) =>
-                        updateField(selectedField.id, { binding: v as PdfFormField["binding"] })
+                        updateField(selectedField.id, {
+                          binding: v as PdfFormField["binding"],
+                          bindingKey: v === "customer_custom" ? selectedField.bindingKey : undefined,
+                        })
                       }
                     >
                       <SelectTrigger className="h-8 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {BINDINGS_FOR_TYPE[selectedField.type].map((b) => (
-                          <SelectItem key={b} value={b}>
-                            {BINDING_LABELS[b]}
-                          </SelectItem>
-                        ))}
+                        <SelectGroup>
+                          <SelectLabel>手入力</SelectLabel>
+                          <SelectItem value="manual">{BINDING_LABELS.manual}</SelectItem>
+                        </SelectGroup>
+                        {BINDINGS_FOR_TYPE[selectedField.type].some((b) => !b.startsWith("customer_") && b !== "manual") && (
+                          <SelectGroup>
+                            <SelectLabel>案件</SelectLabel>
+                            {BINDINGS_FOR_TYPE[selectedField.type]
+                              .filter((b) => !b.startsWith("customer_") && b !== "manual")
+                              .map((b) => (
+                                <SelectItem key={b} value={b}>{BINDING_LABELS[b]}</SelectItem>
+                              ))}
+                          </SelectGroup>
+                        )}
+                        {BINDINGS_FOR_TYPE[selectedField.type].some((b) => CUSTOMER_BINDINGS.includes(b)) && (
+                          <SelectGroup>
+                            <SelectLabel>顧客情報</SelectLabel>
+                            {BINDINGS_FOR_TYPE[selectedField.type]
+                              .filter((b) => CUSTOMER_BINDINGS.includes(b))
+                              .map((b) => (
+                                <SelectItem key={b} value={b}>{BINDING_LABELS[b]}</SelectItem>
+                              ))}
+                          </SelectGroup>
+                        )}
                       </SelectContent>
                     </Select>
+                    {selectedField.binding === "customer_custom" && (
+                      <div className="space-y-1.5 pt-1">
+                        <Label className="text-xs">項目名</Label>
+                        {customFieldKeys.length > 0 && (
+                          <Select
+                            value={selectedField.bindingKey && customFieldKeys.includes(selectedField.bindingKey)
+                              ? selectedField.bindingKey
+                              : "_other"}
+                            onValueChange={(v) => {
+                              if (v === "_other") {
+                                updateField(selectedField.id, { bindingKey: selectedField.bindingKey ?? "" });
+                                return;
+                              }
+                              updateField(selectedField.id, { bindingKey: v, label: selectedField.label === "項目名を指定" || selectedField.label === "顧客のその他項目" ? v : selectedField.label });
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue placeholder="顧客で使っている項目" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {customFieldKeys.map((key) => (
+                                <SelectItem key={key} value={key}>{key}</SelectItem>
+                              ))}
+                              <SelectItem value="_other">直接入力</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Input
+                          value={selectedField.bindingKey ?? ""}
+                          onChange={(e) => updateField(selectedField.id, { bindingKey: e.target.value })}
+                          placeholder="顧客のその他項目名"
+                          className="h-8 text-sm"
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          顧客情報の「その他項目」の項目名と一致させます。
+                        </p>
+                      </div>
+                    )}
                     {selectedField.binding === "manual" && (
                       <p className="text-[11px] text-muted-foreground">
                         差し込み時に手入力する項目です。既定値を下に入力できます。
