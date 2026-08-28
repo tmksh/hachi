@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Plus, Phone, Mail, LayoutGrid, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Craftsman } from "@/lib/database.types";
+import { isPaperInvoice } from "@/lib/procurement";
 
 const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"電気", interior:"内装", plumbing:"配管", general:"総合" };
 
@@ -100,7 +101,12 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
                       <CustomerAvatar seed={c.id} name={c.name} size="md" />
                       <div><p className="font-medium">{c.name}</p><p className="text-sm text-muted-foreground">{c.company_name || "-"}</p></div>
                     </div>
-                    <div className="flex gap-1"><KindBadge craftsman={c} />{c.specialty && <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge>}{c.rank && <Badge className="text-xs">{c.rank}</Badge>}</div>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      <KindBadge craftsman={c} />
+                      {isPaperInvoice(c) && <Badge className="text-xs bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注</Badge>}
+                      {c.specialty && <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge>}
+                      {c.rank && <Badge className="text-xs">{c.rank}</Badge>}
+                    </div>
                   </div>
                   <div className="flex gap-4 text-xs text-muted-foreground">
                     <span>進行中: {c.active_projects}件</span><span>累計: {c.total_projects}件</span>
@@ -138,6 +144,9 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
                       <div className="flex items-center gap-2.5">
                         <CustomerAvatar seed={c.id} name={c.name} />
                         <span className="font-medium">{c.name}</span>
+                        {isPaperInvoice(c) && (
+                          <Badge className="text-[10px] bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注</Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell><KindBadge craftsman={c} /></TableCell>

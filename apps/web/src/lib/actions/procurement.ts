@@ -16,6 +16,14 @@ import {
 } from "@/lib/procurement";
 import type { TransferSender } from "@/lib/procurement";
 import { canAccessFeature, mergeRolePermissions, type RolePermissions } from "@/lib/role-permissions";
+import {
+  generateInvoiceAuthCode,
+  isInvoiceAuthVerified,
+  markInvoiceAuthVerified,
+  maskEmail,
+  setInvoiceAuthChallenge,
+  verifyInvoiceAuthChallenge,
+} from "@/lib/vendor-invoice-auth";
 
 export type ProcurementAttachment = {
   path: string;
@@ -99,7 +107,7 @@ async function sendVendorInvoiceRequestEmail(input: {
     `${input.vendorName} 御中`,
     "",
     `${input.companyName} です。検収が完了しました。`,
-    "下記URLから請求書をご送付ください（ログイン不要）。",
+    "下記URLから請求書をご送付ください（メール認証・ログイン不要）。",
     "",
     url,
     "",
@@ -109,7 +117,7 @@ async function sendVendorInvoiceRequestEmail(input: {
   ].join("\n");
   const html = `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
 <p>${input.vendorName} 御中</p>
-<p>${input.companyName} です。検収が完了しました。<br/>下記ボタンから請求書をご送付ください（ログイン不要）。</p>
+<p>${input.companyName} です。検収が完了しました。<br/>下記ボタンから請求書をご送付ください（メール認証・ログイン不要）。</p>
 <p style="margin:24px 0"><a href="${url}" style="background:#047857;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">請求書を送る</a></p>
 <p style="font-size:12px;color:#64748b;word-break:break-all">${url}</p>
 <p style="font-size:12px;color:#64748b">有効期限: ${input.expiresYmd}（30日）</p>
@@ -221,7 +229,7 @@ export async function getCompanyOrders(): Promise<ProcurementOrder[]> {
   if (error) {
     const { data: fallback, error: fallbackErr } = await supabase
       .from("contractor_orders")
-      .select("*, craftsman:craftsmen(id, name), construction:constructions(id, title, construction_no)")
+      .select("*, craftsman:craftsmen(id, name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (fallbackErr) throw new Error(error.message);
@@ -248,7 +256,7 @@ export async function updateOrderProcurement(
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", orderId)
       .eq("company_id", companyId)
-      .select("*, craftsman:craftsmen(id, name, email), construction:constructions(id, title, construction_no)")
+      .select("*, craftsman:craftsmen(id, name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
       .single();
     if (fallbackErr) {
       throw new Error(
@@ -288,6 +296,77 @@ export async function uploadDeliveryAttachments(
     return actionOk({ files });
   } catch (e) {
     return actionFail(e, "添付のアップロードに失敗しました");
+  }
+}
+
+export async function attachStaffInvoicePdf(
+  orderId: string,
+  formData: FormData,
+): Promise<ActionResult<{ order: ProcurementOrder }>> {
+  try {
+    const { supabase, companyId } = await getAuthContext();
+    const { data: current } = await supabase
+      .from("contractor_orders")
+      .select("id, ledger_status, vendor_invoice_submitted_at")
+      .eq("id", orderId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!current) return actionFail("発注が見つかりません", "発注が見つかりません");
+    if (current.ledger_status !== "inspected") {
+      return actionFail("検収完了（請求待ち）の行だけ添付できます", "検収完了（請求待ち）の行だけ添付できます");
+    }
+    if (current.vendor_invoice_submitted_at) {
+      return actionFail("すでに請求書を受領しています", "すでに請求書を受領しています");
+    }
+
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return actionFail("PDFまたは画像を選んでください", "PDFまたは画像を選んでください");
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return actionFail("ファイルは10MBまでです", "ファイルは10MBまでです");
+    }
+    const name = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
+    const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/.test(name);
+    if (!isPdf && !isImage) {
+      return actionFail("PDFまたは画像を添付してください", "PDFまたは画像を添付してください");
+    }
+
+    const path = `procurement/${companyId}/${orderId}/vendor-invoice/${Date.now()}-${safeFileName(file.name)}`;
+    await uploadToStorage("documents", path, file, {
+      contentType: file.type || (isPdf ? "application/pdf" : "application/octet-stream"),
+      upsert: false,
+    });
+
+    const invoiceDate = String(formData.get("invoiceDate") ?? "").trim();
+    const invoiceNo = String(formData.get("invoiceNo") ?? "").trim();
+    const rawAmount = String(formData.get("invoiceAmount") ?? "").trim();
+    const invoiceAmount = rawAmount === "" ? null : Number(rawAmount);
+    const patch: Record<string, unknown> = {
+      vendor_invoice_pdf_path: path,
+      vendor_invoice_date: invoiceDate || todayIso(),
+      vendor_invoice_no: invoiceNo || null,
+      vendor_invoice_submitted_at: new Date().toISOString(),
+      ledger_status: "invoice_received",
+    };
+    if (invoiceAmount != null && Number.isFinite(invoiceAmount)) {
+      patch.vendor_invoice_amount = invoiceAmount;
+    }
+    let order: ProcurementOrder;
+    try {
+      order = await updateOrderProcurement(orderId, patch);
+    } catch (e) {
+      if (invoiceAmount != null && /vendor_invoice_amount/i.test(e instanceof Error ? e.message : "")) {
+        delete patch.vendor_invoice_amount;
+        order = await updateOrderProcurement(orderId, patch);
+      } else {
+        throw e;
+      }
+    }
+    return actionOk({ order });
+  } catch (e) {
+    return actionFail(e, "PDFの添付に失敗しました");
   }
 }
 
@@ -608,6 +687,9 @@ export type VendorInvoiceView = {
   vendorPdfName: string | null;
   hasVendorPdf: boolean;
   attachments: ProcurementAttachment[];
+  hasEmail: boolean;
+  maskedEmail: string | null;
+  emailVerified: boolean;
 };
 
 function companyIssuer(settings: Record<string, unknown> | null, fallbackName: string) {
@@ -656,11 +738,14 @@ export async function getVendorInvoiceByToken(token: string): Promise<VendorInvo
     const expired = order.invoice_token_expires_at
       ? new Date(order.invoice_token_expires_at) < new Date()
       : false;
+    const vendorEmail = (craftsman?.email ?? "").trim();
+    const submitted = Boolean(order.vendor_invoice_submitted_at);
+    const emailVerified = submitted || expired || await isInvoiceAuthVerified(raw);
     return {
       token: raw,
       expiresAt: order.invoice_token_expires_at,
       expired,
-      submitted: Boolean(order.vendor_invoice_submitted_at),
+      submitted,
       companyName: issuer.name,
       companyAddress: issuer.address,
       companyInvoiceNo: issuer.invoiceNo,
@@ -690,9 +775,154 @@ export async function getVendorInvoiceByToken(token: string): Promise<VendorInvo
         : null,
       hasVendorPdf: Boolean(order.vendor_invoice_pdf_path),
       attachments: Array.isArray(order.delivery_attachments) ? order.delivery_attachments : [],
+      hasEmail: Boolean(vendorEmail),
+      maskedEmail: vendorEmail ? maskEmail(vendorEmail) : null,
+      emailVerified,
     };
   } catch {
     return null;
+  }
+}
+
+async function loadVendorInvoiceOrder(token: string) {
+  const admin = createAdminClient();
+  const { data: order } = await admin
+    .from("contractor_orders")
+    .select("id, company_id, invoice_token_expires_at, vendor_invoice_submitted_at, craftsman:craftsmen(email, name)")
+    .eq("invoice_token", token.trim())
+    .maybeSingle();
+  return order;
+}
+
+async function assertVendorInvoiceReady(token: string, requireAuth: boolean) {
+  const order = await loadVendorInvoiceOrder(token);
+  if (!order) return { ok: false as const, error: "リンクが無効です" };
+  if (order.invoice_token_expires_at && new Date(order.invoice_token_expires_at) < new Date()) {
+    return { ok: false as const, error: "URLの有効期限が切れています" };
+  }
+  if (order.vendor_invoice_submitted_at) {
+    return { ok: false as const, error: "すでに送信済みです" };
+  }
+  if (requireAuth && !(await isInvoiceAuthVerified(token))) {
+    return { ok: false as const, error: "メールに送った確認コードを入力してください" };
+  }
+  return { ok: true as const, order };
+}
+
+export async function sendVendorInvoiceAuthCode(token: string): Promise<ActionResult<{
+  maskedEmail: string;
+  emailSent?: boolean;
+  emailError?: string;
+}>> {
+  try {
+    const raw = token.trim();
+    const order = await loadVendorInvoiceOrder(raw);
+    if (!order) return actionFail("リンクが無効です", "リンクが無効です");
+    if (order.invoice_token_expires_at && new Date(order.invoice_token_expires_at) < new Date()) {
+      return actionFail("URLの有効期限が切れています", "URLの有効期限が切れています");
+    }
+    const craftsman = Array.isArray(order.craftsman) ? order.craftsman[0] : order.craftsman;
+    const to = (craftsman?.email ?? "").trim();
+    if (!to) {
+      return actionFail(
+        "業者マスタにメールがないため、メール認証できません。発注元に社内のPDF添付を依頼してください。",
+        "業者マスタにメールがありません",
+      );
+    }
+    const code = generateInvoiceAuthCode();
+    await setInvoiceAuthChallenge(raw, code);
+
+    const admin = createAdminClient();
+    const { data: company } = await admin.from("companies").select("name").eq("id", order.company_id).maybeSingle();
+    const companyName = company?.name ?? "発注元";
+    const subject = `[BRIDGE Linq] 請求書送信用の確認コード`;
+    const text = [
+      `${craftsman?.name ?? "業者"} 御中`,
+      "",
+      `${companyName} です。請求書送信ページの確認コードです。`,
+      "",
+      `確認コード: ${code}`,
+      "",
+      "有効期限は15分です。このメールに心当たりがない場合は破棄してください。",
+    ].join("\n");
+    const html = `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
+<p>${craftsman?.name ?? "業者"} 御中</p>
+<p>${companyName} です。請求書送信ページの確認コードです。</p>
+<p style="font-size:28px;letter-spacing:0.2em;font-weight:700;margin:20px 0">${code}</p>
+<p style="font-size:12px;color:#64748b">有効期限は15分です。</p>
+</div>`;
+
+    let mail: { sent: boolean; error?: string } = { sent: false };
+    if (process.env.RESEND_API_KEY) {
+      try {
+        const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
+        const { error } = await getResend().emails.send({
+          from: CUSTOMER_FROM_EMAIL,
+          to,
+          subject,
+          html,
+          text,
+        });
+        if (!error) mail = { sent: true };
+        else mail = { sent: false, error: "メール送信に失敗しました" };
+      } catch (e) {
+        mail = { sent: false, error: e instanceof Error ? e.message : "メール送信に失敗しました" };
+      }
+    }
+    if (!mail.sent) {
+      try {
+        const { data: companyUsers } = await admin
+          .from("profiles")
+          .select("id")
+          .eq("company_id", order.company_id)
+          .limit(5);
+        const { sendViaGmailAccount } = await import("@/lib/gmail-send");
+        let gmailOk = false;
+        for (const user of companyUsers ?? []) {
+          try {
+            await sendViaGmailAccount({
+              userId: user.id,
+              to: [{ name: craftsman?.name ?? "業者", address: to }],
+              subject,
+              bodyText: text,
+              bodyHtml: html,
+            });
+            gmailOk = true;
+            break;
+          } catch {
+            /* try next */
+          }
+        }
+        mail = gmailOk ? { sent: true } : { sent: false, error: mail.error ?? "メール送信に失敗しました" };
+      } catch (e) {
+        mail = { sent: false, error: e instanceof Error ? e.message : mail.error ?? "メール送信に失敗しました" };
+      }
+    }
+
+    return actionOk({
+      maskedEmail: maskEmail(to),
+      emailSent: mail.sent,
+      emailError: mail.error,
+    });
+  } catch (e) {
+    return actionFail(e, "確認コードの送信に失敗しました");
+  }
+}
+
+export async function verifyVendorInvoiceAuthCode(
+  token: string,
+  code: string,
+): Promise<ActionResult<{ verified: true }>> {
+  try {
+    const raw = token.trim();
+    const order = await loadVendorInvoiceOrder(raw);
+    if (!order) return actionFail("リンクが無効です", "リンクが無効です");
+    const ok = await verifyInvoiceAuthChallenge(raw, code);
+    if (!ok) return actionFail("確認コードが違います", "確認コードが違います");
+    await markInvoiceAuthVerified(raw);
+    return actionOk({ verified: true as const });
+  } catch (e) {
+    return actionFail(e, "確認に失敗しました");
   }
 }
 
@@ -713,19 +943,9 @@ export async function uploadVendorInvoicePdf(
     const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/.test(name);
     if (!isPdf && !isImage) return actionFail("PDFまたは画像を添付してください", "PDFまたは画像を添付してください");
 
-    const admin = createAdminClient();
-    const { data: order } = await admin
-      .from("contractor_orders")
-      .select("id, company_id, invoice_token_expires_at, vendor_invoice_submitted_at")
-      .eq("invoice_token", token.trim())
-      .maybeSingle();
-    if (!order) return actionFail("リンクが無効です", "リンクが無効です");
-    if (order.invoice_token_expires_at && new Date(order.invoice_token_expires_at) < new Date()) {
-      return actionFail("URLの有効期限が切れています", "URLの有効期限が切れています");
-    }
-    if (order.vendor_invoice_submitted_at) {
-      return actionFail("すでに送信済みです", "すでに送信済みです");
-    }
+    const ready = await assertVendorInvoiceReady(token, true);
+    if (!ready.ok) return actionFail(ready.error, ready.error);
+    const order = ready.order;
 
     const path = `procurement/${order.company_id}/${order.id}/vendor-invoice/${Date.now()}-${safeFileName(file.name)}`;
     await uploadToStorageAsAdmin("documents", path, file, {
@@ -747,33 +967,34 @@ export async function submitVendorInvoice(input: {
   pdfPath?: string | null;
 }): Promise<ActionResult<{ submitted: true }>> {
   try {
+    const ready = await assertVendorInvoiceReady(input.token, true);
+    if (!ready.ok) return actionFail(ready.error, ready.error);
+    const order = ready.order;
     const admin = createAdminClient();
-    const { data: order } = await admin
+    const { data: full } = await admin
       .from("contractor_orders")
-      .select("id, invoice_token_expires_at, vendor_invoice_submitted_at")
-      .eq("invoice_token", input.token.trim())
+      .select("amount")
+      .eq("id", order.id)
       .maybeSingle();
-    if (!order) return actionFail("リンクが無効です", "リンクが無効です");
-    if (order.invoice_token_expires_at && new Date(order.invoice_token_expires_at) < new Date()) {
-      return actionFail("URLの有効期限が切れています", "URLの有効期限が切れています");
-    }
-    if (order.vendor_invoice_submitted_at) {
-      return actionFail("すでに送信済みです", "すでに送信済みです");
-    }
     const patch: Record<string, unknown> = {
       vendor_invoice_date: input.invoiceDate || todayIso(),
       vendor_invoice_no: input.invoiceNo.trim() || null,
       vendor_registration_no: input.registrationNumber.trim() || null,
       vendor_invoice_remarks: input.remarks.trim() || null,
       vendor_invoice_submitted_at: new Date().toISOString(),
+      vendor_invoice_amount: Number(full?.amount ?? 0),
       ledger_status: "invoice_received",
       updated_at: new Date().toISOString(),
     };
     if (input.pdfPath) patch.vendor_invoice_pdf_path = input.pdfPath;
-    const { error } = await admin
+    let { error } = await admin
       .from("contractor_orders")
       .update(patch)
       .eq("id", order.id);
+    if (error && /vendor_invoice_amount/i.test(error.message)) {
+      delete patch.vendor_invoice_amount;
+      ({ error } = await admin.from("contractor_orders").update(patch).eq("id", order.id));
+    }
     if (error) return actionFail(error.message, "送信に失敗しました");
     return actionOk({ submitted: true as const });
   } catch (e) {

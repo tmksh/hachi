@@ -163,6 +163,8 @@ export type Craftsman = {
   bank_account_type?: string | null;
   bank_account_number?: string | null;
   bank_account_kana?: string | null;
+  /** 請求書の受領方法（議事録 2026/08/27: email=メール認証 / paper=紙発注・自社書式） */
+  invoice_channel?: "email" | "paper";
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -417,6 +419,7 @@ export type ContractorOrder = {
   concluded_at?: string | null;
   delivery_attachments?: Array<{ path: string; name: string; contentType?: string; size?: number }> | null;
   vendor_invoice_pdf_path?: string | null;
+  vendor_invoice_amount?: number | null;
   parent_order_id?: string | null;
   lot_no?: number | null;
   created_at: string;
@@ -434,6 +437,8 @@ export type ContractorOrder = {
     bank_account_type?: string | null;
     bank_account_number?: string | null;
     bank_account_kana?: string | null;
+    invoice_channel?: "email" | "paper" | null;
+    kind?: "vendor" | "system" | null;
   };
 };
 

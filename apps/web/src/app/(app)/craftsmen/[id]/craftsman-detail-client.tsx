@@ -64,6 +64,12 @@ export function CraftsmanDetailClient({ initialData }: CraftsmanDetailClientProp
           <CardContent className="space-y-3 text-sm">
             {data.phone && <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" />{data.phone}</div>}
             {data.email && <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground" />{data.email}</div>}
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">請求書</span>
+              {data.invoice_channel === "paper"
+                ? <Badge className="bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注・自社書式</Badge>
+                : <Badge variant="secondary">メール認証（ログイン不要）</Badge>}
+            </div>
           </CardContent>
         </Card>
         <Card><CardHeader className="pb-3"><CardTitle className="text-sm">実績</CardTitle></CardHeader>

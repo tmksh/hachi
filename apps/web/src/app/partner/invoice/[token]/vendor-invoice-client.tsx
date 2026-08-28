@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Loader2, Upload } from "lucide-react";
-import { submitVendorInvoice, uploadVendorInvoicePdf, type VendorInvoiceView } from "@/lib/actions/procurement";
+import {
+  sendVendorInvoiceAuthCode,
+  submitVendorInvoice,
+  uploadVendorInvoicePdf,
+  verifyVendorInvoiceAuthCode,
+  type VendorInvoiceView,
+} from "@/lib/actions/procurement";
 import { formatDateSlash, inclOf, taxOf, todayIso, yen } from "@/lib/procurement";
 
 const vendorInput =
@@ -29,6 +35,10 @@ export function VendorInvoiceClient({
   const [pdfName, setPdfName] = useState(initial?.vendorPdfName ?? "");
   const [dragOver, setDragOver] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [verified, setVerified] = useState(Boolean(initial?.emailVerified || initial?.submitted));
+  const [authCode, setAuthCode] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!invoice) {
@@ -47,6 +57,7 @@ export function VendorInvoiceClient({
   const incl = inclOf(excl);
   const expires = invoice.expiresAt ? formatDateSlash(invoice.expiresAt) : "—";
   const locked = invoice.submitted || invoice.expired;
+  const needsAuth = !verified && !invoice.submitted && !invoice.expired;
   const subject = `${invoice.constructionTitle || invoice.orderTitle}（発注番号 ${invoice.poNo || "—"}）`;
   const itemName = invoice.workContent || invoice.orderTitle;
   const bankLine = [invoice.bankName, invoice.bankBranch, invoice.bankAccountType, invoice.bankAccountNumber]
@@ -103,7 +114,72 @@ export function VendorInvoiceClient({
           <span className="rounded bg-amber-100 text-amber-800 px-2 py-0.5">有効期限 {expires}</span>
         </div>
 
-        <div className="rounded-2xl bg-white shadow-sm border overflow-hidden">
+        {needsAuth && (
+          <div className="rounded-2xl bg-white shadow-sm border p-7 space-y-4">
+            <h1 className="text-xl font-semibold">メールで本人確認</h1>
+            {invoice.hasEmail ? (
+              <>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  ログインは不要です。登録メール（{invoice.maskedEmail}）に確認コードを送ります。コードを入力すると請求書を送れます。
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    className="bg-emerald-700 hover:bg-emerald-800"
+                    disabled={sendingCode}
+                    onClick={async () => {
+                      setSendingCode(true);
+                      const res = await sendVendorInvoiceAuthCode(token);
+                      setSendingCode(false);
+                      if (!res.ok) {
+                        toast.error(res.error);
+                        return;
+                      }
+                      setCodeSent(true);
+                      if (res.emailSent) toast.success(`確認コードを ${res.maskedEmail} に送りました`);
+                      else toast.error(res.emailError || "メールを送れませんでした。発注元へ連絡してください");
+                    }}
+                  >
+                    {sendingCode ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                    {codeSent ? "確認コードを再送" : "確認コードを送る"}
+                  </Button>
+                </div>
+                {codeSent && (
+                  <div className="space-y-2 max-w-xs">
+                    <p className="text-xs text-muted-foreground">確認コード（6桁）</p>
+                    <Input
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={authCode}
+                      onChange={(e) => setAuthCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="123456"
+                      className={vendorInput}
+                    />
+                    <Button
+                      disabled={authCode.length !== 6}
+                      onClick={async () => {
+                        const res = await verifyVendorInvoiceAuthCode(token, authCode);
+                        if (!res.ok) {
+                          toast.error(res.error);
+                          return;
+                        }
+                        setVerified(true);
+                        toast.success("確認できました");
+                      }}
+                    >
+                      確認する
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                業者マスタにメールがないため、メール認証できません。届いた請求書は発注元の検収完了一覧からPDF添付してください。
+              </p>
+            )}
+          </div>
+        )}
+
+        {!needsAuth && <div className="rounded-2xl bg-white shadow-sm border overflow-hidden">
           <div className="bg-emerald-50 text-emerald-900 px-5 py-3 text-sm flex items-start gap-2">
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
             {invoice.submitted
@@ -312,7 +388,7 @@ export function VendorInvoiceClient({
               {invoice.submitted ? "送信済み" : "請求書を送る"}
             </Button>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

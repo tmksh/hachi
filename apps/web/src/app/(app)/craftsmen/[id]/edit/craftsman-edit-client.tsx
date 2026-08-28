@@ -87,6 +87,9 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
   const [companyName, setCompanyName] = useState(initialCraftsman.company_name ?? "");
   const [phone, setPhone] = useState(initialCraftsman.phone ?? "");
   const [email, setEmail] = useState(initialCraftsman.email ?? "");
+  const [invoiceChannel, setInvoiceChannel] = useState<"email" | "paper">(
+    initialCraftsman.invoice_channel === "paper" ? "paper" : "email",
+  );
   const [specialty, setSpecialty] = useState(initialCraftsman.specialty ?? "");
   const [rank, setRank] = useState(initialCraftsman.rank ?? "");
   const [notes, setNotes] = useState(initialCraftsman.notes ?? "");
@@ -115,6 +118,7 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
         company_name: companyName || null,
         phone: phone || null,
         email: email || null,
+        invoice_channel: invoiceChannel,
         specialty: (specialty || null) as "carpenter" | "electrical" | "interior" | "plumbing" | "general" | null,
         rank: (rank || null) as "A" | "B" | "C" | null,
         notes: notes || null,
@@ -152,6 +156,19 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
             <div className="space-y-2"><Label>会社名</Label><Input value={companyName} onChange={e => setCompanyName(e.target.value)} /></div>
             <div className="space-y-2"><Label>電話</Label><Input value={phone} onChange={e => setPhone(e.target.value)} /></div>
             <div className="space-y-2"><Label>メール</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} /></div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>請求書の受領方法</Label>
+              <Select value={invoiceChannel} onValueChange={(v) => setInvoiceChannel(v as "email" | "paper")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">メール認証（ログイン不要）</SelectItem>
+                  <SelectItem value="paper">紙発注・自社書式（社内でPDF添付）</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                紙発注・自社書式の業者は、検収完了一覧から請求書PDFを添付すると「請求書受領」へ進みます。
+              </p>
+            </div>
             <div className="space-y-2">
               <Label>専門</Label>
               <Select value={specialty} onValueChange={setSpecialty}>

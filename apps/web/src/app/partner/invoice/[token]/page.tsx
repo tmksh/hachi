@@ -1,3 +1,4 @@
+/** 議事録 2026/08/27: 検収データの認証はメール認証。業者向けログインは設けない。 */
 import { getVendorInvoiceByToken } from "@/lib/actions/procurement";
 import { VendorInvoiceClient } from "./vendor-invoice-client";
 

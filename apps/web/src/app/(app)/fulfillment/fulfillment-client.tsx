@@ -18,9 +18,11 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { IntegerInput } from "@/components/ui/integer-input";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
 import {
+  attachStaffInvoicePdf,
   completeInspection,
   confirmVendorInvoice,
   approveVendorInvoice,
@@ -35,7 +37,10 @@ import {
   LEDGER_STATUS_META,
   deriveLedgerStatus,
   formatDateSlash,
+  billedExclOf,
   inclOf,
+  isPaperInvoice,
+  taxOf,
   todayIso,
   yen,
   type LedgerStatus,
@@ -94,6 +99,8 @@ export function FulfillmentClient({ initialOrders }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [deliveryTarget, setDeliveryTarget] = useState<ProcurementOrder | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ProcurementOrder | null>(null);
+  const [attachTarget, setAttachTarget] = useState<ProcurementOrder | null>(null);
+  const [paperOnly, setPaperOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -105,6 +112,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
       if (status !== "all" && status !== "active" && ls !== status) return false;
       if (project !== "all" && o.construction_id !== project) return false;
       if (vendor !== "all" && (o.craftsman?.name ?? "") !== vendor) return false;
+      if (paperOnly && !isPaperInvoice(o.craftsman)) return false;
       const due = o.completion_date ?? o.end_date ?? "";
       if (from && due && due < from) return false;
       if (to && due && due > to) return false;
@@ -135,7 +143,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av).localeCompare(String(bv), "ja") * dir;
     });
-  }, [orders, project, vendor, status, from, to, sortKey, sortDir]);
+  }, [orders, project, vendor, status, from, to, paperOnly, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -199,7 +207,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
       <div className="text-xs text-muted-foreground">工事管理 &gt; 発注・納品・検収</div>
       <PageHeader
         title="納品・検収管理"
-        description="ディレクター・施工管理。請求書受領後は経理も確認できます。"
+        description="検収完了後、メール業者は確認コード付きURLから請求。紙発注・自社書式はPDF添付で請求書受領へ進みます。分納は納品ごとに検収・請求します。"
       >
         <Button asChild variant="outline" size="sm">
           <Link href="/ledger">帳票データ作成 ↗</Link>
@@ -238,6 +246,10 @@ export function FulfillmentClient({ initialOrders }: Props) {
               <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="flex-1 min-w-0" />
             </div>
           </div>
+          <label className="flex items-center gap-2 pb-2 shrink-0 text-xs cursor-pointer">
+            <Checkbox checked={paperOnly} onCheckedChange={(c) => setPaperOnly(c === true)} />
+            紙発注のみ
+          </label>
           <p className="text-[11px] text-muted-foreground pb-2 shrink-0 whitespace-nowrap">請求書URLの有効期限は30日です。</p>
         </div>
       </div>
@@ -264,8 +276,9 @@ export function FulfillmentClient({ initialOrders }: Props) {
             ) : listed.map((o) => {
               const ls = deriveLedgerStatus(o);
               const meta = LEDGER_STATUS_META[ls];
+              const paper = isPaperInvoice(o.craftsman);
               return (
-                <tr key={o.id} className="border-t">
+                <tr key={o.id} className={`border-t ${paper ? "bg-amber-50/80" : ""}`}>
                   <td className="px-3 py-2">
                     <Checkbox
                       checked={selected.includes(o.id)}
@@ -273,13 +286,23 @@ export function FulfillmentClient({ initialOrders }: Props) {
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <Link href={`/constructions/${o.construction_id}?tab=orders`} className="text-blue-700 hover:underline font-mono text-xs">
-                      {poLabel(o)}
-                    </Link>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Link href={`/constructions/${o.construction_id}?tab=orders`} className="text-blue-700 hover:underline font-mono text-xs">
+                        {poLabel(o)}
+                      </Link>
+                      {o.lot_no && o.lot_no > 1 && (
+                        <Badge variant="outline" className="text-[10px]">分納{o.lot_no}</Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2">{o.construction ? `${o.construction.construction_no} ${o.construction.title}` : "—"}</td>
-                  <td className="px-3 py-2">{o.craftsman?.name ?? "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{yen(inclOf(Number(o.amount ?? 0)))}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{o.craftsman?.name ?? "—"}</span>
+                      {paper && <Badge className="bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注</Badge>}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{yen(inclOf(billedExclOf(o)))}</td>
                   <td className="px-3 py-2">{formatDateSlash(o.completion_date ?? o.end_date)}</td>
                   <td className="px-3 py-2 text-orange-700">{formatDateSlash(o.delivery_date)}</td>
                   <td className="px-3 py-2"><Badge className={meta.cls}>{meta.label}</Badge></td>
@@ -291,6 +314,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
                       canAccount={canAccount}
                       onDelivery={() => setDeliveryTarget(o)}
                       onInspect={() => setInspectTarget(o)}
+                      onAttach={() => setAttachTarget(o)}
                       onReplace={replace}
                     />
                   </td>
@@ -323,6 +347,12 @@ export function FulfillmentClient({ initialOrders }: Props) {
         onClose={() => setInspectTarget(null)}
         onSaved={(o) => { replace(o); setInspectTarget(null); }}
       />
+      <AttachInvoiceDialog
+        key={attachTarget?.id ?? "attach-closed"}
+        order={attachTarget}
+        onClose={() => setAttachTarget(null)}
+        onSaved={(o) => { replace(o); setAttachTarget(null); }}
+      />
     </div>
   );
 }
@@ -349,13 +379,14 @@ function FilterSelect({
 }
 
 function RowActions({
-  order, status, canAccount, onDelivery, onInspect, onReplace,
+  order, status, canAccount, onDelivery, onInspect, onAttach, onReplace,
 }: {
   order: ProcurementOrder;
   status: LedgerStatus;
   canAccount: boolean;
   onDelivery: () => void;
   onInspect: () => void;
+  onAttach: () => void;
   onReplace: (o: ProcurementOrder) => void;
 }) {
   if (status === "ordered") {
@@ -365,18 +396,27 @@ function RowActions({
     return <Button size="sm" className="h-7 text-xs bg-teal-600 hover:bg-teal-700" onClick={onInspect}>検収完了</Button>;
   }
   if (status === "inspected") {
+    const paper = isPaperInvoice(order.craftsman);
     return (
-      <Button
-        size="sm"
-        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
-        onClick={async () => {
-          const res = await resendInvoiceUrl(order.id);
-          if (!res.ok) { toast.error(res.error); return; }
-          toastInvoiceMail(res);
-        }}
-      >
-        URLを再送
-      </Button>
+      <div className="inline-flex items-center gap-1">
+        <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={onAttach}>
+          PDF添付
+        </Button>
+        {!paper && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={async () => {
+              const res = await resendInvoiceUrl(order.id);
+              if (!res.ok) { toast.error(res.error); return; }
+              toastInvoiceMail(res);
+            }}
+          >
+            URLを再送
+          </Button>
+        )}
+      </div>
     );
   }
   if (status === "invoice_received") {
@@ -391,6 +431,9 @@ function RowActions({
           >
             業者PDF
           </Button>
+        )}
+        {order.vendor_invoice_amount != null && Number(order.vendor_invoice_amount) !== Number(order.amount) && (
+          <Badge className="bg-amber-100 text-amber-900">金額差</Badge>
         )}
         <Button
           size="sm"
@@ -588,10 +631,11 @@ function InspectionDialog({
   onClose: () => void;
   onSaved: (o: ProcurementOrder) => void;
 }) {
+  const paper = isPaperInvoice(order?.craftsman);
   const [result, setResult] = useState<"pass" | "reject">("pass");
   const [date, setDate] = useState(todayIso());
   const [comment, setComment] = useState("");
-  const [sendEmail, setSendEmail] = useState(true);
+  const [sendEmail, setSendEmail] = useState(!paper);
   const [saving, setSaving] = useState(false);
 
   if (!order) return null;
@@ -616,8 +660,8 @@ function InspectionDialog({
           {[
             ["発注", "送信・受け書"],
             ["納品", "納品日＝取引日"],
-            ["検収", "いまここ。担当者が完了→業者へURL"],
-            ["請求書", "業者がURLから送る"],
+            ["検収", paper ? "いまここ。完了後に社内でPDF添付" : "いまここ。担当者が完了→業者へURL"],
+            ["請求書", paper ? "届いたPDFを添付して受領" : "業者がURLから送る"],
             ["確認・承認", "Dir→経理"],
           ].map(([title, sub], i) => (
             <div
@@ -648,7 +692,9 @@ function InspectionDialog({
             <label className={`rounded-lg border p-4 text-sm cursor-pointer ${result === "pass" ? "border-emerald-500 bg-white ring-1 ring-emerald-400" : "bg-white"}`}>
               <RadioGroupItem value="pass" className="mr-2" />
               <span className="font-medium">合格（検収完了）</span>
-              <p className="text-[11px] text-muted-foreground mt-1 pl-6">請求待ちになり、業者へURLを送ります</p>
+              <p className="text-[11px] text-muted-foreground mt-1 pl-6">
+                {paper ? "請求待ちになり、届いた請求書PDFを一覧から添付します" : "請求待ちになり、業者へURLを送ります"}
+              </p>
             </label>
             <label className={`rounded-lg border p-4 text-sm cursor-pointer ${result === "reject" ? "border-orange-500 bg-white ring-1 ring-orange-300" : "bg-white"}`}>
               <RadioGroupItem value="reject" className="mr-2" />
@@ -666,7 +712,7 @@ function InspectionDialog({
           </div>
         </div>
 
-        {result === "pass" && (
+        {result === "pass" && !paper && (
           <div className="rounded-lg border p-4 space-y-3 text-sm">
             <p className="font-semibold">業者への連絡（検収完了 → 請求書を送るURL）</p>
             <div className="grid sm:grid-cols-2 gap-3 text-xs">
@@ -675,9 +721,17 @@ function InspectionDialog({
             </div>
             <label className="flex items-center gap-2 text-xs">
               <Checkbox checked={sendEmail} onCheckedChange={(c) => setSendEmail(c === true)} />
-              検収完了と同時にメールを送る（未設定時はURLをコピー）
+              検収完了と同時にメールを送る（ログイン不要。未設定時はURLをコピー）
             </label>
             <p className="text-[11px] text-muted-foreground">URLの有効期限 30日（既定）</p>
+          </div>
+        )}
+        {result === "pass" && paper && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-2 text-sm">
+            <p className="font-semibold">紙発注・自社書式</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              業者へログイン用の画面は送りません。請求書（メールPDFまたは紙のスキャン）が届いたら、検収完了一覧の「PDF添付」で受領します。
+            </p>
           </div>
         )}
 
@@ -708,16 +762,129 @@ function InspectionDialog({
               disabled={saving}
               onClick={async () => {
                 setSaving(true);
-                const res = await completeInspection({ orderId: order.id, result: "pass", inspectionDate: date, comment, sendEmail });
+                const res = await completeInspection({
+                  orderId: order.id,
+                  result: "pass",
+                  inspectionDate: date,
+                  comment,
+                  sendEmail: paper ? false : sendEmail,
+                });
                 setSaving(false);
                 if (!res.ok) { toast.error(res.error); return; }
                 onSaved(res.order);
-                toastInvoiceMail(res);
+                if (paper) {
+                  toast.success("検収完了。請求書が届いたらPDFを添付してください");
+                } else {
+                  toastInvoiceMail(res);
+                }
               }}
             >
-              検収を完了して業者に通知
+              {paper ? "検収を完了する" : "検収を完了して業者に通知"}
             </Button>
           )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AttachInvoiceDialog({
+  order, onClose, onSaved,
+}: {
+  order: ProcurementOrder | null;
+  onClose: () => void;
+  onSaved: (o: ProcurementOrder) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [invoiceDate, setInvoiceDate] = useState(todayIso());
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [invoiceAmount, setInvoiceAmount] = useState(Number(order?.amount ?? 0));
+  const [confirmDiff, setConfirmDiff] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  if (!order) return null;
+  const orderExcl = Number(order.amount ?? 0);
+  const amountDiff = invoiceAmount !== orderExcl;
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>請求書PDFを添付 — {poLabel(order)}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            受領したPDF（紙はスキャン）を添付すると、この行は「請求書受領」へ移動します。未添付の行が請求書未受領の一覧になります。
+          </p>
+          <p className="text-xs">
+            {order.construction ? `${order.construction.construction_no} ${order.construction.title}` : ""}
+            {order.craftsman?.name ? ` ／ ${order.craftsman.name}` : ""}
+            {` ／ 発注 ${yen(inclOf(orderExcl))}（税込）`}
+          </p>
+          <div className="space-y-1">
+            <Label>請求書（PDFまたは画像）</Label>
+            <Input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/heic"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+            {file && <p className="text-[11px] text-muted-foreground">{file.name}</p>}
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>請求日</Label>
+              <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>請求番号（任意）</Label>
+              <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="任意" />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label>請求書の金額（税抜）</Label>
+              <IntegerInput value={invoiceAmount} onValueChange={setInvoiceAmount} />
+              <p className="text-[11px] text-muted-foreground">
+                発注 {yen(orderExcl)} / 税込 {yen(inclOf(invoiceAmount))}（税 {yen(taxOf(invoiceAmount))}）。この数字が帳票・全銀に載ります。
+              </p>
+            </div>
+          </div>
+          {amountDiff && (
+            <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <Checkbox checked={confirmDiff} onCheckedChange={(c) => setConfirmDiff(c === true)} />
+              <span>発注金額と違います。紙の請求書の数字で進めることを確認しました。</span>
+            </label>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>キャンセル</Button>
+          <Button
+            className="bg-emerald-700 hover:bg-emerald-800"
+            disabled={saving}
+            onClick={async () => {
+              if (!file) {
+                toast.error("PDFまたは画像を選んでください");
+                return;
+              }
+              if (amountDiff && !confirmDiff) {
+                toast.error("発注と金額が違う場合は、確認にチェックしてください");
+                return;
+              }
+              setSaving(true);
+              const fd = new FormData();
+              fd.append("file", file);
+              fd.append("invoiceDate", invoiceDate);
+              fd.append("invoiceNo", invoiceNo);
+              fd.append("invoiceAmount", String(invoiceAmount));
+              const res = await attachStaffInvoicePdf(order.id, fd);
+              setSaving(false);
+              if (!res.ok) {
+                toast.error(res.error);
+                return;
+              }
+              onSaved(res.order);
+              toast.success("添付しました。請求書受領へ移動しました");
+            }}
+          >
+            添付して請求書受領へ
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -114,6 +114,17 @@ export async function createCraftsman(input: Omit<Craftsman, "id" | "company_id"
     .insert({ ...input, company_id: profile.company_id })
     .select()
     .single();
+  if (error && /invoice_channel/i.test(error.message)) {
+    const { invoice_channel: _channel, ...rest } = input;
+    void _channel;
+    const retry = await supabase
+      .from("craftsmen")
+      .insert({ ...rest, company_id: profile.company_id })
+      .select()
+      .single();
+    if (retry.error) throw retry.error;
+    return retry.data as Craftsman;
+  }
   if (error) throw error;
   return data as Craftsman;
 }
@@ -127,12 +138,24 @@ export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman,
       throw new Error("システム予約の業者は名称・種別を変更できません");
     }
   }
-  const { data, error } = await supabase
+  let payload: Partial<Omit<Craftsman, "id" | "company_id" | "created_at" | "updated_at">> = { ...input };
+  let { data, error } = await supabase
     .from("craftsmen")
-    .update(input)
+    .update(payload)
     .eq("id", id)
     .select()
     .single();
+  if (error && /invoice_channel/i.test(error.message)) {
+    const { invoice_channel: _channel, ...rest } = payload;
+    void _channel;
+    payload = rest;
+    ({ data, error } = await supabase
+      .from("craftsmen")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single());
+  }
   if (error && /bank_code|bank_name_kana|bank_branch_code|bank_branch_kana/i.test(error.message)) {
     const {
       bank_code,
@@ -140,7 +163,7 @@ export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman,
       bank_branch_code,
       bank_branch_kana,
       ...rest
-    } = input;
+    } = payload;
     const packedName = [bank_code, bank_name_kana || rest.bank_name].filter(Boolean).join(" ");
     const packedBranch = [bank_branch_code, bank_branch_kana || rest.bank_branch].filter(Boolean).join(" ");
     const { data: fallback, error: fallbackErr } = await supabase

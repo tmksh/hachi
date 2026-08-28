@@ -50,7 +50,7 @@ export const LEDGER_STATUS_META: Record<
     label: "検収完了（請求待ち）",
     cls: "bg-emerald-100 text-emerald-800",
     bar: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    nextActor: "業者へURL送信済み",
+    nextActor: "請求書の受領待ち",
   },
   invoice_received: {
     label: "請求書受領",
@@ -103,6 +103,40 @@ export const CSV_OUTPUT_COLUMNS = [
 export type CsvOutputColumnKey = (typeof CSV_OUTPUT_COLUMNS)[number]["key"];
 
 export const ACCOUNTING_ROLES = ["hq_admin", "admin", "administration", "executive"] as const;
+
+export type InvoiceChannel = "email" | "paper";
+
+/** 議事録 2026/08/27: 紙発注・自社書式は社内PDF添付。未設定かつメールなしは紙発注とみなす。 */
+export function invoiceChannelOf(craftsman?: {
+  invoice_channel?: string | null;
+  email?: string | null;
+  kind?: string | null;
+} | null): InvoiceChannel {
+  if (craftsman?.kind === "system") return "email";
+  if (craftsman?.invoice_channel === "paper") return "paper";
+  if (craftsman?.invoice_channel === "email") return "email";
+  return craftsman?.email ? "email" : "paper";
+}
+
+export function isPaperInvoice(craftsman?: {
+  invoice_channel?: string | null;
+  email?: string | null;
+  kind?: string | null;
+} | null): boolean {
+  return invoiceChannelOf(craftsman) === "paper";
+}
+
+/** 請求書で確認した税抜金額。未入力なら発注金額。帳票・全銀はこれを使う。 */
+export function billedExclOf(order: {
+  vendor_invoice_amount?: number | string | null;
+  amount?: number | string | null;
+}): number {
+  if (order.vendor_invoice_amount != null && order.vendor_invoice_amount !== "") {
+    const n = Number(order.vendor_invoice_amount);
+    if (Number.isFinite(n)) return n;
+  }
+  return Number(order.amount ?? 0);
+}
 
 export function isAccountingRole(role: string | null | undefined): boolean {
   if (!role) return false;

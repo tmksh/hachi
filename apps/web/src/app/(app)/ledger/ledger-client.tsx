@@ -23,6 +23,7 @@ import {
   downloadTextFile,
   downloadZenginFile,
   formatDateSlash,
+  billedExclOf,
   inclOf,
   isZenginAccountReady,
   isZenginSenderReady,
@@ -119,7 +120,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
 
   const csvRows = useMemo(() => {
     const rows = filtered.map((o) => {
-      const excl = Number(o.amount ?? 0);
+      const excl = billedExclOf(o);
       return {
         id: o.id,
         projectNo: o.construction?.construction_no ?? "",
@@ -174,7 +175,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
       const account = resolveZenginAccount(o.craftsman ?? {});
       const bank = bankLabel(o.craftsman ?? {});
       const key = `${o.craftsman?.id ?? o.craftsman?.name ?? "未登録"}|${account.bankCode}|${account.accountNumber}`;
-      const billed = inclOf(Number(o.amount ?? 0));
+      const billed = inclOf(billedExclOf(o));
       const cur = map.get(key);
       if (cur) {
         cur.billed += billed;
