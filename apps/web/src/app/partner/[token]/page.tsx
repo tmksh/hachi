@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { HardHat, CheckCircle2, Loader2 } from "lucide-react";
+import { HardHat, CheckCircle2, Loader2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import {
   acceptPartnerOrder,
   getPartnerPortalOrder,
   type PartnerPortalOrder,
 } from "@/lib/actions/partner-portal";
+import { OrderDocumentPreview } from "@/components/constructions/order-document-preview";
 
 /** 外部協力業者向け URL アクセス（⑥ No.10）— ログイン不要 */
 export default function PartnerPortalPage() {
@@ -39,13 +40,13 @@ export default function PartnerPortalPage() {
       toast.error(res.error);
       return;
     }
-    setOrder((prev) => (prev ? { ...prev, accepted: true } : prev));
-    toast.success("受領しました");
+    setOrder((prev) => (prev ? { ...prev, accepted: true, acceptedAt: new Date().toISOString() } : prev));
+    toast.success("受領しました。請書を確認できます");
   };
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-8 flex items-center justify-center">
-      <Card className="max-w-lg w-full">
+    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
+      <Card className="max-w-lg w-full mx-auto">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <HardHat className="h-5 w-5" />発注書確認（外部協力業者）
@@ -81,9 +82,14 @@ export default function PartnerPortalPage() {
                 </p>
               </div>
               {order.accepted ? (
-                <p className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" />受領済み
-                </p>
+                <div className="space-y-3">
+                  <p className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+                    <CheckCircle2 className="h-4 w-4" />受領済み
+                  </p>
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => window.print()}>
+                    <FileText className="h-4 w-4" />請書を印刷
+                  </Button>
+                </div>
               ) : (
                 <Button size="sm" className="gap-1.5" disabled={accepting} onClick={() => void handleAccept()}>
                   {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -94,6 +100,25 @@ export default function PartnerPortalPage() {
           )}
         </CardContent>
       </Card>
+      {order && (
+        <div className="mt-6 print:mt-0">
+          <OrderDocumentPreview
+            kind={order.accepted ? "acknowledgment" : "order"}
+            data={{
+              title: order.orderTitle,
+              amount: order.amount,
+              orderDate: order.orderDate,
+              acceptedAt: order.acceptedAt,
+              startDate: order.startDate,
+              endDate: order.endDate,
+              workContent: order.workContent,
+              specialNotes: order.specialNotes,
+              craftsmanName: order.craftsmanName,
+              constructionTitle: order.constructionTitle,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

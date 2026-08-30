@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { getCostBudget, saveCostBudget } from "@/lib/actions/cost-budgets";
 import { getConstructionEstimate } from "@/lib/actions/constructions";
 import { bulkCreateContractorOrders } from "@/lib/actions/contractor-orders";
+import { getProcurementMasters, listAccountItemHistory, type AccountItemHistory } from "@/lib/actions/procurement";
+import { PROCUREMENT_ACCOUNT_ITEMS, suggestAccountItem } from "@/lib/procurement";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,8 @@ type ContractorRow = {
   status: "発注済" | "未発注";
   name: string;
   work_type: string;
+  account_item: string;
+  account_item_source: string;
   budget: number;
   add_contracts: number[];
   management_budget: number;
@@ -59,6 +63,8 @@ function normalizeRow(raw: Record<string, unknown>): ContractorRow {
     status: (raw.status as ContractorRow["status"]) ?? "未発注",
     name: String(raw.name ?? ""),
     work_type: String(raw.work_type ?? ""),
+    account_item: String(raw.account_item ?? ""),
+    account_item_source: String(raw.account_item_source ?? ""),
     budget: Number(raw.budget ?? 0),
     add_contracts,
     management_budget: Number(raw.management_budget ?? 0),
@@ -66,6 +72,26 @@ function normalizeRow(raw: Record<string, unknown>): ContractorRow {
     add_orders,
     monthly: (raw.monthly as ContractorRow["monthly"]) ?? {},
   };
+}
+
+function accountLocked(row: Pick<ContractorRow, "account_item_source">) {
+  return (
+    row.account_item_source === "budget"
+    || row.account_item_source === "accounting"
+    || row.account_item_source === "manual"
+  );
+}
+
+function withSuggestedAccount(
+  row: ContractorRow,
+  past: AccountItemHistory[],
+): ContractorRow {
+  if (accountLocked(row)) return row;
+  const key = (row.name || (row.work_type !== "—" ? row.work_type : "")).trim();
+  if (!key) return { ...row, account_item: "", account_item_source: "" };
+  const suggested = suggestAccountItem(key, past);
+  if (!suggested.item) return { ...row, account_item: "", account_item_source: "" };
+  return { ...row, account_item: suggested.item, account_item_source: suggested.source };
 }
 
 function padRow(row: ContractorRow, contractCols: number, orderCols: number): ContractorRow {
@@ -110,6 +136,7 @@ function newEmptyRow(contractCols = 2, orderCols = 3): ContractorRow {
   return {
     id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     status: "未発注", name: "", work_type: "",
+    account_item: "", account_item_source: "",
     budget: 0,
     add_contracts: Array(contractCols).fill(0),
     management_budget: 0,
@@ -366,6 +393,8 @@ interface Props {
     amount: number;
     status: string;
     work_content?: string | null;
+    account_item?: string | null;
+    account_item_source?: string | null;
     craftsman?: { name: string } | null;
   }>;
   estimates?: Array<{
@@ -380,7 +409,7 @@ interface Props {
     diff_amount: number;
   }>;
   authorName?: string;
-  onNavigateToOrders?: (row?: { name: string; work_type: string; budget: number }) => void;
+  onNavigateToOrders?: (row?: { name: string; work_type: string; budget: number; account_item?: string }) => void;
   onOrdersCreated?: () => void;
 }
 
@@ -424,6 +453,8 @@ function mapEstimateToBudgetRows(
     status: "未発注" as const,
     name: g.name,
     work_type: [...g.workTypes].join(" / ") || "—",
+    account_item: "",
+    account_item_source: "",
     budget: g.budget,
     add_contracts: [0, 0],
     management_budget: g.budget,
@@ -439,6 +470,8 @@ function mapEstimateToBudgetRows(
       status: "未発注" as const,
       name: "",
       work_type: "予備費（現場対応分）",
+      account_item: "",
+      account_item_source: "",
       budget: 0,
       add_contracts: [0, 0],
       management_budget: 0,
@@ -458,6 +491,8 @@ function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
     status: (order.status === "approved" || order.status === "submitted" ? "発注済" : "未発注") as ContractorRow["status"],
     name: order.craftsman?.name ?? order.title,
     work_type: order.work_content ?? order.title,
+    account_item: order.account_item ?? "",
+    account_item_source: order.account_item_source ?? "",
     budget: Number(order.amount ?? 0),
     add_contracts: [0, 0],
     management_budget: Number(order.amount ?? 0),
@@ -480,12 +515,21 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [accountItems, setAccountItems] = useState<string[]>(PROCUREMENT_ACCOUNT_ITEMS.map((i) => i.name));
+  const [history, setHistory] = useState<AccountItemHistory[]>([]);
 
   const defaultPeriod = periodStart?.slice(0, 7) ?? "2025-01";
   // 台帳独自の契約金額（見積参照時に見積合計へ同期 / 保存済み値を復元）
   const [ledgerContractAmount, setLedgerContractAmount] = useState<number | null>(null);
   const resolvedContractAmount =
     ledgerContractAmount ?? (propAmount && propAmount > 0 ? propAmount : 0);
+
+  useEffect(() => {
+    void getProcurementMasters().then((m) => {
+      if (m.accountItems.length) setAccountItems(m.accountItems);
+    }).catch(() => {});
+    void listAccountItemHistory().then(setHistory).catch(() => {});
+  }, []);
 
   useEffect(() => {
     getCostBudget(constructionId).then((data) => {
@@ -504,6 +548,14 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
       setLoaded(true);
     }).catch(() => setLoaded(true));
   }, [constructionId]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setRows((prev) => {
+      const next = prev.map((r) => withSuggestedAccount(r, history));
+      return next.some((r, i) => r.account_item !== prev[i]?.account_item) ? next : prev;
+    });
+  }, [history, loaded]);
 
   const persist = useCallback(async (
     nextRows: ContractorRow[],
@@ -545,7 +597,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   const [confirmReplaceRows, setConfirmReplaceRows] = useState<ContractorRow[] | null>(null);
 
   const applyEstimateRows = useCallback((newRows: ContractorRow[]) => {
-    setRows(newRows.map((r) => padRow(r, contractColCount, orderColCount)));
+    setRows(newRows.map((r) => padRow(withSuggestedAccount(r, history), contractColCount, orderColCount)));
     // 契約金額が未設定・見積合計と乖離している場合は見積合計（売値）に同期（No.16: 粗利異常値の防止）
     const estimateTotal = newRows.reduce((s, r) => s + Number(r.budget || 0), 0);
     if (estimateTotal > 0) {
@@ -556,7 +608,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     }
     setSaved(false);
     toast.success("見積もりから工事台帳を作成しました");
-  }, [contractColCount, orderColCount, propAmount]);
+  }, [contractColCount, orderColCount, propAmount, history]);
 
   const applyFromEstimate = useCallback(async (estimateId: string) => {
     const loadingId = toast.loading("見積もりを読み込み中...");
@@ -645,6 +697,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           name: r.name,
           workType: r.work_type,
           amount: compute(r).budget_total,
+          accountItem: r.account_item,
         })),
       );
       const targetIds = new Set(targets.map(r => r.id));
@@ -713,9 +766,16 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   /* ── row update helpers ── */
   const updateField = useCallback(
     <K extends keyof ContractorRow>(id: string, field: K, value: ContractorRow[K]) => {
-      setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+      setRows(prev => prev.map(r => {
+        if (r.id !== id) return r;
+        const next = { ...r, [field]: value } as ContractorRow;
+        if (field === "name" || field === "work_type") {
+          return withSuggestedAccount(next, history);
+        }
+        return next;
+      }));
       setSaved(false);
-    }, []
+    }, [history]
   );
   const updateContractCol = useCallback((id: string, colIdx: number, value: number) => {
     setRows(prev => prev.map(r => {
@@ -771,7 +831,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     ));
 
   /* ── totals ── */
-  const totalColSpan = 12 + contractColCount + orderColCount + months.length;
+  const totalColSpan = 14 + contractColCount + orderColCount + months.length;
 
   const totals = useMemo(() => {
     const t = {
@@ -966,11 +1026,12 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
       )}
         style={{ cursor: commentMode ? "crosshair" : undefined }}
       >
-        <table className="border-collapse text-sm" style={{ minWidth: `${1230 + contractColCount * 92 + orderColCount * 92 + months.length * 78}px` }} onClick={handleTableClick}>
+        <table className="border-collapse text-sm" style={{ minWidth: `${1340 + contractColCount * 92 + orderColCount * 92 + months.length * 78}px` }} onClick={handleTableClick}>
           <colgroup>
             <col style={{ width: 30 }} />
             <col style={{ width: 32 }} /><col style={{ width: 62 }} />
             <col style={{ width: 130 }} /><col style={{ width: 115 }} />
+            <col style={{ width: 110 }} />
             <col style={{ width: 92 }} />
             {Array.from({ length: contractColCount }).map((_, i) => <col key={`cc-${i}`} style={{ width: 92 }} />)}
             <col style={{ width: 100 }} /><col style={{ width: 92 }} />
@@ -984,7 +1045,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
 
           <thead>
             <tr>
-              <th colSpan={5} className={cn(th, "bg-gray-100 text-left text-gray-600")}>基本情報</th>
+              <th colSpan={6} className={cn(th, "bg-gray-100 text-left text-gray-600")}>基本情報</th>
               <th colSpan={1 + contractColCount} className={cn(th, "bg-blue-100 text-blue-800 relative group/add-budget")}>
                 <span>実行予算・追加契約</span>
                 <button
@@ -1029,6 +1090,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
               <th className={cn(th, "bg-gray-100")}>発注</th>
               <th className={cn(th, "bg-gray-100 text-left")}>業者名</th>
               <th className={cn(th, "bg-gray-100 text-left")}>工種</th>
+              <th className={cn(th, "bg-gray-100 text-left")}>勘定科目</th>
               <th className={cn(th, "bg-blue-50")}>実行予算</th>
               {Array.from({ length: contractColCount }).map((_, i) => (
                 <th key={`ch-${i}`} className={cn(th, "bg-blue-50")}>{colLabel("追加契約", i)}</th>
@@ -1080,7 +1142,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                   <td className={cn(tcc)}>
                     {row.status === "未発注" && onNavigateToOrders ? (
                       <button
-                        onClick={() => onNavigateToOrders({ name: row.name, work_type: row.work_type, budget: row.budget })}
+                        onClick={() => onNavigateToOrders({ name: row.name, work_type: row.work_type, budget: row.budget, account_item: row.account_item })}
                         className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-tight cursor-pointer transition-colors bg-blue-500 text-white hover:bg-blue-600"
                         title="発注書・請書タブへ移動"
                       >
@@ -1115,6 +1177,27 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                       onChange={v => updateField(row.id, "work_type", v)}
                       placeholder="工種"
                     />
+                  </td>
+                  <td className={cn(tdl)}>
+                    <select
+                      value={row.account_item}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setRows((prev) => prev.map((r) => r.id === row.id
+                          ? { ...r, account_item: next, account_item_source: "budget" }
+                          : r));
+                        setSaved(false);
+                      }}
+                      title={row.account_item_source === "learned" || row.account_item_source === "ai"
+                        ? "過去の実績から提案。変更すると次回の学習に残ります"
+                        : "ディレクター・施工管理が入力。経理が直した内容が優先されます"}
+                      className="w-full text-[11px] bg-transparent border-0 outline-none focus:ring-1 focus:ring-[#6BC9B3] focus:bg-white focus:rounded px-0.5 py-0.5"
+                    >
+                      <option value="">未設定</option>
+                      {accountItems.map((item) => (
+                        <option key={item} value={item}>{item}</option>
+                      ))}
+                    </select>
                   </td>
                   {/* 実行予算 */}
                   <td className={cn(tdc, "bg-blue-50/30")}>
@@ -1201,7 +1284,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
             {/* 合計行 */}
             <tr className="bg-blue-50/20 font-semibold border-b-2 border-gray-300">
               <td colSpan={3} className={cn(tcc, "bg-gray-100")} />
-              <td colSpan={2} className={cn(tdl, "bg-gray-50 font-bold")}>合計</td>
+              <td colSpan={3} className={cn(tdl, "bg-gray-50 font-bold")}>合計</td>
               <td className={cn(tdc, "bg-blue-50 font-bold")}>{fmtAlways(totals.budget)}</td>
               {totals.add_contracts.map((v, i) => (
                 <td key={`tc-${i}`} className={cn(tdc, "bg-blue-50 font-bold")}>{fmtView(v)}</td>
@@ -1229,7 +1312,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           {/* ── サマリーフッター ── */}
           <tfoot className="border-t-2 border-gray-400">
             <tr className="bg-gray-50 text-[11px] text-gray-500">
-              <td colSpan={5} className={cn(tdl, "bg-gray-100")} />
+              <td colSpan={6} className={cn(tdl, "bg-gray-100")} />
               <td colSpan={1 + contractColCount + 1} className={cn(tdc, "text-center bg-blue-50/60 font-semibold text-blue-700")}>実行予算（暫定）</td>
               <td className={cn(tdc, "bg-violet-50")} />
               <td colSpan={1 + orderColCount} className={cn(tdc, "text-center bg-amber-50 font-semibold text-amber-700")}>暫定合計</td>
@@ -1242,7 +1325,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
               { label: "工事粗利率", vBudget: grBudget,       vConfirmed: grConfirmed,   isRate: true  },
             ].map(({ label, vBudget, vConfirmed, isRate }) => (
               <tr key={label} className="bg-white border-b border-gray-200">
-                <td colSpan={5} className={cn(tdl, "bg-gray-100 font-semibold text-gray-700")}>{label}</td>
+                <td colSpan={6} className={cn(tdl, "bg-gray-100 font-semibold text-gray-700")}>{label}</td>
                 <td colSpan={1 + contractColCount + 1} className={cn(tdc, "bg-blue-50 font-bold",
                   !isRate && vBudget < 0 ? "text-red-600" : !isRate ? "text-gray-800" : vBudget < 0 ? "text-red-600" : "text-emerald-700"
                 )}>

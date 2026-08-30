@@ -25,7 +25,7 @@ import {
   CheckCircle2, Undo2, CloudUpload, ChevronDown, ChevronUp, Link2, MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getProcurementMasters } from "@/lib/actions/procurement";
+import { getProcurementMasters, listAccountItemHistory, type AccountItemHistory } from "@/lib/actions/procurement";
 import { updateOrderAccountItem } from "@/lib/actions/procurement";
 import {
   ORDER_DISPLAY_STATUS_META,
@@ -47,9 +47,12 @@ import {
   approveContractorOrder,
   rejectContractorOrder,
   sendContractorOrderToCloudSign,
+  markContractorOrderAcknowledged,
 } from "@/lib/actions/contractor-orders";
 import { getOrCreatePartnerOrderLink } from "@/lib/actions/partner-portal";
 import { getCraftsmen } from "@/lib/actions/craftsmen";
+import { vendorNameMatches } from "@/lib/vendor-normalize";
+import { OrderDocumentPreview, type OrderDocKind } from "@/components/constructions/order-document-preview";
 import { getProfiles } from "@/lib/actions/profiles";
 import { useAuth } from "@/hooks/use-auth";
 import type { ContractorOrder, Craftsman, EstimateItem, Profile } from "@/lib/database.types";
@@ -226,24 +229,34 @@ export function InvoicesTab({
 ══════════════════════════════════════════════════ */
 
 export type OrderRow = ContractorOrder & {
-  craftsman?: { id: string; name: string } | null;
+  craftsman?: { id: string; name: string; company_name?: string | null } | null;
   submitted_comment?: string | null;
   submitted_to?: string | null;
   submitted_by?: string | null;
   submitted_at?: string | null;
 };
 
+function craftsmanLabel(c: { name: string; company_name?: string | null }) {
+  const company = c.company_name?.trim();
+  if (company && company !== c.name) return `${company}（${c.name}）`;
+  return company || c.name;
+}
+
 const PAYMENT_COUNT_OPTIONS = ["1回", "2回", "3回", "4回", "6回", "12回", "その他"];
 
 const APPROVER_ROLES = ["hq_admin", "admin", "executive", "contractor_admin"] as const;
 
-/** 業者名 → 業者マスタ照合（完全一致 → 部分一致） */
+/** 業者名 → 業者マスタ照合（会社名・表記ゆれを含む） */
 function matchCraftsman(name: string, craftsmen: Craftsman[]): Craftsman | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  const exact = craftsmen.find(c => c.name.trim() === trimmed);
+  const exact = craftsmen.find((c) =>
+    c.name.trim() === trimmed || (c.company_name?.trim() ?? "") === trimmed,
+  );
   if (exact) return exact;
-  return craftsmen.find(c => c.name.trim().includes(trimmed) || trimmed.includes(c.name.trim())) ?? null;
+  return craftsmen.find((c) =>
+    vendorNameMatches(c.name, trimmed) || (c.company_name ? vendorNameMatches(c.company_name, trimmed) : false),
+  ) ?? null;
 }
 
 export function OrdersTab({ constructionId, initialOrders, constructionStartDate, constructionEndDate, estimateId, initialForm }: {
@@ -252,7 +265,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
   constructionStartDate?: string | null;
   constructionEndDate?: string | null;
   estimateId?: string | null;
-  initialForm?: { title?: string; amount?: string; workContent?: string } | null;
+  initialForm?: { title?: string; amount?: string; workContent?: string; accountItem?: string } | null;
 }) {
   const { profile, hasRole } = useAuth();
   const canApprove = hasRole(...APPROVER_ROLES);
@@ -263,6 +276,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [craftsmen, setCraftsmen] = useState<Craftsman[]>([]);
   const [pdfPreviewOrder, setPdfPreviewOrder] = useState<OrderRow | null>(null);
+  const [pdfPreviewKind, setPdfPreviewKind] = useState<OrderDocKind>("order");
   const [estimateItems, setEstimateItems] = useState<EstimateItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [form, setForm] = useState({
@@ -280,11 +294,12 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     workContent: initialForm?.workContent ?? "",
     specialNotes: "",
     department: "",
-    accountItem: "",
-    accountItemSource: "",
+    accountItem: initialForm?.accountItem ?? "",
+    accountItemSource: initialForm?.accountItem ? "budget" : "",
   });
   const [departments, setDepartments] = useState<string[]>([]);
   const [accountItems, setAccountItems] = useState<string[]>(PROCUREMENT_ACCOUNT_ITEMS.map((i) => i.name));
+  const [accountHistory, setAccountHistory] = useState<AccountItemHistory[]>([]);
   const [listStatus, setListStatus] = useState("all");
   const [listDept, setListDept] = useState("all");
   const [unsetAccountOnly, setUnsetAccountOnly] = useState(false);
@@ -311,6 +326,19 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
 
   const scheduleTotal = customSchedule.reduce((s, r) => s + r.rate * 100, 0);
   const scheduleValid = customSchedule.length === 0 || Math.abs(scheduleTotal - 100) < 0.1;
+
+  const suggestionPast = accountHistory.length > 0
+    ? accountHistory
+    : orders.map((o) => ({
+        vendorName: o.craftsman?.name,
+        companyName: o.craftsman?.company_name,
+        accountItem: o.account_item,
+        accountItemSource: o.account_item_source,
+      }));
+
+  useEffect(() => {
+    void listAccountItemHistory().then(setAccountHistory).catch(() => {});
+  }, []);
 
   const loadEstimateItems = async () => {
     if (!estimateId || estimateItems.length > 0) return;
@@ -344,7 +372,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     if (form.craftsmanId || !form.craftsmanName.trim()) return;
     const matched = matchCraftsman(form.craftsmanName, craftsmen);
     if (matched) {
-      const suggested = suggestAccountItem(matched.name);
+      const suggested = suggestAccountItem(matched.company_name || matched.name, suggestionPast);
       setForm(f => ({
         ...f,
         craftsmanId: matched.id,
@@ -354,7 +382,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
         accountItemSource: f.accountItemSource || suggested.source,
       }));
     } else if (form.craftsmanName) {
-      const suggested = suggestAccountItem(form.craftsmanName);
+      const suggested = suggestAccountItem(form.craftsmanName, suggestionPast);
       setForm(f => ({
         ...f,
         accountItem: f.accountItem || suggested.item,
@@ -362,7 +390,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
       }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [craftsmen, showCreateForm]);
+  }, [craftsmen, showCreateForm, accountHistory]);
 
   const craftsmanUnmatched = !form.craftsmanId && form.craftsmanName.trim() !== "";
 
@@ -491,6 +519,19 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     }
   };
 
+  const handleMarkAcknowledged = async (order: OrderRow) => {
+    setActingId(order.id);
+    try {
+      const updated = await markContractorOrderAcknowledged(order.id);
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...updated, craftsman: o.craftsman } : o)));
+      toast.success("請書を受領済みにしました。納品・検収へ進めます");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "請書の受領記録に失敗しました");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   async function handleImportFromEstimate() {
     if (!estimateId) {
       toast.error("見積もりが紐付いていません");
@@ -561,8 +602,9 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                   value={form.craftsmanId || undefined}
                   onValueChange={v => {
                     const id = v === "__none__" ? "" : v;
-                    const name = craftsmen.find(c => c.id === id)?.name ?? "";
-                    const suggested = suggestAccountItem(name);
+                    const picked = craftsmen.find(c => c.id === id);
+                    const name = picked ? craftsmanLabel(picked) : "";
+                    const suggested = suggestAccountItem(picked?.company_name || picked?.name || name, suggestionPast);
                     setForm(f => ({
                       ...f,
                       craftsmanId: id,
@@ -579,7 +621,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                   <SelectContent>
                     <SelectItem value="__none__">指定なし</SelectItem>
                     {craftsmen.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      <SelectItem key={c.id} value={c.id}>{craftsmanLabel(c)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1003,7 +1045,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                         {order.notes && <p className="text-xs text-muted-foreground mt-0.5">{order.notes}</p>}
                       </td>
                       <td className="px-3 py-3 text-sm">
-                        {order.craftsman?.name ?? (
+                        {order.craftsman ? craftsmanLabel(order.craftsman) : (
                           <span className="inline-flex items-center text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
                             ⚠️ 業者が未設定
                           </span>
@@ -1105,13 +1147,32 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                                 <MoreHorizontal className="h-4 w-4" />
                               </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuContent align="end" className="w-48">
                               <DropdownMenuItem onClick={() => void handleCopyPartnerLink(order)}>
                                 <Link2 className="h-3.5 w-3.5" />業者URL
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setPdfPreviewOrder(order)}>
-                                <FileText className="h-3.5 w-3.5" />PDF確認
+                              <DropdownMenuItem onClick={() => { setPdfPreviewKind("order"); setPdfPreviewOrder(order); }}>
+                                <FileText className="h-3.5 w-3.5" />発注書を確認
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!order.concluded_at}
+                                title={order.concluded_at ? "請書を確認" : "業者の受領後に確認できます"}
+                                onClick={() => {
+                                  if (!order.concluded_at) return;
+                                  setPdfPreviewKind("acknowledgment");
+                                  setPdfPreviewOrder(order);
+                                }}
+                              >
+                                <FileText className="h-3.5 w-3.5" />請書を確認
+                              </DropdownMenuItem>
+                              {order.status === "approved" && !order.concluded_at && (
+                                <DropdownMenuItem
+                                  disabled={actingId === order.id}
+                                  onClick={() => void handleMarkAcknowledged(order)}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />請書を受領済みにする
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 className="text-red-600"
                                 disabled={deletingId === order.id}
@@ -1129,8 +1190,9 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
                         <td colSpan={9} className="px-4 py-3">
                           <div className="space-y-3 text-xs">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
-                              <div><span className="text-muted-foreground">発注先：</span>{order.craftsman?.name ?? "指定なし"}</div>
+                              <div><span className="text-muted-foreground">発注先：</span>{order.craftsman ? craftsmanLabel(order.craftsman) : "指定なし"}</div>
                               <div><span className="text-muted-foreground">発注日：</span>{order.order_date ?? "—"}</div>
+                              <div><span className="text-muted-foreground">請書：</span>{order.concluded_at ? `受領済み（${order.concluded_at.slice(0, 10)}）` : "未受領"}</div>
                               <div><span className="text-muted-foreground">工期：</span>{order.start_date ?? "—"} 〜 {order.end_date ?? "—"}</div>
                               <div><span className="text-muted-foreground">完了予定日：</span>{order.completion_date ?? "—"}</div>
                               <div><span className="text-muted-foreground">支払予定日：</span>{order.payment_date ?? "—"}</div>
@@ -1258,22 +1320,44 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
         </DialogContent>
       </Dialog>
 
-      {/* 発注書PDFプレビューダイアログ */}
       {pdfPreviewOrder && (
         <Dialog open={!!pdfPreviewOrder} onOpenChange={() => setPdfPreviewOrder(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>発注書プレビュー</DialogTitle>
+          <DialogContent className="flex flex-col gap-0 p-0 overflow-hidden max-h-[92vh] w-[min(calc(100%-1.5rem),calc(210mm+4rem))] max-w-[min(calc(100%-1.5rem),calc(210mm+4rem))] sm:max-w-[min(calc(100%-1.5rem),calc(210mm+4rem))]">
+            <DialogHeader className="px-5 py-3 bg-slate-100 border-b">
+              <DialogTitle>{pdfPreviewKind === "acknowledgment" ? "請書プレビュー" : "発注書プレビュー"}</DialogTitle>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant={pdfPreviewKind === "order" ? "default" : "outline"} className="h-7 text-xs" onClick={() => setPdfPreviewKind("order")}>発注書</Button>
+                <Button size="sm" variant={pdfPreviewKind === "acknowledgment" ? "default" : "outline"} className="h-7 text-xs" onClick={() => setPdfPreviewKind("acknowledgment")}>請書</Button>
+              </div>
             </DialogHeader>
-            <div className="flex-1 overflow-y-auto">
-              <OrderPdfPreview order={pdfPreviewOrder} />
+            <div className="flex-1 overflow-y-auto bg-slate-200 py-6 px-4">
+              <OrderDocumentPreview
+                kind={pdfPreviewKind}
+                data={{
+                  title: pdfPreviewOrder.title,
+                  amount: pdfPreviewOrder.amount,
+                  orderDate: pdfPreviewOrder.order_date,
+                  acceptedAt: pdfPreviewOrder.concluded_at,
+                  startDate: pdfPreviewOrder.start_date,
+                  endDate: pdfPreviewOrder.end_date,
+                  completionDate: pdfPreviewOrder.completion_date,
+                  paymentDate: pdfPreviewOrder.payment_date,
+                  paymentCount: pdfPreviewOrder.payment_count,
+                  workContent: pdfPreviewOrder.work_content,
+                  specialNotes: pdfPreviewOrder.special_notes,
+                  craftsmanName: pdfPreviewOrder.craftsman ? craftsmanLabel(pdfPreviewOrder.craftsman) : null,
+                  paymentSchedule: (pdfPreviewOrder.payment_schedule && pdfPreviewOrder.payment_schedule.length > 0)
+                    ? pdfPreviewOrder.payment_schedule
+                    : buildPaymentSchedule(pdfPreviewOrder.amount, pdfPreviewOrder.payment_count ?? "1回", pdfPreviewOrder.start_date, pdfPreviewOrder.end_date),
+                }}
+              />
             </div>
-            <DialogFooter>
+            <DialogFooter className="px-5 py-3 border-t">
               <Button variant="outline" onClick={() => setPdfPreviewOrder(null)}>閉じる</Button>
               <Button onClick={() => window.print()} variant="outline">
                 <FileText className="h-4 w-4 mr-1" />印刷
               </Button>
-              {pdfPreviewOrder.status === "draft" && (
+              {pdfPreviewOrder.status === "draft" && pdfPreviewKind === "order" && (
                 <Button
                   onClick={() => {
                     const target = pdfPreviewOrder;
@@ -1287,108 +1371,6 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      )}
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────
-   発注書PDFプレビューコンポーネント
-────────────────────────────────────────────────── */
-function OrderPdfPreview({ order }: { order: OrderRow }) {
-  const schedule = (order.payment_schedule && order.payment_schedule.length > 0)
-    ? order.payment_schedule
-    : buildPaymentSchedule(order.amount, order.payment_count ?? "1回", order.start_date, order.end_date);
-  const tax = Math.round(order.amount * 0.1);
-  const total = order.amount + tax;
-
-  return (
-    <div className="bg-white text-black p-6 space-y-4 text-sm font-sans print:p-0">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold tracking-wide mb-1">発 注 書</h1>
-        <p className="text-xs text-gray-500">発注日: {order.order_date ?? "—"}</p>
-      </div>
-
-      <div className="flex justify-between gap-4 border-b pb-3">
-        <div>
-          <p className="text-xs text-gray-500 mb-0.5">発注先</p>
-          <p className="text-base font-semibold">{order.craftsman?.name ?? "（未設定）"} 御中</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500 mb-0.5">件名</p>
-          <p className="font-semibold">{order.title}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <div><span className="text-gray-500">工期開始：</span>{order.start_date ?? "—"}</div>
-        <div><span className="text-gray-500">工期終了：</span>{order.end_date ?? "—"}</div>
-        <div><span className="text-gray-500">完了予定日：</span>{order.completion_date ?? "—"}</div>
-        <div><span className="text-gray-500">支払予定日：</span>{order.payment_date ?? "—"}</div>
-        <div><span className="text-gray-500">支払回数：</span>{order.payment_count ?? "1回"}</div>
-      </div>
-
-      {order.work_content && (
-        <div className="border rounded p-2">
-          <p className="text-[11px] font-semibold text-gray-500 mb-1">工事内容</p>
-          <p className="text-xs whitespace-pre-wrap">{order.work_content}</p>
-        </div>
-      )}
-
-      <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border px-2 py-1.5 text-left">項目</th>
-            <th className="border px-2 py-1.5 text-right w-28">金額</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className="border px-2 py-1.5">{order.title}</td>
-            <td className="border px-2 py-1.5 text-right tabular-nums">¥{order.amount.toLocaleString()}</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td className="border px-2 py-1.5 text-right text-gray-500">消費税（10%）</td>
-            <td className="border px-2 py-1.5 text-right tabular-nums">¥{tax.toLocaleString()}</td>
-          </tr>
-          <tr className="bg-gray-50 font-bold">
-            <td className="border px-2 py-1.5 text-right">合計（税込）</td>
-            <td className="border px-2 py-1.5 text-right tabular-nums text-base">¥{total.toLocaleString()}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      {schedule.length > 1 && (
-        <div>
-          <p className="text-[11px] font-semibold text-gray-500 mb-1">支払スケジュール</p>
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-2 py-1 text-left">区分</th>
-                <th className="border px-2 py-1 text-right">金額</th>
-                <th className="border px-2 py-1 text-left">支払期日</th>
-              </tr>
-            </thead>
-            <tbody>
-              {schedule.map((s, i) => (
-                <tr key={i}>
-                  <td className="border px-2 py-1">{s.phase}</td>
-                  <td className="border px-2 py-1 text-right tabular-nums">¥{s.amount.toLocaleString()}</td>
-                  <td className="border px-2 py-1">{s.due_date ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {order.special_notes && (
-        <div className="border rounded p-2 border-gray-300">
-          <p className="text-[11px] font-semibold text-gray-500 mb-1">特記事項</p>
-          <p className="text-xs whitespace-pre-wrap">{order.special_notes}</p>
-        </div>
       )}
     </div>
   );

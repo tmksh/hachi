@@ -92,8 +92,8 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
       ? initialSettings.period_start_day
       : 1,
   );
-  // No.97: 法人税の概算表示（デフォルトOFF）
-  const [showEstimatedTax, setShowEstimatedTax] = useState(false);
+  // No.89: 当期純利益を段階利益として常時出すため、法人税概算はデフォルトON
+  const [showEstimatedTax, setShowEstimatedTax] = useState(true);
   // No.82: 決算書は千円表示が既定（入力保存は常に円）
   const [displayUnit, setDisplayUnit] = useState<FinancialDisplayUnit>("thousand");
   const [costSheetOpen, setCostSheetOpen] = useState(false);

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { guessReplyAddress, replySubject } from "@/lib/mail-reply";
 
 export type MailProvider = "gmail" | "imap" | "forward";
 
@@ -21,13 +22,22 @@ export async function getEmailAccounts(): Promise<EmailAccount[]> {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("email_accounts")
-    .select("id, provider, email_address, display_name, last_sync_at, token_expires_at, forward_address")
+    .select("id, provider, email_address, last_sync_at, token_expires_at")
     .eq("user_id", user.id)
     .order("created_at");
 
-  return (data ?? []) as EmailAccount[];
+  if (error) {
+    console.error("[getEmailAccounts]", error);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    ...row,
+    display_name: null,
+    forward_address: null,
+  })) as EmailAccount[];
 }
 
 export async function getGmailAccount() {
@@ -112,6 +122,99 @@ export async function markThreadRead(id: string) {
 export async function toggleThreadStar(id: string, starred: boolean) {
   const supabase = await createClient();
   await supabase.from("email_threads").update({ is_starred: starred }).eq("id", id);
+}
+
+export async function replyToThread(input: {
+  threadId: string;
+  body_text: string;
+  body_html?: string;
+  to?: string;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const body = input.body_text.trim();
+  if (!body) throw new Error("本文を入力してください");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id, display_name")
+    .eq("id", user.id)
+    .single();
+  if (!profile) throw new Error("Profile not found");
+
+  const thread = await getEmailThread(input.threadId);
+  if (!thread) throw new Error("スレッドが見つかりません");
+
+  const { data: gmailAccount } = await supabase
+    .from("email_accounts")
+    .select("id, email_address")
+    .eq("user_id", user.id)
+    .eq("provider", "gmail")
+    .maybeSingle();
+
+  const toAddress =
+    input.to?.trim() ||
+    guessReplyAddress(thread.messages ?? [], [gmailAccount?.email_address ?? ""]);
+  if (!toAddress) {
+    throw new Error("返信先のメールアドレスを入力してください");
+  }
+
+  const { sendViaGmailAccount } = await import("@/lib/gmail-send");
+  const sent = await sendViaGmailAccount({
+    userId: user.id,
+    to: [{ address: toAddress }],
+    subject: replySubject(thread.subject),
+    bodyText: body,
+    bodyHtml: input.body_html,
+    gmailThreadId: thread.external_thread_id,
+  });
+
+  const now = new Date().toISOString();
+  const { error: msgError } = await supabase.from("email_messages").insert({
+    company_id: profile.company_id,
+    thread_id: thread.id,
+    from_address: sent.emailAddress,
+    from_name: profile.display_name ?? sent.emailAddress,
+    to_addresses: [{ address: toAddress }],
+    cc_addresses: [],
+    subject: replySubject(thread.subject),
+    body_text: body,
+    body_html: input.body_html || null,
+    direction: "outbound",
+    external_message_id: sent.gmailMessageId,
+    received_at: now,
+  });
+  if (msgError) {
+    const { error: msgRetry } = await supabase.from("email_messages").insert({
+      company_id: profile.company_id,
+      thread_id: thread.id,
+      from_address: sent.emailAddress,
+      from_name: profile.display_name ?? sent.emailAddress,
+      to_addresses: [{ address: toAddress }],
+      subject: replySubject(thread.subject),
+      body_text: body,
+      direction: "outbound",
+      received_at: now,
+    });
+    if (msgRetry) console.error("[replyToThread] message insert failed", msgError, msgRetry);
+  }
+
+  const threadPatch: Record<string, unknown> = {
+    snippet: body.substring(0, 200),
+    last_message_at: now,
+    is_read: true,
+    updated_at: now,
+  };
+  if (!thread.external_thread_id && sent.gmailThreadId) {
+    threadPatch.external_thread_id = sent.gmailThreadId;
+  }
+  await supabase.from("email_threads").update(threadPatch).eq("id", thread.id);
+
+  return getEmailThread(thread.id);
 }
 
 export async function sendEmail(input: {

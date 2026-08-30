@@ -1,5 +1,7 @@
 /** シート9: 発注〜帳票データ・納品検収の共通定義 */
 
+import { vendorNameMatches } from "@/lib/vendor-normalize";
+
 export const PROCUREMENT_ACCOUNT_ITEMS = [
   { name: "外注加工費", hint: "最も多い" },
   { name: "材料費", hint: "最も多い" },
@@ -178,11 +180,38 @@ const ACCOUNT_HINTS: Array<{ re: RegExp; item: string }> = [
   { re: /塗装|建設|工事|施工|土木|設備|電気|水道/, item: "外注加工費" },
 ];
 
-export function suggestAccountItem(vendorName: string | null | undefined): {
+export function suggestAccountItem(
+  vendorName: string | null | undefined,
+  past?: Array<{
+    vendorName?: string | null;
+    companyName?: string | null;
+    accountItem?: string | null;
+    accountItemSource?: string | null;
+  }>,
+): {
   item: string;
-  source: "ai";
+  source: "ai" | "learned";
 } {
   const name = vendorName?.trim() ?? "";
+  if (!name) return { item: "", source: "ai" };
+  if (past?.length) {
+    const hits = past.filter((p) => {
+      if (!p.accountItem) return false;
+      return (
+        (p.vendorName && vendorNameMatches(p.vendorName, name))
+        || (p.companyName && vendorNameMatches(p.companyName, name))
+      );
+    });
+    if (hits.length > 0) {
+      const counts = new Map<string, number>();
+      for (const h of hits) {
+        const weight = h.accountItemSource === "accounting" ? 3 : 1;
+        counts.set(h.accountItem!, (counts.get(h.accountItem!) ?? 0) + weight);
+      }
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      return { item: top, source: "learned" };
+    }
+  }
   for (const hint of ACCOUNT_HINTS) {
     if (hint.re.test(name)) return { item: hint.item, source: "ai" };
   }

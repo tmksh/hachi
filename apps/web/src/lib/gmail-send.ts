@@ -47,7 +47,16 @@ export async function sendViaGmailAccount(input: {
   subject: string;
   bodyText: string;
   bodyHtml?: string | null;
-}): Promise<{ accountId: string; emailAddress: string; gmailMessageId: string | null }> {
+  /** Gmail の threadId。指定すると既存スレッドへの返信になる */
+  gmailThreadId?: string | null;
+  /** RFC Message-ID（あれば In-Reply-To / References に付与） */
+  inReplyTo?: string | null;
+}): Promise<{
+  accountId: string;
+  emailAddress: string;
+  gmailMessageId: string | null;
+  gmailThreadId: string | null;
+}> {
   const admin = createAdminClient();
   const { data: account, error: accErr } = await admin
     .from("email_accounts")
@@ -101,11 +110,13 @@ export async function sendViaGmailAccount(input: {
       .map((line) => `<p style="margin:0 0 8px;white-space:pre-wrap;">${line.replace(/</g, "&lt;").replace(/>/g, "&gt;") || "&nbsp;"}</p>`)
       .join("");
 
+  const replyId = input.inReplyTo?.trim();
   const mime = [
     `From: ${from}`,
     `To: ${toLine}`,
     ...(ccLine ? [`Cc: ${ccLine}`] : []),
     `Subject: =?UTF-8?B?${Buffer.from(input.subject, "utf8").toString("base64")}?=`,
+    ...(replyId ? [`In-Reply-To: ${replyId}`, `References: ${replyId}`] : []),
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",
@@ -130,7 +141,10 @@ export async function sendViaGmailAccount(input: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ raw: toBase64Url(mime) }),
+    body: JSON.stringify({
+      raw: toBase64Url(mime),
+      ...(input.gmailThreadId ? { threadId: input.gmailThreadId } : {}),
+    }),
   });
 
   if (!sendRes.ok) {
@@ -142,10 +156,11 @@ export async function sendViaGmailAccount(input: {
     throw new Error("Gmail APIでの送信に失敗しました");
   }
 
-  const sent = (await sendRes.json()) as { id?: string };
+  const sent = (await sendRes.json()) as { id?: string; threadId?: string };
   return {
     accountId: account.id as string,
     emailAddress: from,
     gmailMessageId: sent.id ?? null,
+    gmailThreadId: sent.threadId ?? input.gmailThreadId ?? null,
   };
 }

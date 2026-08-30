@@ -37,7 +37,19 @@ import {
 } from "@/lib/procurement";
 
 type Format = "zengin" | "csv";
-type SortKey = "vendor" | "department" | "project" | "delivery" | "amount";
+type SortKey =
+  | "vendor"
+  | "department"
+  | "project"
+  | "projectNo"
+  | "delivery"
+  | "amount"
+  | "amountExcl"
+  | "tax"
+  | "bank"
+  | "kana"
+  | "billed"
+  | "fee";
 
 type Props = {
   initialOrders: ProcurementOrder[];
@@ -114,7 +126,11 @@ export function LedgerClient({ initialOrders, masters }: Props) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir("asc");
+      setSortDir(
+        key === "amount" || key === "amountExcl" || key === "tax" || key === "billed" || key === "fee"
+          ? "desc"
+          : "asc",
+      );
     }
   };
 
@@ -140,8 +156,11 @@ export function LedgerClient({ initialOrders, masters }: Props) {
     rows.sort((a, b) => {
       const val = (r: typeof a) => {
         if (sortKey === "amount") return r.amountIncl;
+        if (sortKey === "amountExcl") return r.amountExcl;
+        if (sortKey === "tax") return r.tax;
         if (sortKey === "delivery") return r.deliveryDate;
         if (sortKey === "vendor") return r.vendorName;
+        if (sortKey === "projectNo") return r.projectNo;
         if (sortKey === "project") return r.projectName;
         return r.department;
       };
@@ -203,13 +222,23 @@ export function LedgerClient({ initialOrders, masters }: Props) {
     const rows = [...map.values()];
     const dir = sortDir === "asc" ? 1 : -1;
     rows.sort((a, b) => {
-      const av = sortKey === "amount" ? a.billed : sortKey === "vendor" ? a.vendorName : a.department;
-      const bv = sortKey === "amount" ? b.billed : sortKey === "vendor" ? b.vendorName : b.department;
+      const feeOf = (r: typeof a) => defaultTransferFee(r.billed);
+      const val = (r: typeof a) => {
+        if (sortKey === "billed") return r.billed;
+        if (sortKey === "fee") return feeOf(r);
+        if (sortKey === "amount") return feeBurden === "recipient" ? r.billed - feeOf(r) : r.billed;
+        if (sortKey === "vendor") return r.vendorName;
+        if (sortKey === "bank") return r.bank ?? "";
+        if (sortKey === "kana") return r.kana;
+        return r.department;
+      };
+      const av = val(a);
+      const bv = val(b);
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av).localeCompare(String(bv), "ja") * dir;
     });
     return rows;
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, feeBurden]);
 
   const unexportable = zenginGroups.filter((g) => !g.exportable);
   const visibleZengin = showUnexportable ? unexportable : zenginGroups.filter((g) => g.exportable);
@@ -455,10 +484,10 @@ export function LedgerClient({ initialOrders, masters }: Props) {
       </section>
       </div>
 
-      {unsetAccounts > 0 && (
+      {format === "csv" && unsetAccounts > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm text-red-800">
-            勘定科目が未確定の請求が {unsetAccounts} 件あります。このまま出すと科目別集計が合いません。
+            勘定科目が未確定の請求が {unsetAccounts} 件あります。このまま出すと科目別集計が合いません。全銀フォーマットには科目は不要です。
           </p>
           <Button asChild size="sm" className="bg-red-600 hover:bg-red-700">
             <Link href="/account-items">勘定科目の確定へ</Link>
@@ -491,13 +520,13 @@ export function LedgerClient({ initialOrders, masters }: Props) {
               <thead>
                 <tr className="bg-muted/40 text-[11px] text-muted-foreground">
                   <th className="px-3 py-2 w-8" />
-                  <Th onClick={() => toggleSort("project")}>案件番号</Th>
+                  <Th onClick={() => toggleSort("projectNo")}>案件番号</Th>
                   <Th onClick={() => toggleSort("project")}>案件名</Th>
                   <Th onClick={() => toggleSort("vendor")}>業者名</Th>
                   <Th onClick={() => toggleSort("department")}>部門</Th>
                   <Th onClick={() => toggleSort("delivery")} className="bg-amber-50">納品日（取引日）</Th>
-                  <th className="px-3 py-2 text-right">税抜</th>
-                  <th className="px-3 py-2 text-right">消費税</th>
+                  <Th onClick={() => toggleSort("amountExcl")} className="text-right">税抜</Th>
+                  <Th onClick={() => toggleSort("tax")} className="text-right">消費税</Th>
                   <Th onClick={() => toggleSort("amount")} className="text-right">税込</Th>
                 </tr>
               </thead>
@@ -531,10 +560,10 @@ export function LedgerClient({ initialOrders, masters }: Props) {
                 <tr className="bg-muted/40 text-[11px] text-muted-foreground">
                   <th className="px-3 py-2 w-8" />
                   <Th onClick={() => toggleSort("vendor")}>業者名</Th>
-                  <th className="px-3 py-2 text-left">振込先口座</th>
-                  <th className="px-3 py-2 text-left">受取人名（カナ）</th>
-                  <th className="px-3 py-2 text-right">請求額</th>
-                  <th className="px-3 py-2 text-right">手数料</th>
+                  <Th onClick={() => toggleSort("bank")}>振込先口座</Th>
+                  <Th onClick={() => toggleSort("kana")}>受取人名（カナ）</Th>
+                  <Th onClick={() => toggleSort("billed")} className="text-right">請求額</Th>
+                  <Th onClick={() => toggleSort("fee")} className="text-right">手数料</Th>
                   <Th onClick={() => toggleSort("amount")} className="text-right">振込額</Th>
                 </tr>
               </thead>

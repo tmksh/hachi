@@ -47,13 +47,13 @@ export function effectiveCategoryAmounts(
   category: CategoryLike,
   items: ItemLike[],
 ): { cost_amount: number; selling_amount: number; overridden: boolean } {
-  const overridden = isCategoryOverridden(items);
-  if (overridden) {
+  const hasDetails = isCategoryOverridden(items);
+  if (hasDetails) {
     const calcItems = items.filter((i) => !i.is_text_row);
     return {
       cost_amount: calcItems.reduce((s, i) => s + Number(i.cost_amount ?? 0), 0),
       selling_amount: calcItems.reduce((s, i) => s + Number(i.selling_amount ?? 0), 0),
-      overridden: true,
+      overridden: hasCategoryDirectInput(category),
     };
   }
   return { ...categoryDirectAmounts(category), overridden: false };

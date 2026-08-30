@@ -33,6 +33,7 @@ import {
   type ProcurementAttachment,
   type ProcurementOrder,
 } from "@/lib/actions/procurement";
+import { markContractorOrderAcknowledged } from "@/lib/actions/contractor-orders";
 import {
   LEDGER_STATUS_META,
   deriveLedgerStatus,
@@ -214,6 +215,25 @@ export function FulfillmentClient({ initialOrders }: Props) {
         </Button>
       </PageHeader>
 
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="rounded-xl border bg-amber-50/70 border-amber-200 p-3 space-y-2">
+          <p className="text-xs font-semibold text-amber-950">紙発注・自社書式の流れ</p>
+          <ol className="text-[11px] text-amber-950/90 space-y-1 leading-snug list-decimal pl-4">
+            <li>業者マスタで「紙発注」にした行が色分けされます</li>
+            <li>請書を受け取ったら「請書受領」を記録します</li>
+            <li>納品 → 検収完了（案内メールは紙／PDF送付）</li>
+            <li>届いた請求書を「PDF添付」すると請求書受領になります</li>
+            <li>ディレクター確認 → 経理承認 → 帳票データ</li>
+          </ol>
+        </div>
+        <div className="rounded-xl border bg-card p-3 space-y-2">
+          <p className="text-xs font-semibold">分納の単位</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            分納は納品ごとに1行です。この納品分の金額を入れて登録すると、残額の行が新たにできます。残行も同じように検収・請求します。
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
         {FLOW.map((s) => (
           <button
@@ -390,6 +410,30 @@ function RowActions({
   onReplace: (o: ProcurementOrder) => void;
 }) {
   if (status === "ordered") {
+    if (!order.concluded_at) {
+      return (
+        <div className="inline-flex items-center gap-1">
+          <Button size="sm" className="h-7 text-xs" variant="outline" disabled title="請書の受領後に納品できます">
+            納品を登録
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-sky-600 hover:bg-sky-700"
+            onClick={async () => {
+              try {
+                const updated = await markContractorOrderAcknowledged(order.id);
+                onReplace({ ...order, ...updated, craftsman: order.craftsman, construction: order.construction });
+                toast.success("請書を受領済みにしました");
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "請書の受領記録に失敗しました");
+              }
+            }}
+          >
+            請書受領
+          </Button>
+        </div>
+      );
+    }
     return <Button size="sm" className="h-7 text-xs bg-teal-600 hover:bg-teal-700" onClick={onDelivery}>納品を登録</Button>;
   }
   if (status === "delivered") {
@@ -565,21 +609,23 @@ function DeliveryDialog({
           </div>
           {partial === "partial" && (
             <div className="space-y-1">
-              <Label>この納品分の金額（税抜・任意）</Label>
+              <Label>この納品分の金額（税抜・必須）</Label>
               <Input
                 type="number"
-                min={0}
+                min={1}
+                max={Math.max(0, Number(order.amount ?? 0) - 1)}
                 value={lotAmount}
                 onChange={(e) => setLotAmount(e.target.value)}
-                placeholder={`元の発注額 ${order.amount ?? 0}`}
+                placeholder={`発注額未満（元の額 ${order.amount ?? 0}）`}
               />
+              <p className="text-[11px] text-muted-foreground">残額は新しい行になります。0円の残行は作れません。</p>
             </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>キャンセル</Button>
           <Button
-            disabled={saving}
+            disabled={saving || (partial === "partial" && (lotAmount.trim() === "" || Number(lotAmount) <= 0 || Number(lotAmount) >= Number(order.amount ?? 0)))}
             onClick={async () => {
               setSaving(true);
               try {
@@ -635,7 +681,7 @@ function InspectionDialog({
   const [result, setResult] = useState<"pass" | "reject">("pass");
   const [date, setDate] = useState(todayIso());
   const [comment, setComment] = useState("");
-  const [sendEmail, setSendEmail] = useState(!paper);
+  const [sendEmail, setSendEmail] = useState(Boolean(order?.craftsman?.email));
   const [saving, setSaving] = useState(false);
 
   if (!order) return null;
@@ -727,11 +773,19 @@ function InspectionDialog({
           </div>
         )}
         {result === "pass" && paper && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-2 text-sm">
+          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3 text-sm">
             <p className="font-semibold">紙発注・自社書式</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               業者へログイン用の画面は送りません。請求書（メールPDFまたは紙のスキャン）が届いたら、検収完了一覧の「PDF添付」で受領します。
             </p>
+            <div className="grid sm:grid-cols-2 gap-3 text-xs">
+              <p><span className="text-muted-foreground">宛先</span><br />{email}</p>
+              <p><span className="text-muted-foreground">件名</span><br />[BRIDGE Linq] 検収完了 — 請求書（紙／PDF）をご送付ください</p>
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox checked={sendEmail} onCheckedChange={(c) => setSendEmail(c === true)} />
+              検収完了と同時に案内メールを送る（紙／PDFを発注元へ送付）
+            </label>
           </div>
         )}
 
@@ -767,13 +821,19 @@ function InspectionDialog({
                   result: "pass",
                   inspectionDate: date,
                   comment,
-                  sendEmail: paper ? false : sendEmail,
+                  sendEmail,
                 });
                 setSaving(false);
                 if (!res.ok) { toast.error(res.error); return; }
                 onSaved(res.order);
                 if (paper) {
-                  toast.success("検収完了。請求書が届いたらPDFを添付してください");
+                  if (res.emailSent) {
+                    toast.success("検収完了。紙／PDF送付の案内を送りました", { description: res.emailTo });
+                  } else {
+                    toast.success("検収完了。請求書が届いたらPDFを添付してください", {
+                      description: res.emailError,
+                    });
+                  }
                 } else {
                   toastInvoiceMail(res);
                 }

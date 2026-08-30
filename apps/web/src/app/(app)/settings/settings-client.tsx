@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,22 @@ const MAIN_DEFAULT_SUB: Record<string, string> = {
   integrations_group: "external_integrations",
 };
 
+const SUB_TO_MAIN: Record<string, string> = {
+  profile: "personal",
+  security: "personal",
+  notifications: "personal",
+  mail_signature: "personal",
+  pdf_builder: "personal",
+  members: "organization",
+  attendance_settings: "organization",
+  workflow_types: "organization",
+  crm_master: "master",
+  craftsmen_master: "master",
+  external_integrations: "integrations_group",
+  app_integrations: "integrations_group",
+  integrations: "integrations_group",
+};
+
 function SettingsSubSelect({
   value,
   onChange,
@@ -195,23 +211,18 @@ export function SettingsClient({
   initialAppIntegrations?: AppIntegrationsInitialData;
 }) {
   const { profile, loading: authLoading } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initInnerTab = searchParams.get("tab") ?? "profile";
-  const personalTabs = new Set(["profile", "security", "notifications", "mail_signature", "pdf_builder"]);
-  const integrationTabs = new Set(["external_integrations", "app_integrations", "integrations"]);
-  const initMain = integrationTabs.has(initInnerTab) ? "integrations_group" : "personal";
+  const initMain = SUB_TO_MAIN[initInnerTab] ?? "personal";
   const [mainTab, setMainTab] = useState(initMain);
-  const [subTab, setSubTab] = useState(
-    personalTabs.has(initInnerTab) || integrationTabs.has(initInnerTab) ? initInnerTab : "profile",
-  );
+  const [subTab, setSubTab] = useState(SUB_TO_MAIN[initInnerTab] ? initInnerTab : "profile");
   /** 一度開いた大タブは unmount しない（再取得・再マウント待ちを防ぐ） */
   const [visitedMain, setVisitedMain] = useState<Set<string>>(() => new Set(["personal", initMain]));
   /** 権限マトリクスは重いのでメンバー一覧の後に描画 */
   const [permsReady, setPermsReady] = useState(false);
 
-  const handleMainTabChange = (next: string) => {
-    setMainTab(next);
-    setSubTab(MAIN_DEFAULT_SUB[next] ?? "profile");
+  const markVisited = (next: string) => {
     setVisitedMain((prev) => {
       if (prev.has(next)) return prev;
       const n = new Set(prev);
@@ -219,6 +230,29 @@ export function SettingsClient({
       return n;
     });
   };
+
+  const goToSubTab = (nextSub: string) => {
+    const nextMain = SUB_TO_MAIN[nextSub] ?? "personal";
+    setMainTab(nextMain);
+    setSubTab(nextSub);
+    markVisited(nextMain);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", nextSub);
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+  };
+
+  const handleMainTabChange = (next: string) => {
+    goToSubTab(MAIN_DEFAULT_SUB[next] ?? "profile");
+  };
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (!tab || !SUB_TO_MAIN[tab] || tab === subTab) return;
+    const nextMain = SUB_TO_MAIN[tab];
+    setMainTab(nextMain);
+    setSubTab(tab);
+    markVisited(nextMain);
+  }, [searchParams, subTab]);
   const formDefaults = companyFormState(initialCompany);
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(initialCompany);
@@ -384,6 +418,12 @@ export function SettingsClient({
         invoice_number: companyInvoiceNumber,
         invoice_closing_day: invoiceClosingDay,
         fiscal_month_start: fiscalMonthStart,
+        attendance_settings: {
+          start_time: attStartTime,
+          end_time: attEndTime,
+          break_minutes: Number(attBreakMinutes),
+          leave_types: attLeaveTypes,
+        },
         cloudsign: {
           enabled: cloudsignEnabled,
           api_key: cloudsignApiKey || undefined,
@@ -708,7 +748,7 @@ export function SettingsClient({
           {mainTab === "personal" && (
             <SettingsSubSelect
               value={subTab}
-              onChange={setSubTab}
+              onChange={goToSubTab}
               items={[
                 { value: "profile", label: "プロフィール" },
                 { value: "security", label: "セキュリティ" },
@@ -722,7 +762,7 @@ export function SettingsClient({
           {mainTab === "organization" && canManageMembers && (
             <SettingsSubSelect
               value={subTab}
-              onChange={setSubTab}
+              onChange={goToSubTab}
               items={[
                 { value: "members", label: "メンバー管理" },
                 { value: "attendance_settings", label: "勤怠設定" },
@@ -734,7 +774,7 @@ export function SettingsClient({
           {mainTab === "master" && canManageMembers && (
             <SettingsSubSelect
               value={subTab}
-              onChange={setSubTab}
+              onChange={goToSubTab}
               items={[
                 { value: "crm_master", label: "CRMマスタ" },
                 { value: "craftsmen_master", label: "職人マスタ" },
@@ -743,10 +783,8 @@ export function SettingsClient({
           )}
 
           {mainTab === "integrations_group" && (
-            <SettingsSubSelect
-              value={subTab}
-              onChange={setSubTab}
-              items={[
+            <div className="flex flex-wrap gap-1">
+              {[
                 { value: "external_integrations", label: "Googleカレンダー" },
                 ...(canManageMembers
                   ? [
@@ -754,8 +792,19 @@ export function SettingsClient({
                       { value: "integrations", label: "API / Webhook" },
                     ]
                   : []),
-              ]}
-            />
+              ].map((item) => (
+                <Button
+                  key={item.value}
+                  type="button"
+                  size="sm"
+                  variant={subTab === item.value ? "default" : "ghost"}
+                  className="h-8"
+                  onClick={() => goToSubTab(item.value)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -871,6 +920,24 @@ export function SettingsClient({
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground">工事管理の月次請求自動生成に使用します</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>始業時刻</Label>
+                          <Input
+                            type="time"
+                            value={attStartTime}
+                            onChange={(e) => setAttStartTime(e.target.value)}
+                          />
+                          <p className="text-xs text-muted-foreground">勤怠の所定始業。組織 → 勤怠設定と共通です</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>終業時刻</Label>
+                          <Input
+                            type="time"
+                            value={attEndTime}
+                            onChange={(e) => setAttEndTime(e.target.value)}
+                          />
+                          <p className="text-xs text-muted-foreground">勤怠の所定終業。組織 → 勤怠設定と共通です</p>
                         </div>
                         <div className="space-y-2">
                           <Label>会計年度の始まり月</Label>
@@ -1065,11 +1132,25 @@ export function SettingsClient({
                         </div>
                       )}
                       {(company.settings as Record<string, string>)?.address && (
-                        <div className="flex justify-between py-1.5">
+                        <div className="flex justify-between py-1.5 border-b border-border/50">
                           <span className="text-muted-foreground">住所</span>
                           <span>{(company.settings as Record<string, string>).address}</span>
                         </div>
                       )}
+                      <div className="flex justify-between py-1.5 border-b border-border/50">
+                        <span className="text-muted-foreground">請求締日</span>
+                        <span>
+                          {(company.settings as Record<string, string>)?.invoice_closing_day === "20"
+                            ? "20日締め"
+                            : "月末締め"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-muted-foreground">就業時刻</span>
+                        <span>
+                          {attStartTime} – {attEndTime}
+                        </span>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-2">
                         会社情報の編集は本部管理者権限が必要です。
                       </p>

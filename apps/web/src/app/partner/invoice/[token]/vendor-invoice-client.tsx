@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Loader2, Upload } from "lucide-react";
 import {
+  getVendorInvoiceByToken,
   sendVendorInvoiceAuthCode,
   submitVendorInvoice,
   uploadVendorInvoicePdf,
@@ -71,8 +72,13 @@ export function VendorInvoiceClient({
   };
 
   const send = async () => {
-    if (!invoiceDate || !regNo.trim()) {
+    const registration = regNo.trim().toUpperCase();
+    if (!invoiceDate || !registration) {
       toast.error("請求日と登録番号を入力してください");
+      return;
+    }
+    if (!/^T\d{13}$/.test(registration)) {
+      toast.error("登録番号は T + 13桁で入力してください");
       return;
     }
     setSaving(true);
@@ -92,7 +98,7 @@ export function VendorInvoiceClient({
       token,
       invoiceDate,
       invoiceNo,
-      registrationNumber: regNo,
+      registrationNumber: registration,
       remarks,
       pdfPath,
     });
@@ -161,6 +167,15 @@ export function VendorInvoiceClient({
                         if (!res.ok) {
                           toast.error(res.error);
                           return;
+                        }
+                        const fresh = await getVendorInvoiceByToken(token);
+                        if (fresh) {
+                          setInvoice(fresh);
+                          setInvoiceDate(fresh.invoiceDate || todayIso());
+                          setInvoiceNo(fresh.invoiceNo ?? "");
+                          setRegNo(fresh.registrationNumber ?? "");
+                          setRemarks(fresh.remarks ?? "");
+                          setPdfName(fresh.vendorPdfName ?? "");
                         }
                         setVerified(true);
                         toast.success("確認できました");

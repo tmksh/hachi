@@ -36,7 +36,7 @@ import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dial
 import { StatusSelect } from "@/components/shared/status-select";
 import { Label } from "@/components/ui/label";
 import { updateContract } from "@/lib/actions/contracts";
-import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, mergeDefaults, syncFromContext, resolveCompanyContext, type FormValues, type RenderContext } from "@/lib/contract-templates";
+import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, mergeDefaults, syncFromContext, prepareFormForOutput, resolveCompanyContext, type FormValues, type RenderContext } from "@/lib/contract-templates";
 import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
 import { getCompany } from "@/lib/actions/profiles";
 import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
@@ -413,18 +413,19 @@ function DocumentsTab({
   const [templateId, setTemplateId] = useState(draft?.template_id ?? CONTRACT_TEMPLATES[0]?.id ?? "");
   const tpl = CONTRACT_TEMPLATES.find((t) => t.id === templateId);
   const linked = data.linked_construction;
+  const estimateTotal = (data as { estimate?: { total?: number } | null }).estimate?.total ?? null;
   const baseCtx: RenderContext = useMemo(() => ({
     construction: {
       title: linked?.title || data.title,
       start_date: data.start_date ?? linked?.start_date ?? null,
       end_date: data.end_date ?? linked?.end_date ?? null,
-      order_amount: data.amount || linked?.order_amount || null,
+      order_amount: data.amount || linked?.order_amount || estimateTotal || null,
     },
     customer: data.customer ? {
       name: data.customer.name,
       address: data.customer.address ?? null,
     } : null,
-  }), [data, linked]);
+  }), [data, linked, estimateTotal]);
   const [companyCtx, setCompanyCtx] = useState<RenderContext["company"]>(null);
   const renderCtx: RenderContext = useMemo(
     () => ({ ...baseCtx, company: companyCtx }),
@@ -538,8 +539,11 @@ function DocumentsTab({
 
   const handlePdfPrint = () => {
     if (!tpl) return;
+    const next = prepareFormForOutput(tpl, renderCtx, form);
+    setForm(next);
+    void persistDraft(next);
     const pdf = pdfTemplate ?? resolvePdfTemplates(null).contract;
-    const html = buildContractPrintHtml(renderPreview(tpl, form, renderCtx), pdf, tpl.name);
+    const html = buildContractPrintHtml(renderPreview(tpl, next, renderCtx), pdf, tpl.name);
     const w = window.open("", "_blank", "width=900,height=1200");
     if (!w) return;
     w.document.write(html);
@@ -830,7 +834,7 @@ function EsignTab({
     <Card>
       <CardContent className="p-4 space-y-4">
         <p className="text-sm text-muted-foreground">
-          クラウドサイン連携 — 送信メッセージはテンプレート／Linq自動生成／手動入力のいずれでも作成できます
+          クラウドサイン連携 — 送信する契約書は電子文書文面（電子文書を作成し双方が保管）になります。書面2通の文言は使いません。
         </p>
 
         <div className="space-y-2">

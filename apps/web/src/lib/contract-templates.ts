@@ -16,6 +16,7 @@ export type TemplateField = {
   placeholder?: string;
   required?: boolean;
   synced?: boolean; // 工程表から自動連携されるフィールド
+  readonly?: boolean;
 };
 
 export type ContractTemplate = {
@@ -65,8 +66,10 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "payment_terms",   label: "支払条件",           type: "textarea", placeholder: "着工時30%、上棟時30%、完成引渡時40%" },
       { name: "warranty_years",  label: "瑕疵担保期間（年）", type: "number",   placeholder: "10" },
       { name: "warranty_include",label: "瑕疵担保条項を含める", type: "toggle" },
-      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea", placeholder: "テンプレート既定の特記事項" },
+      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea", readonly: true },
       { name: "special_notes",   label: "特記事項（この案件で変わる部分）", type: "textarea", placeholder: "案件ごとに変わる特記事項" },
+      { name: "terms_mode",      label: "約款をテキストで編集する", type: "toggle" },
+      { name: "terms_text",      label: "約款（テキスト）", type: "textarea", placeholder: "約款を貼り付ける" },
       { name: "esign_only",      label: "電子文書として締結する", type: "toggle" },
     ],
   },
@@ -87,8 +90,10 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "start_date",    label: "業務開始日",       type: "date",     synced: true },
       { name: "end_date",      label: "業務完了日",       type: "date",     synced: true },
       { name: "scope",         label: "業務範囲",         type: "textarea", placeholder: "基本設計、実施設計、確認申請、工事監理" },
-      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea" },
+      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea", readonly: true },
       { name: "special_notes", label: "特記事項（この案件で変わる部分）", type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "terms_mode",    label: "約款をテキストで編集する", type: "toggle" },
+      { name: "terms_text",    label: "約款（テキスト）", type: "textarea", placeholder: "約款を貼り付ける" },
       { name: "esign_only",    label: "電子文書として締結する", type: "toggle" },
     ],
   },
@@ -109,12 +114,54 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
       { name: "amount_excl_tax", label: "追加金額（税抜・円）", type: "number" },
       { name: "tax_rate",        label: "消費税率（%）",  type: "number" },
       { name: "end_date",        label: "変更後工期終了日", type: "date",   synced: true },
-      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea" },
+      { name: "special_notes_fixed", label: "特記事項（固定）", type: "textarea", readonly: true },
       { name: "special_notes",   label: "特記事項（この案件で変わる部分）", type: "textarea", placeholder: "特記事項があればここに記入してください" },
+      { name: "terms_mode",      label: "約款をテキストで編集する", type: "toggle" },
+      { name: "terms_text",      label: "約款（テキスト）", type: "textarea", placeholder: "約款を貼り付ける" },
       { name: "esign_only",      label: "電子文書として締結する", type: "toggle" },
     ],
   },
 ];
+
+export const DEFAULT_CONTRACT_TERMS = `第1条（総則）
+本約款は、本書面に添付する契約の一部をなす。
+
+第2条（法令遵守）
+乙は、関係法令を遵守して業務を遂行する。
+
+第3条（協議）
+本契約および本約款に定めのない事項は、甲乙誠意をもって協議のうえ定める。`;
+
+const DESIGN_CONTRACT_TERMS = `第1条（総則）
+本約款は、本設計監理業務委託契約の一部をなす。
+
+第2条（業務の遂行）
+乙は、関係法令および委託の趣旨に従い、善良な管理者の注意をもって業務を遂行する。
+
+第3条（協議）
+本契約および本約款に定めのない事項は、甲乙誠意をもって協議のうえ定める。`;
+
+const CHANGE_ORDER_TERMS = `第1条（総則）
+本約款は、原契約および本追加変更契約の一部をなす。原契約に定めのある事項は、本契約に別段の定めがない限り原契約による。
+
+第2条（効力）
+本契約は、原契約と一体として効力を有する。
+
+第3条（協議）
+本契約および本約款に定めのない事項は、甲乙誠意をもって協議のうえ定める。`;
+
+export function termsForTemplate(templateId: string): string {
+  if (templateId === "design_supervision") return DESIGN_CONTRACT_TERMS;
+  if (templateId === "change_order") return CHANGE_ORDER_TERMS;
+  return DEFAULT_CONTRACT_TERMS;
+}
+
+export function fixedSpecialNotes(templateId: string): string {
+  if (templateId === "construction_contract") {
+    return "本契約は、工期の着手日から効力を成す。\n本契約に定めのない事項は、関係法令および信義誠実の原則により協議のうえ定める。";
+  }
+  return "本契約に定めのない事項は、関係法令および信義誠実の原則により協議のうえ定める。";
+}
 
 export function findTemplate(id: string): ContractTemplate | undefined {
   return CONTRACT_TEMPLATES.find(t => t.id === id);
@@ -171,12 +218,16 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
         v[f.name] = "着工時30%、上棟時30%、完成引渡時40%";
         break;
       case "special_notes_fixed":
-        v[f.name] = template.id === "construction_contract"
-          ? "本契約は、工期の着手日から効力を成す。\n本契約に定めのない事項は、関係法令および信義誠実の原則により協議のうえ定める。"
-          : "本契約に定めのない事項は、関係法令および信義誠実の原則により協議のうえ定める。";
+        v[f.name] = fixedSpecialNotes(template.id);
         break;
       case "special_notes":
         v[f.name] = "";
+        break;
+      case "terms_mode":
+        v[f.name] = 0;
+        break;
+      case "terms_text":
+        v[f.name] = termsForTemplate(template.id);
         break;
       case "esign_only":
         v[f.name] = 1;
@@ -220,6 +271,23 @@ export function syncFromContext(form: FormValues, ctx: RenderContext): FormValue
   return next;
 }
 
+/** PDF出力・CloudSign送信前に案件情報を埋め、固定特記をテンプレートに戻す */
+export function prepareFormForOutput(
+  template: ContractTemplate,
+  ctx: RenderContext,
+  current: FormValues,
+  opts?: { esign?: boolean },
+): FormValues {
+  const synced = syncFromContext(current, ctx);
+  const merged = mergeDefaults(template, ctx, synced);
+  merged.special_notes_fixed = fixedSpecialNotes(template.id);
+  if (getNum(merged, "terms_mode") === 0) {
+    merged.terms_text = termsForTemplate(template.id);
+  }
+  if (opts?.esign) merged.esign_only = 1;
+  return merged;
+}
+
 /** 空欄のみ buildDefaults で補完（既存入力は保持） */
 export function mergeDefaults(
   template: ContractTemplate,
@@ -229,6 +297,10 @@ export function mergeDefaults(
   const defaults = buildDefaults(template, ctx);
   const merged: FormValues = { ...defaults };
   for (const f of template.fields) {
+    if (f.readonly || f.name === "special_notes_fixed") {
+      merged[f.name] = defaults[f.name];
+      continue;
+    }
     const cur = current[f.name];
     if (cur === undefined || cur === null || cur === "") continue;
     if (f.type === "toggle") {
@@ -236,6 +308,9 @@ export function mergeDefaults(
       continue;
     }
     merged[f.name] = cur;
+  }
+  if (getNum(merged, "terms_mode") === 0) {
+    merged.terms_text = termsForTemplate(template.id);
   }
   return merged;
 }
@@ -260,8 +335,8 @@ function getNum(v: FormValues, k: string): number {
   return typeof x === "number" ? x : Number(x) || 0;
 }
 
-function specialNotesBlock(values: FormValues): string {
-  const fixed = getStr(values, "special_notes_fixed");
+function specialNotesBlock(values: FormValues, templateId: string): string {
+  const fixed = fixedSpecialNotes(templateId);
   const extra = getStr(values, "special_notes");
   const parts: string[] = [];
   if (fixed) {
@@ -277,6 +352,17 @@ function specialNotesBlock(values: FormValues): string {
     <h3 class="font-bold mb-2">【特記事項】</h3>
     ${parts.join("")}
     <p class="border-b border-gray-300 pb-2"></p>
+  </div>`;
+}
+
+function termsBlock(values: FormValues, templateId: string): string {
+  const editInTextarea = getNum(values, "terms_mode") !== 0;
+  const text = editInTextarea ? getStr(values, "terms_text") : termsForTemplate(templateId);
+  if (!text.trim()) return "";
+  return `<div>
+    <h3 class="font-bold mb-2">【約款】</h3>
+    <p class="text-[11px] text-gray-500 mb-1">${editInTextarea ? "（テキストエリアで編集）" : "（ひな形に含む）"}</p>
+    <p class="whitespace-pre-line text-[12px]">${text}</p>
   </div>`;
 }
 
@@ -325,7 +411,9 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p>乙は、本工事の引渡し後${warrantyYears}年間、瑕疵担保責任を負うものとする。</p>
   </div>` : ""}
 
-  ${specialNotesBlock(values)}
+  ${specialNotesBlock(values, template.id)}
+
+  ${termsBlock(values, template.id)}
 
   ${closingClause(values)}
 
@@ -377,7 +465,9 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p class="whitespace-pre-line">${getStr(values, "payment_terms") || "—"}</p>
   </div>
 
-  ${specialNotesBlock(values)}
+  ${specialNotesBlock(values, template.id)}
+
+  ${termsBlock(values, template.id)}
 
   ${closingClause(values)}
 
@@ -427,7 +517,9 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p>変更後工期終了日：${endDate}</p>
   </div>
 
-  ${specialNotesBlock(values)}
+  ${specialNotesBlock(values, template.id)}
+
+  ${termsBlock(values, template.id)}
 
   ${closingClause(values)}
 

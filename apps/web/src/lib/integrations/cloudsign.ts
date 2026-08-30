@@ -13,6 +13,7 @@ export type CloudSignSendRequest = {
   title: string;
   pdf_base64?: string;
   pdf_url?: string;
+  html?: string;
   signers: Array<{ name: string; email: string; order: number }>;
   metadata?: Record<string, string>;
 };
@@ -77,7 +78,9 @@ export async function sendToCloudSign(
     return {
       document_id: `stub-${Date.now()}`,
       status: "sent",
-      message: "クラウドサインAPI未設定のためスタブ送信しました（設定 > 連携からAPIキーを登録すると本番送信されます）",
+      message: request.html
+        ? "電子文書文面の契約書を付けてスタブ送信しました（設定 > 連携からAPIキーを登録すると本番送信されます）"
+        : "クラウドサインAPI未設定のためスタブ送信しました（設定 > 連携からAPIキーを登録すると本番送信されます）",
     };
   }
 
@@ -91,6 +94,9 @@ export async function sendToCloudSign(
     body: JSON.stringify({
       title: request.title,
       signers: request.signers,
+      metadata: request.metadata ?? {},
+      html: request.html,
+      file: request.pdf_base64,
     }),
   });
 

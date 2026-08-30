@@ -218,7 +218,7 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex flex-col gap-0 p-0 overflow-hidden max-h-[92vh] w-[min(calc(100%-1.5rem),calc(210mm+2.5rem))] max-w-[min(calc(100%-1.5rem),calc(210mm+2.5rem))] sm:max-w-[min(calc(100%-1.5rem),calc(210mm+2.5rem))]"
+        className="flex flex-col gap-0 p-0 overflow-hidden max-h-[92vh] w-[min(calc(100%-1.5rem),calc(210mm+4rem))] max-w-[min(calc(100%-1.5rem),calc(210mm+4rem))] sm:max-w-[min(calc(100%-1.5rem),calc(210mm+4rem))]"
         showCloseButton={false}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-100 border-b shrink-0">
@@ -243,7 +243,7 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
             id="quote-print-area"
             data-pdf-mode={data.mode}
             className="bg-white shadow-lg text-slate-900 font-sans mx-auto w-full max-w-[210mm] min-h-[297mm] box-border"
-            style={{ padding: "12mm 14mm", fontSize: paperFontSize, lineHeight: "1.55" }}
+            style={{ padding: "16mm 18mm", fontSize: paperFontSize, lineHeight: "1.55" }}
           >
             <div className="space-y-5">
               <div className="text-center pb-2 border-b-2 border-slate-900">

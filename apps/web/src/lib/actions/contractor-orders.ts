@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notifySalesFlowUser } from "@/lib/actions/sales-flow";
 import { getCloudSignConfig, sendToCloudSign } from "@/lib/integrations/cloudsign";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
+import { suggestAccountItem } from "@/lib/procurement";
 import type { ContractorOrder, Craftsman } from "@/lib/database.types";
 
 const ORDER_SELECT = "*, craftsman:craftsmen(id, name)";
@@ -153,17 +154,59 @@ export async function sendContractorOrderToCloudSign(orderId: string): Promise<{
     signers: [{ name: craftsman?.name ?? "発注先", email: craftsman?.email ?? "", order: 1 }],
     metadata: { contractor_order_id: order.id },
   });
-  await supabase
+  const sentAt = new Date().toISOString();
+  const { error: updErr } = await supabase
     .from("contractor_orders")
-    .update({ clouds_sign_sent_at: new Date().toISOString() })
+    .update({
+      clouds_sign_sent_at: sentAt,
+      cloudsign_document_id: result.document_id,
+    })
     .eq("id", orderId);
+  if (updErr && /cloudsign_document_id/i.test(updErr.message)) {
+    await supabase
+      .from("contractor_orders")
+      .update({ clouds_sign_sent_at: sentAt })
+      .eq("id", orderId);
+  }
   return { ok: true, message: result.message };
+}
+
+/** 紙発注など、電子署名なしで請書を受領済みにする */
+export async function markContractorOrderAcknowledged(orderId: string): Promise<ContractorOrder> {
+  const { supabase, companyId } = await getAuthContext();
+  const now = new Date().toISOString();
+  const { data: order, error } = await supabase
+    .from("contractor_orders")
+    .update({
+      concluded_at: now,
+      ledger_status: "ordered",
+      updated_at: now,
+    })
+    .eq("id", orderId)
+    .eq("company_id", companyId)
+    .eq("status", "approved")
+    .select(ORDER_SELECT)
+    .single();
+  if (error && /ledger_status/i.test(error.message)) {
+    const retry = await supabase
+      .from("contractor_orders")
+      .update({ concluded_at: now, updated_at: now })
+      .eq("id", orderId)
+      .eq("company_id", companyId)
+      .eq("status", "approved")
+      .select(ORDER_SELECT)
+      .single();
+    if (retry.error) throw new Error(retry.error.message);
+    return retry.data as ContractorOrder;
+  }
+  if (error) throw new Error(error.message);
+  return order as ContractorOrder;
 }
 
 /** 工事台帳で選択した複数業者へドラフト発注書を一括生成 */
 export async function bulkCreateContractorOrders(
   constructionId: string,
-  rows: Array<{ name: string; workType?: string; amount: number }>,
+  rows: Array<{ name: string; workType?: string; amount: number; accountItem?: string }>,
 ) {
   const { supabase, companyId } = await getAuthContext();
 
@@ -182,6 +225,9 @@ export async function bulkCreateContractorOrders(
   if (craftErr) throw new Error(craftErr.message);
   const craftsmen = craftsmenData ?? [];
 
+  const { listAccountItemHistory } = await import("@/lib/actions/procurement");
+  const past = await listAccountItemHistory();
+
   const matchId = (name: string): string | null => {
     const trimmed = name.trim();
     if (!trimmed) return null;
@@ -196,31 +242,46 @@ export async function bulkCreateContractorOrders(
   const today = new Date().toISOString().split("T")[0];
   const payload = rows
     .filter((r) => r.name.trim())
-    .map((r) => ({
-      company_id: companyId,
-      construction_id: constructionId,
-      craftsman_id: matchId(r.name),
-      title: `${construction.title} ${r.name.trim()}`,
-      amount: Math.max(0, Math.round(r.amount)),
-      status: "draft" as const,
-      order_date: today,
-      start_date: construction.start_date,
-      end_date: construction.end_date,
-      payment_count: "1回",
-      work_content: r.workType?.trim() || null,
-      payment_schedule: buildPaymentSchedule(
-        Math.max(0, Math.round(r.amount)),
-        "1回",
-        construction.start_date,
-        construction.end_date,
-      ),
-    }));
+    .map((r) => {
+      const chosen = r.accountItem?.trim();
+      const suggested = suggestAccountItem(r.name || r.workType, past);
+      return {
+        company_id: companyId,
+        construction_id: constructionId,
+        craftsman_id: matchId(r.name),
+        title: `${construction.title} ${r.name.trim()}`,
+        amount: Math.max(0, Math.round(r.amount)),
+        status: "draft" as const,
+        order_date: today,
+        start_date: construction.start_date,
+        end_date: construction.end_date,
+        payment_count: "1回",
+        work_content: r.workType?.trim() || null,
+        account_item: chosen || suggested.item,
+        account_item_source: chosen ? "budget" : suggested.source,
+        payment_schedule: buildPaymentSchedule(
+          Math.max(0, Math.round(r.amount)),
+          "1回",
+          construction.start_date,
+          construction.end_date,
+        ),
+      };
+    });
   if (payload.length === 0) throw new Error("業者名が入力された行を選択してください");
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("contractor_orders")
     .insert(payload)
     .select(ORDER_SELECT);
+  if (error && /account_item/i.test(error.message)) {
+    const fallback = payload.map((row) => {
+      const { account_item, account_item_source, ...rest } = row;
+      void account_item;
+      void account_item_source;
+      return rest;
+    });
+    ({ data, error } = await supabase.from("contractor_orders").insert(fallback).select(ORDER_SELECT));
+  }
   if (error) throw new Error(error.message);
   const { ensurePartnerTokenForOrder } = await import("@/lib/actions/partner-portal");
   await Promise.all(

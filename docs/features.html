@@ -187,6 +187,7 @@
   <div class="hero-inner" style="text-align:center;">
 
     <h1>機能一覧</h1>
+    <p class="hero-desc" style="margin:0 auto 0;text-align:center;">各入力項目がどこで使われるかの正本は <a href="index.html#data-map">仕様書「入力 → 参照（全項目）」</a> です。</p>
   </div>
 </div>
 
@@ -243,6 +244,12 @@
     <!-- CRM -->
     <div class="feat-card" data-cat="crm">
       <div class="feat-cat">CRM・リード</div>
+      <div class="feat-title">問い合わせ管理</div>
+      <div class="feat-desc">顧客化前の問い合わせを <code>/leads</code> で管理。手動登録と Webhook（<code>X-Bridge-Secret</code>）。ステータスは未対応／対応中／顧客化済／見送り。CRM への転記は「顧客化」ボタン（自動顧客化なし）。</div>
+      <div class="feat-tags"><span class="feat-tag">Webhook</span><span class="feat-tag">手動登録</span><span class="feat-tag">顧客化</span><span class="feat-tag">見送り</span></div></div>
+
+    <div class="feat-card" data-cat="crm">
+      <div class="feat-cat">CRM・リード</div>
       <div class="feat-title">顧客・商談管理</div>
       <div class="feat-desc">顧客の登録・編集・検索・削除。法人／個人／未フォロー、<strong>一覧／カード／パイプライン</strong>の3ビュー（初期は一覧）。独立パイプラインは廃止し <code>/crm?view=pipeline</code> に統合。<code>/deals</code> は同画面へリダイレクト。見込度 A/B/C・特需、担当者・獲得ソース・タグ、関連データ（商談・見積・契約・工事）参照に対応。</div>
       <div class="feat-tags"><span class="feat-tag">一覧・カード・パイプライン</span><span class="feat-tag">見込度 A/B/C</span><span class="feat-tag">獲得ソース管理</span><span class="feat-tag">関連データ参照</span></div></div>
@@ -281,13 +288,13 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">契約管理</div>
-      <div class="feat-desc">受注後に自動登録される契約を管理。詳細は7タブ：顧客情報／やり取り管理（旧・合意形成サポート）／書類作成／承認WF／電子契約／ドキュメント／見積もり。テンプレート選択で契約書PDFプレビュー、CloudSign送信、ワークフロー連携に対応。</div>
+      <div class="feat-desc">受注後に自動登録される契約を管理。詳細は7タブ。書類作成は顧客（甲）・会社情報（乙）・工事の名称／工期を自動転記。請負金額欄のラベルは税抜、実値は工事 order_amount（見積 total＝税込が入ることがある）。CloudSign・承認WF連携。</div>
       <div class="feat-tags"><span class="feat-tag">やり取り管理</span><span class="feat-tag">書類作成</span><span class="feat-tag">承認WF</span><span class="feat-tag">電子契約</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">工事管理</div>
-      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細は<strong>8タブ</strong>：顧客情報／工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント。工程表から工事日報を作成。Notion「工事フロー」2-1〜2-5に対応。顧客請求はナビ非表示の <code>/invoices</code> で横断管理。</div>
+      <div class="feat-desc">工事の進捗・コスト・担当者を管理。詳細は<strong>8タブ</strong>：顧客情報／工程表／見積もり／契約書／追加変更／工事台帳／発注書・請書／ドキュメント。工程表「日報を追加」は日報画面へ遷移（タスク値は転記しない）。顧客請求はナビ非表示の <code>/invoices</code>（着工・完工日＋締日）。</div>
       <div class="feat-tags"><span class="feat-tag">8タブ構成</span><span class="feat-tag">ガント工程表</span><span class="feat-tag">工事日報</span><span class="feat-tag">工事台帳永続化</span></div></div>
 
     <div class="feat-card" data-cat="production">
@@ -299,19 +306,37 @@
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">工事台帳（原価管理）</div>
-      <div class="feat-desc">工事詳細「工事台帳」タブで下請業者ごとの実行予算・発注・月次請求を管理。粗利・粗利率をリアルタイム計算。construction_cost_budgets テーブルへ永続化し、保存後もデータを保持。見積明細からの初期行インポートに対応。</div>
+      <div class="feat-desc">工事詳細「工事台帳」タブで下請業者ごとの実行予算・発注・月次請求・勘定科目を管理。粗利をリアルタイム計算。<code>construction_cost_budgets</code> に永続化。「参照」で見積／追加変更を転記。科目は履歴学習（空行は自動入力しない）。</div>
       <div class="feat-tags"><span class="feat-tag">DB 永続化</span><span class="feat-tag">粗利自動計算</span><span class="feat-tag">月次請求入力</span><span class="feat-tag">予算残アラート</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">発注書・請書</div>
-      <div class="feat-desc">工事詳細「発注書・請書」タブで下請業者への発注書を作成・送付。支払スケジュールは2回／4回／6回／12回から選択。職人（下請業者）情報を自動取得し、契約単価・支払条件を明細に反映。発注確定後に請書 PDF を自動生成。外部協力業者は URL 経由でログイン不要の専用画面から受領操作・PDF ダウンロードが可能。</div>
-      <div class="feat-tags"><span class="feat-tag">支払スケジュール（2/4/6/12回）</span><span class="feat-tag">請書自動生成</span><span class="feat-tag">外部業者 URL 受領</span><span class="feat-tag">職人情報自動取得</span></div></div>
+      <div class="feat-desc">工事詳細「発注書・請書」タブで下請業者への発注書を作成。支払回数は 1／2／3／4／6／12／その他。台帳「参照」から見積転記、一括発注は追加契約込み。単行「発注」はタブ遷移＋実行予算のみ事前入力。承認後 CloudSign 可。業者は検収後に <code>/partner/invoice/[token]</code> で請求。</div>
+      <div class="feat-tags"><span class="feat-tag">支払回数 1〜12／その他</span><span class="feat-tag">台帳から一括発注</span><span class="feat-tag">CloudSign</span><span class="feat-tag">業者請求 URL</span></div></div>
+
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">納品・検収</div>
+      <div class="feat-desc">承認済み発注の請書受領・納品（分納）・検収・請求受領・経理承認。<code>/fulfillment</code>。検収後に業者へ請求 URL をメール（有効期限30日）。紙発注は PDF 案内。</div>
+      <div class="feat-tags"><span class="feat-tag">分納</span><span class="feat-tag">検収</span><span class="feat-tag">経理承認</span><span class="feat-tag">業者ポータル</span></div></div>
+
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">帳票データ作成</div>
+      <div class="feat-desc">経理承認済み請求から全銀ファイルまたは案件別 CSV を作成（<code>/ledger</code>）。振込元は会社情報の全銀設定。振込先は職人口座。科目未確定時は勘定科目の確定へ誘導。全銀ファイルに科目列は不要。</div>
+      <div class="feat-tags"><span class="feat-tag">全銀</span><span class="feat-tag">案件別CSV</span><span class="feat-tag">会社の振込元</span></div></div>
+
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">勘定科目の確定</div>
+      <div class="feat-desc">未確定科目を業者単位で一括確定（<code>/account-items</code>）。実行予算・発注で人が入れた科目を学習（経理確定は重み大）。空行を自動で外注加工費にはしない。</div>
+      <div class="feat-tags"><span class="feat-tag">学習候補</span><span class="feat-tag">業者一括</span><span class="feat-tag">帳票へ戻る</span></div></div>
 
     <div class="feat-card" data-cat="production">
       <div class="feat-cat">工事・生産</div>
       <div class="feat-title">請求管理（ナビ非表示）</div>
-      <div class="feat-desc">顧客向け請求書の作成・明細編集・消費税計算・ステータス（draft／sent／paid／cancelled）。会社設定の締日（20日／月末）に基づく月次一括生成。<strong>サイドバー非表示</strong>（ルート <code>/invoices</code> と権限キーは残存）。原価の月次は工事台帳側でも管理。</div>
+      <div class="feat-desc">顧客向け請求書の作成・明細編集・消費税計算・ステータス（draft／sent／paid／cancelled）。会社の締日（20日／月末）＋工事の着工・完工日で月次按分（工程表タスクは見ない）。<strong>サイドバー非表示</strong>（<code>/invoices</code>）。</div>
       <div class="feat-tags"><span class="feat-tag">締日ベース月次生成</span><span class="feat-tag">ナビ非表示</span><span class="feat-tag">入金サマリー</span><span class="feat-tag">ブラウザ印刷</span></div></div>
 
     <div class="feat-card" data-cat="production">
@@ -320,11 +345,17 @@
       <div class="feat-desc">年度予算の策定・承認。完了工事から売上・粗利実績を集計し計画対実績を表示。<strong>サイドバー非表示</strong>（ルート <code>/budget</code>）。経営の期首予算・間接費は BI 設定側で管理。</div>
       <div class="feat-tags"><span class="feat-tag">年度予算策定</span><span class="feat-tag">ナビ非表示</span><span class="feat-tag">達成率表示</span><span class="feat-tag">BIと別モジュール</span></div></div>
 
+    <div class="feat-card" data-cat="production">
+      <div class="feat-cat">工事・生産</div>
+      <div class="feat-title">決算書（ナビ非表示）</div>
+      <div class="feat-desc">損益計算書・製造原価報告書（<code>/financials</code>）。経営層。BI からリンク。確定後は BI 実績として参照。会計年度始月は会社情報。</div>
+      <div class="feat-tags"><span class="feat-tag">PL</span><span class="feat-tag">ナビ非表示</span><span class="feat-tag">BI連携</span></div></div>
+
     <!-- PORTAL -->
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">勤怠管理</div>
-      <div class="feat-desc">アナログ時計 UI でワンクリック出退勤打刻。休暇区分（有給・特休・半日等）の選択に対応。月次一覧で出勤日数・実労働時間・残業時間・承認済日数を集計表示。管理者は全スタッフの勤怠を確認・承認・却下可能。所定時刻・休憩・休暇種別は会社設定で管理。</div>
+      <div class="feat-desc">アナログ時計 UI でワンクリック出退勤打刻。休暇区分の選択、月次集計、管理者の承認／却下。始業・終業・休憩・休暇区分は会社情報と組織 › 勤怠設定で共通（attendance_settings）。</div>
       <div class="feat-tags"><span class="feat-tag">出退勤打刻</span><span class="feat-tag">休暇区分管理</span><span class="feat-tag">月次集計</span><span class="feat-tag">管理者承認</span></div></div>
 
     <div class="feat-card" data-cat="portal">
@@ -336,20 +367,20 @@
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">社内回覧板</div>
-      <div class="feat-desc">お知らせ・社内通達の投稿・編集・削除。緊急フラグ・ピン留め・ロール別配信に対応。閲覧時に自動既読記録、コメント機能あり。キーワード・日付・緊急/ピン留めフィルタで検索可能。未読件数はヘッダーバッジでリアルタイム表示。</div>
+      <div class="feat-desc">お知らせ・社内通達の投稿・編集・削除。緊急フラグ・ピン留め・ロール別配信。未読の緊急回覧が1件以上で BombAlert（チャット未読では出さない）。閲覧時に既読記録。</div>
       <div class="feat-tags"><span class="feat-tag">緊急・ピン留め</span><span class="feat-tag">ロール別配信</span><span class="feat-tag">自動既読管理</span><span class="feat-tag">コメント</span></div></div>
 
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">カレンダー</div>
-      <div class="feat-desc">日／週／月表示で社内予定を管理。イベントの作成・編集・削除に対応。メンバーごとに色分けしてオーバーレイ表示。Google カレンダーと OAuth 連携（設定時）することで双方向同期が可能。未連携時は DB イベントのみ表示。</div>
+      <div class="feat-desc">日／週／月表示で社内予定を管理。メンバー重ね表示。Google カレンダー連携の操作は <strong>設定 → 外部連携 → Googleカレンダー</strong>（ユーザーメニュー「外部連携」も同じ）。カレンダー画面は状態表示と設定へのリンク。未連携時は DB イベントのみ。</div>
       <div class="feat-tags"><span class="feat-tag">日・週・月表示</span><span class="feat-tag">メンバー色分け</span><span class="feat-tag">Google カレンダー連携</span><span class="feat-tag">双方向同期</span></div></div>
 
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
       <div class="feat-title">メール連携</div>
-      <div class="feat-desc">Gmail OAuth / IMAP / 手動フォワードで受信スレッドを同期。スレッド一覧・既読・スター管理、メール送信・返信に対応。メールアカウントは設定画面で接続・切断。未連携時はデモスレッドを表示（接続後に実データへ切替）。</div>
-      <div class="feat-tags"><span class="feat-tag">Gmail OAuth 連携</span><span class="feat-tag">受信スレッド同期</span><span class="feat-tag">送信・返信</span><span class="feat-tag">スター管理</span></div></div>
+      <div class="feat-desc">Gmail OAuth / IMAP / 手動フォワードで受信スレッドを同期。スレッド一覧・既読・スター、作成（/mail/compose）。<strong>スレッド返信は Gmail のみ</strong>。連携はメール画面。未連携時はデモスレッド。</div>
+      <div class="feat-tags"><span class="feat-tag">Gmail OAuth</span><span class="feat-tag">IMAP</span><span class="feat-tag">Gmailスレッド返信</span><span class="feat-tag">スター</span></div></div>
 
     <div class="feat-card" data-cat="portal">
       <div class="feat-cat">ポータル</div>
@@ -379,14 +410,14 @@
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">管理者設定・通知</div>
-      <div class="feat-desc">設定は個人／組織／マスタ／連携の4大タブ。PDFビルダー、メンバー招待、権限マトリクス、CloudSign・請求締日・見込度%、CRM／職人マスタ、API・Webhook。ベル通知、社内チャット（internal_messages）を提供。</div>
+      <div class="feat-desc">設定は概要／組織／マスタ／外部連携の4大タブ。会社情報（締日・就業時刻・会計月・見込度%・CloudSign・全銀）、PDFビルダー、メンバー・権限、CRM／職人マスタ、Googleカレンダー、アプリ連携、API・Webhook。</div>
       <div class="feat-tags"><span class="feat-tag">PDFビルダー</span><span class="feat-tag">権限マトリクス</span><span class="feat-tag">社内チャット</span><span class="feat-tag">各種マスタ管理</span></div></div>
 
     <div class="feat-card" data-cat="system">
       <div class="feat-cat">システム</div>
       <div class="feat-title">社内チャット</div>
-      <div class="feat-desc">サイドバーから起動する社内メッセージ。DB（internal_messages）に永続化。未読が多い場合は BombAlert。BRIDGE AI から担当者への転送にも対応。</div>
-      <div class="feat-tags"><span class="feat-tag">internal_messages</span><span class="feat-tag">BombAlert</span><span class="feat-tag">AI転送</span></div></div>
+      <div class="feat-desc">サイドバーから起動する社内メッセージ。DB（internal_messages）に永続化。BRIDGE AI から担当者へ転送可。<strong>BombAlert は緊急回覧の未読1件以上のみ</strong>（チャット未読では出さない）。</div>
+      <div class="feat-tags"><span class="feat-tag">internal_messages</span><span class="feat-tag">AI転送</span></div></div>
 
     <!-- INTEGRATION -->
     <div class="feat-card" data-cat="integration">
@@ -404,7 +435,7 @@
     <div class="feat-card" data-cat="integration">
       <div class="feat-cat">外部連携</div>
       <div class="feat-title">Supabase Database</div>
-      <div class="feat-desc">PostgreSQL をバックエンドとして使用。業務テーブルに RLS を適用し company_id 単位でマルチテナントを実現。マイグレーションは 00001〜00064。リアルタイムサブスクリプションに対応。</div>
+      <div class="feat-desc">PostgreSQL をバックエンドとして使用。業務テーブルに RLS を適用し company_id 単位でマルチテナントを実現。マイグレーションは 00001〜00080。リアルタイムサブスクリプションに対応。</div>
       <div class="feat-tags"><span class="feat-tag">PostgreSQL 15</span><span class="feat-tag">RLS ポリシー</span><span class="feat-tag">リアルタイム同期</span></div></div>
 
     <div class="feat-card" data-cat="integration">
@@ -505,7 +536,7 @@
 
       <div class="ext-card">
         <div class="ext-name">CloudSign API（B案）</div>
-        <div class="ext-desc">追加変更工事の電子署名。設定画面で API キーを登録。未契約・未設定時は PDF ダウンロードで代替。</div>
+        <div class="ext-desc">契約書・追加変更・発注書の電子署名。会社情報で API キーを登録。未設定時は PDF ダウンロードで代替。</div>
         <span class="ext-status ext-status-done">実装済み</span>
       </div>
 
@@ -540,7 +571,7 @@
       <div class="ext-card">
 
         <div class="ext-name">Google Calendar API</div>
-        <div class="ext-desc">Google カレンダーと双方向同期。システム内で作成したイベントを Google カレンダーに反映。カレンダー ID を設定で指定。</div>
+        <div class="ext-desc">設定 → 外部連携 → Googleカレンダーで OAuth。カレンダー画面に予定表示（primary の表示期間）。再連携・解除も設定から。</div>
         <span class="ext-status ext-status-optional">要OAuth設定</span>
       </div>
 

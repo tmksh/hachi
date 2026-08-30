@@ -601,13 +601,23 @@
         <option value="#features">機能詳細（一覧）</option>
         <option value="#feat-dashboard">　├ ダッシュボード</option>
         <option value="#feat-bi">　├ BIダッシュボード</option>
+        <option value="#feat-leads">　├ 問い合わせ管理</option>
         <option value="#feat-crm">　├ 顧客・商談管理</option>
         <option value="#feat-quotes">　├ 見積管理</option>
         <option value="#feat-craftsmen">　├ 職人管理</option>
         <option value="#feat-contracts">　├ 契約管理</option>
         <option value="#feat-constructions">　├ 工事管理</option>
+        <option value="#feat-fulfillment">　├ 納品・検収</option>
+        <option value="#feat-ledger">　├ 帳票データ作成</option>
+        <option value="#feat-account-items">　├ 勘定科目の確定</option>
         <option value="#feat-portal">　├ ポータル各機能</option>
         <option value="#feat-settings">　└ 設定</option>
+        <option value="#data-map">入力 → 参照（全項目）</option>
+        <option value="#data-map-crm">　├ 顧客・商談</option>
+        <option value="#data-map-quotes">　├ 見積</option>
+        <option value="#data-map-constructions">　├ 工事</option>
+        <option value="#data-map-settings">　├ 設定</option>
+        <option value="#data-map-portal">　└ ポータル</option>
         <option value="#flows">業務フロー</option>
         <option value="#constructions">工事管理（8タブ）</option>
         <option value="#cost">工事台帳（原価管理表）</option>
@@ -630,7 +640,7 @@
 <!-- HERO -->
 <div class="hero">
   <div class="hero-inner">
-    <div class="hero-eyebrow">System Specification — v2.2（2026/07/25 現行コード準拠・フルページスクリーンショット＋詳細操作ガイド付き）</div>
+    <div class="hero-eyebrow">System Specification — v2.3（2026/08/30 現行コード準拠・メニュー／入力参照／権限ルートを実装に同期）</div>
     <h1>BRIDGE Linq<br><em>統合業務支援システム</em></h1>
     <p class="hero-desc">建設業・リフォーム業向けオールインワン業務管理プラットフォーム。この仕様書は<strong>はじめてのログインから各機能の使い方まで</strong>、実際の画面キャプチャ付きで解説します。加盟店は <strong>{slug}.bridge-linq.com</strong> の専用 URL で利用します。</p>
     <div class="hero-btns">
@@ -659,9 +669,9 @@
         <div class="overview-desc">レガシー3＋CSVデフォルト6＋外部協力。会社別カスタムロール可</div>
       </div>
       <div class="overview-item">
-        <div class="overview-num">64</div>
+        <div class="overview-num">80</div>
         <div class="overview-title">DB マイグレーション</div>
-        <div class="overview-desc">00001〜00064。RLS で company_id 単位のマルチテナント</div>
+        <div class="overview-desc">00001〜00080。RLS で company_id 単位のマルチテナント</div>
       </div>
     </div>
   </section>
@@ -675,6 +685,7 @@
       <a class="toc-link" href="#getting-started">はじめに<span>ログインと画面の見方</span></a>
       <a class="toc-link" href="#menu">メニュー構成<span>サイドバー大項目とルート</span></a>
       <a class="toc-link" href="#features">機能詳細<span>各画面の仕様と使い方</span></a>
+      <a class="toc-link" href="#data-map">入力 → 参照<span>全項目・全機能</span></a>
       <a class="toc-link" href="#flows">業務フロー<span>リード〜工事〜お金</span></a>
       <a class="toc-link" href="#constructions">工事管理 8タブ<span>工程・台帳・発注など</span></a>
       <a class="toc-link" href="#cost">工事台帳<span>原価管理表の列と計算</span></a>
@@ -707,7 +718,7 @@
       <li><strong>左サイドバー：</strong>大項目（ダッシュボード／リード／生産／ポータル）。クリックで展開してページ移動します。表示される項目はロール・権限設定によって変わります。</li>
       <li><strong>サイドバー下部：</strong>グローバル検索・通知ベル・社内チャット・BRIDGE AI。</li>
       <li><strong>右下 BRIDGE AI：</strong>どの画面からでも AI チャットを起動でき、開いている画面の内容を踏まえて回答します。</li>
-      <li><strong>ユーザーメニュー（左下アイコン）：</strong>設定（/settings）・ログアウト。</li>
+      <li><strong>ユーザーメニュー（左下アイコン）：</strong>プロフィール／設定（/settings）・外部連携（/settings?tab=external_integrations）・ログアウト。</li>
     </ul>
     <div class="feat-note">検証用アカウントは本ページ下部「<a href="#accounts">ログイン情報</a>」を参照してください。</div>
   </section>
@@ -741,6 +752,11 @@
           <span class="menu-group-label">リード</span>
         </div>
         <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-leads">問い合わせ管理</a></div>
+          <div class="menu-item-path">/leads</div>
+          <div class="menu-item-desc">顧客化前の問い合わせ。手動登録／Webhook。顧客化はボタン操作。</div>
+        </div>
+        <div class="menu-item">
           <div class="menu-item-name"><a href="#feat-crm">顧客・商談管理</a></div>
           <div class="menu-item-path">/crm</div>
           <div class="menu-item-desc">顧客マスタ＋商談パイプライン（一覧/カード/カンバン）。詳細は7タブ。</div>
@@ -771,6 +787,21 @@
           <div class="menu-item-path">/constructions</div>
           <div class="menu-item-desc">工事案件。詳細8タブ＋工程表からの工事日報。原価・発注・追加変更を1画面で。</div>
         </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-fulfillment">納品・検収</a></div>
+          <div class="menu-item-path">/fulfillment</div>
+          <div class="menu-item-desc">発注後の請書・納品・検収・請求受領〜経理承認。業者請求 URL を発行。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-ledger">帳票データ作成</a></div>
+          <div class="menu-item-path">/ledger</div>
+          <div class="menu-item-desc">経理承認済み請求から全銀データ／案件別 CSV。振込元は会社情報。</div>
+        </div>
+        <div class="menu-item">
+          <div class="menu-item-name"><a href="#feat-account-items">勘定科目の確定</a></div>
+          <div class="menu-item-path">/account-items</div>
+          <div class="menu-item-desc">未確定科目を業者単位で確定。実行予算・発注の学習候補を反映。</div>
+        </div>
       </div>
       <div class="menu-group">
         <div class="menu-group-head">
@@ -790,7 +821,7 @@
         <div class="menu-item">
           <div class="menu-item-name"><a href="#feat-portal">勤怠</a></div>
           <div class="menu-item-path">/attendance</div>
-          <div class="menu-item-desc">出退勤打刻・休暇区分・月次集計。始業終業は会社設定。</div>
+          <div class="menu-item-desc">出退勤打刻・休暇区分・月次集計。始業終業は会社情報／勤怠設定（共通）。</div>
         </div>
         <div class="menu-item">
           <div class="menu-item-name"><a href="#feat-portal">ワークフロー</a></div>
@@ -812,9 +843,11 @@
 
     <div class="feat-warn">
       <strong>ナビ外だがルートあり：</strong>
-      設定 <span class="inline-code">/settings</span>（ユーザーメニュー）、運営管理 <span class="inline-code">/admin</span>、
-      BIデザイン案 <span class="inline-code">/bi2</span>、請求 <span class="inline-code">/invoices</span>・予算 <span class="inline-code">/budget</span>（サイドバー非表示）、
+      設定 <span class="inline-code">/settings</span>（ユーザーメニュー。外部連携は <span class="inline-code">/settings?tab=external_integrations</span>）、
+      運営管理 <span class="inline-code">/admin</span>（<span class="inline-code">/admin/login</span> 専用）、
+      BIデザイン案 <span class="inline-code">/bi2</span>、請求 <span class="inline-code">/invoices</span>・予算 <span class="inline-code">/budget</span>・決算書 <span class="inline-code">/financials</span>（サイドバー非表示）、
       マーケティング <span class="inline-code">/marketing/*</span>（フェーズ2・全ロール遮断）。
+      業者ポータル：<span class="inline-code">/partner/[token]</span>、<span class="inline-code">/partner/invoice/[token]</span>。
       グローバル：社内チャット・BRIDGE AI パネル（メインレイアウト常時マウント）。
     </div>
   </section>
@@ -851,7 +884,7 @@
           <li><strong>一覧系：</strong>売上トレンド・商談パイプライン・最近の見積／顧客・生産サマリー・進行中工事</li>
           <li>未フォローアップ（デフォルト非表示）</li>
         </ul>
-        <div class="feat-note">保存先は localStorage（<span class="inline-code">dashboard-widgets-v1</span>）と DB のダッシュボード設定の併用。</div>
+        <div class="feat-note">保存先は localStorage（<span class="inline-code">dashboard-widgets-v1</span>）と DB のダッシュボード設定の併用。ウィジェット設定の参照先は <a href="#data-map-portal">入力 → 参照（ポータル）</a>。</div>
       </div>
     </div>
 
@@ -887,7 +920,34 @@
           <li>予備費率（権限キー <span class="inline-code">reserve_fee</span>）、実績ソース／着地ティアのフィルタ</li>
           <li>粗利率フォールバック、全社間接費按分（equal / revenue_share）</li>
         </ul>
-        <div class="feat-note">関連テーブル: <span class="inline-code">bi_company_config</span> / <span class="inline-code">bi_annual_settings</span> / <span class="inline-code">bi_budget_change_log</span> / <span class="inline-code">bi_overhead_items</span> / <span class="inline-code">bi_department_targets</span>。<span class="inline-code">/bi2</span> は同系統メトリクスのカードUI（DnD・ナビ非掲載）。</div>
+        <div class="feat-note">関連テーブル: <span class="inline-code">bi_company_config</span> / <span class="inline-code">bi_annual_settings</span> / <span class="inline-code">bi_budget_change_log</span> / <span class="inline-code">bi_overhead_items</span> / <span class="inline-code">bi_department_targets</span>。<span class="inline-code">/bi2</span> は同系統メトリクスのカードUI（DnD・ナビ非掲載）。会計開始月は会社情報。初回 SSR は既定4月始まりで描画し、クライアント再取得後に会社設定へ揃います。決算書（<span class="inline-code">/financials</span>）の確定値は経営層向けに BI から参照できます。期首・見込度・実績ソースの全項目は <a href="#data-map-bi">入力 → 参照（BI）</a>。</div>
+      </div>
+    </div>
+
+    <!-- LEADS -->
+    <div class="feat-block" id="feat-leads">
+      <div class="feat-block-head">
+        <div class="feat-block-path">リード › /leads</div>
+        <div class="feat-block-title">問い合わせ管理</div>
+        <p class="feat-block-lead">顧客化する前の問い合わせを一覧管理します。Web フォーム等は Webhook、電話・店頭は手動登録です。CRM への転記は「顧客化」ボタンが必要です（自動顧客化はしません）。</p>
+      </div>
+      <div class="feat-block-body">
+        <div class="howto">
+          <div class="howto-title">使い方</div>
+          <ol>
+            <li><b>「手動登録」</b>で氏名・経路（電話／手動／Web／メール／Instagram／その他）・内容を入力します。</li>
+            <li>外部サイトからは Webhook URL とシークレット（ヘッダー <span class="inline-code">X-Bridge-Secret</span>）で取り込みます。有効化・再発行・無効化・テスト取り込みができます。</li>
+            <li>未対応／対応中の行から<b>「顧客化」</b>すると CRM 顧客が作成され、以後は「顧客を開く」で遷移します。<b>「見送り」</b>もできます。</li>
+          </ol>
+        </div>
+        <h3 class="feat-h3">ステータス</h3>
+        <p>
+          <span class="status-pill">未対応</span>
+          <span class="status-pill">対応中</span>
+          <span class="status-pill">顧客化済</span>
+          <span class="status-pill">見送り</span>
+        </p>
+        <div class="feat-note">権限の目安: hq_admin / contractor_admin / admin / sales / executive。テーブル: inbound leads（migration 00066）。入力→参照の全項目は <a href="#data-map-leads">入力 → 参照（問い合わせ）</a>。</div>
       </div>
     </div>
 
@@ -995,7 +1055,7 @@
           <li>ステージは会社マスタ <span class="inline-code">deal_stages</span>（設定 › CRMマスタで CRUD・並び替え・受注/失注フラグ）</li>
           <li>失注理由・獲得ソース・顧客タグも同マスタ群で管理</li>
         </ul>
-        <div class="feat-note">主要テーブル: <span class="inline-code">customers</span>（prospect_grade 等）, <span class="inline-code">deals</span>, <span class="inline-code">deal_activities</span>, <span class="inline-code">todos</span>, <span class="inline-code">voice_jobs</span>, <span class="inline-code">deal_stage_proposals</span>。</div>
+        <div class="feat-note">主要テーブル: <span class="inline-code">customers</span>（prospect_grade 等）, <span class="inline-code">deals</span>, <span class="inline-code">deal_activities</span>, <span class="inline-code">todos</span>, <span class="inline-code">voice_jobs</span>, <span class="inline-code">deal_stage_proposals</span>。記入画面・商談の全項目は <a href="#data-map-crm">顧客</a> / <a href="#data-map-deals">商談</a>。</div>
       </div>
     </div>
 
@@ -1066,6 +1126,7 @@
           <span class="status-pill">accepted</span>
           <span class="status-pill">rejected</span>
         </p>
+        <div class="feat-note">ヘッダー・大項目・明細の全項目は <a href="#data-map-quotes">入力 → 参照（見積）</a>。</div>
       </div>
     </div>
 
@@ -1088,7 +1149,7 @@
             <li>登録した職人は工事詳細の<b>発注書・請書</b>で発注先として選択できます。</li>
           </ol>
         </div>
-        <div class="feat-note">作業履歴セクションは現状プレースホルダ（発注書との本連携は未完）。マスタ: <span class="inline-code">craftsmen_specialties</span> / <span class="inline-code">craftsmen_qualifications</span>。</div>
+        <div class="feat-note">作業履歴は表示枠のみで、発注書とはまだつながっていません。設定の職種・資格マスタは、職人の登録画面の選択肢にはまだ出ません。口座・請求方法などの全項目は <a href="#data-map-craftsmen">入力 → 参照（職人）</a>。</div>
       </div>
     </div>
 
@@ -1132,9 +1193,12 @@
           <summary>書類作成 — 契約書テンプレートの選択と入力<span class="ops-path">/contracts/[id] › 書類作成</span></summary>
           <div class="ops-body">
             <ol>
-              <li>タブ上部のテンプレートバナーで<b>「テンプレートを変更」</b>をクリックし、「テンプレートを選択」ダイアログから使用するテンプレートを選びます（テンプレートは設定 › PDF編集で作成）。</li>
-              <li>契約書フォームの各項目を入力します。入力内容は<b>自動保存</b>され、「保存済み {時刻}」と表示されます（保存ボタンはありません）。</li>
-              <li>ツールバーの操作：<b>「同期」</b>＝契約・見積の最新データをフォームへ反映、<b>「PDFフォーム」</b>＝テンプレートPDF上の入力表示、<b>「PDF出力」</b>＝PDFダウンロード、<b>「確定する」</b>＝内容を確定。</li>
+              <li>タブ上部のテンプレートバナーで<b>「テンプレートを変更」</b>をクリックし、「テンプレートを選択」ダイアログから使用するテンプレートを選びます。組み込みは<b>工事請負／設計監理／追加工事</b>。独自 PDF は設定 › PDF編集で作成します。</li>
+              <li>初期値は顧客・工事・会社情報から入ります。<b>甲</b>＝顧客名・住所、<b>乙</b>＝PDF発行元または会社名・会社住所、<b>名称・工期</b>＝工事、<b>工事場所</b>＝顧客住所（空なら未入力）。会社情報の乙は非同期で埋まるため、開いた直後やその状態での下書き保存では空のまま残ることがあります。PDF／CloudSign 送信直前には再補完します。</li>
+              <li><b>請負金額（税抜・円）</b>には工事の <span class="inline-code">order_amount</span> が入ります。受注フローでは見積の <span class="inline-code">total</span>（税込）がここに入ることがあります。プレビューは欄の値に消費税率を加算して税込表示するため、税込合計を税抜欄に入れると二重加算になります。</li>
+              <li>支払条件の初期値は固定文（着工時30%・上棟時30%・完成引渡時40%）です。顧客口座や会社の全銀情報からは転記しません。</li>
+              <li>入力内容は<b>自動保存</b>され、「保存済み {時刻}」と表示されます（保存ボタンはありません）。</li>
+              <li>ツールバーの<b>「同期」</b>は顧客・工事・会社情報を空欄へ再反映します。<b>「PDFフォーム」</b>＝テンプレートPDF上の入力、<b>「PDF出力」</b>＝ダウンロード、<b>「確定する」</b>＝内容確定。</li>
             </ol>
           </div>
         </details>
@@ -1167,7 +1231,7 @@
           <span class="status-pill">completed</span>
           <span class="status-pill">cancelled</span>
         </p>
-        <div class="feat-note">電子契約タブの解放条件: 契約が contracted/executing/completed、または CloudSign 紐付け済、または WF approved。工事新規作成の対象は contracted/executing の契約。</div>
+        <div class="feat-note">電子契約タブの解放条件: 契約が contracted/executing/completed、または CloudSign 紐付け済、または WF approved。工事新規作成の対象は contracted/executing の契約。書類の全項目は <a href="#data-map-contracts">入力 → 参照（契約）</a>。</div>
       </div>
     </div>
 
@@ -1199,7 +1263,7 @@
               <li>左上の<b>「工程追加」</b>をクリックすると「工程を追加」ダイアログが開きます。<b>工程名（必須）</b>・開始日・終了日・担当業者・<b>依存関係（先行工程）</b>・ステータス・メモを入力して<b>「追加する」</b>を押します。</li>
               <li>既存の工程は<b>ガントバーまたは行をクリック</b>すると「工程を編集」が開き、修正して<b>「保存する」</b>で更新します。</li>
               <li>表示は右上の<b>日／週／月</b>で切り替えられます。</li>
-              <li><b>「日報を追加」</b>をクリックすると日報作成画面（日付・タイトル・天候・作業内容・作業人数・進捗メモ・課題）へ移動します。</li>
+              <li><b>「日報を追加」</b>をクリックすると日報作成画面（日付・タイトル・天候・作業内容・作業人数・進捗メモ・課題）へ移動します。工程タスクの名称・日付・進捗は<b>転記されません</b>（手入力）。</li>
             </ol>
           </div>
         </details>
@@ -1217,8 +1281,8 @@
           <summary>発注書・請書 — 下請業者への発注<span class="ops-path">/constructions/[id] › 発注書・請書</span></summary>
           <div class="ops-body">
             <ol>
-              <li><b>「発注書を追加」</b>（または工事台帳の「発注」ボタン）をクリックすると「発注書を作成」ダイアログが開きます。</li>
-              <li><b>発注先業者</b>・発注日・工期・完了予定日・支払予定日・<b>支払回数（1回〜12回／その他）</b>・<b>金額（税抜・必須）</b>などを入力して<b>「作成する」</b>を押します。支払回数に応じて支払スケジュールが按分されます。</li>
+              <li><b>「発注書を追加」</b>で同タブ内の作成フォームを開きます。工事台帳の単行<b>「発注」</b>は発注書タブへ遷移し、工期・工種などを事前入力します（ダイアログは開きません。単行の金額は実行予算のみで、追加契約列は含めません）。台帳の<b>「選択業者に一括発注」</b>は追加契約込みの予算合計でドラフトを作ります。</li>
+              <li><b>発注先業者</b>・発注日・工期・完了予定日・支払予定日・<b>支払回数（1／2／3／4／6／12回／その他）</b>・<b>金額（税抜・必須）</b>などを入力して<b>「作成する」</b>を押します。支払回数に応じて支払スケジュールが按分されます。承認後は CloudSign 送信もできます（会社情報の API キー）。</li>
               <li>一覧の<b>「申請する」</b>から承認者を選択して社内承認を申請できます。</li>
               <li><b>「見積から取得」</b>を使うと、見積明細から複数の発注書を一括作成できます。工事台帳では<b>「選択業者に一括発注」</b>も可能です。</li>
             </ol>
@@ -1247,11 +1311,69 @@
         </p>
         <h3 class="feat-h3">工事日報</h3>
         <ul class="feat-ul">
-          <li>入口: 工程表タブ「日報を追加」→ <span class="inline-code">/constructions/[id]/reports/new</span></li>
+          <li>入口: 工程表タブ「日報を追加」→ <span class="inline-code">/constructions/[id]/reports/new</span>（画面遷移のみ。工程行の値は転記しない）</li>
           <li>フィールド: 日付・タイトル・天候・内容・作業人数・進捗メモ・課題・記入者</li>
           <li>テーブル: <span class="inline-code">construction_reports</span></li>
         </ul>
-        <p style="margin-top:1rem;font-size:.88rem;">タブ詳細・工事台帳は下記「<a href="#constructions">工事管理（8タブ）</a>」「<a href="#cost">工事台帳</a>」セクションを参照。</p>
+        <p style="margin-top:1rem;font-size:.88rem;">タブ詳細・工事台帳は下記「<a href="#constructions">工事管理（8タブ）</a>」「<a href="#cost">工事台帳</a>」。入力の全項目は <a href="#data-map-constructions">入力 → 参照（工事）</a>。</p>
+      </div>
+    </div>
+
+    <!-- FULFILLMENT -->
+    <div class="feat-block" id="feat-fulfillment">
+      <div class="feat-block-head">
+        <div class="feat-block-path">生産 › /fulfillment</div>
+        <div class="feat-block-title">納品・検収</div>
+        <p class="feat-block-lead">承認・締結済み発注のあと、請書受領・納品（分納可）・検収・請求受領・経理承認までを管理します。</p>
+      </div>
+      <div class="feat-block-body">
+        <div class="howto">
+          <div class="howto-title">使い方</div>
+          <ol>
+            <li>対象は工事の発注書（承認・締結済み）。請書未受領では納品登録できません。</li>
+            <li>納品日・数量・PDF を登録します。納品日が取引日になります。</li>
+            <li>検収完了すると業者へ請求 URL（<span class="inline-code">/partner/invoice/[token]</span>、有効期限30日）をメールします。紙発注の業者は PDF 案内になります。</li>
+            <li>業者がポータルで請求日・インボイス登録番号（T+13桁必須）を入れ、任意で自社 PDF を添付して送信します。金額・振込先・品目は発注・マスタから表示されます（OTP 未確認では金額・口座を返しません）。</li>
+            <li>社内で請求書確認のあと、経理承認（権限 <span class="inline-code">fulfillment_approve</span>）。承認済みが帳票データ作成の対象です。</li>
+          </ol>
+        </div>
+        <div class="feat-note">業者マスタにメールが無いとポータル認証できません。業者住所はマスタに列が無く空になることがあります。納品〜業者請求の全項目は <a href="#data-map-fulfillment">入力 → 参照（納品・検収）</a>。</div>
+      </div>
+    </div>
+
+    <!-- LEDGER -->
+    <div class="feat-block" id="feat-ledger">
+      <div class="feat-block-head">
+        <div class="feat-block-path">生産 › /ledger</div>
+        <div class="feat-block-title">帳票データ作成</div>
+        <p class="feat-block-lead">経理承認済みの請求から、全銀ファイルまたは案件別 CSV を書き出します。画面名・パンくずは「帳票データ作成」です（旧称 FBデータ作成）。</p>
+      </div>
+      <div class="feat-block-body">
+        <div class="howto">
+          <div class="howto-title">使い方</div>
+          <ol>
+            <li>出力形式（全銀／CSV）・絞り込みを選び、プレビューして書き出します。</li>
+            <li>振込元（依頼人コード・半角カナ・仕向銀行／支店・口座）は<b>設定 › 会社情報 › 全銀・振込元</b>が初期値です。今回用に画面で上書きできます。</li>
+            <li>振込先は職人マスタの口座です。未登録行は全銀出力できません。</li>
+            <li>勘定科目が未確定の行がある場合は <span class="inline-code">/account-items</span> へ誘導します。全銀ファイル自体に科目列は不要です（警告は CSV 側）。</li>
+          </ol>
+        </div>
+        <div class="feat-note">出力列・依頼人・口座の全項目は <a href="#data-map-ledger">入力 → 参照（帳票・科目）</a>。</div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT ITEMS -->
+    <div class="feat-block" id="feat-account-items">
+      <div class="feat-block-head">
+        <div class="feat-block-path">生産 › /account-items</div>
+        <div class="feat-block-title">勘定科目の確定</div>
+        <p class="feat-block-lead">未確定の勘定科目を業者単位で一括確定します。実行予算・発注で人が入れた科目（経理確定は重み大）を学習し、次回の候補にします。</p>
+      </div>
+      <div class="feat-block-body">
+        <ul class="feat-ul">
+          <li>候補は過去実績（learned）または業者名キーワード。空行を自動で「外注加工費」にはしません。</li>
+          <li>確定後は帳票データ作成へ戻れます。権限の目安: hq_admin / admin / administration / executive。学習と確定の対応は <a href="#data-map-ledger">入力 → 参照（帳票・科目）</a>。</li>
+        </ul>
       </div>
     </div>
 
@@ -1275,12 +1397,12 @@
               <tr>
                 <td class="td-name">メール</td>
                 <td class="td-mono">/mail</td>
-                <td>Gmail OAuth / IMAP(Xserver) / 手動フォワード。スレッド同期・既読・スター・作成（/mail/compose）。</td>
+                <td>Gmail OAuth / IMAP(Xserver) / 手動フォワード。スレッド同期・既読・スター・作成（/mail/compose）。<b>スレッド返信は Gmail 連携時のみ</b>（IMAP／フォワードは不可）。</td>
               </tr>
               <tr>
                 <td class="td-name">勤怠</td>
                 <td class="td-mono">/attendance</td>
-                <td>出退勤打刻、休暇種別（残業／休日／午前休／午後休など）、月次サマリー。始業終業は組織設定。</td>
+                <td>出退勤打刻、休暇種別、月次サマリー。始業・終業・休憩・休暇区分は <span class="inline-code">attendance_settings</span>（会社情報と組織 › 勤怠設定で共通）。</td>
               </tr>
               <tr>
                 <td class="td-name">ワークフロー</td>
@@ -1317,7 +1439,7 @@
             <ol>
               <li>右上の<b>「作成」</b>をクリックすると「予定追加」画面（/calendar/new）が開きます。</li>
               <li><b>タイトル（必須）・開始日（必須）</b>を入力し、必要に応じて終日・終了日時・カテゴリ（営業／工事／タスク／施設／機材）・場所・<b>メンバーに共有</b>・説明を設定して<b>「保存」</b>を押します（「予定を追加しました」と表示）。</li>
-              <li><b>Google Calendar 連携：</b>左サイドの「連携アカウント」で<b>「連携する」</b>をクリックし、Google アカウントを認可します。以後、予定は双方向で同期されます。トークン切れの際は<b>「再連携（トークン更新）」</b>、解除は<b>「連携を解除」</b>。</li>
+              <li><b>Google Calendar 連携：</b>操作本体は<b>設定 › 外部連携 › Googleカレンダー</b>（ユーザーメニュー「外部連携」でも同じ）。カレンダー画面の「連携アカウント」は状態表示と設定へのリンクです。認可後、予定は双方向で同期されます（表示は primary の表示期間）。トークン切れは設定で<b>再連携</b>、解除も設定から行います。</li>
             </ol>
           </div>
         </details>
@@ -1327,7 +1449,7 @@
             <ol>
               <li>初回は<b>「メールを連携」</b>をクリックし、「メールサービスを連携」ダイアログで <b>Gmail</b>（Google 認証）または <b>Xserver／その他</b>（IMAP）を選択します。</li>
               <li>IMAP の場合は<b>メールアドレス・IMAPホスト・ユーザー名・パスワード</b>を入力して<b>「接続して連携」</b>を押します。</li>
-              <li>連携後はスレッドが同期され、既読・スター・作成（/mail/compose）・返信ができます。</li>
+              <li>連携後はスレッドが同期され、既読・スター・作成（/mail/compose）ができます。<b>スレッド返信</b>（返信先の自動推定＋本文）は Gmail アカウントのみです。</li>
               <li>本文末尾に自動挿入される<b>署名</b>は、設定 › 概要 › <b>メール署名</b>タブで登録します。</li>
             </ol>
           </div>
@@ -1361,7 +1483,7 @@
             <ol>
               <li><b>「新規作成」</b>をクリックすると「新規お知らせ」ダイアログが開きます。</li>
               <li><b>タイトル（必須）・本文（必須）</b>を入力し、通知対象（<b>全員に通知</b>／<b>権限（ロール）で絞る</b>）・期限・ピン留め・<b>緊急</b>を設定して<b>「投稿」</b>を押します。</li>
-              <li>緊急のお知らせが未読の場合、対象者の画面に BombAlert（全画面アラート）が表示されます。既読状況は投稿ごとに管理されます。</li>
+              <li>緊急のお知らせが<b>未読で1件以上</b>あると、対象者に BombAlert（全画面アラート）が出ます。チャット未読では出ません。確認済み ID は端末の localStorage に残り、同じ投稿では再表示しません。</li>
             </ol>
           </div>
         </details>
@@ -1383,6 +1505,7 @@
           <figure class="shot"><img src="screenshots/circulation.png" alt="回覧（/circulation）" loading="lazy" /><figcaption class="shot-cap">回覧（/circulation）</figcaption></figure>
           <figure class="shot"><img src="screenshots/documents.png" alt="文書管理（/documents）" loading="lazy" /><figcaption class="shot-cap">文書管理（/documents）</figcaption></figure>
         </div>
+        <div class="feat-note">カレンダー・メール・勤怠・WF・回覧・文書・チャット・ダッシュボードの全項目は <a href="#data-map-portal">入力 → 参照（ポータル）</a>。</div>
       </div>
     </div>
 
@@ -1394,25 +1517,25 @@
         <p class="feat-block-lead">個人設定と、管理者向けの組織・マスタ・外部連携を4つの大タブで構成します。</p>
       </div>
       <div class="feat-block-body">
-        <figure class="shot"><img src="screenshots/settings.png" alt="設定（/settings）。概要／組織／マスタ／連携の4大タブ。会社情報で締日・見込度%・CloudSign を設定。" loading="lazy" /><figcaption class="shot-cap">設定（/settings）。概要／組織／マスタ／連携の4大タブ。会社情報で締日・見込度%・CloudSign を設定。</figcaption></figure>
+        <figure class="shot"><img src="screenshots/settings.png" alt="設定（/settings）。概要／組織／マスタ／外部連携の4大タブ。会社情報で締日・就業時刻・見込度%・CloudSign・全銀を設定。" loading="lazy" /><figcaption class="shot-cap">設定（/settings）。概要／組織／マスタ／外部連携の4大タブ。会社情報で締日・就業時刻・見込度%・CloudSign・全銀を設定。</figcaption></figure>
         <div class="howto">
           <div class="howto-title">使い方（管理者の初期セットアップ）</div>
           <ol>
-            <li><b>概要 › 会社情報</b>で社名・住所・請求締日（20日／月末）・会計開始月・見込度%（A/B/C）・CloudSign を設定します。</li>
+            <li><b>概要 › 会社情報</b>で社名・代表者・インボイス番号・住所・請求締日（20日／月末）・始業／終業時刻・会計開始月・見込度%（A/B/C）・特需デフォルト契約率・CloudSign・全銀振込元を設定します。</li>
             <li><b>組織 › メンバー管理</b>の「メンバー追加」でメンバーを招待し、ロールを割り当てます。</li>
             <li>同じ画面の<b>「ロール・権限設定」</b>で、ロールごとに使える機能を ON/OFF します（カスタムロール追加可）。</li>
             <li><b>マスタ › CRMマスタ</b>で商談ステージ・失注理由・獲得ソース・タグを自社の運用に合わせて編集します。</li>
-            <li><b>連携</b>タブで Slack などのアプリ連携、API キー・Webhook を設定します。</li>
+            <li><b>外部連携</b>で Googleカレンダー（全員）、アプリ連携／API・Webhook（管理者）を設定します。</li>
           </ol>
         </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>大タブ</th><th>サブ</th></tr></thead>
             <tbody>
-              <tr><td class="td-name">概要（個人）</td><td>プロフィール／セキュリティ／通知設定／メール署名／PDF編集（管理者）。会社情報もここに表示（管理者）</td></tr>
+              <tr><td class="td-name">概要（個人）</td><td>プロフィール／セキュリティ／通知設定／メール署名／PDF編集（管理者）。会社情報もここに表示（本部管理者）</td></tr>
               <tr><td class="td-name">組織</td><td>メンバー管理（招待・ロール変更・ロール・権限設定）／勤怠設定／ワークフロー</td></tr>
               <tr><td class="td-name">マスタ</td><td>CRMマスタ（ステージ・失注理由・ソース・タグ）／職人マスタ</td></tr>
-              <tr><td class="td-name">連携</td><td>アプリ連携（Chatwork / Slack / LINE WORKS / kintone）／API・Webhook</td></tr>
+              <tr><td class="td-name">外部連携</td><td>Googleカレンダー（全員）／アプリ連携（Chatwork / Slack / LINE WORKS / kintone、管理者）／API・Webhook（管理者）。URL <span class="inline-code">?tab=external_integrations</span></td></tr>
             </tbody>
           </table>
         </div>
@@ -1425,7 +1548,7 @@
               <li><b>文字サイズ</b>（小／中／大）は選択すると即時に画面へ反映されます。</li>
               <li>右下の<b>「保存」</b>をクリックすると「プロフィールを更新しました」と表示されます。</li>
             </ol>
-            <div class="ops-hint">本部管理者は同タブ下部の「会社情報」カードで会社名・代表者名・インボイス登録番号・請求締日（月末締め／20日締め）・会計年度の始まり月・見込度A/B/C%・クラウドサイン連携を編集し、「会社情報を保存」で確定します。</div>
+            <div class="ops-hint">本部管理者は同タブ下部の「会社情報」カードで会社名・代表者名・インボイス登録番号・住所・請求締日（月末締め／20日締め）・始業／終業時刻・会計年度の始まり月・見込度A/B/C%・特需デフォルト契約率・クラウドサイン連携・全銀振込元を編集し、「会社情報を保存」で確定します。始業／終業は組織 › 勤怠設定と同じ <span class="inline-code">attendance_settings</span> です。</div>
           </div>
         </details>
         <details class="ops">
@@ -1443,7 +1566,7 @@
           <div class="ops-body">
             <ul>
               <li>トグルは4種類：<b>メール通知／プッシュ通知／承認リマインダー／日報リマインダー</b>。</li>
-              <li>スイッチを切り替えると<b>即時保存</b>され、「{項目名}を有効／無効にしました」と表示されます（保存ボタンはありません）。</li>
+              <li>スイッチを切り替えると<b>即時保存</b>され、「{項目名}を有効／無効にしました」と表示されます（保存ボタンはありません）。いまは設定の記憶だけで、実際のメール通知やリマインダーにはまだつながっていません。</li>
             </ul>
           </div>
         </details>
@@ -1464,7 +1587,7 @@
             <ol>
               <li>未インポートの場合、中央の<b>「PDFをインポートする」</b>をクリック（またはドラッグ＆ドロップ）して、ベースになる PDF（最大10MB）を読み込みます。</li>
               <li>ヘッダーで<b>テンプレート名</b>と<b>文書種別</b>を設定します。</li>
-              <li>左パレットの項目を<b>クリックして追加</b>します。<b>自動入力項目</b>（顧客名・顧客住所・工事名・工事番号・受注金額（税抜／税込）・工期開始／終了・本日日付）は契約データから自動で埋まり、<b>自由項目</b>（テキスト入力・テキストエリア・チェックボックス・署名・固定テキスト）は作成時に入力する欄になります。</li>
+              <li>左パレットの項目を<b>クリックして追加</b>します。<b>自動入力項目</b>（顧客名・顧客住所・工事名・工事番号・受注金額（税抜／税込）・工期開始／終了・本日日付）は契約・工事データから埋まります。税込欄は税抜想定値×1.1 です（元データが税込だと二重加算）。<b>乙（自社名・住所）の binding はありません</b>（組み込み契約テンプレート側で乙を補完）。<b>自由項目</b>（テキスト入力・テキストエリア・チェックボックス・署名・固定テキスト）は作成時に入力する欄になります。</li>
               <li>追加したフィールドは PDF 上で<b>ドラッグして位置調整</b>、<b>右下ハンドルでサイズ変更</b>します。右サイドパネルでラベル・データ連携・文字サイズを設定できます。</li>
               <li>右上の<b>「保存」</b>をクリックすると「保存しました」と表示され、一覧に戻ります。作成したテンプレートは契約詳細の「書類作成」タブで選択できます。</li>
             </ol>
@@ -1494,7 +1617,7 @@
           </div>
         </details>
         <details class="ops">
-          <summary>勤怠設定 — 就業時間と休暇区分（管理者）<span class="ops-path">組織 › 勤怠設定</span></summary>
+          <summary>勤怠設定 — 就業時間と休暇区分（管理者）<span class="ops-path">組織 › 勤怠設定（会社情報の始業／終業と共通）</span></summary>
           <div class="ops-body">
             <ol>
               <li><b>就業時間：</b>始業時刻・終業時刻・休憩時間（分）を入力すると所定労働時間が表示されます。</li>
@@ -1535,7 +1658,17 @@
           </div>
         </details>
         <details class="ops">
-          <summary>アプリ連携 — Chatwork / Slack / LINE WORKS / kintone（管理者）<span class="ops-path">連携 › アプリ連携</span></summary>
+          <summary>Googleカレンダー — 連携・再連携・解除<span class="ops-path">外部連携 › Googleカレンダー</span></summary>
+          <div class="ops-body">
+            <ol>
+              <li>設定の大タブ<b>「外部連携」</b>、またはユーザーメニューの<b>「外部連携」</b>（<span class="inline-code">/settings?tab=external_integrations</span>）を開きます。</li>
+              <li><b>「Googleカレンダーを連携」</b>または<b>「再連携」</b>で Google 認可します。連携中メールが表示されます。</li>
+              <li><b>「連携を解除」</b>でトークンを削除します。カレンダー画面の予定表示に使います（Gmail 連携はメール画面側）。</li>
+            </ol>
+          </div>
+        </details>
+        <details class="ops">
+          <summary>アプリ連携 — Chatwork / Slack / LINE WORKS / kintone（管理者）<span class="ops-path">外部連携 › アプリ連携</span></summary>
           <div class="ops-body">
             <ol>
               <li>連携したいサービスのカードで<b>「連携する」</b>をクリックします。</li>
@@ -1546,7 +1679,7 @@
           </div>
         </details>
         <details class="ops">
-          <summary>API / Webhook — 開発者向け連携（管理者）<span class="ops-path">連携 › API / Webhook</span></summary>
+          <summary>API / Webhook — 開発者向け連携（管理者）<span class="ops-path">外部連携 › API / Webhook</span></summary>
           <div class="ops-body">
             <ol>
               <li><b>API キー発行：</b>キー名を入力して<b>「キーを発行」</b>をクリックします。<b>生のキーは発行時に一度だけ表示</b>されるため必ず控えてください。不要になったキーは無効化できます。</li>
@@ -1555,7 +1688,7 @@
             </ol>
           </div>
         </details>
-        <div class="feat-note">PDF ビルダー専用ルート: <span class="inline-code">/settings/pdf-builder</span>。組織・マスタ・連携タブは管理者のみ表示されます。</div>
+        <div class="feat-note">会社情報・権限・マスタ・連携・PDF・通知の<strong>全項目</strong>は <a href="#data-map-settings">入力 → 参照（設定）</a>。PDF ビルダー専用ルート: <span class="inline-code">/settings/pdf-builder</span>。組織・マスタは管理者のみ。外部連携のうち Googleカレンダーは全員、アプリ連携／API は管理者のみ。</div>
       </div>
     </div>
 
@@ -1568,9 +1701,10 @@
       </div>
       <div class="feat-block-body">
         <ul class="feat-ul">
-          <li><strong>社内チャット:</strong> サイドバーから起動。<span class="inline-code">internal_messages</span> に永続化。未読≥10で BombAlert。AI から担当者へ転送可</li>
+          <li><strong>社内チャット:</strong> サイドバーから起動。<span class="inline-code">internal_messages</span> に永続化。AI から担当者へ転送可。<strong>BombAlert は出さない</strong>（未読件数に関係なく）</li>
           <li><strong>BRIDGE AI:</strong> 右サイドパネル。ページコンテキスト（dashboard/bi/crm/quotes 等）を付与して回答。詳細は <a href="ai.html">ai.html</a></li>
-          <li><strong>運営管理 /admin:</strong> 全国加盟店 BI、企業一覧（slug／プラン編集・Netlify ドメイン連携）、Linq AI プラットフォーム設定。ログインは super-admin 専用</li>
+          <li><strong>BombAlert:</strong> 未読の<b>緊急回覧</b>（<span class="inline-code">type=announcement</span> かつ緊急）が <b>1件以上</b>のとき全画面表示。確認後は localStorage で同一投稿を再表示しない</li>
+          <li><strong>運営管理 /admin:</strong> 全国加盟店 BI、企業一覧（slug／プラン編集・Netlify ドメイン連携）、Linq AI プラットフォーム設定。ログインは <span class="inline-code">/admin/login</span>（<span class="inline-code">super-admin@example.com</span> 専用）。加盟店ロールが /admin を直打ちしてもテナントの /unauthorized にはせず、運営ログインへ誘導する</li>
         </ul>
       </div>
     </div>
@@ -1584,11 +1718,294 @@
       </div>
       <div class="feat-block-body">
         <ul class="feat-ul">
-          <li><strong>/invoices</strong> — 顧客請求（draft/sent/paid/cancelled）。締日ベース月次一括生成。権限キーは残存</li>
+          <li><strong>/invoices</strong> — 顧客請求（draft/sent/paid/cancelled）。会社の請求締日＋<b>工事の着工・完工日</b>で月次按分（工程表タスクは見ない）。権限キーは残存</li>
           <li><strong>/budget</strong> — 年度予算策定・実績対比（BI 期首設定とは別モジュール）</li>
+          <li><strong>/financials</strong> — 決算書（PL・製造原価）。経営層。BI からリンク。確定後は BI 実績参照</li>
           <li><strong>/marketing/*</strong> — メール配信／SNS／ROI／クリエイティブ。フェーズ2予定。<span class="inline-code">ROUTE_ROLES["/marketing"]=[]</span> で全遮断</li>
+          <li><strong>/unauthorized</strong> — テナント内で権限のないページへアクセスしたとき（/admin は対象外）</li>
         </ul>
+        <div class="feat-note">顧客請求の項目は <a href="#data-map-hidden">入力 → 参照（ナビ外）</a>。決算・予算は <a href="#data-map-bi">BI・決算</a>。運営は <a href="#data-map-admin">運営</a>。</div>
       </div>
+    </div>
+  </section>
+
+  <!-- DATA MAP: 入力 → 参照（全項目） -->
+  <section id="data-map">
+    <div class="section-label">Data Lineage</div>
+    <h2>入力 → 参照（全項目・全機能）</h2>
+    <p class="section-desc">左が入力する画面、右が「その値が実際に使われる場所」です。2026-08-30 の実装に準拠。右に「この画面に出すだけ」とある項目は、入力しても見積・契約・BIなど他の機能には渡りません。</p>
+    <p class="feat-note" style="margin-bottom:1.5rem">
+      <a href="#data-map-leads">問い合わせ</a> ·
+      <a href="#data-map-crm">顧客</a> ·
+      <a href="#data-map-deals">商談</a> ·
+      <a href="#data-map-quotes">見積</a> ·
+      <a href="#data-map-craftsmen">職人</a> ·
+      <a href="#data-map-contracts">契約</a> ·
+      <a href="#data-map-constructions">工事</a> ·
+      <a href="#data-map-fulfillment">納品・検収</a> ·
+      <a href="#data-map-ledger">帳票・科目</a> ·
+      <a href="#data-map-settings">設定</a> ·
+      <a href="#data-map-portal">ポータル</a> ·
+      <a href="#data-map-bi">BI・決算</a> ·
+      <a href="#data-map-hidden">ナビ外</a> ·
+      <a href="#data-map-admin">運営</a>
+    </p>
+
+    <h3 class="feat-h3" id="data-map-leads" style="margin-top:0">問い合わせ /leads</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">手動登録 / Webhook</td><td>名前</td><td>一覧。顧客化 → customers.name。初回商談タイトル</td></tr>
+          <tr><td class="td-name">手動登録 / Webhook</td><td>電話 / メール</td><td>一覧。顧客化 → customers.phone / email</td></tr>
+          <tr><td class="td-name">手動登録 / Webhook</td><td>経路 source</td><td>一覧バッジ。顧客化 → customers.source</td></tr>
+          <tr><td class="td-name">手動登録 / Webhook</td><td>問い合わせ分類</td><td>一覧。顧客化 → customers.inquiry_category</td></tr>
+          <tr><td class="td-name">手動登録 / Webhook</td><td>問い合わせ内容</td><td>一覧・検索。顧客化 → customers.inquiry_content</td></tr>
+          <tr><td class="td-name">顧客化操作</td><td>ステータス / customer_id / deal_id</td><td>「顧客を開く」。CRM 顧客＋初回商談（stage=inquiry）。問い合わせ日は顧客化当日</td></tr>
+          <tr><td class="td-name">見送り</td><td>status</td><td>一覧フィルタのみ</td></tr>
+          <tr><td class="td-name">Webhook 設定</td><td>URL / シークレット</td><td>外部フォーム取り込み（X-Bridge-Secret）。CRM 自動顧客化はしない</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-crm">顧客・記入画面 /crm</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目（列）</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">記入画面</td><td>契約者氏名 name</td><td>CRM全画面、見積／契約／工事一覧、契約書甲、PDF customer_name、受注メール、ダッシュボード</td></tr>
+          <tr><td class="td-name">記入画面</td><td>電話 phone / メール email</td><td>CRM、契約・工事の顧客パネル、PDF、録音要約の顧客更新。契約メッセージング。メール画面への自動紐付けはしない</td></tr>
+          <tr><td class="td-name">記入画面</td><td>住所 address</td><td>CRM詳細、契約書 甲住所／工事場所、工事契約タブ、PDF、受注時現場担当提案</td></tr>
+          <tr><td class="td-name">記入画面</td><td>法人／個人 customer_type、会社名 company_name</td><td>詳細バッジ、見積PDF御中、契約詳細。一覧の法人タブは会社名の有無で判定</td></tr>
+          <tr><td class="td-name">記入画面</td><td>部門 department、年齢 age、EIGHT-ID eight_id</td><td>契約PDFの差し込みに使える。顧客詳細や BI の画面には出ない</td></tr>
+          <tr><td class="td-name">記入画面</td><td>知ったきっかけ source、問い合わせ分類／日／内容</td><td>PDF。分類は初回商談作成のきっかけ。内容は AI 提案・見積ドラフト。詳細ヘッダーには出さない</td></tr>
+          <tr><td class="td-name">記入画面</td><td>担当者 assigned_to</td><td>CRM一覧／詳細、PDF、Leads顧客化、新規商談、録音処理</td></tr>
+          <tr><td class="td-name">記入画面</td><td>予算下限 budget_min／上限 budget_max</td><td>PDF。上限のみ BI 期待値のフォールバック（商談金額が無いとき）</td></tr>
+          <tr><td class="td-name">記入画面</td><td>見込度 A/B/C prospect_grade</td><td>CRMバッジ、PDF、BI 期待値売上。特需ON時は null</td></tr>
+          <tr><td class="td-name">記入画面</td><td>特需 is_special_demand、独自確度% special_probability</td><td>CRMバッジ、PDF、BI 特需期待値。独自%未設定時は会社の特需デフォルト率</td></tr>
+          <tr><td class="td-name">記入画面</td><td>ステータス status、タグ tags</td><td>一覧／詳細／ダッシュボードに表示。タグで絞り込みや BI 集計には使わない。PDF には出る</td></tr>
+          <tr><td class="td-name">記入画面</td><td>備考 notes</td><td>PDF、録音AI更新。CRM詳細未表示</td></tr>
+          <tr><td class="td-name">記入画面</td><td>LINE / Slack ID</td><td>契約のやり取り管理タブ。CRM本体未表示</td></tr>
+          <tr><td class="td-name">記入画面</td><td>その他項目 custom_fields</td><td>PDFビルダー customer_custom のみ</td></tr>
+          <tr><td class="td-name">契約／工事の顧客情報タブ</td><td>上記と同じ customers 行</td><td>同一レコードを更新。工事ヘッダーの工事場所は顧客住所</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-deals">商談（パイプライン）</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">商談追加／編集</td><td>商談名 title</td><td>カンバン、CRM概要、受注→契約 title、見積新規 ?title=</td></tr>
+          <tr><td class="td-name">商談追加／編集</td><td>ステージ stage</td><td>カンバン列、BI forecast（dealsソース）、受注／失注フロー、AI提案</td></tr>
+          <tr><td class="td-name">商談追加／編集</td><td>金額 value（税抜）</td><td>KPI、BI見込、受注→契約 amount／工事 order_amount、見積新規 ?value=</td></tr>
+          <tr><td class="td-name">商談追加／編集</td><td>担当 assigned_to</td><td>カンバン、受注→契約担当</td></tr>
+          <tr><td class="td-name">商談編集</td><td>クロージング予定日 expected_close_date</td><td>商談タブ、BI deals の計上日</td></tr>
+          <tr><td class="td-name">商談編集</td><td>部門 department_name</td><td>BI 部門別 forecast／実績。追加ダイアログには無い</td></tr>
+          <tr><td class="td-name">商談追加／編集</td><td>優先度 priority、次アクション next_action</td><td>カンバンと商談タブに表示するだけ。契約書や BI には渡らない</td></tr>
+          <tr><td class="td-name">商談タブ</td><td>要約 summary</td><td>タブ内、AI見込度判定。契約／PDFへは転記しない</td></tr>
+          <tr><td class="td-name">商談タブ AI</td><td>見込度判定の適用</td><td>customers.prospect_grade → BI</td></tr>
+          <tr><td class="td-name">受注確定</td><td>（操作）</td><td>契約自動登録。見積または工事へ引き継ぎダイアログ</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-quotes">見積 /quotes</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">見積新規／ヘッダー</td><td>件名 title、備考 notes</td><td>一覧、PDF、検索、受注時の契約名の代わり、承認申請。見積詳細では件名を変えられない（専用の編集画面のみ）</td></tr>
+          <tr><td class="td-name">見積新規／ヘッダー</td><td>顧客 customer_id</td><td>一覧グループ、CRM関連、契約／工事紐付け、PDF御中</td></tr>
+          <tr><td class="td-name">見積新規／ヘッダー</td><td>部門 department_name</td><td>部門粗利率マスタとの比較、承認、BI（工事化後）</td></tr>
+          <tr><td class="td-name">見積（生成）</td><td>見積番号／小計／税／合計 total／粗利</td><td>詳細KPI、PDF、CRM概要、受注 amount、BI。total は税込。契約の「請負金額（税抜）」に入ることがある</td></tr>
+          <tr><td class="td-name">見積（生成）</td><td>経営調整費／予備費 金額</td><td>原価内訳PDF、詳細KPI、工事台帳。顧客向けPDFは予備費非表示。表下の率入力は廃止（システム業者行から集計）</td></tr>
+          <tr><td class="td-name">大項目</td><td>名称／摘要／数量／単価／発注業者</td><td>PDF見出し、原価集計、台帳工種・業者、発注「見積から取得」</td></tr>
+          <tr><td class="td-name">明細</td><td>品名・摘要・数量・単位・原単価・見積単価</td><td>合計、顧客PDF、原価内訳PDF、工事台帳、発注金額</td></tr>
+          <tr><td class="td-name">明細</td><td>発注業者 vendor_*、notes（業者名キー）</td><td>発注、納品・検収、原価集計</td></tr>
+          <tr><td class="td-name">明細</td><td>予備費行 is_reserve_row</td><td>原価のみ。顧客PDF除外。発注業者＝システム「予備費」</td></tr>
+          <tr><td class="td-name">明細</td><td>テキスト行 is_text_row</td><td>表示のみ。計算・売価ゼロ</td></tr>
+          <tr><td class="td-name">承認操作</td><td>status／申請コメント</td><td>一覧、受注時の最新見積取得、ワークフロー</td></tr>
+          <tr><td class="td-name">（画面に無い列）</td><td>有効期限 validity_date</td><td>入力欄が無く、見積画面でも他機能でも使っていない</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-craftsmen">職人 /craftsmen</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">職人 新規／編集</td><td>名前 name、会社名、電話</td><td>一覧／詳細、見積発注先、発注書、納品・検収、CloudSign 署名者、請求プレビュー</td></tr>
+          <tr><td class="td-name">職人 新規／編集</td><td>メール email</td><td>発注メール、業者請求 OTP、CloudSign</td></tr>
+          <tr><td class="td-name">職人 新規／編集</td><td>請求書の受領方法 invoice_channel</td><td>納品・検収：paper＝社内PDF添付、email＝業者ポータルURL</td></tr>
+          <tr><td class="td-name">職人 編集</td><td>銀行コード／名カナ、支店、種目、口座番号、受取人名カナ</td><td>帳票の全銀ファイル（必須）。表示用銀行名はプレビュー用</td></tr>
+          <tr><td class="td-name">職人 新規／編集</td><td>専門 specialty</td><td>一覧の絞り込み。発注先の自動選択には使わない</td></tr>
+          <tr><td class="td-name">職人 編集</td><td>ランク、スキル、対応エリア、契約単価、支払い予定、備考</td><td>職人詳細に出すだけ。発注金額・支払・BI には使わない</td></tr>
+          <tr><td class="td-name">設定 › 職人マスタ</td><td>職種区分／資格のラベル</td><td>ここに登録しても、職人の登録画面の選択肢にはまだ出ない</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-contracts">契約 /contracts</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">契約 新規／編集</td><td>顧客／担当／件名／金額／契約日／工期／見積／備考／ステータス</td><td>一覧・詳細、Webhook、工事新規の初期値（顧客・受注額・工期）、BI</td></tr>
+          <tr><td class="td-name">書類作成</td><td>甲名／甲住所</td><td>プレビュー、PDF、CloudSign。初期値＝顧客</td></tr>
+          <tr><td class="td-name">書類作成</td><td>乙名／乙住所</td><td>プレビュー、PDF。初期値＝PDF発行元または会社名／会社住所。非同期補完。下書き保存が早いと空のまま残る</td></tr>
+          <tr><td class="td-name">書類作成</td><td>名称／工事場所／工期</td><td>プレビュー、PDF。初期値＝工事 title、顧客住所、工事着工・完工（工程表フォールバック）</td></tr>
+          <tr><td class="td-name">書類作成</td><td>請負金額（税抜） amount_excl_tax、消費税率</td><td>プレビューは税加算して税込表示。実値は工事 order_amount（見積 total＝税込が入ることがある）</td></tr>
+          <tr><td class="td-name">書類作成</td><td>支払条件</td><td>プレビュー。初期は固定文。顧客口座・全銀からは来ない</td></tr>
+          <tr><td class="td-name">書類作成</td><td>瑕疵担保、業務範囲、原契約、変更内容、特記、約款、電子締結</td><td>プレビュー／PDF。テンプレ種別で出る欄が違う</td></tr>
+          <tr><td class="td-name">書類作成</td><td>フォーム全体 notes JSON</td><td>再編集。同期ボタンは空欄を顧客・工事・会社で埋める</td></tr>
+          <tr><td class="td-name">承認WF／電子契約</td><td>申請・送信先メール</td><td>ワークフロー、CloudSign（会社情報の API キー）</td></tr>
+          <tr><td class="td-name">やり取り管理</td><td>メッセージ、LINE/Slack</td><td>顧客の line_user_id / slack_channel_id</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-constructions">工事（8タブ）</h3>
+    <div class="table-wrap" style="margin-bottom:1.2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">工事 新規／編集</td><td>名称 title</td><td>ヘッダー、契約書名称、顧客請求明細、月次一括、BI、Webhook</td></tr>
+          <tr><td class="td-name">工事 新規／編集</td><td>契約／顧客／見積</td><td>受注額・顧客・工期の初期値、顧客情報タブ、見積タブ、発注「見積から取得」</td></tr>
+          <tr><td class="td-name">工事 新規／編集</td><td>着工／竣工 start_date / end_date</td><td>工程表、契約書工期、月次請求按分（工程タスクは見ない）、発注工期初期値</td></tr>
+          <tr><td class="td-name">工事 新規／編集</td><td>受注額 order_amount</td><td>ヘッダー、台帳契約金額、請求生成、月次一括、BI実績、契約書金額</td></tr>
+          <tr><td class="td-name">工事 新規／編集</td><td>予算原価 budget_cost、担当、部門、拠点、ステータス、進捗</td><td>ヘッダー、通知、BI部門／拠点、一覧バッジ、月次請求対象</td></tr>
+          <tr><td class="td-name">工程表</td><td>工程名、開始／終了、ステータス、進捗、業者、依存、説明、担当</td><td>ガント。工期は契約書のフォールバック。日報へは転記しない</td></tr>
+          <tr><td class="td-name">日報</td><td>日付・天候・内容・人数・課題</td><td>construction_reports のみ</td></tr>
+          <tr><td class="td-name">追加変更</td><td>変更名、前後見積、差額</td><td>一覧、台帳「追加変更参照」の工種と追加契約列、CloudSign</td></tr>
+          <tr><td class="td-name">工事台帳 行</td><td>業者名、工種、勘定科目、実行予算、追加契約、管理用予算、発注額、追加発注、月次請求、コメント</td><td>粗利自動計算。科目→発注・帳票・科目確定。一括発注は追加含む予算合計。単行「発注」は実行予算のみ</td></tr>
+          <tr><td class="td-name">工事台帳</td><td>参照（見積／追加変更）</td><td>行生成。再参照は置き換え確認</td></tr>
+          <tr><td class="td-name">発注書</td><td>業者、件名、発注日、工期、完了予定、支払予定、支払回数、スケジュール、部門、科目、工事内容、金額、特記</td><td>PDF、納品・検収、帳票、業者ポータル、CloudSign。支払回数 1/2/3/4/6/12／その他</td></tr>
+          <tr><td class="td-name">発注書</td><td>承認／請書受領／CloudSign</td><td>納品可能化、ledger_status</td></tr>
+          <tr><td class="td-name">ドキュメントタブ</td><td>ファイル／カテゴリ</td><td>Storage、文書管理の横断一覧</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-fulfillment">納品・検収 /fulfillment</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">請書受領</td><td>concluded_at</td><td>納品可能。ledger_status=ordered</td></tr>
+          <tr><td class="td-name">納品登録</td><td>納品日、内容、分納、分納金額、添付</td><td>検収画面。納品日＝帳票の取引日。分納は残行生成</td></tr>
+          <tr><td class="td-name">検収</td><td>合否、検収日、コメント、検収者</td><td>合格→業者へ請求URL（30日）。不合格→発注済みに戻す</td></tr>
+          <tr><td class="td-name">紙請求添付</td><td>請求日／番号／金額／PDF</td><td>帳票 billedExcl、invoice_received</td></tr>
+          <tr><td class="td-name">ディレクター確認／経理承認</td><td>確認・承認日時</td><td>経理承認済みだけが帳票対象</td></tr>
+          <tr><td class="td-name">業者ポータル</td><td>請求日、請求番号、登録番号（T+13必須）、備考、PDF</td><td>帳票CSV、検収画面。金額は発注額固定。OTP未確認では金額・口座を返さない</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-ledger">帳票・勘定科目</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">帳票（他画面の値を使う）</td><td>承認済み発注の部門・科目・納品日・請求日・税抜・請求番号・工事・業者口座</td><td>CSV列、全銀グループ。口座未登録は全銀不可。科目未確定は /account-items へ</td></tr>
+          <tr><td class="td-name">帳票画面</td><td>出力列、振込指定日、手数料負担、依頼人上書き</td><td>全銀ヘッダー／振込額。初期の依頼人は会社情報の全銀</td></tr>
+          <tr><td class="td-name">勘定科目の確定</td><td>業者グループの科目一括確定</td><td>contractor_orders.account_item（source=accounting）。次回の学習候補。空行を自動入力しない</td></tr>
+          <tr><td class="td-name">実行予算／発注の科目</td><td>account_item（manual / budget / learned / ai）</td><td>帳票、確定画面スキップ、学習（人が入れた・経理確定のみ。AI提案は学習しない）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-settings">設定（プロフィール・会社・組織・マスタ・連携）</h3>
+    <div class="table-wrap" style="margin-bottom:1.2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">プロフィール</td><td>表示名・電話・部署・役職</td><td>サイドバー、担当者表示、メンバー一覧</td></tr>
+          <tr><td class="td-name">プロフィール</td><td>文字サイズ</td><td>画面全体（即時）</td></tr>
+          <tr><td class="td-name">セキュリティ</td><td>パスワード</td><td>Supabase Auth</td></tr>
+          <tr><td class="td-name">通知設定</td><td>メール／プッシュ／承認／日報リマインダー</td><td>ON/OFF は保存される。実際のメール通知やリマインダーにはまだ使われていない</td></tr>
+          <tr><td class="td-name">メール署名</td><td>署名本文</td><td>メール作成（/mail/compose）末尾。スレッド返信には自動挿入しない</td></tr>
+          <tr><td class="td-name">会社情報</td><td>会社名</td><td>契約乙、帳票、メール件名、業者請求の発注元</td></tr>
+          <tr><td class="td-name">会社情報</td><td>住所</td><td>契約乙、業者請求の発注元住所</td></tr>
+          <tr><td class="td-name">会社情報</td><td>代表者・インボイス番号・電話・郵便番号</td><td>会社情報表示。代表者・郵便は他画面未参照。インボイス番号は自社表示（職人マスタに T 番号列は無い）</td></tr>
+          <tr><td class="td-name">会社情報</td><td>請求締日</td><td>/invoices 月次一括、工事工期按分、工事詳細の締日表示</td></tr>
+          <tr><td class="td-name">会社情報／勤怠設定</td><td>始業・終業・休憩・休暇区分</td><td>勤怠の所定・残業・区分プルダウン（同一 attendance_settings）</td></tr>
+          <tr><td class="td-name">会社情報</td><td>会計開始月</td><td>BI 年度・月軸、決算書作成の初期値。初回 SSR は一時的に4月</td></tr>
+          <tr><td class="td-name">会社情報</td><td>見込度 A/B/C %、特需デフォルト率</td><td>BI 期待値／特需。BI 分析ルールと同じ DB</td></tr>
+          <tr><td class="td-name">会社情報</td><td>CloudSign 有効／APIキー</td><td>契約・追加変更・発注の電子署名</td></tr>
+          <tr><td class="td-name">会社情報</td><td>全銀・振込元（依頼人〜口座）</td><td>帳票全銀ヘッダー（画面で今回分上書き可）</td></tr>
+          <tr><td class="td-name">メンバー</td><td>招待名・メール・ロール、従業員区分</td><td>権限、サイドバー。従業員区分は BI 1人当たり利益（正社員1.0／パート0.5）</td></tr>
+          <tr><td class="td-name">ロール・権限</td><td>機能×ロール、カスタムロール</td><td>サイドバー、middleware、経理承認 fulfillment_approve、BI予備費 reserve_fee、BI顧客名マスク</td></tr>
+          <tr><td class="td-name">ワークフロー種別</td><td>種別名、期限日、カスタム項目、承認ルート</td><td>WF新規、契約承認、見積粗利承認</td></tr>
+          <tr><td class="td-name">CRMマスタ</td><td>ステージ（ラベル／色／順）</td><td>パイプライン列</td></tr>
+          <tr><td class="td-name">CRMマスタ</td><td>獲得ソース、顧客タグ</td><td>顧客フォーム選択肢</td></tr>
+          <tr><td class="td-name">CRMマスタ</td><td>失注理由</td><td>マスタには登録できる。失注するときの選択肢にはまだ出ない</td></tr>
+          <tr><td class="td-name">CRMマスタ</td><td>部門別粗利率</td><td>見積承認閾値、sales-flow、決算、BI部門シート</td></tr>
+          <tr><td class="td-name">CRMマスタ</td><td>拠点名</td><td>工事拠点、BI拠点目標</td></tr>
+          <tr><td class="td-name">外部連携</td><td>Googleカレンダー 連携／再連携／解除</td><td>カレンダー予定、/calendar/new 同期。Gmail とトークン共用</td></tr>
+          <tr><td class="td-name">アプリ連携</td><td>Chatwork／Slack／LINE WORKS／kintone の認証とイベント</td><td>業務イベント通知</td></tr>
+          <tr><td class="td-name">API / Webhook</td><td>APIキー、通知先URL、イベント</td><td>/api/v1 Bearer、HMAC POST</td></tr>
+          <tr><td class="td-name">PDF編集</td><td>テンプレ名・種別・PDF・配置フィールド</td><td>契約／工事の PDFフォーム差し込み。乙 binding なし。税込欄は税抜×1.1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-portal">ポータル（カレンダー・メール・勤怠・WF・回覧・文書）</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">カレンダー</td><td>タイトル、開始／終了、終日、カテゴリ、場所、説明、共有メンバー</td><td>日／週／月、他メンバー重ね、Google 双方向。表示フィルタは端末のみ（永続化なし）</td></tr>
+          <tr><td class="td-name">メール作成</td><td>To／Cc／件名／本文</td><td>Gmail 送信。署名は作成画面のみ末尾挿入</td></tr>
+          <tr><td class="td-name">メール返信</td><td>返信先（推定可）、本文</td><td>Gmail スレッド。IMAP／フォワードでは返信不可</td></tr>
+          <tr><td class="td-name">メール連携</td><td>Gmail OAuth／IMAP／フォワード</td><td>スレッド一覧。未連携時はデモ</td></tr>
+          <tr><td class="td-name">勤怠</td><td>出勤／退勤、休暇区分、期間、理由</td><td>月次集計、管理者承認。所定は会社の就業設定</td></tr>
+          <tr><td class="td-name">ワークフロー</td><td>種別、件名、金額、期限、動的項目、承認者</td><td>承認画面、Webhook。見積粗利・契約承認もここに届く</td></tr>
+          <tr><td class="td-name">回覧</td><td>タイトル、本文、対象（全員／ロール）、期限、ピン、緊急</td><td>一覧、通知、Webhook。緊急かつ未読1件以上で BombAlert（チャット未読では出ない）</td></tr>
+          <tr><td class="td-name">文書</td><td>文書名、ファイル、カテゴリ、顧客／工事紐付け</td><td>一覧／グリッド、工事ドキュメントタブ</td></tr>
+          <tr><td class="td-name">社内チャット</td><td>メッセージ</td><td>internal_messages。BombAlert 対象外</td></tr>
+          <tr><td class="td-name">ダッシュボード表示設定</td><td>ウィジェット表示／順／幅／高さ</td><td>ダッシュボード本人のみ（DB＋localStorage）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-bi">BI・期首・決算</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">BI 期首</td><td>全社売上／粗利目標、製造間接費、販管費</td><td>KPI、達成率、P/L、拠点按分</td></tr>
+          <tr><td class="td-name">BI 期首</td><td>会社指定粗利率、予備費率、決算で予備費を戻す</td><td>見積／実行予算の上長承認閾値、利益表示</td></tr>
+          <tr><td class="td-name">BI 期首</td><td>部門別／拠点別目標、期中変更</td><td>部門・拠点グラフ、変更履歴</td></tr>
+          <tr><td class="td-name">BI 分析ルール</td><td>請求／商談粗利率、見込度%、特需率、実績ソース、着地ティア、間接費按分</td><td>実績集計、着地予測。見込度%は会社情報と同一</td></tr>
+          <tr><td class="td-name">CRM／商談／工事（他画面の値）</td><td>見込度、特需、商談金額、工事受注額、部門、拠点</td><td>期待値・実績・部門別。確定した決算書は実績として使う</td></tr>
+          <tr><td class="td-name">決算 /financials</td><td>年度、科目の予算／実績／前期、表示設定</td><td>確定後 BI。会計開始月は会社情報</td></tr>
+          <tr><td class="td-name">予算 /budget</td><td>年度、支店、目標売上、明細</td><td>予算一覧 KPI。<strong>BI 期首とは別テーブル</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-hidden">ナビ外：顧客請求</h3>
+    <div class="table-wrap" style="margin-bottom:2rem">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">請求 詳細</td><td>宛名、請求日、支払期日、支払条件、備考、明細（摘要／数量／単価）、ステータス</td><td>PDF／印刷、メール、Webhook。月次一括は工事着工・完工＋会社締日</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="feat-h3" id="data-map-admin">運営 /admin</h3>
+    <div class="table-wrap" style="margin-bottom:0">
+      <table>
+        <thead><tr><th>入力</th><th>項目</th><th>参照先</th></tr></thead>
+        <tbody>
+          <tr><td class="td-name">企業追加／編集</td><td>会社名、slug、プラン、オーナー</td><td>テナント、Netlify サブドメイン、初期メンバー</td></tr>
+          <tr><td class="td-name">Linq AI</td><td>有効、プロバイダ、モデル、APIキー</td><td>全テナントの BRIDGE AI、決算インポート、音声。加盟店の会社情報からは変更不可</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
@@ -1633,10 +2050,10 @@
       <div class="auth-arrow">→</div>
       <div class="auth-step"><div class="auth-step-num">2-4</div><div class="auth-step-title">工事台帳</div><div class="auth-step-desc">原価 DB 永続化</div></div>
       <div class="auth-arrow">→</div>
-      <div class="auth-step step-last"><div class="auth-step-num">2-5</div><div class="auth-step-title">発注・請求</div><div class="auth-step-desc">発注書タブ＋/invoices</div></div>
+      <div class="auth-step step-last"><div class="auth-step-num">2-5</div><div class="auth-step-title">発注・検収・帳票</div><div class="auth-step-desc">発注書 → 納品・検収 → 帳票</div></div>
     </div>
     <div class="feat-note" style="margin-bottom:0">
-      Notion 2-5 は「発注書・請求書」を1ステップにまとめています。現行 UI では下請への<strong>発注書・請書</strong>は工事詳細タブ、顧客向け<strong>請求書</strong>は <span class="inline-code">/invoices</span>（ナビ非表示）で横断管理します。
+      Notion 2-5 は「発注書・請求書」を1ステップにまとめています。現行 UI では下請への<strong>発注書・請書</strong>は工事詳細タブ、その後の<strong>納品・検収</strong>は <span class="inline-code">/fulfillment</span>、<strong>帳票</strong>は <span class="inline-code">/ledger</span>、顧客向け<strong>請求書</strong>は <span class="inline-code">/invoices</span>（ナビ非表示）です。
     </div>
   </section>
 
@@ -1644,7 +2061,7 @@
   <section id="constructions">
     <div class="section-label">Feature Detail</div>
     <h2>工事管理（8タブ構成）</h2>
-    <p class="section-desc">工事詳細ページ（<span class="inline-code">/constructions/[id]</span>）の現行タブ構成です。2026-07 時点で「顧客情報」が先頭に追加されています。</p>
+    <p class="section-desc">工事詳細ページ（<span class="inline-code">/constructions/[id]</span>）の現行タブ構成です。「顧客情報」が先頭。請求タブ UI は非表示（コードは一部残存）。</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>タブ</th><th>キー</th><th>Notion</th><th>機能概要</th></tr></thead>
@@ -1655,15 +2072,16 @@
           <tr><td class="td-name">契約書</td><td class="td-mono">contract</td><td>—</td><td>契約書 PDF のアップロード・管理</td></tr>
           <tr><td class="td-name">追加変更</td><td class="td-mono">change</td><td>2-3</td><td>change_orders。明細差額・承認・CloudSign（未設定時 PDF 代替）</td></tr>
           <tr><td class="td-name">工事台帳</td><td class="td-mono">budget</td><td>2-4</td><td>原価管理表。construction_cost_budgets へ永続化</td></tr>
-          <tr><td class="td-name">発注書・請書</td><td class="td-mono">orders</td><td>2-5</td><td>contractor_orders。支払回数 2/4/6/12 回の schedule 按分</td></tr>
+          <tr><td class="td-name">発注書・請書</td><td class="td-mono">orders</td><td>2-5</td><td>contractor_orders。支払回数 1/2/3/4/6/12／その他の schedule 按分。CloudSign 可</td></tr>
           <tr><td class="td-name">ドキュメント</td><td class="td-mono">documents</td><td>—</td><td>工事関連ファイルの一覧・カード・DL</td></tr>
         </tbody>
       </table>
     </div>
-    <figure class="shot"><img src="screenshots/construction-orders.png" alt="工事詳細 — 発注書・請書タブ。下請業者への発注を作成し、支払回数（2/4/6/12回）で按分。" loading="lazy" /><figcaption class="shot-cap">工事詳細 — 発注書・請書タブ。下請業者への発注を作成し、支払回数（2/4/6/12回）で按分。</figcaption></figure>
+    <figure class="shot"><img src="screenshots/construction-orders.png" alt="工事詳細 — 発注書・請書タブ。下請業者への発注を作成し、支払回数（1/2/3/4/6/12回／その他）で按分。" loading="lazy" /><figcaption class="shot-cap">工事詳細 — 発注書・請書タブ。下請業者への発注を作成し、支払回数（1/2/3/4/6/12回／その他）で按分。</figcaption></figure>
     <div class="feat-note">
       <strong>関連設定:</strong> CloudSign（会社情報 settings.cloudsign）／請求締日 invoice_closing_day（20 または月末）。
-      顧客請求の月次生成は /invoices。工事詳細の請求タブ UI はトリガー非表示（実装コードは一部残存）。
+      顧客請求の月次生成は /invoices（工事の着工・完工日＋締日。工程表タスクとは非連動）。工事詳細の請求タブ UI はトリガー非表示（実装コードは一部残存）。
+      工事台帳には勘定科目列があり、履歴学習で次回提案する。空行は未設定のまま。列ごとの参照先は <a href="#data-map-constructions">入力 → 参照（工事）</a>。
     </div>
   </section>
 
@@ -1681,7 +2099,7 @@
         <li>工事詳細の<b>「工事台帳」タブ</b>を開き、「行を追加」で下請業者の行を追加します（<b>「参照」</b>から見積もり／追加変更の明細を転記することも可能。再参照時は置き換え確認あり）。</li>
         <li><b>白いセル</b>をクリックして業者名・工種・実行予算・発注額・月次請求を入力します。Enter または別セルへの移動で確定します。</li>
         <li><b>緑のセル</b>（合計・確定額・予算残・請求残・粗利）は自動計算されます。</li>
-        <li>「発注済／未発注」バッジはクリックのたびに切り替わります。行を選択して<b>「選択業者に一括発注」</b>を押すと発注書をまとめて作成できます。</li>
+          <li>「発注済／未発注」バッジはクリックのたびに切り替わります。行を選択して<b>「選択業者に一括発注」</b>を押すと、追加契約込みの予算合計で発注書ドラフトをまとめて作成できます。単行の「発注」はタブ遷移＋実行予算のみの事前入力です。</li>
         <li>入力内容は<b>自動保存</b>されます（「保存中...」→「自動保存済み」と表示。保存ボタンはありません）。</li>
         <li><b>「コメント」</b>モードに切り替えるとセル単位でコメントを残せます。</li>
         <li>予算残・請求残が<b>マイナスになると赤字表示</b>されるので、超過にすぐ気付けます。</li>
@@ -1693,7 +2111,7 @@
         <thead><tr><th>グループ</th><th>列</th><th>種別</th><th>説明</th></tr></thead>
         <tbody>
           <tr><td class="td-name">基本</td><td>発注ステータス／施工業者／工種／管理用予算</td><td>入力</td><td>発注済↔未発注トグル含む</td></tr>
-          <tr><td class="td-name">実行予算</td><td>実行予算／追加契約①②／追加含む実行予算</td><td>入力＋自動</td><td>追加含む = 実行＋追加①＋追加②</td></tr>
+          <tr><td class="td-name">実行予算</td><td>実行予算／追加契約①②／追加含む実行予算／勘定科目</td><td>入力＋自動</td><td>追加含む = 実行＋追加①＋追加②。科目は履歴学習（空行は自動入力しない）</td></tr>
           <tr><td class="td-name">発注</td><td>発注額／追加発注①②③／確定額／予算残</td><td>入力＋自動</td><td>確定額 = 発注＋追加発注合計。予算残 = 追加含む実行 − 確定額</td></tr>
           <tr><td class="td-name">月次請求</td><td>〇月請求（12ヶ月）／請求残</td><td>入力＋自動</td><td>請求残 = 確定額 − 月次請求合計</td></tr>
         </tbody>
@@ -1723,8 +2141,8 @@
         <div class="arch-layer-body">Server / Client Components を併用。Tailwind CSS 4 + Shadcn/UI（Radix）。ダッシュボード〜ポータル、設定、BRIDGE AI／社内チャット。</div>
         <div class="arch-tags">
           <span class="arch-tag">ダッシュボード / BI</span>
-          <span class="arch-tag">CRM / 見積 / 職人</span>
-          <span class="arch-tag">契約 / 工事</span>
+          <span class="arch-tag">問い合わせ / CRM / 見積 / 職人</span>
+          <span class="arch-tag">契約 / 工事 / 検収 / 帳票</span>
           <span class="arch-tag">ポータル</span>
           <span class="arch-tag">設定</span>
         </div>
@@ -1733,7 +2151,7 @@
       <div class="arch-layer arch-server">
         <div class="arch-layer-label">サーバー・エッジ層</div>
         <div class="arch-layer-title">Next.js Middleware + Server Actions（Netlify）</div>
-        <div class="arch-layer-body">認証・ロール保護に加え、<strong>サブドメイン（slug）からテナント（company_id）を解決</strong>。権限拒否時は /unauthorized。企業登録時に Netlify API でドメイン alias を自動追加。</div>
+        <div class="arch-layer-body">認証・ロール保護に加え、<strong>サブドメイン（slug）からテナント（company_id）を解決</strong>。テナント内の権限拒否は /unauthorized。/admin は super-admin 専用で /admin/login へ。企業登録時に Netlify API でドメイン alias を自動追加。</div>
         <div class="arch-tags">
           <span class="arch-tag">middleware.ts（RBAC）</span>
           <span class="arch-tag">サブドメイン解決</span>
@@ -1835,7 +2253,7 @@
   <section id="database">
     <div class="section-label">Database</div>
     <h2>データベース設計（主要テーブル）</h2>
-    <p class="section-desc">全業務テーブルは company_id ＋ RLS。サブドメイン解決は SECURITY DEFINER の <span class="inline-code">resolve_company_id_by_slug</span> で id のみ公開取得します。マイグレーション <strong>00001〜00064</strong>。</p>
+    <p class="section-desc">全業務テーブルは company_id ＋ RLS。サブドメイン解決は SECURITY DEFINER の <span class="inline-code">resolve_company_id_by_slug</span> で id のみ公開取得します。マイグレーション <strong>00001〜00080</strong>。</p>
     <div class="db-grid">
       <div class="db-item"><div class="db-item-name">companies</div><div class="db-item-desc">会社マスタ・slug・settings</div></div>
       <div class="db-item"><div class="db-item-name">profiles</div><div class="db-item-desc">ユーザー・ロール</div></div>
@@ -1848,8 +2266,10 @@
       <div class="db-item"><div class="db-item-name">construction_reports</div><div class="db-item-desc">工事日報</div></div>
       <div class="db-item"><div class="db-item-name">change_orders</div><div class="db-item-desc">追加変更</div></div>
       <div class="db-item"><div class="db-item-name">construction_cost_budgets</div><div class="db-item-desc">工事台帳</div></div>
-      <div class="db-item"><div class="db-item-name">contractor_orders</div><div class="db-item-desc">下請発注</div></div>
-      <div class="db-item"><div class="db-item-name">craftsmen</div><div class="db-item-desc">職人</div></div>
+      <div class="db-item"><div class="db-item-name">contractor_orders</div><div class="db-item-desc">下請発注・CloudSign</div></div>
+      <div class="db-item"><div class="db-item-name">inbound_leads</div><div class="db-item-desc">問い合わせ</div></div>
+      <div class="db-item"><div class="db-item-name">financial_statements</div><div class="db-item-desc">決算書（ナビ外）</div></div>
+      <div class="db-item"><div class="db-item-name">craftsmen</div><div class="db-item-desc">職人・口座</div></div>
       <div class="db-item"><div class="db-item-name">invoices / budgets</div><div class="db-item-desc">請求・年度予算（ナビ外）</div></div>
       <div class="db-item"><div class="db-item-name">bi_*</div><div class="db-item-desc">BI 設定・間接費・部門目標</div></div>
       <div class="db-item"><div class="db-item-name">attendance_*</div><div class="db-item-desc">勤怠</div></div>
@@ -1910,7 +2330,7 @@
         <div class="role-bar bar-l3"></div>
         <div>
           <div class="role-info-name">外部協力業者<span class="role-info-id">external_partner</span></div>
-          <div class="role-info-desc">/partner/[token] 想定（現状スタブ寄り）。ログイン不要 URL 経由。</div>
+          <div class="role-info-desc">ログイン不要 URL。<span class="inline-code">/partner/[token]</span> および検収後の業者請求 <span class="inline-code">/partner/invoice/[token]</span>（メール OTP）。</div>
         </div>
       </div>
     </div>
@@ -1921,9 +2341,12 @@
         <thead><tr><th>機能</th><th>主な許可ロール（デフォルト）</th></tr></thead>
         <tbody>
           <tr><td class="td-name">BI</td><td>hq_admin, contractor_admin, admin, executive</td></tr>
+          <tr><td class="td-name">問い合わせ /leads</td><td>hq_admin, contractor_admin, admin, sales, executive</td></tr>
           <tr><td class="td-name">CRM / 見積 / 職人 / 契約</td><td>上記 ＋ sales, executive</td></tr>
           <tr><td class="td-name">工事</td><td>上記 ＋ field_manager</td></tr>
-          <tr><td class="td-name">請求（/invoices）</td><td>hq_admin, contractor_admin, admin, administration, executive</td></tr>
+          <tr><td class="td-name">納品・検収 / 帳票</td><td>管理者系＋総務。経理承認は fulfillment_approve</td></tr>
+          <tr><td class="td-name">勘定科目の確定</td><td>hq_admin, admin, administration, executive</td></tr>
+          <tr><td class="td-name">請求（/invoices）・決算（/financials）</td><td>hq_admin, contractor_admin, admin, administration, executive（決算は経営層）</td></tr>
           <tr><td class="td-name">ワークフロー</td><td>社内ロールほぼ全員</td></tr>
           <tr><td class="td-name">マーケティング</td><td>全遮断（[]）</td></tr>
         </tbody>
@@ -1940,6 +2363,10 @@
       <div class="auth-step"><div class="auth-step-num">4</div><div class="auth-step-title">権限解決</div><div class="auth-step-desc">会社マトリクス or デフォルト</div></div>
       <div class="auth-arrow">→</div>
       <div class="auth-step step-last"><div class="auth-step-num">5</div><div class="auth-step-title">ルート保護</div><div class="auth-step-desc">middleware 毎リクエスト</div></div>
+    </div>
+    <div class="feat-note" style="margin-top:1.2rem">
+      未ログイン → <span class="inline-code">/login</span>。テナント内の権限不足 → <span class="inline-code">/unauthorized</span>。
+      <span class="inline-code">/admin</span> 配下は super-admin 以外を <span class="inline-code">/admin/login</span> へ（加盟店セッションがあっても同じ）。
     </div>
   </section>
 

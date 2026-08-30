@@ -159,7 +159,7 @@ export async function getConstruction(id: string) {
       .order("sort_order"),
     supabase
       .from("contractor_orders")
-      .select("*, craftsman:craftsmen(id, name)")
+      .select("*, craftsman:craftsmen(id, name, company_name)")
       .eq("construction_id", id)
       .order("created_at", { ascending: false }),
     supabase
@@ -627,7 +627,7 @@ export async function createContractorOrder(input: {
       account_item: input.accountItem || null,
       account_item_source: input.accountItemSource || (input.accountItem ? "manual" : null),
     })
-    .select("*, craftsman:craftsmen(id, name)")
+    .select("*, craftsman:craftsmen(id, name, company_name)")
     .single();
   if (error) {
     const { data: fallback, error: fallbackErr } = await supabase
@@ -650,7 +650,7 @@ export async function createContractorOrder(input: {
         special_notes: input.specialNotes || null,
         payment_schedule: schedule,
       })
-      .select("*, craftsman:craftsmen(id, name)")
+      .select("*, craftsman:craftsmen(id, name, company_name)")
       .single();
     if (fallbackErr) throw error;
     const { ensurePartnerTokenForOrder } = await import("@/lib/actions/partner-portal");
@@ -868,7 +868,7 @@ export async function seedContractorOrders(constructionId: string) {
       status: s.status,
       notes: s.notes,
     })))
-    .select("*, craftsman:craftsmen(id, name)");
+    .select("*, craftsman:craftsmen(id, name, company_name)");
   if (error) throw error;
   return data;
 }
@@ -1983,7 +1983,7 @@ export async function createOrdersFromEstimate(constructionId: string, estimateI
         work_content: item.specification || item.name,
         payment_schedule: schedule,
       })
-      .select("*, craftsman:craftsmen(id, name)")
+      .select("*, craftsman:craftsmen(id, name, company_name)")
       .single();
     if (error) throw error;
     created.push(data);

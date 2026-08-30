@@ -2,7 +2,26 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export async function GET() {
+async function withMeta(accessToken: string, includeMeta: boolean) {
+  if (!includeMeta) return { access_token: accessToken, connected: true as const };
+  try {
+    const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!infoRes.ok) return { access_token: accessToken, connected: true as const, email: null as string | null };
+    const info = (await infoRes.json()) as { email?: string };
+    return {
+      access_token: accessToken,
+      connected: true as const,
+      email: typeof info.email === "string" ? info.email : null,
+    };
+  } catch {
+    return { access_token: accessToken, connected: true as const, email: null as string | null };
+  }
+}
+
+export async function GET(request: Request) {
+  const includeMeta = new URL(request.url).searchParams.get("meta") === "1";
   const supabase = await createClient();
   const {
     data: { user },
@@ -21,7 +40,7 @@ export async function GET() {
 
   // 未連携は正常系（404 にするとコンソールが赤くなり、再取得ループにも見える）
   if (!profile?.google_access_token) {
-    return NextResponse.json({ access_token: null, connected: false });
+    return NextResponse.json({ access_token: null, connected: false, email: null });
   }
 
   const expiresAt = profile.google_token_expires_at
@@ -30,7 +49,7 @@ export async function GET() {
 
   // トークンが有効なら返す
   if (Date.now() < expiresAt - 60_000) {
-    return NextResponse.json({ access_token: profile.google_access_token });
+    return NextResponse.json(await withMeta(profile.google_access_token as string, includeMeta));
   }
 
   // リフレッシュが必要
@@ -68,7 +87,7 @@ export async function GET() {
       })
       .eq("id", user.id);
 
-    return NextResponse.json({ access_token: newToken });
+    return NextResponse.json(await withMeta(newToken, includeMeta));
   } catch {
     return NextResponse.json({ error: "Token refresh error" }, { status: 500 });
   }

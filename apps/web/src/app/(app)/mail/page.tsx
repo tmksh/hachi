@@ -3,6 +3,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getEmailAccounts, getEmailThreads } from "@/lib/actions/mail";
 import { MailClient } from "./mail-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function MailPage() {
   const [initialAccounts, initialThreads] = await Promise.all([
     getEmailAccounts(),

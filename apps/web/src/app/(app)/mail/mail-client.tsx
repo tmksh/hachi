@@ -7,6 +7,8 @@ import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,6 +20,8 @@ import {
   CheckCircle2,
   LogOut,
   Plus,
+  Reply,
+  Send,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,11 +38,13 @@ import {
   toggleThreadStar,
   getEmailAccounts,
   disconnectEmailAccount,
+  replyToThread,
   type EmailAccount,
   type MailProvider,
 } from "@/lib/actions/mail";
 import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mock";
 import { ConnectMailDialog } from "@/components/mail/connect-mail-dialog";
+import { guessReplyAddress } from "@/lib/mail-reply";
 
 type Thread = Awaited<ReturnType<typeof getEmailThreads>>[number];
 type ThreadDetail = Awaited<ReturnType<typeof getEmailThread>>;
@@ -89,6 +95,9 @@ export function MailClient({
   const [accounts, setAccounts] = useState<EmailAccount[]>(initialAccounts);
   const [useMock, setUseMock] = useState(initialResolved.useMock);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [replyTo, setReplyTo] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+  const [replying, setReplying] = useState(false);
 
   useEffect(() => {
     const connected = searchParams.get("mail_connected") ?? searchParams.get("gmail_connected");
@@ -96,6 +105,7 @@ export function MailClient({
     if (connected) {
       const labels: Record<string, string> = { "1": "Gmail", gmail: "Gmail" };
       toast.success(`${labels[connected] ?? "メールサービス"} を連携しました`);
+      void loadData();
     }
     if (error) {
       const msgs: Record<string, string> = {
@@ -203,6 +213,67 @@ export function MailClient({
       setSelected(detail as ThreadDetail);
     } catch {
       toast.error("読み込みに失敗");
+    }
+  };
+
+  useEffect(() => {
+    setReplyBody("");
+    setReplyTo("");
+  }, [selected?.id]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const myEmails = accounts
+      .map((a) => a.email_address)
+      .filter((addr): addr is string => Boolean(addr));
+    setReplyTo((prev) => prev || guessReplyAddress(selected.messages ?? [], myEmails));
+  }, [selected, accounts]);
+
+  const handleReply = async () => {
+    if (!selected) return;
+    if (!replyBody.trim()) {
+      toast.error("本文を入力してください");
+      return;
+    }
+    if (useMock || isMockId(selected.id)) {
+      toast.error("デモ表示です。Gmail連携後に返信できます");
+      return;
+    }
+    if (!accounts.some((a) => a.provider === "gmail")) {
+      toast.error("Gmailを連携するとスレッドから返信できます");
+      setConnectOpen(true);
+      return;
+    }
+    if (!replyTo.trim() || !replyTo.includes("@")) {
+      toast.error("返信先のメールアドレスを入力してください");
+      return;
+    }
+    setReplying(true);
+    try {
+      const updated = await replyToThread({
+        threadId: selected.id,
+        body_text: replyBody.trim(),
+        to: replyTo.trim(),
+      });
+      toast.success("返信しました");
+      setReplyBody("");
+      setSelected(updated as ThreadDetail);
+      setThreads((prev) =>
+        prev.map((x) =>
+          x.id === selected.id
+            ? {
+                ...x,
+                snippet: replyBody.trim().slice(0, 200),
+                last_message_at: new Date().toISOString(),
+                is_read: true,
+              }
+            : x
+        )
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "返信に失敗しました");
+    } finally {
+      setReplying(false);
     }
   };
 
@@ -407,6 +478,36 @@ export function MailClient({
                     </div>
                   )
                 )}
+                <div className="border rounded-lg p-4 space-y-3 bg-muted/20">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Reply className="h-4 w-4" />
+                    このスレッドに返信
+                  </div>
+                  <Input
+                    value={replyTo}
+                    onChange={(e) => setReplyTo(e.target.value)}
+                    placeholder="返信先（name@example.com）"
+                    disabled={replying}
+                  />
+                  <Textarea
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    placeholder="返信内容を入力..."
+                    rows={5}
+                    disabled={replying}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => void handleReply()}
+                      disabled={replying}
+                    >
+                      <Send className="h-4 w-4" />
+                      {replying ? "送信中..." : "返信する"}
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">

@@ -362,7 +362,7 @@ function ConstructionDetailPageContent({
   const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") ?? "schedule");
   const [completionOpen, setCompletionOpen] = useState(false);
-  const [prefillOrder, setPrefillOrder] = useState<{ title?: string; amount?: string; workContent?: string } | null>(null);
+  const [prefillOrder, setPrefillOrder] = useState<{ title?: string; amount?: string; workContent?: string; accountItem?: string } | null>(null);
   const initialEstimateId = searchParams.get("estimateId");
 
   useEffect(() => {
@@ -598,7 +598,12 @@ function ConstructionDetailPageContent({
             periodStart={data.start_date}
             authorName={profile?.display_name ?? "ユーザー"}
             onNavigateToOrders={(row) => {
-              setPrefillOrder(row ? { title: row.name || row.work_type, amount: row.budget ? String(row.budget) : "", workContent: row.work_type } : null);
+              setPrefillOrder(row ? {
+                title: row.name || row.work_type,
+                amount: row.budget ? String(row.budget) : "",
+                workContent: row.work_type,
+                accountItem: row.account_item,
+              } : null);
               setActiveTab("orders");
             }}
             onOrdersCreated={reload}

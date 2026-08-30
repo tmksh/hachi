@@ -7,6 +7,8 @@ export type CostBudgetRow = {
   status: "発注済" | "未発注";
   name: string;
   work_type: string;
+  account_item?: string;
+  account_item_source?: string;
   budget: number;
   add_contracts: number[];
   management_budget: number;

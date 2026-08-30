@@ -8,6 +8,7 @@ export type PartnerPortalOrder = {
   token: string;
   label: string;
   accepted: boolean;
+  acceptedAt: string | null;
   constructionTitle: string;
   startDate: string | null;
   endDate: string | null;
@@ -15,6 +16,8 @@ export type PartnerPortalOrder = {
   amount: number;
   workContent: string | null;
   craftsmanName: string | null;
+  orderDate: string | null;
+  specialNotes: string | null;
 };
 
 export async function getPartnerPortalOrder(token: string): Promise<PartnerPortalOrder | null> {
@@ -28,6 +31,7 @@ export async function getPartnerPortalOrder(token: string): Promise<PartnerPorta
       token: row.token,
       label: row.label,
       accepted: Boolean(row.accepted_at) || String(row.label ?? "").startsWith("[accepted]"),
+      acceptedAt: row.accepted_at ?? null,
       constructionTitle: row.construction_title ?? row.label,
       startDate: row.start_date ?? null,
       endDate: row.end_date ?? null,
@@ -35,6 +39,8 @@ export async function getPartnerPortalOrder(token: string): Promise<PartnerPorta
       amount: Number(row.amount ?? 0),
       workContent: row.work_content ?? null,
       craftsmanName: row.craftsman_name ?? null,
+      orderDate: row.order_date ?? null,
+      specialNotes: row.special_notes ?? null,
     };
   }
 
@@ -61,7 +67,7 @@ export async function getPartnerPortalOrder(token: string): Promise<PartnerPorta
       access.contractor_order_id
         ? admin
             .from("contractor_orders")
-            .select("title, amount, work_content, craftsman:craftsmen(name)")
+            .select("title, amount, work_content, order_date, special_notes, craftsman:craftsmen(name, company_name)")
             .eq("id", access.contractor_order_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
@@ -69,17 +75,21 @@ export async function getPartnerPortalOrder(token: string): Promise<PartnerPorta
     const craftsman = order && "craftsman" in order
       ? (Array.isArray(order.craftsman) ? order.craftsman[0] : order.craftsman)
       : null;
+    const company = craftsman && "company_name" in craftsman ? (craftsman as { company_name?: string | null }).company_name : null;
     return {
       token: access.token,
       label: access.label,
       accepted: Boolean(acceptedAt) || String(access.label ?? "").startsWith("[accepted]"),
+      acceptedAt: acceptedAt ?? null,
       constructionTitle: construction?.title ?? access.label,
       startDate: construction?.start_date ?? null,
       endDate: construction?.end_date ?? null,
       orderTitle: order?.title ?? "発注書",
       amount: Number(order?.amount ?? 0),
       workContent: order?.work_content ?? null,
-      craftsmanName: craftsman?.name ?? null,
+      craftsmanName: (company && company !== craftsman?.name) ? `${company}（${craftsman?.name}）` : (craftsman?.name ?? null),
+      orderDate: order && "order_date" in order ? (order.order_date as string | null) : null,
+      specialNotes: order && "special_notes" in order ? (order.special_notes as string | null) : null,
     };
   } catch {
     return null;

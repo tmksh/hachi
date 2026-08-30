@@ -29,8 +29,17 @@ type VendorGroup = {
 };
 
 function basisFor(vendorName: string, all: ProcurementOrder[]) {
-  const past = all.filter((o) => o.craftsman?.name === vendorName && o.account_item);
-  if (past.length === 0) return { label: "実績なし", cls: "bg-gray-100 text-gray-600" };
+  const suggested = suggestAccountItem(vendorName, all.map((o) => ({
+    vendorName: o.craftsman?.name,
+    companyName: o.craftsman && "company_name" in o.craftsman ? (o.craftsman as { company_name?: string | null }).company_name : null,
+    accountItem: o.account_item,
+    accountItemSource: o.account_item_source,
+  })));
+  const past = all.filter((o) => o.account_item && (
+    o.craftsman?.name === vendorName
+    || (o.craftsman && "company_name" in o.craftsman && (o.craftsman as { company_name?: string | null }).company_name === vendorName)
+  ));
+  if (past.length === 0) return { label: suggested.source === "learned" ? "類似業者の実績" : "実績なし", cls: "bg-gray-100 text-gray-600", item: suggested.item };
   const counts = new Map<string, number>();
   for (const o of past) counts.set(o.account_item!, (counts.get(o.account_item!) ?? 0) + 1);
   const [top, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];

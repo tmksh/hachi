@@ -40,6 +40,7 @@ const FIELD_GROUP_DEFS: FieldGroup[] = [
   { title: "金額・工期", description: "工期は工程表と連携されます", names: ["amount_excl_tax", "tax_rate", "start_date", "end_date"] },
   { title: "支払・条件", names: ["payment_terms", "warranty_years", "warranty_include"] },
   { title: "特記事項", names: ["special_notes_fixed", "special_notes"] },
+  { title: "約款", description: "ひな形に含めるか、テキストエリアに貼るかを選べます", names: ["terms_mode", "terms_text"] },
   { title: "締結方法", names: ["esign_only"] },
 ];
 
@@ -91,6 +92,8 @@ export function ContractFormField({
           <span className={cn("text-xs font-medium", isChecked ? "text-green-600" : "text-muted-foreground")}>
             {field.name === "esign_only"
               ? (isChecked ? "電子文書" : "書面（2通）")
+              : field.name === "terms_mode"
+                ? (isChecked ? "テキスト" : "ひな形")
               : (isChecked ? "有効" : "無効")}
           </span>
           <Switch checked={isChecked} onCheckedChange={v => onChange(v ? 1 : 0)} />
@@ -107,6 +110,11 @@ export function ContractFormField({
           {field.label}
           {field.required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
+        {field.readonly && (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+            テンプレート固定
+          </span>
+        )}
         {field.synced && (
           <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100">
             <CalendarRange className="h-3 w-3" />
@@ -117,10 +125,16 @@ export function ContractFormField({
       {field.type === "textarea" ? (
         <textarea
           value={String(value ?? "")}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => { if (!field.readonly) onChange(e.target.value); }}
+          readOnly={field.readonly}
           placeholder={field.placeholder ?? "入力してください"}
-          rows={3}
-          className={cn(INPUT_CLS, "resize-none leading-relaxed min-h-[72px]")}
+          rows={field.name === "terms_text" ? 8 : 3}
+          className={cn(
+            INPUT_CLS,
+            "resize-y leading-relaxed",
+            field.name === "terms_text" ? "min-h-[160px]" : "min-h-[72px]",
+            field.readonly && "bg-slate-50 text-slate-600 cursor-default",
+          )}
         />
       ) : (
         <div className="relative">
@@ -267,6 +281,26 @@ export function ContractFormSection({
             rendered.add(f.name);
             return fieldEl(f);
           })}
+        </div>
+      );
+    }
+
+    /* 約款：ひな形のときはテンプレート文面のみ。テキスト編集時だけテキストエリア */
+    if (title === "約款") {
+      const termsToggle = fields.find(f => f.name === "terms_mode");
+      const termsText = fields.find(f => f.name === "terms_text");
+      const editText = Number(form.terms_mode) !== 0;
+      if (termsToggle) rendered.add("terms_mode");
+      if (termsText) rendered.add("terms_text");
+      return (
+        <div className="space-y-3.5">
+          {termsToggle && fieldEl(termsToggle)}
+          {editText && termsText && fieldEl(termsText)}
+          {!editText && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              ひな形の約款を契約書に含めます。種類ごとの標準約款です。直す場合は「約款をテキストで編集する」をオンにしてください。
+            </p>
+          )}
         </div>
       );
     }

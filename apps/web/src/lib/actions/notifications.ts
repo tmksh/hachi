@@ -233,6 +233,19 @@ export async function notifyManagerOfOverload(urgentCount: number): Promise<{ ma
 
   if (!managers || managers.length === 0) return { managerName: null };
 
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: already } = await supabase
+    .from("internal_messages")
+    .select("id")
+    .eq("sender_id", user.id)
+    .eq("message_type", "chat")
+    .gte("created_at", since)
+    .ilike("content", "%緊急通知が%")
+    .limit(1);
+  if (already && already.length > 0) {
+    return { managerName: managers[0].display_name };
+  }
+
   const content = `⚠️ ${myProfile.display_name} さんの緊急通知が ${urgentCount} 件未対応になっています。確認を促してください。`;
 
   await Promise.all(
@@ -251,16 +264,25 @@ export async function notifyManagerOfOverload(urgentCount: number): Promise<{ ma
 }
 
 export async function markAnnouncementAsRead(announcementId: string) {
+  await markAnnouncementsAsRead([announcementId]);
+}
+
+export async function markAnnouncementsAsRead(announcementIds: string[]) {
+  const ids = [...new Set(announcementIds.map((id) => id.replace(/^ann_/, "").trim()).filter(Boolean))];
+  if (ids.length === 0) return;
   const supabase = await createClient();
   const user = await getAuthUser();
   if (!user) return;
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) return;
-
-  await supabase.from("announcement_reads").upsert({
-    company_id: profile.company_id,
-    announcement_id: announcementId,
-    user_id: user.id,
-    read_at: new Date().toISOString(),
-  }, { onConflict: "announcement_id,user_id" });
+  const readAt = new Date().toISOString();
+  await supabase.from("announcement_reads").upsert(
+    ids.map((announcement_id) => ({
+      company_id: profile.company_id,
+      announcement_id,
+      user_id: user.id,
+      read_at: readAt,
+    })),
+    { onConflict: "announcement_id,user_id" },
+  );
 }

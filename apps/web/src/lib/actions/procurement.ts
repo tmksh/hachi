@@ -11,6 +11,7 @@ import type { ContractorOrder } from "@/lib/database.types";
 import {
   PROCUREMENT_ACCOUNT_ITEMS,
   addDaysIso,
+  isPaperInvoice,
   parseTransferSender,
   todayIso,
 } from "@/lib/procurement";
@@ -94,28 +95,51 @@ async function sendVendorInvoiceRequestEmail(input: {
   vendorName: string;
   companyName: string;
   poNo: string;
-  invoicePath: string;
-  expiresYmd: string;
+  invoicePath?: string;
+  expiresYmd?: string;
+  mode?: "url" | "paper";
 }): Promise<{ sent: boolean; to?: string; error?: string }> {
   const to = input.to?.trim();
   if (!to) return { sent: false, error: "業者マスタにメールアドレスがありません" };
 
+  const paper = input.mode === "paper";
   const origin = await resolveAppOrigin();
-  const url = `${origin}${input.invoicePath.startsWith("/") ? "" : "/"}${input.invoicePath}`;
-  const subject = `[BRIDGE Linq] 検収完了 — ${input.poNo} 請求書をご送付ください`;
-  const text = [
-    `${input.vendorName} 御中`,
-    "",
-    `${input.companyName} です。検収が完了しました。`,
-    "下記URLから請求書をご送付ください（メール認証・ログイン不要）。",
-    "",
-    url,
-    "",
-    `有効期限: ${input.expiresYmd}（30日）`,
-    "",
-    "本メールに心当たりがない場合は破棄してください。",
-  ].join("\n");
-  const html = `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
+  const url = !paper && input.invoicePath
+    ? `${origin}${input.invoicePath.startsWith("/") ? "" : "/"}${input.invoicePath}`
+    : "";
+  const subject = paper
+    ? `[BRIDGE Linq] 検収完了 — ${input.poNo} 請求書（紙／PDF）をご送付ください`
+    : `[BRIDGE Linq] 検収完了 — ${input.poNo} 請求書をご送付ください`;
+  const text = paper
+    ? [
+        `${input.vendorName} 御中`,
+        "",
+        `${input.companyName} です。検収が完了しました。`,
+        "紙の請求書、またはPDFを発注元へご送付ください（ログイン用の画面はございません）。",
+        "",
+        `発注番号: ${input.poNo}`,
+        "",
+        "本メールに心当たりがない場合は破棄してください。",
+      ].join("\n")
+    : [
+        `${input.vendorName} 御中`,
+        "",
+        `${input.companyName} です。検収が完了しました。`,
+        "下記URLから請求書をご送付ください（メール認証・ログイン不要）。",
+        "",
+        url,
+        "",
+        `有効期限: ${input.expiresYmd}（30日）`,
+        "",
+        "本メールに心当たりがない場合は破棄してください。",
+      ].join("\n");
+  const html = paper
+    ? `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
+<p>${input.vendorName} 御中</p>
+<p>${input.companyName} です。検収が完了しました。<br/>紙の請求書、またはPDFを発注元へご送付ください（ログイン用の画面はございません）。</p>
+<p>発注番号: ${input.poNo}</p>
+</div>`
+    : `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
 <p>${input.vendorName} 御中</p>
 <p>${input.companyName} です。検収が完了しました。<br/>下記ボタンから請求書をご送付ください（メール認証・ログイン不要）。</p>
 <p style="margin:24px 0"><a href="${url}" style="background:#047857;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">請求書を送る</a></p>
@@ -179,6 +203,27 @@ async function notifyVendorInvoiceUrl(
     poNo: order.po_no ?? order.id.slice(0, 8),
     invoicePath,
     expiresYmd,
+    mode: "url",
+  });
+}
+
+async function notifyVendorPaperInvoice(
+  order: ProcurementOrder,
+  userId: string,
+): Promise<{ sent: boolean; to?: string; error?: string }> {
+  const { supabase } = await getAuthContext();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("name")
+    .eq("id", order.company_id)
+    .maybeSingle();
+  return sendVendorInvoiceRequestEmail({
+    userId,
+    to: order.craftsman?.email,
+    vendorName: order.craftsman?.name ?? "業者",
+    companyName: company?.name ?? "発注元",
+    poNo: order.po_no ?? order.id.slice(0, 8),
+    mode: "paper",
   });
 }
 
@@ -219,6 +264,57 @@ export async function getProcurementMasters(): Promise<{
   };
 }
 
+export type AccountItemHistory = {
+  vendorName: string | null;
+  companyName: string | null;
+  accountItem: string | null;
+  accountItemSource: string | null;
+};
+
+/** 経理確定の発注と、実行予算で入力した科目を学習用に返す */
+export async function listAccountItemHistory(): Promise<AccountItemHistory[]> {
+  const { supabase, companyId } = await getAuthContext();
+  const past: AccountItemHistory[] = [];
+
+  const { data: orders } = await supabase
+    .from("contractor_orders")
+    .select("account_item, account_item_source, craftsman:craftsmen(name, company_name)")
+    .eq("company_id", companyId)
+    .not("account_item", "is", null)
+    .limit(400);
+  for (const o of orders ?? []) {
+    if (o.account_item_source === "ai" || o.account_item_source === "learned") continue;
+    const craftsman = Array.isArray(o.craftsman) ? o.craftsman[0] : o.craftsman;
+    past.push({
+      vendorName: craftsman?.name ?? null,
+      companyName: craftsman?.company_name ?? null,
+      accountItem: o.account_item,
+      accountItemSource: o.account_item_source,
+    });
+  }
+
+  const { data: budgets } = await supabase
+    .from("construction_cost_budgets")
+    .select("rows")
+    .eq("company_id", companyId)
+    .limit(80);
+  for (const budget of budgets ?? []) {
+    const rows = Array.isArray(budget.rows) ? budget.rows : [];
+    for (const raw of rows) {
+      const row = raw as { name?: string; account_item?: string; account_item_source?: string };
+      if (!row.account_item?.trim() || !row.name?.trim()) continue;
+      if (row.account_item_source === "ai" || row.account_item_source === "learned") continue;
+      past.push({
+        vendorName: row.name.trim(),
+        companyName: null,
+        accountItem: row.account_item.trim(),
+        accountItemSource: row.account_item_source || "budget",
+      });
+    }
+  }
+  return past;
+}
+
 export async function getCompanyOrders(): Promise<ProcurementOrder[]> {
   const { supabase, companyId } = await getAuthContext();
   const { data, error } = await supabase
@@ -229,7 +325,7 @@ export async function getCompanyOrders(): Promise<ProcurementOrder[]> {
   if (error) {
     const { data: fallback, error: fallbackErr } = await supabase
       .from("contractor_orders")
-      .select("*, craftsman:craftsmen(id, name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
+      .select("*, craftsman:craftsmen(id, name, company_name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (fallbackErr) throw new Error(error.message);
@@ -256,7 +352,7 @@ export async function updateOrderProcurement(
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", orderId)
       .eq("company_id", companyId)
-      .select("*, craftsman:craftsmen(id, name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
+      .select("*, craftsman:craftsmen(id, name, company_name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
       .single();
     if (fallbackErr) {
       throw new Error(
@@ -395,14 +491,25 @@ export async function registerDelivery(input: {
     const { supabase, companyId } = await getAuthContext();
     const { data: before } = await supabase
       .from("contractor_orders")
-      .select("id, amount, parent_order_id, lot_no, company_id")
+      .select("id, amount, parent_order_id, lot_no, company_id, concluded_at")
       .eq("id", input.orderId)
       .eq("company_id", companyId)
       .maybeSingle();
     if (!before) return actionFail("発注が見つかりません", "発注が見つかりません");
+    if (!before.concluded_at) {
+      return actionFail("請書の受領後に納品できます", "請書の受領後に納品できます");
+    }
 
     const originalAmount = Number(before.amount ?? 0);
     const lotAmount = input.lotAmount != null && Number.isFinite(input.lotAmount) ? Number(input.lotAmount) : null;
+    if (input.partial === "partial") {
+      if (lotAmount == null || lotAmount <= 0) {
+        return actionFail("分納の金額を入力してください", "分納の金額を入力してください");
+      }
+      if (lotAmount >= originalAmount) {
+        return actionFail("分納の金額は発注額未満にしてください", "分納の金額は発注額未満にしてください");
+      }
+    }
     const patch: Record<string, unknown> = {
       delivery_date: input.deliveryDate || todayIso(),
       delivery_content: input.content.trim() || null,
@@ -445,6 +552,7 @@ async function createRemainingLot(
   const remainingAmount = opts.lotAmount != null
     ? Math.max(0, opts.originalAmount - opts.lotAmount)
     : 0;
+  if (remainingAmount <= 0) return undefined;
 
   const payload: Record<string, unknown> = {
     company_id: order.company_id,
@@ -472,6 +580,7 @@ async function createRemainingLot(
     ledger_status: "ordered",
     parent_order_id: opts.rootId,
     lot_no: nextLot,
+    concluded_at: order.concluded_at ?? new Date().toISOString(),
   };
 
   const { data, error } = await supabase
@@ -518,6 +627,7 @@ export async function completeInspection(input: {
         ledger_status: "ordered",
         delivery_date: null,
         delivery_content: null,
+        delivery_attachments: [],
       });
       return actionOk({ order });
     }
@@ -537,7 +647,9 @@ export async function completeInspection(input: {
 
     let mail: { sent: boolean; to?: string; error?: string } = { sent: false };
     if (input.sendEmail) {
-      mail = await notifyVendorInvoiceUrl(order, invoiceUrl, expires, user.id);
+      mail = isPaperInvoice(order.craftsman)
+        ? await notifyVendorPaperInvoice(order, user.id)
+        : await notifyVendorInvoiceUrl(order, invoiceUrl, expires, user.id);
     }
     return actionOk({
       order,
@@ -590,6 +702,17 @@ export async function resendInvoiceUrl(orderId: string): Promise<ActionResult<{
 }
 
 export async function confirmVendorInvoice(orderId: string): Promise<ProcurementOrder> {
+  const { supabase, companyId } = await getAuthContext();
+  const { data: current } = await supabase
+    .from("contractor_orders")
+    .select("ledger_status")
+    .eq("id", orderId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!current) throw new Error("発注が見つかりません");
+  if (current.ledger_status !== "invoice_received") {
+    throw new Error("請求書受領の行だけ確認できます");
+  }
   return updateOrderProcurement(orderId, {
     director_confirmed_at: new Date().toISOString(),
     ledger_status: "confirmed",
@@ -612,6 +735,17 @@ async function assertCanApproveVendorInvoice() {
 
 export async function approveVendorInvoice(orderId: string): Promise<ProcurementOrder> {
   await assertCanApproveVendorInvoice();
+  const { supabase, companyId } = await getAuthContext();
+  const { data: current } = await supabase
+    .from("contractor_orders")
+    .select("ledger_status, director_confirmed_at")
+    .eq("id", orderId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!current) throw new Error("発注が見つかりません");
+  if (current.ledger_status !== "confirmed" || !current.director_confirmed_at) {
+    throw new Error("ディレクター確認のあとで経理承認できます");
+  }
   return updateOrderProcurement(orderId, {
     accounting_approved_at: new Date().toISOString(),
     ledger_status: "payment_approved",
@@ -690,6 +824,7 @@ export type VendorInvoiceView = {
   hasEmail: boolean;
   maskedEmail: string | null;
   emailVerified: boolean;
+  previewLocked: boolean;
 };
 
 function companyIssuer(settings: Record<string, unknown> | null, fallbackName: string) {
@@ -741,43 +876,49 @@ export async function getVendorInvoiceByToken(token: string): Promise<VendorInvo
     const vendorEmail = (craftsman?.email ?? "").trim();
     const submitted = Boolean(order.vendor_invoice_submitted_at);
     const emailVerified = submitted || expired || await isInvoiceAuthVerified(raw);
+    const previewLocked = !emailVerified;
     return {
       token: raw,
       expiresAt: order.invoice_token_expires_at,
       expired,
       submitted,
       companyName: issuer.name,
-      companyAddress: issuer.address,
-      companyInvoiceNo: issuer.invoiceNo,
-      constructionNo: construction?.construction_no ?? "",
-      constructionTitle: construction?.title ?? "",
-      orderTitle: order.title,
-      poNo: order.po_no ?? "",
-      amount: Number(order.amount ?? 0),
-      deliveryDate: order.delivery_date,
-      workContent: order.work_content,
-      vendorName: craftsman?.company_name || craftsman?.name || "業者",
+      companyAddress: previewLocked ? "" : issuer.address,
+      companyInvoiceNo: previewLocked ? "" : issuer.invoiceNo,
+      constructionNo: previewLocked ? "" : construction?.construction_no ?? "",
+      constructionTitle: previewLocked ? "" : construction?.title ?? "",
+      orderTitle: previewLocked ? "" : order.title,
+      poNo: previewLocked ? "" : order.po_no ?? "",
+      amount: previewLocked ? 0 : Number(order.amount ?? 0),
+      deliveryDate: previewLocked ? null : order.delivery_date,
+      workContent: previewLocked ? null : order.work_content,
+      vendorName: previewLocked ? "" : craftsman?.company_name || craftsman?.name || "業者",
       vendorAddress: "",
-      vendorPhone: craftsman?.phone ?? "",
-      paymentDate: order.payment_date ?? null,
-      bankName,
-      bankBranch,
-      bankAccountType,
-      bankAccountNumber,
-      bankAccountKana,
-      bankInfo: bank || "（口座情報は発注元の業者マスタに登録された内容が表示されます）",
-      invoiceDate: order.vendor_invoice_date,
-      invoiceNo: order.vendor_invoice_no,
-      registrationNumber: order.vendor_registration_no,
-      remarks: order.vendor_invoice_remarks,
-      vendorPdfName: order.vendor_invoice_pdf_path
-        ? String(order.vendor_invoice_pdf_path).split("/").pop() ?? "請求書.pdf"
-        : null,
-      hasVendorPdf: Boolean(order.vendor_invoice_pdf_path),
-      attachments: Array.isArray(order.delivery_attachments) ? order.delivery_attachments : [],
+      vendorPhone: previewLocked ? "" : craftsman?.phone ?? "",
+      paymentDate: previewLocked ? null : order.payment_date ?? null,
+      bankName: previewLocked ? "" : bankName,
+      bankBranch: previewLocked ? "" : bankBranch,
+      bankAccountType: previewLocked ? "" : bankAccountType,
+      bankAccountNumber: previewLocked ? "" : bankAccountNumber,
+      bankAccountKana: previewLocked ? "" : bankAccountKana,
+      bankInfo: previewLocked
+        ? ""
+        : bank || "（口座情報は発注元の業者マスタに登録された内容が表示されます）",
+      invoiceDate: previewLocked ? null : order.vendor_invoice_date,
+      invoiceNo: previewLocked ? null : order.vendor_invoice_no,
+      registrationNumber: previewLocked ? null : order.vendor_registration_no,
+      remarks: previewLocked ? null : order.vendor_invoice_remarks,
+      vendorPdfName: previewLocked
+        ? null
+        : order.vendor_invoice_pdf_path
+          ? String(order.vendor_invoice_pdf_path).split("/").pop() ?? "請求書.pdf"
+          : null,
+      hasVendorPdf: previewLocked ? false : Boolean(order.vendor_invoice_pdf_path),
+      attachments: previewLocked ? [] : Array.isArray(order.delivery_attachments) ? order.delivery_attachments : [],
       hasEmail: Boolean(vendorEmail),
       maskedEmail: vendorEmail ? maskEmail(vendorEmail) : null,
       emailVerified,
+      previewLocked,
     };
   } catch {
     return null;
@@ -969,6 +1110,13 @@ export async function submitVendorInvoice(input: {
   try {
     const ready = await assertVendorInvoiceReady(input.token, true);
     if (!ready.ok) return actionFail(ready.error, ready.error);
+    const invoiceDate = input.invoiceDate.trim();
+    const registrationNumber = input.registrationNumber.trim().toUpperCase();
+    if (!invoiceDate) return actionFail("請求日を入力してください", "請求日を入力してください");
+    if (!registrationNumber) return actionFail("登録番号を入力してください", "登録番号を入力してください");
+    if (!/^T\d{13}$/.test(registrationNumber)) {
+      return actionFail("登録番号は T + 13桁で入力してください", "登録番号は T + 13桁で入力してください");
+    }
     const order = ready.order;
     const admin = createAdminClient();
     const { data: full } = await admin
@@ -977,9 +1125,9 @@ export async function submitVendorInvoice(input: {
       .eq("id", order.id)
       .maybeSingle();
     const patch: Record<string, unknown> = {
-      vendor_invoice_date: input.invoiceDate || todayIso(),
+      vendor_invoice_date: invoiceDate,
       vendor_invoice_no: input.invoiceNo.trim() || null,
-      vendor_registration_no: input.registrationNumber.trim() || null,
+      vendor_registration_no: registrationNumber,
       vendor_invoice_remarks: input.remarks.trim() || null,
       vendor_invoice_submitted_at: new Date().toISOString(),
       vendor_invoice_amount: Number(full?.amount ?? 0),

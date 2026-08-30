@@ -51,7 +51,7 @@ export function GoogleCalendarSettingsCard() {
     const supabase = createClient();
     const [{ data: { user } }, tokenRes, oauthRes] = await Promise.all([
       supabase.auth.getUser(),
-      fetch("/api/google-token"),
+      fetch("/api/google-token?meta=1"),
       fetch("/api/google-oauth-status"),
     ]);
     if (oauthRes.ok) {
@@ -69,17 +69,23 @@ export function GoogleCalendarSettingsCard() {
       setAppUrlHost(oauth.appUrlHost ?? null);
     }
     const googleIdentity = user?.identities?.find((i) => i.provider === "google");
-    setEmail(
-      (googleIdentity?.identity_data?.email as string | undefined)
-        ?? (user?.user_metadata?.email as string | undefined)
-        ?? user?.email
-        ?? null,
-    );
     if (tokenRes.ok) {
-      const data = await tokenRes.json() as { access_token?: string | null; connected?: boolean };
+      const data = await tokenRes.json() as {
+        access_token?: string | null;
+        connected?: boolean;
+        email?: string | null;
+      };
       setConnected(Boolean(data.access_token) || data.connected === true);
+      setEmail(
+        data.email
+          ?? (googleIdentity?.identity_data?.email as string | undefined)
+          ?? (user?.user_metadata?.email as string | undefined)
+          ?? user?.email
+          ?? null,
+      );
     } else {
       setConnected(false);
+      setEmail(null);
     }
   }, []);
 
@@ -127,7 +133,7 @@ export function GoogleCalendarSettingsCard() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">外部連携</CardTitle>
         <p className="text-sm text-muted-foreground">
-          ここで連携すると、カレンダー画面に Google の予定が表示されます。
+          設定 → 外部連携から Google カレンダーを連携・解除・再連携できます。連携するとカレンダー画面に予定が表示されます。
         </p>
       </CardHeader>
       <CardContent className="space-y-3">

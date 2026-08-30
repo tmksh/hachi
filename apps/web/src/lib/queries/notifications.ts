@@ -39,7 +39,7 @@ export async function fetchNotifications(): Promise<Notification[]> {
   ] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", user.id).single(),
     supabase.from("announcement_reads").select("announcement_id").eq("user_id", user.id),
-    selectAnnouncementsForNotifications(supabase, 30),
+    selectAnnouncementsForNotifications(supabase, 80),
     supabase
       .from("workflow_steps")
       .select("id, request_id, workflow_requests!inner(id, title, created_at)")
@@ -201,6 +201,9 @@ export async function fetchNotifications(): Promise<Notification[]> {
     ...salesFlowNotifs,
     ...calendarNotifs,
   ]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .sort((a, b) => {
+      if (Boolean(a.is_urgent) !== Boolean(b.is_urgent)) return a.is_urgent ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    })
     .slice(0, 50);
 }

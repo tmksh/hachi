@@ -33,6 +33,7 @@ import {
   LogOut,
   Settings,
   User,
+  Link2,
   ChevronRight,
   FileText,
   CalendarDays,
@@ -55,13 +56,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { Profile } from "@/hooks/use-auth";
-import { markAnnouncementAsRead } from "@/lib/actions/notifications";
+import { markAnnouncementAsRead, markAnnouncementsAsRead } from "@/lib/actions/notifications";
 import { fetchNotifications, type Notification } from "@/lib/queries/notifications";
 import { BombAlert } from "@/components/layout/bomb-alert";
 
-/** 緊急回覧: 未読1件で BombAlert（仕様どおり） */
+/** 緊急回覧: 未読1件で BombAlert（仕様どおり）。チャット未読では出さない。 */
 const ANNOUNCEMENT_BOMB_THRESHOLD = 1;
-const ANN_BOMB_SESSION_KEY = "hachi_bomb_ann_ids";
+const BOMB_ACK_KEY = "hachi_bomb_acked_ids";
 import { globalSearch, type SearchResult } from "@/lib/actions/search";
 import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
 import { format } from "date-fns";
@@ -93,18 +94,22 @@ function dismissNotificationIds(ids: string[]) {
   persistDismissedNotifIds([...readDismissedNotifIds(), ...ids]);
 }
 
-function readSessionIds(key: string): string[] {
+function readAckedBombIds(): string[] {
   try {
-    const raw = JSON.parse(sessionStorage.getItem(key) ?? "[]");
+    const raw = JSON.parse(localStorage.getItem(BOMB_ACK_KEY) ?? "[]");
     return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [];
   } catch {
     return [];
   }
 }
 
-function rememberSessionIds(key: string, ids: string[]) {
-  const next = [...new Set([...readSessionIds(key), ...ids])].slice(-200);
-  sessionStorage.setItem(key, JSON.stringify(next));
+function persistAckedBombIds(ids: string[]) {
+  const next = [...new Set([...readAckedBombIds(), ...ids])].slice(-400);
+  localStorage.setItem(BOMB_ACK_KEY, JSON.stringify(next));
+}
+
+function urgentForBomb(notifs: Notification[]): Notification[] {
+  return notifs.filter((n) => n.is_urgent && n.type === "announcement");
 }
 
 const GROUP_ICONS = {
@@ -148,7 +153,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [showBombAlert, setShowBombAlert] = useState(false);
   const [bombUrgentCount, setBombUrgentCount] = useState(0);
+  const [bombUrgentItems, setBombUrgentItems] = useState<Notification[]>([]);
   const bombChecked = useRef(false);
+  const skipNotifRefetch = useRef(false);
 
   useEffect(() => {
     const fetchUnread = async () => {
@@ -214,18 +221,13 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       fetchNotifications().then((notifs) => {
         const filtered = filterDismissedNotifications(notifs);
         setNotifications(filtered);
-        const urgent = filtered.filter(
-          (n) => n.is_urgent && n.type === "announcement",
-        );
-        const alreadyShown = new Set(readSessionIds(ANN_BOMB_SESSION_KEY));
-        const unseen = urgent.filter((n) => !alreadyShown.has(n.id));
-        try {
-          localStorage.removeItem("hachi_bomb_shown_ann");
-          localStorage.removeItem("hachi_bomb_check");
-          localStorage.removeItem("hachi_chat_bomb_check");
-        } catch { /* ignore */ }
+        const acked = new Set(readAckedBombIds());
+        const unseen = urgentForBomb(filtered).filter((n) => !acked.has(n.id));
         if (unseen.length >= ANNOUNCEMENT_BOMB_THRESHOLD) {
-          rememberSessionIds(ANN_BOMB_SESSION_KEY, unseen.map((n) => n.id));
+          try {
+            persistAckedBombIds(unseen.map((n) => n.id));
+          } catch { /* ignore */ }
+          setBombUrgentItems(unseen);
           setBombUrgentCount(unseen.length);
           setShowBombAlert(true);
         }
@@ -246,6 +248,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
   useEffect(() => {
     if (!notifOpen) return;
+    if (skipNotifRefetch.current) {
+      skipNotifRefetch.current = false;
+      return;
+    }
     const fetchNotifs = () =>
       fetchNotifications()
         .then((notifs) => setNotifications(filterDismissedNotifications(notifs)))
@@ -269,6 +275,27 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   }, [searchQuery]);
 
   const unreadCount = notifications.length;
+
+  const acknowledgeBombAndOpenPanel = () => {
+    const items = bombUrgentItems;
+    const ids = items.map((n) => n.id);
+    try {
+      if (ids.length) {
+        persistAckedBombIds(ids);
+        dismissNotificationIds(ids);
+      }
+    } catch { /* ignore */ }
+    const annIds = items
+      .filter((n) => n.type === "announcement")
+      .map((n) => n.id.replace("ann_", ""));
+    if (annIds.length) {
+      void markAnnouncementsAsRead(annIds).catch(() => {});
+    }
+    skipNotifRefetch.current = true;
+    setNotifications(items);
+    setShowBombAlert(false);
+    setNotifOpen(true);
+  };
 
   const useBlueSidebar = false;
 
@@ -539,6 +566,12 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                       設定
                     </Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings?tab=external_integrations" className="gap-2">
+                      <Link2 className="h-4 w-4" />
+                      外部連携
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onSignOut} className="gap-2 text-destructive">
                     <LogOut className="h-4 w-4" />
@@ -608,6 +641,12 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                         <Link href="/settings" className="gap-2">
                           <Settings className="h-4 w-4" />
                           設定
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/settings?tab=external_integrations" className="gap-2">
+                          <Link2 className="h-4 w-4" />
+                          外部連携
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -724,8 +763,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                       .map((n) => n.id.replace("ann_", ""));
                     try {
                       dismissNotificationIds(ids);
+                      persistAckedBombIds(ids);
                     } catch { /* ignore */ }
-                    void Promise.all(annIds.map((id) => markAnnouncementAsRead(id))).catch(() => {});
+                    void markAnnouncementsAsRead(annIds).catch(() => {});
                     setNotifications([]);
                   }}
                 >
@@ -814,10 +854,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       {showBombAlert && (
         <BombAlert
           urgentCount={bombUrgentCount}
-          onDismiss={() => {
-            setShowBombAlert(false);
-            setNotifOpen(true);
-          }}
+          onDismiss={acknowledgeBombAndOpenPanel}
         />
       )}
 

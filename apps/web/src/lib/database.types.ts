@@ -416,6 +416,7 @@ export type ContractorOrder = {
   invoice_token?: string | null;
   invoice_token_expires_at?: string | null;
   clouds_sign_sent_at?: string | null;
+  cloudsign_document_id?: string | null;
   concluded_at?: string | null;
   delivery_attachments?: Array<{ path: string; name: string; contentType?: string; size?: number }> | null;
   vendor_invoice_pdf_path?: string | null;
@@ -427,6 +428,7 @@ export type ContractorOrder = {
   craftsman?: {
     id: string;
     name: string;
+    company_name?: string | null;
     email?: string | null;
     bank_name?: string | null;
     bank_name_kana?: string | null;

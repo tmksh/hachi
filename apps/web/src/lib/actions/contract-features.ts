@@ -4,7 +4,17 @@ import { createClient } from "@/lib/supabase/server";
 import { getCloudSignConfig, sendToCloudSign } from "@/lib/integrations/cloudsign";
 import { createWorkflowRequest } from "@/lib/actions/workflow";
 import { dispatchWebhook } from "@/lib/webhooks";
-import { findTemplate } from "@/lib/contract-templates";
+import {
+  findTemplate,
+  prepareFormForOutput,
+  renderPreview,
+  resolveCompanyContext,
+  type FormValues,
+  type RenderContext,
+} from "@/lib/contract-templates";
+import { getContract } from "@/lib/actions/contracts";
+import { resolvePdfTemplates } from "@/lib/pdf-template";
+import { buildContractPrintHtml } from "@/lib/contract-pdf";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -1025,19 +1035,59 @@ export async function sendContractCloudSign(contractId: string, email: string, s
   const { data: company } = await supabase.from("companies").select("settings").eq("id", company_id).single();
   const config = getCloudSignConfig(company?.settings as Record<string, unknown>);
 
-  const { data: contract } = await supabase
-    .from("contracts")
-    .select("contract_no, title, customer:customers(name)")
-    .eq("id", contractId)
-    .single();
-  if (!contract) throw new Error("契約が見つかりません");
+  const full = await getContract(contractId);
+  if (!full) throw new Error("契約が見つかりません");
 
-  const customerName = (contract.customer as { name?: string })?.name ?? "ご担当者";
+  const customerName = full.customer?.name ?? "ご担当者";
+
+  let html: string | undefined;
+  let notesPayload: Record<string, unknown> = {};
+  try {
+    notesPayload = full.notes ? JSON.parse(full.notes) as Record<string, unknown> : {};
+  } catch {
+    notesPayload = { legacy_notes: full.notes };
+  }
+  const draft = notesPayload.contract_draft as { template_id?: string; form?: FormValues } | undefined;
+  const template = draft?.template_id ? findTemplate(draft.template_id) : findTemplate("construction_contract");
+  if (template) {
+    const linked = full.linked_construction;
+    const estimateTotal = (full as { estimate?: { total?: number } | null }).estimate?.total ?? null;
+    const { data: companyRow } = await supabase.from("companies").select("name, settings").eq("id", company_id).maybeSingle();
+    const pdfTemplates = resolvePdfTemplates(
+      (companyRow?.settings as { pdf_templates?: unknown } | null)?.pdf_templates as Record<string, unknown> | undefined,
+    );
+    const pdf = pdfTemplates.contract ?? pdfTemplates.estimate;
+    const ctx: RenderContext = {
+      construction: {
+        title: linked?.title || full.title,
+        start_date: full.start_date ?? linked?.start_date ?? null,
+        end_date: full.end_date ?? linked?.end_date ?? null,
+        order_amount: full.amount || linked?.order_amount || estimateTotal || null,
+      },
+      customer: full.customer
+        ? { name: full.customer.name, address: full.customer.address ?? null }
+        : null,
+      company: resolveCompanyContext(companyRow, pdf),
+    };
+    const form = prepareFormForOutput(template, ctx, draft?.form ?? {}, { esign: true });
+    notesPayload.contract_draft = { template_id: template.id, form };
+    await supabase.from("contracts").update({
+      notes: JSON.stringify(notesPayload),
+      updated_at: new Date().toISOString(),
+    }).eq("id", contractId);
+    html = buildContractPrintHtml(renderPreview(template, form, ctx), pdf, template.name);
+  }
 
   const result = await sendToCloudSign(config, {
-    title: contract.title,
+    title: full.title,
     signers: [{ name: customerName, email, order: 1 }],
-    metadata: { contract_id: contractId, subject, message },
+    html,
+    metadata: {
+      contract_id: contractId,
+      subject,
+      message,
+      esign_only: "1",
+    },
   });
 
   await supabase.from("contracts").update({

@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import {
   CONTRACT_TEMPLATES, type ContractTemplate, type FormValues,
   type RenderContext, findTemplate, buildDefaults, renderPreview,
-  mergeDefaults, syncFromContext, resolveCompanyContext,
+  mergeDefaults, syncFromContext, prepareFormForOutput, resolveCompanyContext,
 } from "@/lib/contract-templates";
 import {
   createContractDoc, updateContractDoc, deleteContractDoc,
@@ -407,8 +407,11 @@ function ContractEditor({
   }
 
   function handlePdfPrint() {
+    const next = prepareFormForOutput(tpl, renderCtx, form);
+    setForm(next);
+    if (!isNew) void save();
     const pdf = pdfTpl ?? resolvePdfTemplates(null).contract;
-    const bodyHtml = renderPreview(tpl, form, renderCtx);
+    const bodyHtml = renderPreview(tpl, next, renderCtx);
     const win = window.open("", "_blank", "width=900,height=1200");
     if (!win) return;
     win.document.write(buildContractPrintHtml(bodyHtml, pdf, tpl.name));
