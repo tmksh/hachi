@@ -255,7 +255,8 @@ function matchCraftsman(name: string, craftsmen: Craftsman[]): Craftsman | null 
   );
   if (exact) return exact;
   return craftsmen.find((c) =>
-    vendorNameMatches(c.name, trimmed) || (c.company_name ? vendorNameMatches(c.company_name, trimmed) : false),
+    vendorNameMatches(c.name, trimmed, c.bank_account_kana) ||
+      (c.company_name ? vendorNameMatches(c.company_name, trimmed, c.bank_account_kana) : false),
   ) ?? null;
 }
 

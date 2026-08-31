@@ -67,6 +67,7 @@ export type VendorCandidate = {
   id: string;
   name: string;
   company_name: string | null;
+  bank_account_kana?: string | null;
   kind: "vendor" | "system";
   system_key: "unregistered" | "reserve" | "management" | null;
 };
@@ -81,11 +82,22 @@ export async function getVendorCandidates(): Promise<VendorCandidate[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("craftsmen")
-    .select("id, name, company_name, kind, system_key")
+    .select("id, name, company_name, bank_account_kana, kind, system_key")
     .is("deleted_at", null)
     .order("kind", { ascending: false }) // system を先頭に
     .order("name")
     .limit(500);
+  if (error && /bank_account_kana/i.test(error.message)) {
+    const retry = await supabase
+      .from("craftsmen")
+      .select("id, name, company_name, kind, system_key")
+      .is("deleted_at", null)
+      .order("kind", { ascending: false })
+      .order("name")
+      .limit(500);
+    if (retry.error) throw retry.error;
+    return (retry.data ?? []) as VendorCandidate[];
+  }
   if (error) throw error;
   return (data ?? []) as VendorCandidate[];
 }

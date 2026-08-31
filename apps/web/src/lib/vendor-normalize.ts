@@ -3,8 +3,11 @@
  * - 「㈱」「（株）」⇔「株式会社」などの法人格表記
  * - 全角/半角（英数・カナ）
  * - カタカナ/ひらがな
+ * - 漢字の読み（「高橋」↔「タカハシ」）
  * を正規化して候補マッチングに使う。表示名は変更しない。
  */
+
+import { kanjiToHiraganaReading } from "./vendor-readings";
 
 const CORPORATE_ALIASES: Array<[RegExp, string]> = [
   [/㈱/g, "株式会社"],
@@ -33,9 +36,20 @@ export function normalizeVendorName(raw: string): string {
   return text.toLowerCase().replace(/[\s\u3000・.、,，]/g, "");
 }
 
-/** 正規化後の部分一致（インクリメンタルサーチ用） */
-export function vendorNameMatches(candidate: string, query: string): boolean {
+/** 正規化＋漢字読みの検索キー */
+export function vendorPhoneticKey(raw: string): string {
+  return kanjiToHiraganaReading(normalizeVendorName(raw));
+}
+
+/** 正規化後の部分一致（インクリメンタルサーチ用）。カタカナ入力で漢字社名にも当たる */
+export function vendorNameMatches(candidate: string, query: string, extraPhonetic?: string | null): boolean {
   const q = normalizeVendorName(query);
   if (!q) return true;
-  return normalizeVendorName(candidate).includes(q);
+  if (normalizeVendorName(candidate).includes(q)) return true;
+
+  const qKey = vendorPhoneticKey(query);
+  if (!qKey) return true;
+  if (vendorPhoneticKey(candidate).includes(qKey)) return true;
+  if (extraPhonetic && vendorPhoneticKey(extraPhonetic).includes(qKey)) return true;
+  return false;
 }

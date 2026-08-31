@@ -307,8 +307,8 @@ function VendorInput({
   const filtered = (q
     ? candidates.filter(
         (c) =>
-          vendorNameMatches(c.name, q) ||
-          (c.company_name ? vendorNameMatches(c.company_name, q) : false),
+          vendorNameMatches(c.name, q, c.bank_account_kana) ||
+          (c.company_name ? vendorNameMatches(c.company_name, q, c.bank_account_kana) : false),
       )
     : candidates
   ).slice().sort((a, b) => {
