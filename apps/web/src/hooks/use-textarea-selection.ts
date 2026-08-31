@@ -82,7 +82,7 @@ export function useTextareaSelection() {
         scheduleSync();
         return;
       }
-      if ((target as HTMLElement).closest?.("[data-text-selection-toolbar]")) return;
+      if ((target as HTMLElement).closest?.("[data-text-selection-toolbar],[data-slot='tooltip-content']")) return;
       // 選択確定の click と外側クリックが競合しないよう、1フレーム遅らせて判定
       requestAnimationFrame(() => {
         if (!readTextareaSelection(elementRef.current)) clear();

@@ -270,7 +270,9 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
         </TabsContent>
 
         <TabsContent value="todo" className="mt-4">
-          <CustomerTodoTab customerId={id as string} />
+          {mainTab === "todo" && (
+            <CustomerTodoTab key={`todo-${id}`} customerId={id as string} />
+          )}
         </TabsContent>
 
         <TabsContent value="scheduling" className="mt-4">

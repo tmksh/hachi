@@ -6,7 +6,7 @@ import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { TextSelectionToolbar } from "@/components/ui/text-selection-toolbar";
+import { SelectionToolbarButton, TextSelectionToolbar } from "@/components/ui/text-selection-toolbar";
 import { Badge } from "@/components/ui/badge";
 import {
   Mic, Square, Copy, Sparkles, ListTodo, Save, Mail,
@@ -566,24 +566,31 @@ export function RecordingSummaryTab({
                 placeholder={recordingState === "done" ? "AI要約（編集可能）" : "営業メモ（手入力可）"}
               />
               <TextSelectionToolbar visible={Boolean(selection.trim())} anchorRect={anchorRect}>
-                <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
+                <SelectionToolbarButton
+                  label="ToDoに追加"
+                  description="選択した文章をToDoタブの一覧に追加します"
+                  onClick={() => void addTodoFromSelection()}
+                >
                   <ListTodo className="h-3.5 w-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="size-7" title="AIで改善" onClick={() => void improveText()} disabled={improving}>
+                </SelectionToolbarButton>
+                <SelectionToolbarButton
+                  label="文章を改善"
+                  description="選択した文章をAIで整えます"
+                  disabled={improving}
+                  onClick={() => void improveText()}
+                >
                   {improving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-7"
-                  title="コピー"
+                </SelectionToolbarButton>
+                <SelectionToolbarButton
+                  label="コピー"
+                  description="選択した文章をコピーします"
                   onClick={() => {
                     navigator.clipboard.writeText(selection);
                     toast.success("コピーしました");
                   }}
                 >
                   <Copy className="h-3.5 w-3.5" />
-                </Button>
+                </SelectionToolbarButton>
               </TextSelectionToolbar>
             </div>
 

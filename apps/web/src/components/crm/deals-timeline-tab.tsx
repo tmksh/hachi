@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useTextareaSelection } from "@/hooks/use-textarea-selection";
-import { TextSelectionToolbar } from "@/components/ui/text-selection-toolbar";
+import { SelectionToolbarButton, TextSelectionToolbar } from "@/components/ui/text-selection-toolbar";
 import type { DealActivity } from "@/lib/database.types";
 import {
   getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo,
@@ -306,21 +306,23 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
               placeholder="商談の要点・次のアクションなどを記録..."
             />
             <TextSelectionToolbar visible={Boolean(selection.trim())} anchorRect={anchorRect}>
-              <Button size="icon" variant="ghost" className="size-7" title="ToDoに追加" onClick={() => void addTodoFromSelection()}>
+              <SelectionToolbarButton
+                label="ToDoに追加"
+                description="選択した文章をToDoタブの一覧に追加します"
+                onClick={() => void addTodoFromSelection()}
+              >
                 <ListTodo className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-7"
-                title="コピー"
+              </SelectionToolbarButton>
+              <SelectionToolbarButton
+                label="コピー"
+                description="選択した文章をコピーします"
                 onClick={() => {
                   navigator.clipboard.writeText(selection);
                   toast.success("コピーしました");
                 }}
               >
                 <Copy className="h-3.5 w-3.5" />
-              </Button>
+              </SelectionToolbarButton>
             </TextSelectionToolbar>
           </div>
           <div className="flex justify-end">
