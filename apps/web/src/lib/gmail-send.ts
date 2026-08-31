@@ -36,6 +36,33 @@ function formatAddress(addr: { name?: string; address: string }): string {
   return `${name} <${email}>`;
 }
 
+/** Gmail の threadId は 16進。IMAP UID などを渡すと 400 になる */
+function isGmailThreadId(id: string | null | undefined): id is string {
+  return Boolean(id && /^[0-9a-f]{10,}$/i.test(id.trim()));
+}
+
+function encodeUtf8Base64(text: string): string {
+  return Buffer.from(text, "utf8").toString("base64");
+}
+
+async function postGmailSend(
+  accessToken: string,
+  raw: string,
+  threadId?: string | null,
+) {
+  return fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      raw,
+      ...(threadId ? { threadId } : {}),
+    }),
+  });
+}
+
 /**
  * 連携済み Gmail アカウント経由でメール送信する。
  * 未連携・トークン失効時は Error を throw（偽の「送信しました」を防ぐ）。
@@ -122,30 +149,28 @@ export async function sendViaGmailAccount(input: {
     "",
     `--${boundary}`,
     "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: 7bit",
+    "Content-Transfer-Encoding: base64",
     "",
-    textBody,
+    encodeUtf8Base64(textBody),
     "",
     `--${boundary}`,
     "Content-Type: text/html; charset=UTF-8",
-    "Content-Transfer-Encoding: 7bit",
+    "Content-Transfer-Encoding: base64",
     "",
-    `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${htmlBody}</div>`,
+    encodeUtf8Base64(`<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${htmlBody}</div>`),
     "",
     `--${boundary}--`,
   ].join("\r\n");
 
-  const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      raw: toBase64Url(mime),
-      ...(input.gmailThreadId ? { threadId: input.gmailThreadId } : {}),
-    }),
-  });
+  const raw = toBase64Url(mime);
+  const threadId = isGmailThreadId(input.gmailThreadId) ? input.gmailThreadId.trim() : null;
+
+  let sendRes = await postGmailSend(accessToken, raw, threadId);
+  if (!sendRes.ok && threadId && (sendRes.status === 400 || sendRes.status === 404)) {
+    const firstErr = await sendRes.text().catch(() => "");
+    console.error("[sendViaGmailAccount] thread send failed, retry without threadId", sendRes.status, firstErr);
+    sendRes = await postGmailSend(accessToken, raw, null);
+  }
 
   if (!sendRes.ok) {
     const errText = await sendRes.text().catch(() => "");

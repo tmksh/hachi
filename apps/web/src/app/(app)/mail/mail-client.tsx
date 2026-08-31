@@ -31,6 +31,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { humanizeClientError } from "@/lib/humanize-error";
 import {
   getEmailThreads,
   getEmailThread,
@@ -250,14 +251,18 @@ export function MailClient({
     }
     setReplying(true);
     try {
-      const updated = await replyToThread({
+      const result = await replyToThread({
         threadId: selected.id,
         body_text: replyBody.trim(),
         to: replyTo.trim(),
       });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("返信しました");
       setReplyBody("");
-      setSelected(updated as ThreadDetail);
+      setSelected(result.thread as ThreadDetail);
       setThreads((prev) =>
         prev.map((x) =>
           x.id === selected.id
@@ -271,7 +276,7 @@ export function MailClient({
         )
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "返信に失敗しました");
+      toast.error(humanizeClientError(e, "返信に失敗しました。Gmail連携と返信先を確認してください"));
     } finally {
       setReplying(false);
     }
