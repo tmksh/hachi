@@ -803,6 +803,12 @@ export async function getWorkflowApprovalSupport(requestId: string) {
   );
 }
 
+const DELETED_WORKFLOW_TYPE_PREFIX = "deleted:";
+
+function isDeletedWorkflowTypeKey(key?: string | null) {
+  return String(key ?? "").startsWith(DELETED_WORKFLOW_TYPE_PREFIX);
+}
+
 export async function getWorkflowTypes() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -811,7 +817,7 @@ export async function getWorkflowTypes() {
     .order("sort_order")
     .order("created_at");
   if (error) throw actionError(error, "ワークフロー種別の取得に失敗しました");
-  return data;
+  return (data ?? []).filter((t) => !isDeletedWorkflowTypeKey((t as { key?: string }).key));
 }
 
 export async function createWorkflowType(input: {
@@ -865,8 +871,32 @@ export async function updateWorkflowType(id: string, input: {
 
 export async function deleteWorkflowType(id: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("workflow_types").delete().eq("id", id);
-  if (error) throw actionError(error, "ワークフロー種別の削除に失敗しました");
+  const { data: current, error: fetchErr } = await supabase
+    .from("workflow_types")
+    .select("id, key")
+    .eq("id", id)
+    .single();
+  if (fetchErr || !current) throw actionError(fetchErr, "ワークフロー種別が見つかりません");
+
+  // 申請が残っていても種別を消せるよう、先に参照を外す（マイグレーション適用後）
+  await supabase.from("workflow_requests").update({ type_id: null }).eq("type_id", id);
+
+  const { data: removed, error: delErr } = await supabase
+    .from("workflow_types")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (!delErr && removed && removed.length > 0) return;
+
+  // FK / RLS で物理削除できない場合は論理削除（申請データは残す）
+  const nextKey = isDeletedWorkflowTypeKey(current.key)
+    ? current.key
+    : `${DELETED_WORKFLOW_TYPE_PREFIX}${current.key}`;
+  const { error: updErr } = await supabase
+    .from("workflow_types")
+    .update({ key: nextKey, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (updErr) throw actionError(updErr ?? delErr, "ワークフロー種別の削除に失敗しました");
 }
 
 export type FieldDef = {

@@ -155,7 +155,7 @@ export function WorkflowTypesTab() {
       toast.success("削除しました");
       setDeleteTarget(null);
       load();
-    } catch { toast.error("削除に失敗"); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : "削除に失敗"); }
   };
 
   const availableApprovers = profiles.filter(p => !approverIds.includes(p.id));

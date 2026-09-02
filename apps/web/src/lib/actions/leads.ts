@@ -88,10 +88,11 @@ export async function createTestInboundLead(): Promise<InboundLead> {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const unique = Date.now();
   return createInboundLead({
     name: `Webhook検証 ${stamp}`,
-    email: "webhook-test@example.com",
-    phone: "09000000000",
+    email: `webhook-test-${unique}@example.com`,
+    phone: `090${String(unique).slice(-8)}`,
     source: "web",
     inquiry_category: "検証",
     inquiry_content: "画面の「テスト取り込み」から登録した自動取り込み検証用データです。",
@@ -157,7 +158,7 @@ export async function convertInboundLeadToCustomer(id: string): Promise<{
     prospect_grade: null,
     is_special_demand: false,
     special_probability: null,
-  });
+  }, { skipDedupe: true });
 
   let dealId: string | undefined;
   const { data: deal } = await supabase

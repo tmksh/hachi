@@ -266,6 +266,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
           <RecordingSummaryTab
             customerId={id as string}
             customerEmail={data.email}
+            onComplete={reloadCustomer}
           />
         </TabsContent>
 

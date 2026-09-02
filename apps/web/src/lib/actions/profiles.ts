@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import type { Profile, Company } from "@/lib/database.types";
+import { pruneMemberCustomRoles, readMemberCustomRoles } from "@/lib/role-assignment";
 
 export async function getProfiles() {
   try {
@@ -152,7 +153,13 @@ export async function updateCompany(input: {
     } : {}),
     ...(input.attendance_settings !== undefined ? { attendance_settings: input.attendance_settings } : {}),
     ...(input.role_permissions !== undefined ? { role_permissions: input.role_permissions } : {}),
-    ...(input.custom_roles !== undefined ? { custom_roles: input.custom_roles } : {}),
+    ...(input.custom_roles !== undefined ? {
+      custom_roles: input.custom_roles,
+      member_custom_roles: pruneMemberCustomRoles(
+        readMemberCustomRoles((current?.settings ?? {}) as Record<string, unknown>),
+        input.custom_roles,
+      ),
+    } : {}),
     ...(input.pdf_templates !== undefined ? { pdf_templates: input.pdf_templates } : {}),
     ...(input.fiscal_month_start !== undefined ? { fiscal_month_start: input.fiscal_month_start } : {}),
     ...(input.transfer !== undefined ? {

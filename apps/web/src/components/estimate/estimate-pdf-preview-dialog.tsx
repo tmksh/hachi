@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FileDown, X } from "lucide-react";
 import { effectiveCategoryAmounts } from "@/lib/estimate-category-totals";
+import {
+  composePdfNotes,
+  formatPdfAddressee,
+  type PdfCustomerRef,
+} from "@/lib/customer-pdf";
 
 export type EstimatePdfMode = "customer" | "cost_breakdown";
 
@@ -14,6 +19,9 @@ export type EstimatePdfPreviewData = {
   title?: string | null;
   customer_name?: string | null;
   customer_company_name?: string | null;
+  customer_type?: string | null;
+  customer_notes?: string | null;
+  addressee?: string;
   notes?: string | null;
   subtotal: number;
   tax: number;
@@ -58,6 +66,7 @@ type EstimatePdfSource = {
   estimate_no?: string;
   title?: string | null;
   notes?: string | null;
+  customer?: PdfCustomerRef | null;
   subtotal?: number;
   tax?: number;
   total?: number;
@@ -91,7 +100,7 @@ type EstimatePdfSource = {
 /** 顧客向け見積書用（売価0行・予備費行は出さない。テキスト行は印字する・No.62） */
 export function toEstimatePdfPreviewData(
   estimate: EstimatePdfSource,
-  customer?: { name?: string | null; company_name?: string | null } | null,
+  customer?: PdfCustomerRef | null,
 ): EstimatePdfPreviewData {
   return toEstimatePdfData(estimate, customer, "customer");
 }
@@ -99,16 +108,22 @@ export function toEstimatePdfPreviewData(
 /** 社内向け原価内訳書用（売価0行・テキスト行・経営調整費・予備費を含む） */
 export function toCostBreakdownPdfPreviewData(
   estimate: EstimatePdfSource,
-  customer?: { name?: string | null; company_name?: string | null } | null,
+  customer?: PdfCustomerRef | null,
 ): EstimatePdfPreviewData {
   return toEstimatePdfData(estimate, customer, "cost_breakdown");
 }
 
 function toEstimatePdfData(
   estimate: EstimatePdfSource,
-  customer: { name?: string | null; company_name?: string | null } | null | undefined,
+  customer: PdfCustomerRef | null | undefined,
   mode: EstimatePdfMode,
 ): EstimatePdfPreviewData {
+  const mergedCustomer: PdfCustomerRef = {
+    name: customer?.name ?? estimate.customer?.name ?? null,
+    company_name: customer?.company_name ?? estimate.customer?.company_name ?? null,
+    customer_type: customer?.customer_type ?? estimate.customer?.customer_type ?? null,
+    notes: customer?.notes ?? estimate.customer?.notes ?? null,
+  };
   const sourceItems = estimate.items ?? [];
   const items = sourceItems
     .filter((item) => {
@@ -167,9 +182,12 @@ function toEstimatePdfData(
     mode,
     estimate_no: estimate.estimate_no,
     title: estimate.title,
-    customer_name: customer?.name ?? null,
-    customer_company_name: customer?.company_name ?? null,
-    notes: estimate.notes,
+    customer_name: mergedCustomer.name ?? null,
+    customer_company_name: mergedCustomer.company_name ?? null,
+    customer_type: mergedCustomer.customer_type ?? null,
+    customer_notes: mergedCustomer.notes ?? null,
+    addressee: formatPdfAddressee(mergedCustomer),
+    notes: composePdfNotes(estimate.notes, mergedCustomer.notes),
     subtotal: estimate.subtotal ?? 0,
     tax: estimate.tax ?? 0,
     total: estimate.total ?? 0,
@@ -256,7 +274,7 @@ export function EstimatePdfPreviewDialog({ open, onOpenChange, data }: EstimateP
               <div className="flex justify-between items-start gap-4 min-w-0">
                 <div className="min-w-0" style={{ flex: 1 }}>
                   <p style={{ fontSize: "13px", fontWeight: "bold", borderBottom: "1px solid #0f172a", paddingBottom: "4px", marginBottom: "6px", overflowWrap: "anywhere" }}>
-                    {data.customer_company_name ?? data.customer_name ?? "　"} 御中
+                    {data.addressee || "　"}
                   </p>
                   <p style={{ color: "#475569", overflowWrap: "anywhere" }}>件名: {data.title ?? "—"}</p>
                   <div className="mt-4 border border-slate-300 px-4 py-2 bg-slate-50 flex justify-between items-center gap-3 min-w-0">

@@ -231,6 +231,7 @@ export type EstimateForView = {
   gross_profit?: number;
   gross_profit_rate?: number;
   notes?: string | null;
+  customer?: { name?: string | null; company_name?: string | null; customer_type?: string | null; notes?: string | null } | null;
   company_id?: string;
   cost_total?: number;
   reserve_fee_1_rate?: number;
@@ -1106,7 +1107,7 @@ export function EstimateDetailView({
   loading?: boolean;
   onEstimateChange: (est: EstimateForView) => void;
   headerExtra?: React.ReactNode;
-  pdfCustomer?: { name?: string | null; company_name?: string | null } | null;
+  pdfCustomer?: { name?: string | null; company_name?: string | null; customer_type?: string | null; notes?: string | null } | null;
 }) {
   const [pdfOpen, setPdfOpen] = useState(false);
   const [pdfData, setPdfData] = useState<EstimatePdfPreviewData | null>(null);

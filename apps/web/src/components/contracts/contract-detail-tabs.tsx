@@ -177,7 +177,12 @@ export function ContractDetailTabs({
       <TabsContent value="estimates" className="mt-4">
         <EstimatesTab
           contractId={contractId}
-          pdfCustomer={data.customer ? { name: data.customer.name, company_name: data.customer.company_name } : null}
+          pdfCustomer={data.customer ? {
+            name: data.customer.name,
+            company_name: data.customer.company_name,
+            customer_type: data.customer.customer_type,
+            notes: data.customer.notes,
+          } : null}
         />
       </TabsContent>
     </Tabs>
@@ -424,6 +429,9 @@ function DocumentsTab({
     customer: data.customer ? {
       name: data.customer.name,
       address: data.customer.address ?? null,
+      company_name: data.customer.company_name ?? null,
+      customer_type: data.customer.customer_type ?? null,
+      notes: data.customer.notes ?? null,
     } : null,
   }), [data, linked, estimateTotal]);
   const [companyCtx, setCompanyCtx] = useState<RenderContext["company"]>(null);
@@ -926,7 +934,7 @@ function EstimatesTab({
   pdfCustomer,
 }: {
   contractId: string;
-  pdfCustomer?: { name?: string | null; company_name?: string | null } | null;
+  pdfCustomer?: { name?: string | null; company_name?: string | null; customer_type?: string | null; notes?: string | null } | null;
 }) {
   const [rows, setRows] = useState<EstimateListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);

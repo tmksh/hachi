@@ -880,6 +880,17 @@ type RecordingSummaryLike = {
   customerUpdates: Array<{ field: string; value: string; reason: string }>;
 };
 
+/** 録音AIの要約を顧客備考へ追記（既存と重複しなければ） */
+function appendRecordingNote(prev: string | null | undefined, title: string, body: string): string {
+  const text = body.trim();
+  if (!text) return prev?.trim() ?? "";
+  const existing = prev?.trim() ?? "";
+  if (existing.includes(text)) return existing;
+  const heading = title.trim() ? `--- ${title.trim()} ---` : "--- 録音要約 ---";
+  const block = `${heading}\n${text}`;
+  return existing ? `${existing}\n\n${block}` : block;
+}
+
 function toCustomerUpdatesArray(updates: Record<string, string | null> | undefined): RecordingSummaryLike["customerUpdates"] {
   return Object.entries(updates ?? {})
     .filter((e): e is [string, string] => typeof e[1] === "string" && e[1].trim() !== "" && e[1] !== "null")
@@ -944,6 +955,12 @@ export async function processRecordingComplete(input: {
     updated_at: new Date().toISOString(),
   }).eq("id", input.recordingId);
 
+  const { data: existingCustomer } = await supabase
+    .from("customers")
+    .select("notes")
+    .eq("id", input.customerId)
+    .maybeSingle();
+
   const customerPatch: Record<string, string | number> = {};
   for (const update of summaryResult.customerUpdates) {
     if (update.field === "budget_min" || update.field === "budget_max") {
@@ -951,10 +968,19 @@ export async function processRecordingComplete(input: {
       if (!Number.isNaN(n) && n > 0) customerPatch[update.field] = n;
     } else if (update.field === "phone" || update.field === "email" || update.field === "address") {
       customerPatch[update.field] = update.value;
-    } else if (update.field === "notes") {
-      customerPatch.notes = update.value;
     }
   }
+
+  let nextNotes = existingCustomer?.notes ?? "";
+  const extractedNotes = summaryResult.customerUpdates.find((u) => u.field === "notes")?.value;
+  if (extractedNotes) nextNotes = appendRecordingNote(nextNotes, "", extractedNotes);
+  if (summaryResult.summary) {
+    nextNotes = appendRecordingNote(nextNotes, summaryResult.title, summaryResult.summary);
+  }
+  if (nextNotes !== (existingCustomer?.notes ?? "")) {
+    customerPatch.notes = nextNotes;
+  }
+
   if (Object.keys(customerPatch).length > 0) {
     await supabase.from("customers").update({
       ...customerPatch,

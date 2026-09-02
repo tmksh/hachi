@@ -8,6 +8,7 @@ import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, ROLE_LABELS } from "@/lib/constants";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { permissionRoleSlugs, roleDisplayLabel } from "@/lib/role-assignment";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -311,7 +312,8 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     return group?.items.some((item) => isActive(item.href)) ?? false;
   };
 
-  const { canAccess } = useCompanyPermissions();
+  const { canAccess, customRoles } = useCompanyPermissions();
+  const profileRoleLabel = roleDisplayLabel(profile?.role, profile?.custom_role_id, customRoles);
 
   /** 権限マトリクスでフィルタされたナビグループ（正本は会社の role_permissions） */
   const visibleGroups = useMemo(
@@ -321,11 +323,11 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
           ...group,
           items: group.items.filter((item) => {
             if (!profile?.role) return true;
-            return canAccess(item.key, [profile.role]);
+            return canAccess(item.key, permissionRoleSlugs(profile));
           }),
         }))
         .filter((group) => group.items.length > 0),
-    [profile?.role, canAccess],
+    [profile, canAccess],
   );
 
   const toggleGroup = (key: string) => {
@@ -549,7 +551,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                     <p className="text-xs text-muted-foreground">{profile?.email}</p>
                     {profile?.role && (
                       <p className="text-xs text-primary font-medium mt-0.5">
-                        {ROLE_LABELS[profile.role]}
+                        {profileRoleLabel || ROLE_LABELS[profile.role]}
                       </p>
                     )}
                   </div>
@@ -626,7 +628,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                         <p className="text-xs text-muted-foreground">{profile?.email}</p>
                         {profile?.role && (
                           <p className="text-xs text-primary font-medium mt-0.5">
-                            {ROLE_LABELS[profile.role]}
+                            {profileRoleLabel || ROLE_LABELS[profile.role]}
                           </p>
                         )}
                       </div>

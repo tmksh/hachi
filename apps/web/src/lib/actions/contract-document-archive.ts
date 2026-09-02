@@ -68,7 +68,7 @@ export async function archiveContractDocumentFromRecord(contractId: string) {
     .from("contracts")
     .select(`
       id, customer_id, title, start_date, end_date, amount, notes,
-      customer:customers(name, address)
+      customer:customers(name, address, company_name, customer_type, notes)
     `)
     .eq("id", contractId)
     .single();
@@ -96,7 +96,13 @@ export async function archiveContractDocumentFromRecord(contractId: string) {
       end_date: contract.end_date,
       order_amount: contract.amount,
     },
-    customer: customer ? { name: customer.name, address: customer.address } : null,
+    customer: customer ? {
+      name: customer.name,
+      address: customer.address,
+      company_name: customer.company_name ?? null,
+      customer_type: customer.customer_type ?? null,
+      notes: customer.notes ?? null,
+    } : null,
     company: companyCtx.name || companyCtx.address ? companyCtx : null,
   };
 

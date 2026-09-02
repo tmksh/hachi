@@ -10,7 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Send, PenLine } from "lucide-react";
-import { sendEmail } from "@/lib/actions/mail";
+import { getMailSignature, sendEmail } from "@/lib/actions/mail";
+
+const SIGNATURE_STORAGE_KEY = "bridge_mail_signature";
+
+function applySignature(current: string, next: string) {
+  if (!next) return current;
+  if (current.includes(next)) return current;
+  return current.trim() ? `${current}\n\n${next}` : `\n\n${next}`;
+}
 
 export function MailComposeClient({ initialSignature }: { initialSignature: string }) {
   const router = useRouter();
@@ -23,10 +31,30 @@ export function MailComposeClient({ initialSignature }: { initialSignature: stri
   const [showSignature, setShowSignature] = useState(true);
 
   useEffect(() => {
-    setSignature(initialSignature);
-    if (initialSignature) {
-      setBody((prev) => (prev.trim() ? prev : `\n\n${initialSignature}`));
+    let stored = "";
+    try {
+      stored = localStorage.getItem(SIGNATURE_STORAGE_KEY) ?? "";
+    } catch {
+      stored = "";
     }
+    const seed = initialSignature || stored;
+    if (seed) {
+      setSignature(seed);
+      setBody((prev) => applySignature(prev, seed));
+    }
+
+    void getMailSignature()
+      .then((fresh) => {
+        if (!fresh) return;
+        try {
+          localStorage.setItem(SIGNATURE_STORAGE_KEY, fresh);
+        } catch {
+          // ignore
+        }
+        setSignature(fresh);
+        setBody((prev) => applySignature(prev, fresh));
+      })
+      .catch(() => {});
   }, [initialSignature]);
 
   const handleToggleSignature = () => {

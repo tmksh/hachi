@@ -19,6 +19,7 @@ import { getDepartmentMarginRates } from "@/lib/actions/deals";
 import { buildBiDepartmentProjectsMock } from "@/lib/bi-mock-data";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { permissionRoleSlugs } from "@/lib/role-assignment";
 import { fiscalYearLabel, DEFAULT_FISCAL_MONTH_START } from "@/lib/bi-utils";
 import { cn } from "@/lib/utils";
 
@@ -80,8 +81,9 @@ export function BiDepartmentProjectsSheet({
   fmtMan: (v: number) => string;
   onClose: () => void;
 }) {
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
+  const roleSlugs = permissionRoleSlugs(profile ?? { role });
   const [rows, setRows] = useState<BiDepartmentProject[]>([]);
   const [canViewCustomer, setCanViewCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -114,7 +116,7 @@ export function BiDepartmentProjectsSheet({
     let cancelled = false;
 
     if (useMock) {
-      const canView = role ? canAccess("bi_customer_name", [role]) : false;
+      const canView = roleSlugs.length ? canAccess("bi_customer_name", roleSlugs) : false;
       setCanViewCustomer(canView);
       const mockKey = departmentName ?? displayName ?? openKey;
       setRows(

@@ -39,6 +39,7 @@ import {
 } from "@/lib/actions/bi";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { permissionRoleSlugs } from "@/lib/role-assignment";
 import { toast } from "sonner";
 import type { BiAnnualSettings, BiActuals } from "@/lib/bi-types";
 import { MOCK_OVERHEAD_BUDGET_MAN } from "@/lib/bi-types";
@@ -373,10 +374,10 @@ export function BiClient({
   initialActuals: BiActuals | null;
 }) {
   const searchParams = useSearchParams();
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
   // 予備費の実値確認・決算戻しの操作可否は権限マトリクス（reserve_fee）で制御
-  const canManageReserve = role ? canAccess("reserve_fee", [role]) : false;
+  const canManageReserve = role ? canAccess("reserve_fee", permissionRoleSlugs(profile ?? { role })) : false;
   const [showTheoretical, setShowTheoretical] = useState(false);
   const [showActualReserve, setShowActualReserve] = useState(false);
   const [releasingReserve, setReleasingReserve] = useState(false);

@@ -18,6 +18,7 @@ import {
   mergeRolePermissions,
   type RolePermissions,
 } from "@/lib/role-permissions";
+import { readMemberCustomRoles } from "@/lib/role-assignment";
 
 export type Profile = {
   id: string;
@@ -29,6 +30,7 @@ export type Profile = {
   department: string | null;
   position: string | null;
   phone: string | null;
+  custom_role_id?: string | null;
 };
 
 type AuthContextValue = {
@@ -71,14 +73,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("id", authUser.id)
         .single();
 
+      if (!data?.company_id) {
+        setProfile((data as Profile | null) ?? null);
+        setRolePermissions(null);
+        return;
+      }
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("settings")
+        .eq("id", data.company_id)
+        .maybeSingle();
+      const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+      const customRoleId = readMemberCustomRoles(settings)[authUser.id] ?? null;
+
       // 内容が同じなら setState しない（Auth 購読者全体の再レンダー防止）
       setProfile((prev) => {
-        const next = (data as Profile | null) ?? null;
+        const next = data
+          ? { ...(data as Profile), custom_role_id: customRoleId }
+          : null;
         if (
           prev
           && next
           && prev.id === next.id
           && prev.role === next.role
+          && prev.custom_role_id === next.custom_role_id
           && prev.display_name === next.display_name
           && prev.avatar_url === next.avatar_url
           && prev.company_id === next.company_id
@@ -92,17 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return next;
       });
 
-      if (!data?.company_id) {
-        setRolePermissions(null);
-        return;
-      }
-
-      const { data: company } = await supabase
-        .from("companies")
-        .select("settings")
-        .eq("id", data.company_id)
-        .maybeSingle();
-      const settings = (company?.settings ?? null) as Record<string, unknown> | null;
       const rp = settings?.role_permissions;
       const nextPerms =
         rp && typeof rp === "object"
@@ -178,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isEmployee: role === "employee",
       hasRole: (...roles: Role[]) => !!role && roles.includes(role),
       canAccess: (pathname: string) =>
-        !!role && canAccessPathWithPermissions(pathname, role, rolePermissions),
+        !!role && canAccessPathWithPermissions(pathname, role, rolePermissions, profile?.custom_role_id),
       supabase,
     }),
     [user, profile, loading, signOut, role, rolePermissions, supabase],

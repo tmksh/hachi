@@ -175,7 +175,7 @@ export async function getContractApprovalWorkflowTypes(): Promise<ContractApprov
     (profiles ?? []).map((p) => [p.id, { name: p.display_name ?? "—", role: p.role ?? null }]),
   );
   const contractTypes = (types ?? [])
-    .filter((t) => isContractWorkflowType(t))
+    .filter((t) => !String(t.key ?? "").startsWith("deleted:") && isContractWorkflowType(t))
     .sort((a, b) => scoreContractWorkflowType(b) - scoreContractWorkflowType(a));
 
   return contractTypes.map((t) => {
@@ -263,9 +263,10 @@ async function resolveContractWorkflowType(
     .select("id, key, name, approval_route")
     .eq("company_id", companyId);
 
-  const candidates = (types ?? []).filter((t) => isContractWorkflowType(t));
+  const active = (types ?? []).filter((t) => !String(t.key ?? "").startsWith("deleted:"));
+  const candidates = active.filter((t) => isContractWorkflowType(t));
   if (candidates.length === 0) {
-    return (types ?? [])[0] ?? null;
+    return active[0] ?? null;
   }
 
   candidates.sort((a, b) => scoreContractWorkflowType(b) - scoreContractWorkflowType(a));
@@ -1065,7 +1066,13 @@ export async function sendContractCloudSign(contractId: string, email: string, s
         order_amount: full.amount || linked?.order_amount || estimateTotal || null,
       },
       customer: full.customer
-        ? { name: full.customer.name, address: full.customer.address ?? null }
+        ? {
+          name: full.customer.name,
+          address: full.customer.address ?? null,
+          company_name: full.customer.company_name ?? null,
+          customer_type: full.customer.customer_type ?? null,
+          notes: full.customer.notes ?? null,
+        }
         : null,
       company: resolveCompanyContext(companyRow, pdf),
     };

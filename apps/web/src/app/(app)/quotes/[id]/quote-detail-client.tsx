@@ -54,7 +54,12 @@ export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
       <EstimateDetailView
         estimate={data as unknown as EstimateForView}
         onEstimateChange={(est) => setData((prev) => ({ ...(prev as EstimateDetail), ...(est as unknown as EstimateDetail) }))}
-        pdfCustomer={data.customer ? { name: data.customer.name, company_name: data.customer.company_name } : null}
+        pdfCustomer={data.customer ? {
+          name: data.customer.name,
+          company_name: data.customer.company_name,
+          customer_type: data.customer.customer_type,
+          notes: data.customer.notes,
+        } : null}
         headerExtra={
           <Button
             variant="outline"

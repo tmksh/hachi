@@ -90,12 +90,12 @@ import {
   updateTeamMemberEmploymentType,
   removeTeamMember,
   resendTeamInvite,
-  type TeamRole,
 } from "@/lib/actions/team";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Profile } from "@/lib/database.types";
 import { NAV_GROUPS, NAV_ITEM_ROLES, ROLE_LABELS, ASSIGNABLE_TEAM_ROLES, SYSTEM_PERMISSION_ROLES, type Role } from "@/lib/constants";
 import { useCompanyPermissions, type CustomRole, type RolePermissions } from "@/hooks/use-company-permissions";
+import { assignedRoleValue, resolveRoleSelection, roleDisplayLabel } from "@/lib/role-assignment";
 import { mergeRolePermissions, withPermissionsSchema } from "@/lib/role-permissions";
 import { parseTransferSender, type TransferSender } from "@/lib/procurement";
 import { FontSizeSelector } from "@/components/settings/font-size-selector";
@@ -325,7 +325,7 @@ export function SettingsClient({
   const [addSaving, setAddSaving] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<TeamRole>("employee");
+  const [newRole, setNewRole] = useState<string>("employee");
   const [inviteSent, setInviteSent] = useState(false);
   const [inviteLinkFallback, setInviteLinkFallback] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
@@ -444,6 +444,11 @@ export function SettingsClient({
     setSavingSignature(true);
     try {
       await saveMailSignature(signature);
+      try {
+        localStorage.setItem("bridge_mail_signature", signature);
+      } catch {
+        // ignore
+      }
       toast.success("署名を保存しました");
     } catch {
       toast.error("保存に失敗しました");
@@ -638,13 +643,26 @@ export function SettingsClient({
     }
   };
 
-  const handleChangeRole = async (member: Profile, role: TeamRole) => {
-    if (member.role === role) return;
+  const handleChangeRole = async (member: Profile, selected: string) => {
+    if (assignedRoleValue(member) === selected) return;
+    let resolved: { role: Profile["role"]; customRoleId: string | null };
+    try {
+      resolved = resolveRoleSelection(selected, customRoles);
+    } catch (e) {
+      toast.error("ロール変更に失敗しました", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+      return;
+    }
     setUpdatingRoleId(member.id);
     const prev = [...members];
-    setMembers((m) => m.map((x) => (x.id === member.id ? { ...x, role } : x)));
+    setMembers((m) => m.map((x) => (x.id === member.id ? {
+      ...x,
+      role: resolved.role,
+      custom_role_id: resolved.customRoleId,
+    } : x)));
     try {
-      await updateTeamMemberRole(member.id, role);
+      await updateTeamMemberRole(member.id, selected);
       toast.success("ロールを変更しました");
     } catch (e) {
       setMembers(prev);
@@ -1348,12 +1366,13 @@ export function SettingsClient({
                         {members.map((m) => {
                           const isSelf = m.id === profile?.id;
                           const canEditThis = !isSelf;
-                          const avatarColor = getCustomerAvatarColor(m.role);
+                          const assigned = assignedRoleValue(m);
+                          const avatarColor = getCustomerAvatarColor(assigned);
                           return (
                             <tr key={m.id} className="border-t hover:bg-muted/30">
                               <td className="px-3 py-2.5">
                                 <div className="flex items-center gap-2.5">
-                                  <CustomerAvatar seed={m.role} name={m.display_name} size="sm" />
+                                  <CustomerAvatar seed={assigned} name={m.display_name} size="sm" />
                                   <div>
                                     <div className="font-medium">{m.display_name}</div>
                                     {(m.department || m.position) && (
@@ -1368,8 +1387,8 @@ export function SettingsClient({
                               <td className="px-3 py-2.5">
                                 {canEditThis ? (
                                   <Select
-                                    value={m.role}
-                                    onValueChange={(v) => void handleChangeRole(m, v as TeamRole)}
+                                    value={assigned}
+                                    onValueChange={(v) => void handleChangeRole(m, v)}
                                     disabled={updatingRoleId === m.id}
                                   >
                                     <SelectTrigger
@@ -1382,6 +1401,9 @@ export function SettingsClient({
                                       {ASSIGNABLE_TEAM_ROLES.map((role) => (
                                         <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
                                       ))}
+                                      {customRoles.map((cr) => (
+                                        <SelectItem key={cr.id} value={cr.id}>{cr.name}</SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -1390,7 +1412,7 @@ export function SettingsClient({
                                     className="h-7 px-2 text-xs rounded-md border-0 text-white"
                                     style={{ background: avatarColor.avatarGradient }}
                                   >
-                                    {ROLE_LABELS[m.role]}
+                                    {roleDisplayLabel(m.role, m.custom_role_id, customRoles)}
                                     {isSelf && <span className="ml-1">（自分）</span>}
                                   </Badge>
                                 )}
@@ -1747,11 +1769,14 @@ export function SettingsClient({
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">ロール *</Label>
-                    <Select value={newRole} onValueChange={(v) => setNewRole(v as TeamRole)}>
+                    <Select value={newRole} onValueChange={setNewRole}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {ASSIGNABLE_TEAM_ROLES.map((role) => (
                           <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                        ))}
+                        {customRoles.map((cr) => (
+                          <SelectItem key={cr.id} value={cr.id}>{cr.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

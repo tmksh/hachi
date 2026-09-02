@@ -22,6 +22,8 @@ export type Profile = {
   phone: string | null;
   /** 従業員区分（1人当たり利益の係数: full_time=1.0 / part_time=0.5）。マイグレーション未適用環境では undefined */
   employment_type?: 'full_time' | 'part_time';
+  /** 会社のカスタムロール ID（companies.settings.member_custom_roles から付与） */
+  custom_role_id?: string | null;
   created_at: string;
   updated_at: string;
 };

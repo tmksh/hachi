@@ -232,7 +232,12 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
         onBack={() => { setSelectedId(null); }}
         loading={loadingEstimate}
         onEstimateChange={(est) => onEstimateChange(est as Detail["estimate"])}
-        pdfCustomer={data.customer ? { name: data.customer.name, company_name: (data.customer as { company_name?: string | null }).company_name } : null}
+        pdfCustomer={data.customer ? {
+          name: data.customer.name,
+          company_name: (data.customer as { company_name?: string | null }).company_name,
+          customer_type: (data.customer as { customer_type?: string | null }).customer_type,
+          notes: (data.customer as { notes?: string | null }).notes,
+        } : null}
       />
     );
   }
@@ -400,7 +405,12 @@ function ConstructionDetailPageContent({
     </div>
   );
 
-  const customer = data.customer as (typeof data.customer & { address?: string | null }) | null;
+  const customer = data.customer as (typeof data.customer & {
+    address?: string | null;
+    company_name?: string | null;
+    customer_type?: string | null;
+    notes?: string | null;
+  }) | null;
   const contract = data.contract as (typeof data.contract & {
     amount?: number; contract_date?: string | null; start_date?: string | null;
     end_date?: string | null; notes?: string | null; status?: string; estimate_id?: string | null;
@@ -557,7 +567,13 @@ function ConstructionDetailPageContent({
                 end_date: data.end_date,
                 order_amount: data.order_amount ?? 0,
               },
-              customer: customer ? { name: customer.name, address: customer.address ?? null } : null,
+              customer: customer ? {
+                name: customer.name,
+                address: customer.address ?? null,
+                company_name: customer.company_name ?? null,
+                customer_type: customer.customer_type ?? null,
+                notes: customer.notes ?? null,
+              } : null,
             }}
           />
         </TabsContent>

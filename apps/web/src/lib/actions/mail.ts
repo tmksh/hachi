@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { guessReplyAddress, replySubject } from "@/lib/mail-reply";
@@ -399,4 +400,6 @@ export async function saveMailSignature(signature: string): Promise<void> {
     data: { mail_signature: signature },
   });
   if (error) throw error;
+  revalidatePath("/mail/compose");
+  revalidatePath("/settings");
 }

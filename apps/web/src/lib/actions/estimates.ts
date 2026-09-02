@@ -21,7 +21,7 @@ export type EstimateListRow = {
   notes: string | null;
   created_at: string;
   updated_at: string;
-  customer: { id: string; name: string; company_name: string | null } | null;
+  customer: { id: string; name: string; company_name: string | null; customer_type?: string | null; notes?: string | null } | null;
   construction: { id: string; title: string; construction_no: string } | null;
   assignee: { id: string; display_name: string } | null;
 };
@@ -31,7 +31,7 @@ export async function getEstimates(): Promise<EstimateListRow[]> {
   const { data, error } = await supabase
     .from("estimates")
     .select(
-      "id, company_id, estimate_no, title, version, status, total, subtotal, tax, gross_profit_rate, customer_id, construction_id, assigned_to, notes, created_at, updated_at, customer:customers(id, name, company_name), construction:constructions!construction_id(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
+      "id, company_id, estimate_no, title, version, status, total, subtotal, tax, gross_profit_rate, customer_id, construction_id, assigned_to, notes, created_at, updated_at, customer:customers(id, name, company_name, customer_type, notes), construction:constructions!construction_id(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
     )
     .order("created_at", { ascending: false })
     .limit(500);
@@ -43,8 +43,8 @@ export async function getEstimatesByCustomer(customerId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("estimates")
-    .select("*, customer:customers(id, name, company_name)")
-    .eq("customer_id", customerId)
+      .select("*, customer:customers(id, name, company_name, customer_type, notes)")
+      .eq("customer_id", customerId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
@@ -55,7 +55,7 @@ export async function getEstimate(id: string) {
   const [{ data, error }, { data: categories }, { data: items }] = await Promise.all([
     supabase
       .from("estimates")
-      .select("*, customer:customers(id, name, company_name)")
+      .select("*, customer:customers(id, name, company_name, customer_type, notes)")
       .eq("id", id)
       .single(),
     supabase
@@ -74,6 +74,13 @@ export async function getEstimate(id: string) {
   return { ...data, categories: categories || [], items: items || [] } as Estimate & {
     categories: EstimateCategory[];
     items: EstimateItem[];
+    customer?: {
+      id: string;
+      name: string;
+      company_name: string | null;
+      customer_type?: string | null;
+      notes?: string | null;
+    } | null;
   };
 }
 

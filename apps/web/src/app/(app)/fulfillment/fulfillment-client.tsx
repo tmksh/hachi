@@ -21,6 +21,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { IntegerInput } from "@/components/ui/integer-input";
 import { useAuth } from "@/hooks/use-auth";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { permissionRoleSlugs } from "@/lib/role-assignment";
 import {
   attachStaffInvoicePdf,
   completeInspection,
@@ -90,7 +91,7 @@ async function openProcurementFile(path: string) {
 export function FulfillmentClient({ initialOrders }: Props) {
   const { profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
-  const canAccount = profile?.role ? canAccess("fulfillment_approve", [profile.role]) : false;
+  const canAccount = profile?.role ? canAccess("fulfillment_approve", permissionRoleSlugs(profile)) : false;
   const [orders, setOrders] = useState(initialOrders);
   const [project, setProject] = useState("all");
   const [vendor, setVendor] = useState("all");

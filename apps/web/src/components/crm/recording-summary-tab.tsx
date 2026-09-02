@@ -39,10 +39,12 @@ export function RecordingSummaryTab({
   customerId,
   dealId,
   customerEmail,
+  onComplete,
 }: {
   customerId: string;
   dealId?: string;
   customerEmail?: string | null;
+  onComplete?: () => void;
 }) {
   const [recordings, setRecordings] = useState<CustomerRecording[]>([]);
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -207,6 +209,7 @@ export function RecordingSummaryTab({
               : "文字起こし完了！結果を確認してください",
           );
         }
+        onComplete?.();
       } else {
         // 非同期処理（12分超）
         if (!newJobId) throw new Error("ジョブIDが取得できませんでした");
@@ -263,6 +266,7 @@ export function RecordingSummaryTab({
               toast.error("商談への自動登録に失敗しました");
             }
           }
+          onComplete?.();
         } else if (job.status === "error") {
           clearInterval(pollRef.current!);
           setErrorMsg(job.error ?? "文字起こしに失敗しました");
@@ -337,6 +341,7 @@ export function RecordingSummaryTab({
       setRecordingState("idle");
       setSendToCustomer(false);
       load();
+      onComplete?.();
     } catch (e) {
       toast.error(e instanceof Error && e.message ? `保存に失敗しました: ${e.message}` : "保存に失敗しました");
     } finally {

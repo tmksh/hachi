@@ -5,6 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getResend, INVITE_FROM_EMAIL, buildInviteEmailHtml } from "@/lib/resend";
 import type { Profile } from "@/lib/database.types";
 import type { AssignableRole } from "@/lib/constants";
+import {
+  readMemberCustomRoles,
+  resolveRoleSelection,
+  type CustomRoleRef,
+} from "@/lib/role-assignment";
 
 export type TeamRole = AssignableRole;
 
@@ -43,6 +48,45 @@ function assertCanAssignRole(actorRole: TeamRole, targetRole: TeamRole) {
   void targetRole;
 }
 
+async function loadCompanyRoleSettings(
+  admin: ReturnType<typeof createAdminClient>,
+  companyId: string,
+): Promise<{ settings: Record<string, unknown>; customRoles: CustomRoleRef[] }> {
+  const { data: company } = await admin
+    .from("companies")
+    .select("settings")
+    .eq("id", companyId)
+    .maybeSingle();
+  const settings = (company?.settings ?? {}) as Record<string, unknown>;
+  const customRoles = Array.isArray(settings.custom_roles)
+    ? (settings.custom_roles as CustomRoleRef[])
+    : [];
+  return { settings, customRoles };
+}
+
+async function persistMemberCustomRole(
+  admin: ReturnType<typeof createAdminClient>,
+  companyId: string,
+  userId: string,
+  customRoleId: string | null,
+  settings?: Record<string, unknown>,
+) {
+  const { data: company } = await admin
+    .from("companies")
+    .select("settings")
+    .eq("id", companyId)
+    .maybeSingle();
+  const latest = ((company?.settings ?? settings ?? {}) as Record<string, unknown>);
+  const map = { ...readMemberCustomRoles(latest) };
+  if (customRoleId) map[userId] = customRoleId;
+  else delete map[userId];
+  const { error } = await admin
+    .from("companies")
+    .update({ settings: { ...latest, member_custom_roles: map } })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
 export async function listTeamMembers(): Promise<Profile[]> {
   const { companyId } = await assertTenantAdmin();
   const admin = createAdminClient();
@@ -50,13 +94,20 @@ export async function listTeamMembers(): Promise<Profile[]> {
   // 招待済みだが profiles 未作成のユーザーを同期（再送ボタンを出せるようにする）
   await syncInvitedProfiles(admin, companyId);
 
-  const { data, error } = await admin
-    .from("profiles")
-    .select("*")
-    .eq("company_id", companyId)
-    .order("created_at", { ascending: false });
+  const [{ data, error }, { settings }] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false }),
+    loadCompanyRoleSettings(admin, companyId),
+  ]);
   if (error) throw error;
-  return (data ?? []) as Profile[];
+  const customMap = readMemberCustomRoles(settings);
+  return ((data ?? []) as Profile[]).map((m) => ({
+    ...m,
+    custom_role_id: customMap[m.id] ?? null,
+  }));
 }
 
 /** auth にいるが profiles が無い招待ユーザーを profiles に補完する */
@@ -116,9 +167,10 @@ async function recoverAndResendInvite(input: {
   email: string;
   displayName: string;
   role: TeamRole;
+  customRoleId?: string | null;
   appUrl: string;
 }): Promise<InviteResult> {
-  const { admin, companyId, actorId, email, displayName, role, appUrl } = input;
+  const { admin, companyId, actorId, email, displayName, role, customRoleId, appUrl } = input;
 
   const { data: authData, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
   if (listErr) {
@@ -160,8 +212,11 @@ async function recoverAndResendInvite(input: {
     }).eq("id", user.id);
   }
 
+  const { settings } = await loadCompanyRoleSettings(admin, companyId);
+  await persistMemberCustomRole(admin, companyId, user.id, customRoleId ?? null, settings);
+
   await admin.auth.admin.updateUserById(user.id, {
-    user_metadata: { company_id: companyId, role, display_name: displayName },
+    user_metadata: { company_id: companyId, role, display_name: displayName, custom_role_id: customRoleId ?? null },
   });
 
   // 既存ユーザーへの再招待は invite が弾かれることがあるため recovery も試す
@@ -244,7 +299,7 @@ async function recoverAndResendInvite(input: {
 export async function inviteTeamMember(input: {
   email: string;
   displayName: string;
-  role: TeamRole;
+  role: string;
   password?: string;
 }): Promise<InviteResult> {
   try {
@@ -258,11 +313,14 @@ export async function inviteTeamMember(input: {
 async function inviteTeamMemberInner(input: {
   email: string;
   displayName: string;
-  role: TeamRole;
+  role: string;
   password?: string;
 }): Promise<InviteResult> {
   const { companyId, actorRole, actorId } = await assertTenantAdmin();
-  assertCanAssignRole(actorRole, input.role);
+  const admin = createAdminClient();
+  const { settings, customRoles } = await loadCompanyRoleSettings(admin, companyId);
+  const resolved = resolveRoleSelection(input.role, customRoles);
+  assertCanAssignRole(actorRole, resolved.role);
 
   if (!input.email.trim()) return { ok: false, error: "メールアドレスは必須です" };
   if (!input.displayName.trim()) return { ok: false, error: "表示名は必須です" };
@@ -274,8 +332,6 @@ async function inviteTeamMemberInner(input: {
     };
   }
 
-  const admin = createAdminClient();
-
   const appUrl =
     process.env.NEXT_PUBLIC_SITE_URL ??
     (process.env.NODE_ENV === "production"
@@ -284,8 +340,9 @@ async function inviteTeamMemberInner(input: {
 
   const userMeta = {
     company_id: companyId,
-    role: input.role,
+    role: resolved.role,
     display_name: input.displayName.trim(),
+    custom_role_id: resolved.customRoleId,
   };
 
   if (input.password) {
@@ -316,12 +373,13 @@ async function inviteTeamMemberInner(input: {
         company_id: companyId,
         display_name: input.displayName.trim(),
         email: input.email.trim(),
-        role: input.role,
+        role: resolved.role,
       });
       if (profileError) {
         return { ok: false, error: `プロフィール作成に失敗しました: ${profileError.message}` };
       }
     }
+    await persistMemberCustomRole(admin, companyId, userId, resolved.customRoleId, settings);
     return { ok: true, emailSent: false };
   }
 
@@ -345,7 +403,8 @@ async function inviteTeamMemberInner(input: {
         actorId,
         email: input.email.trim(),
         displayName: input.displayName.trim(),
-        role: input.role,
+        role: resolved.role,
+        customRoleId: resolved.customRoleId,
         appUrl,
       });
       return recovered;
@@ -391,12 +450,13 @@ async function inviteTeamMemberInner(input: {
         company_id: companyId,
         display_name: input.displayName.trim(),
         email: input.email.trim(),
-        role: input.role,
+        role: resolved.role,
       });
       if (profileError) {
         console.error("[inviteTeamMember] profile insert failed", profileError);
       }
     }
+    await persistMemberCustomRole(admin, companyId, invitedUserId, resolved.customRoleId, settings);
   }
 
   // メール送信に失敗してもアカウント（招待）自体は作成済みのため、
@@ -434,15 +494,17 @@ async function inviteTeamMemberInner(input: {
   return { ok: true, emailSent: true };
 }
 
-export async function updateTeamMemberRole(userId: string, role: TeamRole) {
+export async function updateTeamMemberRole(userId: string, role: string) {
   const { companyId, actorRole, actorId } = await assertTenantAdmin();
 
   if (userId === actorId) {
     throw new Error("自分自身のロールは変更できません");
   }
-  assertCanAssignRole(actorRole, role);
 
   const admin = createAdminClient();
+  const { settings, customRoles } = await loadCompanyRoleSettings(admin, companyId);
+  const resolved = resolveRoleSelection(role, customRoles);
+  assertCanAssignRole(actorRole, resolved.role);
 
   const { data: target } = await admin
     .from("profiles")
@@ -455,9 +517,11 @@ export async function updateTeamMemberRole(userId: string, role: TeamRole) {
 
   const { error } = await admin
     .from("profiles")
-    .update({ role })
+    .update({ role: resolved.role })
     .eq("id", userId);
   if (error) throw error;
+
+  await persistMemberCustomRole(admin, companyId, userId, resolved.customRoleId, settings);
 }
 
 /** 従業員区分の変更（No.77/78: BIの1人当たり利益の係数に使用。正社員=1.0 / パート=0.5） */

@@ -297,8 +297,8 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
             },
             body: JSON.stringify({
               name: `Webhook検証 ${new Date().toLocaleTimeString("ja-JP")}`,
-              email: "webhook-test@example.com",
-              phone: "09000000000",
+              email: `webhook-test-${Date.now()}@example.com`,
+              phone: `090${String(Date.now()).slice(-8)}`,
               source: "web",
               inquiry_content: "画面のテストボタンからWebhookへ送信した検証データです。",
             }),

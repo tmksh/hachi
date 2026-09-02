@@ -42,6 +42,7 @@ import Link from "next/link";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { permissionRoleSlugs } from "@/lib/role-assignment";
 
 // ── 数値入力ヘルパー ──────────────────────────────────────────────────
 function parseAmount(v: string): number {
@@ -112,10 +113,10 @@ export function BiSettingsPanel({
   onCancel,
 }: BiSettingsPanelProps) {
   const router = useRouter();
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
   // 予備費の設定可否は権限マトリクス（機能キー: reserve_fee）で制御。既定は本部管理者のみ
-  const canEditReserve = role ? canAccess("reserve_fee", [role]) : false;
+  const canEditReserve = role ? canAccess("reserve_fee", permissionRoleSlugs(profile ?? { role })) : false;
   const fiscalYear = fiscalYearProp ?? getCurrentFiscalYear();
 
   // ── 全社設定 ──

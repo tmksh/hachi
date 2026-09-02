@@ -7,6 +7,8 @@
  *  - defaults(ctx): 初期値（construction/customer から自動入力）
  */
 
+import { formatPdfPartyName } from "@/lib/customer-pdf";
+
 export type FieldType = "text" | "textarea" | "date" | "number" | "toggle";
 
 export type TemplateField = {
@@ -38,6 +40,9 @@ export type RenderContext = {
   customer: {
     name: string;
     address: string | null;
+    company_name?: string | null;
+    customer_type?: string | null;
+    notes?: string | null;
   } | null;
   /** 乙（請負者＝自社）— 設定の発行元情報または会社名 */
   company?: {
@@ -177,7 +182,7 @@ export function buildDefaults(template: ContractTemplate, ctx: RenderContext): F
         v[f.name] = today;
         break;
       case "kou_name":
-        v[f.name] = ctx.customer?.name ?? "";
+        v[f.name] = formatPdfPartyName(ctx.customer) || ctx.customer?.name || "";
         break;
       case "kou_address":
       case "work_location":
@@ -254,7 +259,8 @@ export function resolveCompanyContext(
 /** 顧客・工事・工程表のマスタデータをフォームに反映 */
 export function syncFromContext(form: FormValues, ctx: RenderContext): FormValues {
   const next = { ...form };
-  if (ctx.customer?.name) next.kou_name = ctx.customer.name;
+  const partyName = formatPdfPartyName(ctx.customer);
+  if (partyName) next.kou_name = partyName;
   if (ctx.customer?.address) {
     next.kou_address = ctx.customer.address;
     if (!next.work_location) next.work_location = ctx.customer.address;
@@ -335,9 +341,10 @@ function getNum(v: FormValues, k: string): number {
   return typeof x === "number" ? x : Number(x) || 0;
 }
 
-function specialNotesBlock(values: FormValues, templateId: string): string {
+function specialNotesBlock(values: FormValues, templateId: string, ctx?: RenderContext): string {
   const fixed = fixedSpecialNotes(templateId);
   const extra = getStr(values, "special_notes");
+  const customerNotes = ctx?.customer?.notes?.trim() || "";
   const parts: string[] = [];
   if (fixed) {
     parts.push(`<p class="text-[11px] text-gray-500 mb-1">（テンプレート固定）</p><p class="whitespace-pre-line">${fixed}</p>`);
@@ -348,11 +355,17 @@ function specialNotesBlock(values: FormValues, templateId: string): string {
   if (parts.length === 0) {
     parts.push(`<p class="whitespace-pre-line min-h-[48px]"></p>`);
   }
+  const notesBlock = customerNotes
+    ? `<div>
+    <h3 class="font-bold mb-2">【備考】</h3>
+    <p class="whitespace-pre-line">${customerNotes}</p>
+  </div>`
+    : "";
   return `<div>
     <h3 class="font-bold mb-2">【特記事項】</h3>
     ${parts.join("")}
     <p class="border-b border-gray-300 pb-2"></p>
-  </div>`;
+  </div>${notesBlock}`;
 }
 
 function termsBlock(values: FormValues, templateId: string): string {
@@ -411,7 +424,7 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p>乙は、本工事の引渡し後${warrantyYears}年間、瑕疵担保責任を負うものとする。</p>
   </div>` : ""}
 
-  ${specialNotesBlock(values, template.id)}
+  ${specialNotesBlock(values, template.id, ctx)}
 
   ${termsBlock(values, template.id)}
 
@@ -465,7 +478,7 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p class="whitespace-pre-line">${getStr(values, "payment_terms") || "—"}</p>
   </div>
 
-  ${specialNotesBlock(values, template.id)}
+  ${specialNotesBlock(values, template.id, ctx)}
 
   ${termsBlock(values, template.id)}
 
@@ -517,7 +530,7 @@ export function renderPreview(template: ContractTemplate, values: FormValues, ct
     <p>変更後工期終了日：${endDate}</p>
   </div>
 
-  ${specialNotesBlock(values, template.id)}
+  ${specialNotesBlock(values, template.id, ctx)}
 
   ${termsBlock(values, template.id)}
 

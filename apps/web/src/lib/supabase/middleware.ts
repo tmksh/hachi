@@ -6,6 +6,7 @@ import {
   mergeRolePermissions,
   type RolePermissions,
 } from "@/lib/role-permissions";
+import { readMemberCustomRoles } from "@/lib/role-assignment";
 import { decodeGmailOAuthState, isGoogleOAuthCallbackPath } from "@/lib/google-oauth-config";
 
 /** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
@@ -271,11 +272,13 @@ export async function updateSession(request: NextRequest) {
       }
 
       let role: string | undefined;
+      let customRoleId: string | undefined;
       let permissions: RolePermissions | null = null;
 
       const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
       if (cached && cached.u === user.id) {
         role = cached.r;
+        customRoleId = cached.c ?? undefined;
         // キャッシュは merge 済み。再 merge すると _v 欠落で HEAL が権限を復元してしまう
         permissions = cached.p ?? null;
       } else {
@@ -294,6 +297,7 @@ export async function updateSession(request: NextRequest) {
             .eq("id", profile.company_id)
             .maybeSingle();
           const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+          customRoleId = readMemberCustomRoles(settings)[user.id];
           if (settings?.role_permissions && typeof settings.role_permissions === "object") {
             // 旧スキーマは merge で営業・経営層などを補完してから判定
             permissions = mergeRolePermissions(settings.role_permissions as RolePermissions);
@@ -302,7 +306,7 @@ export async function updateSession(request: NextRequest) {
 
         if (role) {
           try {
-            const encoded = encodeAuthz({ u: user.id, r: role, p: permissions });
+            const encoded = encodeAuthz({ u: user.id, r: role, c: customRoleId ?? null, p: permissions });
             // Cookie 上限対策（大きすぎる場合はキャッシュしない）
             if (encoded.length < 3500) {
               supabaseResponse.cookies.set(AUTHZ_COOKIE, encoded, {
@@ -319,7 +323,7 @@ export async function updateSession(request: NextRequest) {
         }
       }
 
-      if (!role || !canAccessPathWithPermissions(pathname, role, permissions)) {
+      if (!role || !canAccessPathWithPermissions(pathname, role, permissions, customRoleId)) {
         const url = request.nextUrl.clone();
         url.pathname = "/unauthorized";
         return NextResponse.redirect(url);
@@ -334,11 +338,12 @@ export async function updateSession(request: NextRequest) {
 const LEGACY_ROLE_PERM_COOKIE = "bl_rp";
 /** role + 権限マトリクスの短命キャッシュ（毎リクエストの DB 2回を避ける） */
 const AUTHZ_COOKIE = "bl_az";
-const AUTHZ_MAX_AGE_SEC = 300;
+const AUTHZ_MAX_AGE_SEC = 60;
 
 type AuthzCache = {
   u: string;
   r: string;
+  c?: string | null;
   p: RolePermissions | null;
 };
 

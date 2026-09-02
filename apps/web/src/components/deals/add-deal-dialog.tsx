@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { getCustomers } from "@/lib/actions/customers";
+import { getProfiles } from "@/lib/actions/profiles";
 import { createDeal } from "@/lib/actions/deals";
 import type { Deal } from "@/lib/database.types";
 
@@ -31,11 +32,13 @@ interface Props {
 
 export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Props) {
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [customerId, setCustomerId]           = useState("");
   const [title, setTitle]                     = useState("");
   const [stage, setStage]                     = useState("");
   const [value, setValue]                     = useState("");
   const [priority, setPriority]               = useState("medium");
+  const [assignedTo, setAssignedTo]           = useState("");
   const [expectedClose, setExpectedClose]     = useState("");
   const [nextAction, setNextAction]           = useState("");
   const [saving, setSaving]                   = useState(false);
@@ -50,12 +53,13 @@ export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Pr
   useEffect(() => {
     if (open) {
       getCustomers({ limit: 100 }).then(r => setCustomers(r.customers.map(x => ({ id: x.id, name: x.name })))).catch(() => {});
+      getProfiles().then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
     }
   }, [open]);
 
   function reset() {
     setCustomerId(""); setTitle(""); setStage(stages[0]?.key ?? "");
-    setValue(""); setPriority("medium"); setExpectedClose(""); setNextAction("");
+    setValue(""); setPriority("medium"); setAssignedTo(""); setExpectedClose(""); setNextAction("");
   }
 
   async function handleSave() {
@@ -68,6 +72,7 @@ export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Pr
         stage: (stage || undefined) as Deal["stage"] | undefined,
         value: value ? Number(value) : undefined,
         priority,
+        assigned_to: assignedTo || undefined,
         expected_close_date: expectedClose || undefined,
         next_action: nextAction || undefined,
       });
@@ -131,6 +136,16 @@ export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Pr
               <Label>クロージング予定日</Label>
               <Input type="date" value={expectedClose} onChange={e => setExpectedClose(e.target.value)} />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>担当</Label>
+            <Select value={assignedTo || "_none"} onValueChange={(v) => setAssignedTo(v === "_none" ? "" : v)}>
+              <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">未割り当て</SelectItem>
+                {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.display_name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>次のアクション</Label>

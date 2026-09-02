@@ -141,7 +141,10 @@ export async function getCustomerEntryMasters(): Promise<CustomerEntryMasters> {
   };
 }
 
-export async function createCustomer(input: Omit<Customer, "id" | "company_id" | "created_at" | "updated_at" | "deleted_at">) {
+export async function createCustomer(
+  input: Omit<Customer, "id" | "company_id" | "created_at" | "updated_at" | "deleted_at">,
+  options?: { skipDedupe?: boolean },
+) {
   const supabase = await createClient();
   const user = await getAuthUser();
   if (!user) throw new Error("Not authenticated");
@@ -149,8 +152,10 @@ export async function createCustomer(input: Omit<Customer, "id" | "company_id" |
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
-  // 既存顧客への自動紐付け（No.12）
-  const linked = await findExistingCustomer(supabase, profile.company_id, {
+  // 既存顧客への自動紐付け（No.12）。顧客化（問い合わせ）では新規作成を優先
+  const linked = options?.skipDedupe
+    ? null
+    : await findExistingCustomer(supabase, profile.company_id, {
     email: input.email,
     phone: input.phone,
     name: input.name,

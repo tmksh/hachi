@@ -31,7 +31,10 @@ export function WonDialog({ open, onOpenChange, deal }: Props) {
   if (deal.customer_id) params.set("customer_id", deal.customer_id);
   if (deal.id) params.set("deal_id", deal.id);
   if (deal.title) params.set("title", deal.title);
-  if (deal.value) params.set("order_amount", String(deal.value));
+  if (deal.value) {
+    params.set("order_amount", String(deal.value));
+    params.set("value", String(deal.value));
+  }
 
   const handleConfirmWon = async () => {
     setConfirming(true);

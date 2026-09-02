@@ -184,8 +184,10 @@ export function canAccessPathWithPermissions(
   pathname: string,
   role: string,
   permissions?: RolePermissions | null,
+  customRoleId?: string | null,
 ): boolean {
   const featureKey = featureKeyForPath(pathname);
+  const slugs = customRoleId ? [customRoleId] : [role];
 
   // 完全に未保存（null/undefined）のときのみ ROUTE_ROLES にフォールバック
   const hasSavedMatrix =
@@ -201,7 +203,7 @@ export function canAccessPathWithPermissions(
         return allowed.includes(role as Role);
       }
     }
-    return canAccessFeature(featureKey, [role], permissions);
+    return canAccessFeature(featureKey, slugs, permissions);
   }
 
   // 機能キー未定義のルートは従来ロジック

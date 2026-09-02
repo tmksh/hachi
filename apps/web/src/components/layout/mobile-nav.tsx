@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "@/lib/constants";
 import type { Profile } from "@/hooks/use-auth";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
+import { permissionRoleSlugs } from "@/lib/role-assignment";
 import {
   LayoutDashboard,
   Users,
@@ -44,11 +45,11 @@ export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile
         .map((group) => ({
           ...group,
           items: group.items.filter(
-            (item) => !profile?.role || canAccess(item.key, [profile.role]),
+            (item) => !profile?.role || canAccess(item.key, permissionRoleSlugs(profile)),
           ),
         }))
         .filter((group) => group.items.length > 0),
-    [profile?.role, canAccess],
+    [profile, canAccess],
   );
 
   return (

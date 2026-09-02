@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, FileDown, Sparkles, Loader2 } from "lucide-react";
 import { createEstimate, getEstimate, type CreateEstimateCategoryInput } from "@/lib/actions/estimates";
-import { getCustomers } from "@/lib/actions/customers";
+import { getCustomer, getCustomers } from "@/lib/actions/customers";
+import type { PdfCustomerRef } from "@/lib/customer-pdf";
 import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actions/deals";
 import { generateEstimateDraftForCustomer } from "@/lib/actions/sales-flow";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
@@ -92,13 +93,14 @@ export function QuoteNewClient({
   const preCustomerId = searchParams.get("customer_id") ?? "";
   const copyFromId = searchParams.get("copy_from") ?? "";
   const dealTitle = searchParams.get("title");
-  const dealValue = searchParams.get("value");
+  const dealValue = searchParams.get("value") ?? searchParams.get("order_amount");
 
   const [saving, setSaving] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [loadingSource, setLoadingSource] = useState(!!copyFromId);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(initialCustomers);
   const [customerId, setCustomerId] = useState(preCustomerId);
+  const [pdfCustomer, setPdfCustomer] = useState<PdfCustomerRef | null>(null);
   const [copyCustomerOpen, setCopyCustomerOpen] = useState(!!copyFromId && !preCustomerId);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNotes, setAiNotes] = useState<string | null>(null);
@@ -132,6 +134,28 @@ export function QuoteNewClient({
       .then(({ customers: rows }) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => {});
   }, [initialCustomers.length]);
+
+  useEffect(() => {
+    if (!customerId) {
+      setPdfCustomer(null);
+      return;
+    }
+    let cancelled = false;
+    getCustomer(customerId)
+      .then((c) => {
+        if (cancelled) return;
+        setPdfCustomer({
+          name: c.name,
+          company_name: c.company_name,
+          customer_type: c.customer_type,
+          notes: c.notes,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setPdfCustomer(null);
+      });
+    return () => { cancelled = true; };
+  }, [customerId]);
 
   useEffect(() => {
     getDepartmentMarginRates()
@@ -204,7 +228,7 @@ export function QuoteNewClient({
         })),
       ),
     },
-    { name: customerName !== "—" ? customerName : null },
+    pdfCustomer ?? { name: customerName !== "—" ? customerName : null },
   );
 
   const updateCategoryName = (catId: string, name: string) => {
