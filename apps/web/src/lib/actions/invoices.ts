@@ -5,8 +5,13 @@ import { dispatchWebhook } from "@/lib/webhooks";
 import type { Invoice, InvoiceItem } from "@/lib/database.types";
 import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { runMonthlyInvoiceBulkGeneration } from "@/lib/invoice-monthly-bulk";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export async function getInvoices() {
+  return cachedByCompany("invoices", CACHE_TTL.list, loadInvoices);
+}
+
+async function loadInvoices() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("invoices")
@@ -122,6 +127,7 @@ export async function updateInvoiceStatus(
       }
     }
 
+    await invalidateMyCompanyCache();
     return actionOk({ status });
   } catch (e) {
     return actionFail(e, "ステータスの更新に失敗しました");
@@ -161,6 +167,7 @@ export async function updateInvoice(
       );
     }
   }
+  await invalidateMyCompanyCache();
 }
 
 export async function deleteInvoice(id: string) {
@@ -168,6 +175,7 @@ export async function deleteInvoice(id: string) {
   await supabase.from("invoice_items").delete().eq("invoice_id", id);
   const { error } = await supabase.from("invoices").delete().eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }
 
 export async function createInvoiceFromConstruction(constructionId: string, amount?: number) {
@@ -221,6 +229,7 @@ export async function createInvoiceFromConstruction(constructionId: string, amou
     sort_order: 0,
   }]);
 
+  await invalidateMyCompanyCache();
   return invoice as Invoice;
 }
 
@@ -282,6 +291,7 @@ export async function createInvoice(
     );
   }
 
+  await invalidateMyCompanyCache();
   return invoice as Invoice;
 }
 

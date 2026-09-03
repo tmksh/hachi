@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
+import { CACHE_TTL, cachedByCompany } from "@/lib/supabase/auth-context";
 import { format, startOfMonth, subMonths } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -74,6 +75,10 @@ type UnfollowedRpcRow = {
 
 /** 担当者アサイン済みで一定日数以上フォローアップなしの顧客リストを取得 */
 export async function getUnfollowedLeads(days = 7) {
+  return cachedByCompany(`unfollowed:${days}`, CACHE_TTL.dashboard, () => loadUnfollowedLeads(days), true);
+}
+
+async function loadUnfollowedLeads(days: number) {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_unfollowed_customers", {
     p_days: days,
@@ -99,6 +104,10 @@ export async function getUnfollowedLeads(days = 7) {
 }
 
 export async function getDashboardData() {
+  return cachedByCompany("dashboard", CACHE_TTL.dashboard, loadDashboardData, true);
+}
+
+async function loadDashboardData() {
   const supabase = await createClient();
   const user = await getAuthUser();
 

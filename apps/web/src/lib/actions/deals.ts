@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Deal, DealActivity } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export async function getDealStages() {
   const supabase = await createClient();
@@ -33,6 +34,10 @@ export async function getLostReasons() {
 }
 
 export async function getDeals() {
+  return cachedByCompany("deals", CACHE_TTL.list, loadDeals);
+}
+
+async function loadDeals() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("deals")
@@ -104,6 +109,7 @@ export async function createDeal(input: {
     value: data.value,
     customer_id: data.customer_id,
   });
+  await invalidateMyCompanyCache();
   return data as Deal;
 }
 
@@ -123,6 +129,7 @@ export async function updateDeal(id: string, input: Partial<Omit<Deal, "id" | "c
   if (input.stage && ["won", "lost"].includes(input.stage)) {
     void dispatchWebhook(data.company_id, "deal.closed", { id: data.id, stage: data.stage });
   }
+  await invalidateMyCompanyCache();
   return data as Deal;
 }
 
@@ -130,6 +137,7 @@ export async function deleteDeal(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("deals").delete().eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }
 
 export async function createDealActivity(dealId: string, input: { type: string; title: string; description?: string }) {

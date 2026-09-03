@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { CACHE_TTL, cachedByCompany } from "@/lib/supabase/auth-context";
 
 export type InternalMessage = {
   id: string;
@@ -107,6 +108,10 @@ export async function sendFollowupInquiry(
 
 /** 自分宛の未読メッセージ数 */
 export async function getUnreadMessageCount() {
+  return cachedByCompany("unread-messages", CACHE_TTL.unread, loadUnreadMessageCount, true);
+}
+
+async function loadUnreadMessageCount() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 0;

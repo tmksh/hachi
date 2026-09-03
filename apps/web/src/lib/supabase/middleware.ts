@@ -8,6 +8,14 @@ import {
 } from "@/lib/role-permissions";
 import { readMemberCustomRoles } from "@/lib/role-assignment";
 import { decodeGmailOAuthState, isGoogleOAuthCallbackPath } from "@/lib/google-oauth-config";
+import {
+  AUTHZ_COOKIE,
+  AUTHZ_MAX_AGE_SEC,
+  LEGACY_ROLE_PERM_COOKIE,
+  decodeAuthz,
+  encodeAuthz,
+} from "@/lib/authz-cookie";
+import { jwtIsFresh, jwtUserAsUser, readSupabaseJwtUser } from "@/lib/supabase/session-jwt";
 
 /** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
 const LEGACY_ROUTE_PREFIXES = [
@@ -128,7 +136,10 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const jwt = readSupabaseJwtUser((name) => request.cookies.get(name)?.value, supabaseUrl);
+  const { data: { user } } = jwt && jwtIsFresh(jwt.exp)
+    ? { data: { user: jwtUserAsUser(jwt) } }
+    : await supabase.auth.getUser();
 
   // ── サブドメイン解決（NEXT_PUBLIC_APP_DOMAIN 設定後に有効） ─────────────────
   const slug = extractSubdomain(request);
@@ -265,64 +276,66 @@ export async function updateSession(request: NextRequest) {
       !!featureKeyForPath(pathname)
       || LEGACY_ROUTE_PREFIXES.some((p) => pathname.startsWith(p));
 
+    if (request.cookies.has(LEGACY_ROLE_PERM_COOKIE)) {
+      supabaseResponse.cookies.set(LEGACY_ROLE_PERM_COOKIE, "", { path: "/", maxAge: 0 });
+    }
+
+    let role: string | undefined;
+    let customRoleId: string | undefined;
+    let permissions: RolePermissions | null = null;
+
+    const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
+    if (cached && cached.u === user.id && cached.o) {
+      role = cached.r;
+      customRoleId = cached.c ?? undefined;
+      permissions = cached.p ?? null;
+    } else {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, company_id")
+        .eq("id", user.id)
+        .single();
+
+      role = profile?.role as string | undefined;
+
+      if (profile?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("settings")
+          .eq("id", profile.company_id)
+          .maybeSingle();
+        const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+        customRoleId = readMemberCustomRoles(settings)[user.id];
+        if (settings?.role_permissions && typeof settings.role_permissions === "object") {
+          permissions = mergeRolePermissions(settings.role_permissions as RolePermissions);
+        }
+      }
+
+      if (role) {
+        try {
+          const encoded = encodeAuthz({
+            u: user.id,
+            r: role,
+            c: customRoleId ?? null,
+            o: profile?.company_id ?? null,
+            p: permissions,
+          });
+          if (encoded.length < 3500) {
+            supabaseResponse.cookies.set(AUTHZ_COOKIE, encoded, {
+              path: "/",
+              httpOnly: true,
+              sameSite: "lax",
+              secure: process.env.NODE_ENV === "production",
+              maxAge: AUTHZ_MAX_AGE_SEC,
+            });
+          }
+        } catch {
+          // ignore encode errors
+        }
+      }
+    }
+
     if (needsRoleCheck) {
-      // 壊れた旧 cookie（bl_rp）は毎回消す
-      if (request.cookies.has(LEGACY_ROLE_PERM_COOKIE)) {
-        supabaseResponse.cookies.set(LEGACY_ROLE_PERM_COOKIE, "", { path: "/", maxAge: 0 });
-      }
-
-      let role: string | undefined;
-      let customRoleId: string | undefined;
-      let permissions: RolePermissions | null = null;
-
-      const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
-      if (cached && cached.u === user.id) {
-        role = cached.r;
-        customRoleId = cached.c ?? undefined;
-        // キャッシュは merge 済み。再 merge すると _v 欠落で HEAL が権限を復元してしまう
-        permissions = cached.p ?? null;
-      } else {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role, company_id")
-          .eq("id", user.id)
-          .single();
-
-        role = profile?.role as string | undefined;
-
-        if (profile?.company_id) {
-          const { data: company } = await supabase
-            .from("companies")
-            .select("settings")
-            .eq("id", profile.company_id)
-            .maybeSingle();
-          const settings = (company?.settings ?? null) as Record<string, unknown> | null;
-          customRoleId = readMemberCustomRoles(settings)[user.id];
-          if (settings?.role_permissions && typeof settings.role_permissions === "object") {
-            // 旧スキーマは merge で営業・経営層などを補完してから判定
-            permissions = mergeRolePermissions(settings.role_permissions as RolePermissions);
-          }
-        }
-
-        if (role) {
-          try {
-            const encoded = encodeAuthz({ u: user.id, r: role, c: customRoleId ?? null, p: permissions });
-            // Cookie 上限対策（大きすぎる場合はキャッシュしない）
-            if (encoded.length < 3500) {
-              supabaseResponse.cookies.set(AUTHZ_COOKIE, encoded, {
-                path: "/",
-                httpOnly: true,
-                sameSite: "lax",
-                secure: process.env.NODE_ENV === "production",
-                maxAge: AUTHZ_MAX_AGE_SEC,
-              });
-            }
-          } catch {
-            // ignore encode errors
-          }
-        }
-      }
-
       if (!role || !canAccessPathWithPermissions(pathname, role, permissions, customRoleId)) {
         const url = request.nextUrl.clone();
         url.pathname = "/unauthorized";
@@ -332,40 +345,4 @@ export async function updateSession(request: NextRequest) {
   }
 
   return supabaseResponse;
-}
-
-/** 旧実装の肥大 cookie（誤拒否の原因） */
-const LEGACY_ROLE_PERM_COOKIE = "bl_rp";
-/** role + 権限マトリクスの短命キャッシュ（毎リクエストの DB 2回を避ける） */
-const AUTHZ_COOKIE = "bl_az";
-const AUTHZ_MAX_AGE_SEC = 60;
-
-type AuthzCache = {
-  u: string;
-  r: string;
-  c?: string | null;
-  p: RolePermissions | null;
-};
-
-function encodeAuthz(data: AuthzCache): string {
-  const json = JSON.stringify(data);
-  const bytes = new TextEncoder().encode(json);
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function decodeAuthz(raw: string): AuthzCache | null {
-  try {
-    const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
-    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
-    const bin = atob(b64 + pad);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const data = JSON.parse(new TextDecoder().decode(bytes)) as AuthzCache;
-    if (!data?.u || typeof data.r !== "string") return null;
-    return data;
-  } catch {
-    return null;
-  }
 }

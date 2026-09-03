@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import type { Construction, ConstructionTask, ContractorOrder, EstimateCategory, EstimateItem } from "@/lib/database.types";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -63,6 +64,10 @@ async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>
 }
 
 export async function getConstructions() {
+  return cachedByCompany("constructions", CACHE_TTL.list, loadConstructions);
+}
+
+async function loadConstructions() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("constructions")
@@ -318,6 +323,8 @@ export async function createConstruction(input: {
     deal_id: input.deal_id,
   });
 
+  await invalidateMyCompanyCache();
+
   if (input.assigned_to) {
     try {
       await notifyConstructionAssignee(supabase, {
@@ -339,6 +346,7 @@ export async function createConstruction(input: {
     }
   }
 
+  await invalidateMyCompanyCache();
   return data as Construction;
 }
 
@@ -447,6 +455,7 @@ export async function deleteConstruction(id: string) {
 
   const { error } = await supabase.from("constructions").delete().eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }
 
 export async function createConstructionTask(constructionId: string, input: { name: string; start_date?: string; end_date?: string; assigned_to?: string; description?: string; contractor_name?: string; depends_on_task_id?: string }) {

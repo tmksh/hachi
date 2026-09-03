@@ -6,8 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import type { Profile, Company } from "@/lib/database.types";
 import { pruneMemberCustomRoles, readMemberCustomRoles } from "@/lib/role-assignment";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export async function getProfiles() {
+  return cachedByCompany("profiles", CACHE_TTL.profiles, loadProfiles);
+}
+
+async function loadProfiles() {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
@@ -49,6 +54,7 @@ export async function updateProfile(input: Partial<Pick<Profile, "display_name" 
     .select()
     .single();
   if (error) throw error;
+  await invalidateMyCompanyCache();
   return data as Profile;
 }
 
@@ -87,7 +93,7 @@ const loadCompanySettings = cache(async (): Promise<Record<string, unknown> | nu
 
 /** 会社の settings のみを取得する軽量版（権限・会計設定の参照用） */
 export async function getCompanySettings(): Promise<Record<string, unknown> | null> {
-  return loadCompanySettings();
+  return cachedByCompany("company-settings", CACHE_TTL.settings, loadCompanySettings);
 }
 
 /**
@@ -181,6 +187,7 @@ export async function updateCompany(input: {
     .single();
   if (error) throw error;
 
+  await invalidateMyCompanyCache();
   // middleware の権限キャッシュを破棄（次リクエストで再取得）
   if (input.role_permissions !== undefined) {
     const jar = await cookies();

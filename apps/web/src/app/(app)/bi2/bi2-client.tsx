@@ -552,7 +552,7 @@ export function Bi2Client({
     document.addEventListener("visibilitychange", onVisibility);
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") void loadBiData(true, false);
-    }, 120000);
+    }, 300000);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       clearInterval(interval);

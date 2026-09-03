@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { Estimate, EstimateCategory, EstimateItem } from "@/lib/database.types";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export type EstimateListRow = {
   id: string;
@@ -27,6 +28,10 @@ export type EstimateListRow = {
 };
 
 export async function getEstimates(): Promise<EstimateListRow[]> {
+  return cachedByCompany("estimates", CACHE_TTL.list, loadEstimates);
+}
+
+async function loadEstimates(): Promise<EstimateListRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("estimates")
@@ -241,6 +246,7 @@ export async function createEstimate(
     status: estimate.status,
   });
 
+  await invalidateMyCompanyCache();
   return estimate as Estimate;
 }
 
@@ -410,6 +416,7 @@ export async function copyEstimate(sourceId: string) {
     );
   }
 
+  await invalidateMyCompanyCache();
   return estimate as Estimate;
 }
 
@@ -419,6 +426,7 @@ export async function deleteEstimate(id: string) {
   await supabase.from("estimate_categories").delete().eq("estimate_id", id);
   const { error } = await supabase.from("estimates").delete().eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }
 
 /** 見積改訂版を作成（2回目以降は元見積をコピーして version+1） */

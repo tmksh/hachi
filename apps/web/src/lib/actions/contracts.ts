@@ -3,8 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { Contract } from "@/lib/database.types";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export async function getContracts() {
+  return cachedByCompany("contracts", CACHE_TTL.list, loadContracts);
+}
+
+async function loadContracts() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("contracts")
@@ -114,6 +119,7 @@ export async function createContract(input: {
     status: data.status,
   });
 
+  await invalidateMyCompanyCache();
   return data as Contract;
 }
 
@@ -136,6 +142,7 @@ export async function updateContract(id: string, input: Partial<Omit<Contract, "
     });
   }
 
+  await invalidateMyCompanyCache();
   return data as Contract;
 }
 
@@ -144,4 +151,5 @@ export async function deleteContract(id: string) {
   await supabase.from("constructions").update({ contract_id: null }).eq("contract_id", id);
   const { error } = await supabase.from("contracts").delete().eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import type { AttendanceEntry } from "@/lib/database.types";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 /** JST の YYYY-MM-DD を返す */
 function getTodayJST(): string {
@@ -89,6 +90,7 @@ export async function clockIn() {
     .select()
     .single();
   if (error) throw error;
+  await invalidateMyCompanyCache();
   return data as AttendanceEntry;
 }
 
@@ -115,6 +117,7 @@ export async function clockOut() {
     .select()
     .single();
   if (error) throw error;
+  await invalidateMyCompanyCache();
   return data as AttendanceEntry;
 }
 
@@ -196,6 +199,10 @@ export async function updateLeaveType(id: string, leaveType: string) {
 }
 
 export async function getTodayAttendance() {
+  return cachedByCompany("today-attendance", CACHE_TTL.dashboard, loadTodayAttendance, true);
+}
+
+async function loadTodayAttendance() {
   const supabase = await createClient();
   const user = await getAuthUser();
   if (!user) return null;

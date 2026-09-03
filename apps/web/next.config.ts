@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
     // ページ間ナビゲーション時にクライアント側ルーターキャッシュを再利用し、
     // 直近訪問したページへの戻りを高速化する（秒）
     staleTimes: {
-      dynamic: 30,
-      static: 180,
+      dynamic: 180,
+      static: 300,
     },
   },
 };

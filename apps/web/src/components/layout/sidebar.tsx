@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, memo, useRef } from "react";
 import Link from "next/link";
 import { BrandLogo, BrandMark } from "@/components/layout/brand-logo";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, ROLE_LABELS } from "@/lib/constants";
@@ -131,6 +131,7 @@ interface SidebarProps {
 
 export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInternalChatOpen }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   /** 折りたたみ時: 選択中グループの詳細メニュー */
   const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
@@ -331,7 +332,14 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   );
 
   const toggleGroup = (key: string) => {
-    setOpenGroup((prev) => (prev === key ? null : key));
+    setOpenGroup((prev) => {
+      const next = prev === key ? null : key;
+      if (next) {
+        const group = visibleGroups.find((g) => g.key === next);
+        group?.items.forEach((item) => router.prefetch(item.href));
+      }
+      return next;
+    });
   };
 
   const sidebarActiveItem = "text-white font-medium shadow-sm";

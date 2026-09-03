@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS, buildFiscalMonthLabels, normalizeBudgetMan } from "@/lib/bi-utils";
 import { getCompanyFiscalMonthStart } from "@/lib/actions/profiles";
+import { CACHE_TTL, cachedByCompany, getAuthContext, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 import type {
   BiAnnualSettings,
   BiBudgetChangeLog,
@@ -61,6 +62,10 @@ const DEFAULT_LOCATION_NAMES = ["本社", "東京支店", "大阪支店", "名�
 
 /** 拠点マスタ一覧。未登録ならデフォルト4拠点をseed（No.80） */
 export async function getCompanyLocations(): Promise<CompanyLocation[]> {
+  return cachedByCompany("locations", CACHE_TTL.locations, loadCompanyLocations);
+}
+
+async function loadCompanyLocations(): Promise<CompanyLocation[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -147,6 +152,7 @@ export async function createCompanyLocation(name: string) {
     if (error.code === "23505") throw new Error("同じ名前の拠点がすでにあります");
     throw error;
   }
+  await invalidateMyCompanyCache();
   return data as CompanyLocation;
 }
 
@@ -164,6 +170,7 @@ export async function updateCompanyLocation(id: string, name: string) {
     if (error.code === "23505") throw new Error("同じ名前の拠点がすでにあります");
     throw error;
   }
+  await invalidateMyCompanyCache();
   return data as CompanyLocation;
 }
 
@@ -174,20 +181,59 @@ export async function deleteCompanyLocation(id: string) {
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }
 
 async function getCompanyId() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { supabase, companyId: null as string | null };
+  const ctx = await getAuthContext();
+  return { supabase, companyId: ctx.companyId };
+}
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .single();
+function collectNeededSources(config: BiCompanyConfig) {
+  const types = new Set<string>();
+  const dealStages = new Set<string>();
+  const contractStatuses = new Set<string>();
+  const constructionStatuses = new Set<string>();
+  const invoiceStatuses = new Set<string>();
 
-  return { supabase, companyId: profile?.company_id ?? null };
+  const add = (sources: BiDataSourceFilter[]) => {
+    for (const source of sources) {
+      types.add(source.type);
+      if (source.type === "deals") {
+        if (!source.stages?.length) dealStages.add("*");
+        else source.stages.forEach((s) => dealStages.add(s));
+      }
+      if (source.type === "contracts") {
+        if (!source.statuses?.length) contractStatuses.add("*");
+        else source.statuses.forEach((s) => contractStatuses.add(s));
+      }
+      if (source.type === "constructions") {
+        if (!source.statuses?.length) constructionStatuses.add("*");
+        else source.statuses.forEach((s) => constructionStatuses.add(s));
+      }
+      if (source.type === "invoices") {
+        if (!source.statuses?.length) invoiceStatuses.add("*");
+        else source.statuses.forEach((s) => invoiceStatuses.add(s));
+      }
+    }
+  };
+
+  add(config.actual_sources);
+  for (const tier of config.forecast_tiers) {
+    if (tier.enabled) add(tier.sources);
+  }
+
+  const toFilter = (set: Set<string>) =>
+    set.has("*") ? undefined : set.size > 0 ? [...set] : undefined;
+
+  return {
+    types,
+    dealStages: toFilter(dealStages),
+    contractStatuses: toFilter(contractStatuses),
+    constructionStatuses: toFilter(constructionStatuses),
+    invoiceStatuses: toFilter(invoiceStatuses),
+  };
 }
 
 async function loadCompanyRolePermissions(
@@ -235,6 +281,10 @@ async function roleCanViewBiCustomerName(
 
 // ── 会社別 BI 分析設定 ────────────────────────────────────────────────
 export async function getBiCompanyConfig(): Promise<BiCompanyConfig> {
+  return cachedByCompany("bi-config", CACHE_TTL.settings, loadBiCompanyConfig);
+}
+
+async function loadBiCompanyConfig(): Promise<BiCompanyConfig> {
   const { supabase, companyId } = await getCompanyId();
   if (!companyId) return DEFAULT_BI_COMPANY_CONFIG;
 
@@ -260,17 +310,21 @@ export async function saveBiCompanyConfig(config: BiCompanyConfig): Promise<{ ok
     }, { onConflict: "company_id" });
 
   if (error) return { ok: false, error: error.message };
+  await invalidateMyCompanyCache();
   return { ok: true };
 }
 
 // ── 現在の年度設定を取得 ─────────────────────────────────────────────
 export async function getBiSettings(fiscalYear?: number): Promise<BiAnnualSettings | null> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
+  const ctx = await getAuthContext();
+  if (!ctx.user) return null;
   const fiscalMonthStart = await getCompanyFiscalMonthStart();
   const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
+  return cachedByCompany(`bi-settings:${year}`, CACHE_TTL.bi, () => loadBiSettings(year));
+}
+
+async function loadBiSettings(year: number): Promise<BiAnnualSettings | null> {
+  const supabase = await createClient();
 
   const [{ data, error }, locations] = await Promise.all([
     supabase
@@ -546,6 +600,7 @@ export async function saveBiSettings(input: {
     if (locErr) return { ok: false, error: locErr.message };
   }
 
+  await invalidateMyCompanyCache();
   return { ok: true };
 }
 
@@ -580,6 +635,7 @@ export async function releaseReserve(
     .eq("fiscal_year", fiscalYear);
 
   if (error) return { ok: false, error: error.message };
+  await invalidateMyCompanyCache();
   return { ok: true };
 }
 
@@ -761,37 +817,68 @@ function collectRecords(
 }
 
 export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | null> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  // 会計年度設定と BI 設定は互いに独立しているため並列取得する
-  const [fiscalMonthStart, companyConfig] = await Promise.all([
-    getCompanyFiscalMonthStart(),
-    getBiCompanyConfig(),
-  ]);
-  const MONTH_LABELS = buildFiscalMonthLabels(fiscalMonthStart);
-
+  const ctx = await getAuthContext();
+  if (!ctx.user) return null;
+  const fiscalMonthStart = await getCompanyFiscalMonthStart();
   const year = fiscalYear ?? getCurrentFiscalYear(fiscalMonthStart);
-  const { start, end } = fiscalYearRange(year, fiscalMonthStart);
+  return cachedByCompany(`bi-actuals:${year}`, CACHE_TTL.bi, () => loadBiActuals(year, fiscalMonthStart));
+}
 
-  // 商談・契約・請求は年度で絞る。工事は「年度重複 + 当年請求に紐づくID」だけに限定して全件取得を避ける。
+async function loadBiActuals(year: number, fiscalMonthStart: number): Promise<BiActuals | null> {
+  const supabase = await createClient();
+  const companyConfig = await getBiCompanyConfig();
+  const MONTH_LABELS = buildFiscalMonthLabels(fiscalMonthStart);
+  const { start, end } = fiscalYearRange(year, fiscalMonthStart);
+  const needed = collectNeededSources(companyConfig);
+
   const constructionSelect =
     "id, department_name, location_id, status, order_amount, actual_cost, budget_cost, end_date, start_date";
-  const [{ data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }, { data: constructionsInYear }, locations] = await Promise.all([
-    supabase
+
+  const dealsQuery = (() => {
+    if (!needed.types.has("deals")) return Promise.resolve({ data: [] as never[] });
+    const q = supabase
       .from("deals")
       .select("id, department_name, stage, value, expected_close_date")
-      .or(`expected_close_date.is.null,and(expected_close_date.gte.${start},expected_close_date.lte.${end})`),
-    supabase
+      .or(`expected_close_date.is.null,and(expected_close_date.gte.${start},expected_close_date.lte.${end})`);
+    return needed.dealStages ? q.in("stage", needed.dealStages) : q;
+  })();
+
+  const contractsQuery = (() => {
+    if (!needed.types.has("contracts")) return Promise.resolve({ data: [] as never[] });
+    const q = supabase
       .from("contracts")
       .select("id, department_name, status, amount, contract_date, end_date")
-      .or(`contract_date.is.null,end_date.is.null,and(contract_date.gte.${start},contract_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end})`),
-    supabase
+      .or(`and(contract_date.gte.${start},contract_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end})`);
+    return needed.contractStatuses ? q.in("status", needed.contractStatuses) : q;
+  })();
+
+  const invoicesQuery = (() => {
+    if (!needed.types.has("invoices")) return Promise.resolve({ data: [] as never[] });
+    const q = supabase
       .from("invoices")
       .select("id, total, status, paid_at, construction_id")
       .gte("paid_at", start)
-      .lte("paid_at", end),
+      .lte("paid_at", end);
+    return needed.invoiceStatuses ? q.in("status", needed.invoiceStatuses) : q;
+  })();
+
+  const constructionsQuery = (() => {
+    if (!needed.types.has("constructions") && !needed.types.has("invoices")) {
+      return Promise.resolve({ data: [] as never[] });
+    }
+    const q = supabase
+      .from("constructions")
+      .select(constructionSelect)
+      .or(
+        `and(start_date.lte.${end},end_date.gte.${start}),and(start_date.gte.${start},start_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end})`,
+      );
+    return needed.constructionStatuses ? q.in("status", needed.constructionStatuses) : q;
+  })();
+
+  const [{ data: deals }, { data: contracts }, { data: invoices }, { data: settings }, { data: changeLogs }, { data: constructionsInYear }, locations] = await Promise.all([
+    dealsQuery,
+    contractsQuery,
+    invoicesQuery,
     supabase
       .from("bi_annual_settings")
       .select("overhead_budget, sga_budget, department_targets:bi_department_targets(department_name, sort_order)")
@@ -802,12 +889,7 @@ export async function getBiActuals(fiscalYear?: number): Promise<BiActuals | nul
       .select("field_name, old_value, new_value, effective_from")
       .eq("fiscal_year", year)
       .order("effective_from", { ascending: true }),
-    supabase
-      .from("constructions")
-      .select(constructionSelect)
-      .or(
-        `and(start_date.lte.${end},end_date.gte.${start}),and(start_date.gte.${start},start_date.lte.${end}),and(end_date.gte.${start},end_date.lte.${end}),start_date.is.null,end_date.is.null`,
-      ),
+    constructionsQuery,
     getCompanyLocations(),
   ]);
 
@@ -1211,6 +1293,10 @@ export async function getBiHeadcount(): Promise<BiHeadcountSummary> {
 }
 
 export async function getBiProspectSummary(): Promise<BiProspectSummary> {
+  return cachedByCompany("bi-prospect", CACHE_TTL.bi, loadBiProspectSummary);
+}
+
+async function loadBiProspectSummary(): Promise<BiProspectSummary> {
   const [{ supabase, companyId }, config] = await Promise.all([
     getCompanyId(),
     getBiCompanyConfig(),

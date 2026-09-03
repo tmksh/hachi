@@ -5,6 +5,7 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import type { Customer } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
 import { getCurrentFiscalYear, DEFAULT_DEPARTMENTS } from "@/lib/bi-utils";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 const CUSTOMER_LIST_SELECT =
   "id, company_id, name, company_name, email, phone, customer_type, status, source, assigned_to, address, department, prospect_grade, inquiry_category, inquiry_date, created_at, updated_at, deleted_at, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
@@ -23,11 +24,24 @@ export async function getCustomers(options?: {
   limit?: number;
   search?: string;
 }): Promise<CustomerListResult> {
-  const supabase = await createClient();
   const page = Math.max(1, options?.page ?? 1);
   const limit = Math.min(100, Math.max(1, options?.limit ?? 50));
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
+  const search = options?.search?.trim() ?? "";
+  return cachedByCompany(
+    `customers:${page}:${limit}:${search}`,
+    CACHE_TTL.list,
+    () => loadCustomers({ page, limit, search }),
+  );
+}
+
+async function loadCustomers(options: {
+  page: number;
+  limit: number;
+  search: string;
+}): Promise<CustomerListResult> {
+  const supabase = await createClient();
+  const from = (options.page - 1) * options.limit;
+  const to = from + options.limit - 1;
 
   let query = supabase
     .from("customers")
@@ -36,9 +50,8 @@ export async function getCustomers(options?: {
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  const search = options?.search?.trim();
-  if (search) {
-    const q = `%${search}%`;
+  if (options.search) {
+    const q = `%${options.search}%`;
     query = query.or(`name.ilike.${q},company_name.ilike.${q},email.ilike.${q}`);
   }
 
@@ -48,13 +61,17 @@ export async function getCustomers(options?: {
   return {
     customers: (data ?? []) as unknown as CustomerListResult["customers"],
     total: count ?? 0,
-    page,
-    limit,
+    page: options.page,
+    limit: options.limit,
   };
 }
 
 /** タブ表示用の件数（RPC 1本） */
 export async function getCustomerCounts() {
+  return cachedByCompany("customer-counts", CACHE_TTL.counts, loadCustomerCounts);
+}
+
+async function loadCustomerCounts() {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_customer_counts");
   if (error) throw error;
@@ -205,6 +222,7 @@ export async function createCustomer(
       name: updated.name,
       linked_from_inquiry: true,
     });
+    await invalidateMyCompanyCache();
     return { ...updated, _linkedExisting: true } as Customer & { _linkedExisting?: boolean };
   }
 
@@ -248,6 +266,7 @@ export async function createCustomer(
     }
   }
 
+  await invalidateMyCompanyCache();
   return data as Customer;
 }
 
@@ -325,6 +344,7 @@ export async function updateCustomer(id: string, input: Partial<Omit<Customer, "
     status: data.status,
     tags: data.tags,
   });
+  await invalidateMyCompanyCache();
   return data as Customer;
 }
 
@@ -380,6 +400,7 @@ export async function deleteCustomer(id: string) {
   if (existing) {
     void dispatchWebhook(existing.company_id, "customer.deleted", { id, name: existing.name });
   }
+  await invalidateMyCompanyCache();
 }
 
 type UnfollowedRpcRow = {

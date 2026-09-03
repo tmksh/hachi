@@ -7,8 +7,13 @@ import {
   deleteCraftsmanMasterItem,
   listCraftsmanMasterItems,
 } from "@/lib/craftsmen-master";
+import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export async function getCraftsmen() {
+  return cachedByCompany("craftsmen", CACHE_TTL.list, loadCraftsmen);
+}
+
+async function loadCraftsmen() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("craftsmen")
@@ -34,6 +39,10 @@ const SYSTEM_CRAFTSMEN: Array<{
 
 /** システム予約業者が無ければ作成する */
 export async function ensureSystemCraftsmen(): Promise<void> {
+  return cachedByCompany("system-craftsmen", CACHE_TTL.systemSeed, seedSystemCraftsmen);
+}
+
+async function seedSystemCraftsmen(): Promise<void> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
@@ -135,9 +144,11 @@ export async function createCraftsman(input: Omit<Craftsman, "id" | "company_id"
       .select()
       .single();
     if (retry.error) throw retry.error;
+    await invalidateMyCompanyCache();
     return retry.data as Craftsman;
   }
   if (error) throw error;
+  await invalidateMyCompanyCache();
   return data as Craftsman;
 }
 
@@ -192,6 +203,7 @@ export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman,
     return fallback as Craftsman;
   }
   if (error) throw error;
+  await invalidateMyCompanyCache();
   return data as Craftsman;
 }
 
@@ -206,6 +218,7 @@ export async function deleteCraftsman(id: string) {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+  await invalidateMyCompanyCache();
 }
 
 // ── 職人マスタ CRUD ─────────────────────────
