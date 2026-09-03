@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,16 +17,36 @@ import {
 import { ArrowLeft, FileText, Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   getPdfFormTemplates,
   deletePdfFormTemplate,
 } from "@/lib/actions/pdf-form-templates";
-import type { PdfFormTemplate } from "@/lib/pdf-form-template";
+import {
+  PDF_FORM_DOC_TYPE_LABELS,
+  PDF_FORM_DOC_TYPES,
+  type PdfFormDocType,
+  type PdfFormTemplate,
+} from "@/lib/pdf-form-template";
 
 export function PdfBuilderClient({ initialTemplates }: { initialTemplates: PdfFormTemplate[] }) {
   const router = useRouter();
   const [templates, setTemplates] = useState<PdfFormTemplate[]>(initialTemplates);
   const [loading, setLoading] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [docType, setDocType] = useState<PdfFormDocType | "all">("all");
+  const visible = useMemo(
+    () => templates.filter((t) => docType === "all" || t.docType === docType),
+    [templates, docType],
+  );
+  const newHref = docType === "all"
+    ? "/settings/pdf-builder/new"
+    : `/settings/pdf-builder/new?type=${docType}`;
 
   const load = () => {
     setLoading(true);
@@ -64,15 +84,28 @@ export function PdfBuilderClient({ initialTemplates }: { initialTemplates: PdfFo
       {/* タイトル行 */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold">契約書テンプレート一覧</h2>
+          <h2 className="text-base font-semibold">PDFテンプレート一覧</h2>
           <p className="text-sm text-muted-foreground">
-            PDFをインポートして入力項目を配置し、契約書テンプレートを作成します
+            PDFをインポートして入力項目を配置し、書類テンプレートを作成します
           </p>
         </div>
-        <Button onClick={() => router.push("/settings/pdf-builder/new")}>
-          <Plus className="h-4 w-4 mr-1" />
-          新規テンプレート
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Select value={docType} onValueChange={(v) => setDocType(v as PdfFormDocType | "all")}>
+            <SelectTrigger className="w-[160px] shrink-0" aria-label="書類種別">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">すべて</SelectItem>
+              {PDF_FORM_DOC_TYPES.map((k) => (
+                <SelectItem key={k} value={k}>{PDF_FORM_DOC_TYPE_LABELS[k]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => router.push(newHref)}>
+            <Plus className="h-4 w-4 mr-1" />
+            新規テンプレート
+          </Button>
+        </div>
       </div>
 
       {/* 一覧 */}
@@ -82,7 +115,7 @@ export function PdfBuilderClient({ initialTemplates }: { initialTemplates: PdfFo
             <Skeleton key={i} className="h-32 rounded-lg" />
           ))}
         </div>
-      ) : templates.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
           <FileText className="h-10 w-10 text-muted-foreground/50" />
           <div className="text-sm font-medium text-muted-foreground">テンプレートがありません</div>
@@ -92,7 +125,7 @@ export function PdfBuilderClient({ initialTemplates }: { initialTemplates: PdfFo
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {templates.map((t) => (
+          {visible.map((t) => (
             <div
               key={t.id}
               className="group rounded-lg border bg-card p-4 transition-shadow hover:shadow-sm"
@@ -110,7 +143,7 @@ export function PdfBuilderClient({ initialTemplates }: { initialTemplates: PdfFo
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <div className="text-xs text-muted-foreground">
-                  {t.pageCount}ページ ・ {t.fields.length}項目
+                  {PDF_FORM_DOC_TYPE_LABELS[t.docType]} ・ {t.pageCount}ページ ・ {t.fields.length}項目
                 </div>
                 <div className="flex items-center gap-1">
                   <Button

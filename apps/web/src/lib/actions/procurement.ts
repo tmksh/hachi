@@ -33,14 +33,25 @@ export type ProcurementAttachment = {
   size?: number;
 };
 
+const CONSTRUCTION_SELECT =
+  "id, title, construction_no, assigned_to, assignee:profiles!constructions_assigned_to_fkey(id, display_name)";
+
 const ORDER_SELECT = `
   *,
   craftsman:craftsmen(*),
-  construction:constructions(id, title, construction_no)
+  construction:constructions(${CONSTRUCTION_SELECT})
 `;
 
+const ORDER_SELECT_FALLBACK = `*, craftsman:craftsmen(id, name, company_name, email, kind, invoice_channel), construction:constructions(${CONSTRUCTION_SELECT})`;
+
 export type ProcurementOrder = ContractorOrder & {
-  construction?: { id: string; title: string; construction_no: string } | null;
+  construction?: {
+    id: string;
+    title: string;
+    construction_no: string;
+    assigned_to?: string | null;
+    assignee?: { id: string; display_name: string | null } | { id: string; display_name: string | null }[] | null;
+  } | null;
 };
 
 async function getAuthContext() {
@@ -325,7 +336,7 @@ export async function getCompanyOrders(): Promise<ProcurementOrder[]> {
   if (error) {
     const { data: fallback, error: fallbackErr } = await supabase
       .from("contractor_orders")
-      .select("*, craftsman:craftsmen(id, name, company_name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
+      .select(ORDER_SELECT_FALLBACK)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (fallbackErr) throw new Error(error.message);
@@ -352,7 +363,7 @@ export async function updateOrderProcurement(
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", orderId)
       .eq("company_id", companyId)
-      .select("*, craftsman:craftsmen(id, name, company_name, email, kind, invoice_channel), construction:constructions(id, title, construction_no)")
+      .select(ORDER_SELECT_FALLBACK)
       .single();
     if (fallbackErr) {
       throw new Error(

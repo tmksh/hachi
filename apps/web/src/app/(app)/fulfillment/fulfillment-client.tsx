@@ -71,6 +71,13 @@ function poLabel(o: ProcurementOrder) {
   return o.lot_no && o.lot_no > 1 ? `${base}-${o.lot_no}` : base;
 }
 
+function orderAssignee(o: ProcurementOrder): { id: string; name: string } | null {
+  const raw = o.construction?.assignee;
+  const a = Array.isArray(raw) ? raw[0] ?? null : raw ?? null;
+  if (a?.id) return { id: a.id, name: a.display_name?.trim() || "担当者" };
+  return null;
+}
+
 function toastInvoiceMail(res: { emailSent?: boolean; emailTo?: string; emailError?: string; invoiceUrl?: string; url?: string }) {
   const path = res.invoiceUrl ?? res.url;
   const url = path ? `${window.location.origin}${path}` : "";
@@ -102,6 +109,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
   const [orders, setOrders] = useState(initialOrders);
   const [project, setProject] = useState("all");
   const [vendor, setVendor] = useState("all");
+  const [assignee, setAssignee] = useState("all");
   const [status, setStatus] = useState<string>("active");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -123,6 +131,9 @@ export function FulfillmentClient({ initialOrders }: Props) {
       if (status !== "all" && status !== "active" && ls !== status) return false;
       if (project !== "all" && o.construction_id !== project) return false;
       if (vendor !== "all" && (o.craftsman?.name ?? "") !== vendor) return false;
+      const assigned = orderAssignee(o);
+      if (assignee === "unassigned" && assigned) return false;
+      if (assignee !== "all" && assignee !== "unassigned" && assigned?.id !== assignee) return false;
       if (paperOnly && !isPaperInvoice(o.craftsman)) return false;
       const due = o.completion_date ?? o.end_date ?? "";
       if (from && due && due < from) return false;
@@ -154,7 +165,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av).localeCompare(String(bv), "ja") * dir;
     });
-  }, [orders, project, vendor, status, from, to, paperOnly, sortKey, sortDir]);
+  }, [orders, project, vendor, assignee, status, from, to, paperOnly, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -184,6 +195,14 @@ export function FulfillmentClient({ initialOrders }: Props) {
     () => [...new Set(orders.map((o) => o.craftsman?.name).filter(Boolean))] as string[],
     [orders],
   );
+  const assignees = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of orders) {
+      const a = orderAssignee(o);
+      if (a) m.set(a.id, a.name);
+    }
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "ja"));
+  }, [orders]);
 
   const replace = (updated: ProcurementOrder, extra?: ProcurementOrder) => {
     setOrders((prev) => {
@@ -241,9 +260,15 @@ export function FulfillmentClient({ initialOrders }: Props) {
       </div>
 
       <div className="rounded-xl border bg-card p-3">
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <FilterSelect label="案件" value={project} onChange={setProject} options={[["all", "すべて"], ...projects]} />
           <FilterSelect label="業者" value={vendor} onChange={setVendor} options={[["all", "すべて"], ...vendors.map((v) => [v, v] as [string, string])]} />
+          <FilterSelect
+            label="担当者"
+            value={assignee}
+            onChange={setAssignee}
+            options={[["all", "すべて"], ["unassigned", "未割り当て"], ...assignees]}
+          />
           <FilterSelect
             label="ステータス"
             value={status}
