@@ -335,7 +335,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
             className={`rounded-xl border p-3 text-left ${format === "zengin" ? "border-[var(--brand-dark)] bg-[var(--brand-accent)]" : "hover:bg-muted/40"}`}
           >
             <p className="font-medium text-sm">全銀フォーマット</p>
-            <p className="text-xs text-muted-foreground mt-0.5">経理向け。ネットバンキング取込用。同一業者の複数請求を1行に合算します。</p>
+            <p className="text-xs text-muted-foreground mt-0.5">全銀協 AP-I-12 総合振込。ネットバンキング取込用。同一業者の複数請求を1行に合算します。</p>
           </button>
           <button
             type="button"
@@ -400,7 +400,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
           </p>
           {!isZenginSenderReady(sender) && (
             <p className="text-xs text-red-700">
-              依頼人コード・カナ名・銀行コード・支店コード・口座が揃うと、先方サンプルと同じ全銀形式で出せます。
+              依頼人コード・カナ名・銀行コード・支店コード・口座が揃うと、全銀協規定の総合振込形式で出せます。
             </p>
           )}
           <div className="grid sm:grid-cols-2 gap-3">

@@ -422,6 +422,15 @@ const KANA_TO_HW: Record<string, string> = {
   "（": "(", "）": ")",
 };
 
+const HW_SMALL_TO_LARGE: Record<string, string> = {
+  ｧ: "ｱ", ｨ: "ｲ", ｩ: "ｳ", ｪ: "ｴ", ｫ: "ｵ",
+  ｬ: "ﾔ", ｭ: "ﾕ", ｮ: "ﾖ", ｯ: "ﾂ",
+};
+
+/** 付録1 注1。name=依頼人/受取人、place=銀行名/支店名。ｦ・長音ｰは総合振込で使用可 */
+const ZENGIN_NAME_CHARS = /[0-9A-Zｦｰｱ-ﾝﾞﾟ ()\-\.]/;
+const ZENGIN_PLACE_CHARS = /[0-9A-Zｦｰｱ-ﾝﾞﾟ \-]/;
+
 export function toZenginKana(input: string): string {
   let out = "";
   for (const ch of input) {
@@ -439,28 +448,60 @@ export function toZenginKana(input: string): string {
       out += String.fromCharCode(code - 0xfee0);
       continue;
     }
+    if (code >= 0x61 && code <= 0x7a) {
+      out += String.fromCharCode(code - 0x20);
+      continue;
+    }
     if (code < 0x80 || (code >= 0xff61 && code <= 0xff9f)) {
       out += ch;
     }
   }
+  return [...out].map((ch) => HW_SMALL_TO_LARGE[ch] ?? ch).join("");
+}
+
+function sanitizeZenginText(input: string, mode: "name" | "place"): string {
+  const allow = mode === "place" ? ZENGIN_PLACE_CHARS : ZENGIN_NAME_CHARS;
+  let out = "";
+  for (const ch of toZenginKana(input)) {
+    if (allow.test(ch)) out += ch;
+  }
   return out;
 }
 
-function padKana(input: string, len: number): string {
-  return pad(toZenginKana(input), len);
+function padKana(input: string, len: number, mode: "name" | "place" = "name"): string {
+  return pad(sanitizeZenginText(input, mode), len);
 }
 
-function zenginAccountTypeCode(type: string | undefined): "1" | "2" {
+function nField(value: string | null | undefined, len: number): string {
+  return digitField(value, len) ?? "0".repeat(len);
+}
+
+function omitSp(len: number): string {
+  return " ".repeat(len);
+}
+
+/** ヘッダー預金種目。AP-I-12 は 1普通 2当座 9その他 */
+function senderAccountTypeCode(type: string | undefined): "1" | "2" | "9" {
   const t = (type ?? "").trim();
   if (t === "2" || t.includes("当座")) return "2";
+  if (t === "9" || t.includes("その他") || t.includes("貯蓄")) return "9";
+  return "1";
+}
+
+/** 明細預金種目。1普通 2当座 4貯蓄 9その他 */
+function payeeAccountTypeCode(type: string | undefined): "1" | "2" | "4" | "9" {
+  const t = (type ?? "").trim();
+  if (t === "2" || t.includes("当座")) return "2";
+  if (t === "4" || t.includes("貯蓄")) return "4";
+  if (t === "9" || t.includes("その他")) return "9";
   return "1";
 }
 
 function mmdd(isoDate: string): string {
   const compact = isoDate.replaceAll("-", "");
-  if (compact.length >= 8) return compact.slice(4, 8);
-  if (compact.length === 4) return compact;
-  return pad(compact, 4);
+  if (compact.length >= 8 && /^\d+$/.test(compact)) return compact.slice(4, 8);
+  if (/^\d{4}$/.test(compact)) return compact;
+  return "0000";
 }
 
 export type ZenginSender = TransferSender & {
@@ -479,50 +520,65 @@ export type ZenginRow = {
   accountNumber?: string;
 };
 
-/** 全銀協 総合振込（1行120バイト・SJIS・LF）。先方サンプルと同じ桁。 */
+function record120(fields: string[]): string {
+  return pad(fields.join(""), 120);
+}
+
+/**
+ * 全銀協 AP-I-12「8. 総合振込レコード・フォーマット」どおり。
+ * https://www.zenginkyo.or.jp/fileadmin/res/abstract/efforts/system/jba_protocol_pc.pdf
+ * 各レコード 120 バイト。N は右詰め前ゼロ、C は左詰め残りスペース。
+ * ※省略はスペース。ダミーはスペース。改行はレコード外（ファイル持込時の任意 CRLF）。
+ */
 export function buildZenginText(sender: ZenginSender, rows: ZenginRow[]): string {
-  const header = pad([
-    "1",
-    "21",
-    "0",
-    digitField(sender.senderCode, 10) ?? "0000000000",
-    padKana(sender.senderName, 40),
-    mmdd(sender.transferDate),
-    digitField(sender.bankCode, 4) ?? "0000",
-    padKana(sender.bankName, 15),
-    digitField(sender.branchCode, 3) ?? "000",
-    padKana(sender.branchName, 15),
-    zenginAccountTypeCode(sender.accountType),
-    digitField(sender.accountNumber, 7) ?? "0000000",
-    pad("", 17),
-  ].join(""), 120);
+  const header = record120([
+    "1",                                          // 1 データ区分 ヘッダー
+    "21",                                         // 2 種別コード 総合振込
+    "0",                                          // 3 コード区分 JIS
+    nField(sender.senderCode, 10),                // 4 振込依頼人コード
+    padKana(sender.senderName, 40, "name"),       // 5 振込依頼人名
+    mmdd(sender.transferDate),                    // 6 取組日 MMDD
+    nField(sender.bankCode, 4),                   // 7 仕向銀行番号
+    padKana(sender.bankName, 15, "place"),        // 8 ※仕向銀行名
+    nField(sender.branchCode, 3),                 // 9 仕向支店番号
+    padKana(sender.branchName, 15, "place"),      // 10 ※仕向支店名
+    senderAccountTypeCode(sender.accountType),    // 11 ※預金種目 1普通 2当座 9その他
+    nField(sender.accountNumber, 7),              // 12 ※口座番号
+    omitSp(17),                                   // 13 ダミー
+  ]);
 
-  const data = rows.map((row) => {
-    const amt = String(Math.max(0, Math.round(row.amount))).padStart(10, "0").slice(-10);
-    return pad([
-      "2",
-      digitField(row.bankCode, 4) ?? "0000",
-      padKana(row.bankName ?? "", 15),
-      digitField(row.branchCode, 3) ?? "000",
-      padKana(row.branchName ?? "", 15),
-      pad("", 4),
-      zenginAccountTypeCode(row.accountType),
-      digitField(row.accountNumber, 7) ?? "0000000",
-      padKana(row.accountKana || row.vendorName, 30),
-      amt,
-      pad("", 30),
-    ].join(""), 120);
-  });
+  const usable = rows.filter((row) => Math.round(row.amount) > 0);
+  const data = usable.map((row) => record120([
+    "2",                                          // 1 データ区分
+    nField(row.bankCode, 4),                      // 2 被仕向銀行番号
+    padKana(row.bankName ?? "", 15, "place"),     // 3 ※被仕向銀行名
+    nField(row.branchCode, 3),                    // 4 被仕向支店番号
+    padKana(row.branchName ?? "", 15, "place"),   // 5 ※被仕向支店名
+    omitSp(4),                                    // 6 ※手形交換所番号 省略=SP
+    payeeAccountTypeCode(row.accountType),        // 7 預金種目 1/2/4/9
+    nField(row.accountNumber, 7),                 // 8 口座番号
+    padKana(row.accountKana || row.vendorName, 30, "name"), // 9 受取人名
+    String(Math.round(row.amount)).padStart(10, "0").slice(-10), // 10 振込金額
+    "0",                                          // 11 新規コード その他
+    omitSp(10),                                   // 12 ※顧客コード1 省略=SP
+    omitSp(10),                                   // 13 ※顧客コード2 省略=SP
+    "7",                                          // 14 ※振込指定区分 テレ振込
+    " ",                                          // 15 ※識別表示 顧客コード未使用
+    omitSp(7),                                    // 16 ダミー
+  ]));
 
-  const total = rows.reduce((s, r) => s + Math.max(0, Math.round(r.amount)), 0);
-  const trailer = pad([
-    "8",
-    String(rows.length).padStart(6, "0"),
-    String(total).padStart(12, "0"),
-    pad("", 101),
-  ].join(""), 120);
-  const end = pad("9", 120);
-  return [header, ...data, trailer, end].join("\n");
+  const total = usable.reduce((sum, row) => sum + Math.round(row.amount), 0);
+  const trailer = record120([
+    "8",                                          // 1 データ区分 トレーラ
+    String(usable.length).padStart(6, "0"),       // 2 合計件数
+    String(total).padStart(12, "0").slice(-12),   // 3 合計金額
+    omitSp(101),                                  // 4 ダミー
+  ]);
+  const end = record120([
+    "9",                                          // 1 データ区分 エンド
+    omitSp(119),                                  // 2 ダミー
+  ]);
+  return `${[header, ...data, trailer, end].join("\r\n")}\r\n`;
 }
 
 export function encodeZenginSjis(text: string): Uint8Array {

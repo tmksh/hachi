@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowUpDown, Paperclip } from "lucide-react";
+import { ArrowUpDown, FileText, Paperclip } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,7 @@ import {
   type ProcurementOrder,
 } from "@/lib/actions/procurement";
 import { markContractorOrderAcknowledged } from "@/lib/actions/contractor-orders";
+import { VendorInvoicePreviewDialog } from "@/components/procurement/vendor-invoice-preview-dialog";
 import {
   LEDGER_STATUS_META,
   deriveLedgerStatus,
@@ -56,6 +57,12 @@ type Props = {
 const FLOW: LedgerStatus[] = [
   "ordered", "delivered", "inspected", "invoice_received", "confirmed", "payment_approved",
 ];
+
+const HISTORY_STATUSES: LedgerStatus[] = ["invoice_received", "confirmed", "payment_approved"];
+
+function canOpenHistory(status: LedgerStatus) {
+  return HISTORY_STATUSES.includes(status);
+}
 
 type SortKey = "po" | "project" | "vendor" | "amount" | "due" | "delivery" | "status" | "updated";
 
@@ -102,6 +109,8 @@ export function FulfillmentClient({ initialOrders }: Props) {
   const [deliveryTarget, setDeliveryTarget] = useState<ProcurementOrder | null>(null);
   const [inspectTarget, setInspectTarget] = useState<ProcurementOrder | null>(null);
   const [attachTarget, setAttachTarget] = useState<ProcurementOrder | null>(null);
+  const [detailTarget, setDetailTarget] = useState<ProcurementOrder | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<ProcurementOrder | null>(null);
   const [paperOnly, setPaperOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -216,25 +225,6 @@ export function FulfillmentClient({ initialOrders }: Props) {
         </Button>
       </PageHeader>
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div className="rounded-xl border bg-amber-50/70 border-amber-200 p-3 space-y-2">
-          <p className="text-xs font-semibold text-amber-950">紙発注・自社書式の流れ</p>
-          <ol className="text-[11px] text-amber-950/90 space-y-1 leading-snug list-decimal pl-4">
-            <li>業者マスタで「紙発注」にした行が色分けされます</li>
-            <li>請書を受け取ったら「請書受領」を記録します</li>
-            <li>納品 → 検収完了（案内メールは紙／PDF送付）</li>
-            <li>届いた請求書を「PDF添付」すると請求書受領になります</li>
-            <li>ディレクター確認 → 経理承認 → 帳票データ</li>
-          </ol>
-        </div>
-        <div className="rounded-xl border bg-card p-3 space-y-2">
-          <p className="text-xs font-semibold">分納の単位</p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            分納は納品ごとに1行です。この納品分の金額を入れて登録すると、残額の行が新たにできます。残行も同じように検収・請求します。
-          </p>
-        </div>
-      </div>
-
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
         {FLOW.map((s) => (
           <button
@@ -298,15 +288,20 @@ export function FulfillmentClient({ initialOrders }: Props) {
               const ls = deriveLedgerStatus(o);
               const meta = LEDGER_STATUS_META[ls];
               const paper = isPaperInvoice(o.craftsman);
+              const openHistory = canOpenHistory(ls);
               return (
-                <tr key={o.id} className={`border-t ${paper ? "bg-amber-50/80" : ""}`}>
-                  <td className="px-3 py-2">
+                <tr
+                  key={o.id}
+                  className={`border-t ${paper ? "bg-amber-50/80" : ""} ${openHistory ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                  onClick={() => { if (openHistory) setDetailTarget(o); }}
+                >
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={selected.includes(o.id)}
                       onCheckedChange={(c) => setSelected((p) => c === true ? [...p, o.id] : p.filter((id) => id !== o.id))}
                     />
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <Link href={`/constructions/${o.construction_id}?tab=orders`} className="text-blue-700 hover:underline font-mono text-xs">
                         {poLabel(o)}
@@ -328,7 +323,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
                   <td className="px-3 py-2 text-orange-700">{formatDateSlash(o.delivery_date)}</td>
                   <td className="px-3 py-2"><Badge className={meta.cls}>{meta.label}</Badge></td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{formatDateSlash(o.updated_at)}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                     <RowActions
                       order={o}
                       status={ls}
@@ -336,6 +331,8 @@ export function FulfillmentClient({ initialOrders }: Props) {
                       onDelivery={() => setDeliveryTarget(o)}
                       onInspect={() => setInspectTarget(o)}
                       onAttach={() => setAttachTarget(o)}
+                      onPreview={() => setPreviewTarget(o)}
+                      onDetail={() => setDetailTarget(o)}
                       onReplace={replace}
                     />
                   </td>
@@ -374,6 +371,21 @@ export function FulfillmentClient({ initialOrders }: Props) {
         onClose={() => setAttachTarget(null)}
         onSaved={(o) => { replace(o); setAttachTarget(null); }}
       />
+      <HistoryDetailDialog
+        key={detailTarget?.id ?? "detail-closed"}
+        order={detailTarget}
+        onClose={() => setDetailTarget(null)}
+        onPreview={() => {
+          if (!detailTarget) return;
+          setPreviewTarget(detailTarget);
+          setDetailTarget(null);
+        }}
+      />
+      <VendorInvoicePreviewDialog
+        order={previewTarget}
+        onClose={() => setPreviewTarget(null)}
+        showResend={previewTarget ? deriveLedgerStatus(previewTarget) === "inspected" : false}
+      />
     </div>
   );
 }
@@ -400,7 +412,7 @@ function FilterSelect({
 }
 
 function RowActions({
-  order, status, canAccount, onDelivery, onInspect, onAttach, onReplace,
+  order, status, canAccount, onDelivery, onInspect, onAttach, onPreview, onDetail, onReplace,
 }: {
   order: ProcurementOrder;
   status: LedgerStatus;
@@ -408,6 +420,8 @@ function RowActions({
   onDelivery: () => void;
   onInspect: () => void;
   onAttach: () => void;
+  onPreview: () => void;
+  onDetail: () => void;
   onReplace: (o: ProcurementOrder) => void;
 }) {
   if (status === "ordered") {
@@ -442,25 +456,30 @@ function RowActions({
   }
   if (status === "inspected") {
     const paper = isPaperInvoice(order.craftsman);
-    return (
-      <div className="inline-flex items-center gap-1">
+    if (paper) {
+      return (
         <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={onAttach}>
           PDF添付
         </Button>
-        {!paper && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={async () => {
-              const res = await resendInvoiceUrl(order.id);
-              if (!res.ok) { toast.error(res.error); return; }
-              toastInvoiceMail(res);
-            }}
-          >
-            URLを再送
-          </Button>
-        )}
+      );
+    }
+    return (
+      <div className="inline-flex items-center gap-1">
+        <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={onPreview}>
+          プレビュー
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={async () => {
+            const res = await resendInvoiceUrl(order.id);
+            if (!res.ok) { toast.error(res.error); return; }
+            toastInvoiceMail(res);
+          }}
+        >
+          URLを再送
+        </Button>
       </div>
     );
   }
@@ -494,33 +513,49 @@ function RowActions({
         >
           請求書を確認
         </Button>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onDetail}>
+          内容を見る
+        </Button>
       </div>
     );
   }
   if (status === "confirmed") {
-    if (!canAccount) return <span className="text-[11px] text-muted-foreground">経理承認待ち</span>;
     return (
-      <Button
-        size="sm"
-        className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800"
-        onClick={async () => {
-          try {
-            onReplace(await approveVendorInvoice(order.id));
-            toast.success("経理承認しました。帳票データの対象になります");
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "承認に失敗しました");
-          }
-        }}
-      >
-        承認する
-      </Button>
+      <div className="inline-flex items-center gap-1">
+        {canAccount ? (
+          <Button
+            size="sm"
+            className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800"
+            onClick={async () => {
+              try {
+                onReplace(await approveVendorInvoice(order.id));
+                toast.success("経理承認しました。帳票データの対象になります");
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "承認に失敗しました");
+              }
+            }}
+          >
+            承認する
+          </Button>
+        ) : (
+          <span className="text-[11px] text-muted-foreground">経理承認待ち</span>
+        )}
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onDetail}>
+          内容を見る
+        </Button>
+      </div>
     );
   }
   if (status === "payment_approved") {
     return (
-      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-        <Link href="/ledger">帳票データへ ↗</Link>
-      </Button>
+      <div className="inline-flex items-center gap-1">
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onDetail}>
+          内容を見る
+        </Button>
+        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+          <Link href="/ledger">帳票データへ ↗</Link>
+        </Button>
+      </div>
     );
   }
   return null;
@@ -553,6 +588,175 @@ function AttachmentList({ files }: { files: ProcurementAttachment[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function HistoryField({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="text-sm leading-snug">{value || "—"}</p>
+    </div>
+  );
+}
+
+function InvoiceFilePreview({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileName = path.split("/").pop() ?? "請求書";
+  const isPdf = /\.pdf$/i.test(fileName);
+  const isImage = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(fileName);
+
+  useEffect(() => {
+    let cancelled = false;
+    setUrl(null);
+    setError(null);
+    void getProcurementFileUrl(path).then((res) => {
+      if (cancelled) return;
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setUrl(res.url);
+    });
+    return () => { cancelled = true; };
+  }, [path]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground truncate">{fileName}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          disabled={!url}
+          onClick={() => { if (url) window.open(url, "_blank", "noopener,noreferrer"); }}
+        >
+          <FileText className="h-3.5 w-3.5 mr-1" />
+          別タブで開く
+        </Button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {!error && !url && <p className="text-xs text-muted-foreground">読み込み中…</p>}
+      {url && isPdf && (
+        <iframe title="請求書PDF" src={url} className="w-full h-[420px] rounded-lg border bg-white" />
+      )}
+      {url && isImage && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="請求書" className="max-h-[420px] w-full object-contain rounded-lg border bg-white" />
+      )}
+      {url && !isPdf && !isImage && (
+        <p className="text-xs text-muted-foreground">プレビューできない形式です。「別タブで開く」から確認してください。</p>
+      )}
+    </div>
+  );
+}
+
+function HistoryDetailDialog({
+  order,
+  onClose,
+  onPreview,
+}: {
+  order: ProcurementOrder | null;
+  onClose: () => void;
+  onPreview: () => void;
+}) {
+  if (!order) return null;
+  const status = deriveLedgerStatus(order);
+  const meta = LEDGER_STATUS_META[status];
+  const excl = billedExclOf(order);
+  const paper = isPaperInvoice(order.craftsman);
+  const pdfName = order.vendor_invoice_pdf_path?.split("/").pop();
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            {poLabel(order)} {order.title}
+            <Badge className={meta.cls}>{meta.label}</Badge>
+            {paper && <Badge className="bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注</Badge>}
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            {order.construction ? `${order.construction.construction_no} ${order.construction.title}` : ""}
+            {order.craftsman?.name ? ` ／ ${order.craftsman.name}` : ""}
+          </p>
+        </DialogHeader>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <p className="text-sm font-semibold">発注</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <HistoryField label="発注番号" value={poLabel(order)} />
+            <HistoryField label="発注金額（税抜）" value={yen(Number(order.amount ?? 0))} />
+            <HistoryField label="請書受領" value={formatDateSlash(order.concluded_at)} />
+          </div>
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <p className="text-sm font-semibold">納品</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <HistoryField label="納品日（＝取引日）" value={formatDateSlash(order.delivery_date)} />
+            <HistoryField label="分納" value={order.delivery_partial || "なし（一括納品）"} />
+            <HistoryField label="納品内容" value={order.delivery_content || "—"} />
+          </div>
+          <AttachmentList files={order.delivery_attachments ?? []} />
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <p className="text-sm font-semibold">検収</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <HistoryField
+              label="結果"
+              value={order.inspection_result === "pass" ? "合格" : order.inspection_result === "reject" ? "差し戻し" : "—"}
+            />
+            <HistoryField label="検収日" value={formatDateSlash(order.inspection_date)} />
+            <HistoryField label="検収者" value={order.inspector_name || "—"} />
+          </div>
+          <HistoryField label="コメント" value={order.inspection_comment || "—"} />
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <p className="text-sm font-semibold">請求書</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <HistoryField label="請求日" value={formatDateSlash(order.vendor_invoice_date)} />
+            <HistoryField label="請求番号" value={order.vendor_invoice_no || "—"} />
+            <HistoryField label="登録番号" value={order.vendor_registration_no || "—"} />
+            <HistoryField label="請求額（税抜）" value={yen(excl)} />
+            <HistoryField label="消費税" value={yen(taxOf(excl))} />
+            <HistoryField label="税込" value={yen(inclOf(excl))} />
+          </div>
+          <HistoryField label="備考" value={order.vendor_invoice_remarks || "—"} />
+          {order.vendor_invoice_pdf_path ? (
+            <InvoiceFilePreview path={order.vendor_invoice_pdf_path} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              請求書ファイルは添付されていません。業者ページで入力した数字だけが残っています。
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <p className="text-sm font-semibold">確認・承認</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <HistoryField label="ディレクター確認" value={formatDateSlash(order.director_confirmed_at)} />
+            <HistoryField label="経理承認" value={formatDateSlash(order.accounting_approved_at)} />
+            <HistoryField label="受領日時" value={formatDateSlash(order.vendor_invoice_submitted_at)} />
+          </div>
+        </div>
+
+        <DialogFooter className="sm:justify-between sm:items-center">
+          <p className="text-[11px] text-muted-foreground mr-auto">
+            {pdfName ? `添付ファイル: ${pdfName}` : "PDF未添付"}
+          </p>
+          <Button variant="outline" onClick={onPreview}>当社フォーマット</Button>
+          <Button variant="outline" onClick={onClose}>閉じる</Button>
+          <Button asChild className="bg-emerald-700 hover:bg-emerald-800">
+            <Link href="/ledger">帳票データへ</Link>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -864,8 +1068,9 @@ function AttachInvoiceDialog({
   const [saving, setSaving] = useState(false);
 
   if (!order) return null;
+  const paper = isPaperInvoice(order.craftsman);
   const orderExcl = Number(order.amount ?? 0);
-  const amountDiff = invoiceAmount !== orderExcl;
+  const amountDiff = paper && invoiceAmount !== orderExcl;
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg">
@@ -899,13 +1104,15 @@ function AttachInvoiceDialog({
               <Label>請求番号（任意）</Label>
               <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="任意" />
             </div>
-            <div className="space-y-1 sm:col-span-2">
-              <Label>請求書の金額（税抜）</Label>
-              <IntegerInput value={invoiceAmount} onValueChange={setInvoiceAmount} />
-              <p className="text-[11px] text-muted-foreground">
-                発注 {yen(orderExcl)} / 税込 {yen(inclOf(invoiceAmount))}（税 {yen(taxOf(invoiceAmount))}）。この数字が帳票・全銀に載ります。
-              </p>
-            </div>
+            {paper && (
+              <div className="space-y-1 sm:col-span-2">
+                <Label>請求書の金額（税抜）</Label>
+                <IntegerInput value={invoiceAmount} onValueChange={setInvoiceAmount} />
+                <p className="text-[11px] text-muted-foreground">
+                  発注 {yen(orderExcl)} / 税込 {yen(inclOf(invoiceAmount))}（税 {yen(taxOf(invoiceAmount))}）。この数字が帳票・全銀に載ります。
+                </p>
+              </div>
+            )}
           </div>
           {amountDiff && (
             <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
@@ -933,7 +1140,7 @@ function AttachInvoiceDialog({
               fd.append("file", file);
               fd.append("invoiceDate", invoiceDate);
               fd.append("invoiceNo", invoiceNo);
-              fd.append("invoiceAmount", String(invoiceAmount));
+              if (paper) fd.append("invoiceAmount", String(invoiceAmount));
               const res = await attachStaffInvoicePdf(order.id, fd);
               setSaving(false);
               if (!res.ok) {

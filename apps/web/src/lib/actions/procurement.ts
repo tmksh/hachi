@@ -827,6 +827,109 @@ export type VendorInvoiceView = {
   previewLocked: boolean;
 };
 
+function mapVendorInvoiceView(input: {
+  token: string;
+  order: {
+    title: string;
+    amount?: number | string | null;
+    po_no?: string | null;
+    delivery_date?: string | null;
+    work_content?: string | null;
+    payment_date?: string | null;
+    invoice_token_expires_at?: string | null;
+    vendor_invoice_submitted_at?: string | null;
+    vendor_invoice_date?: string | null;
+    vendor_invoice_no?: string | null;
+    vendor_registration_no?: string | null;
+    vendor_invoice_remarks?: string | null;
+    vendor_invoice_pdf_path?: string | null;
+    delivery_attachments?: unknown;
+    craftsman?: unknown;
+    construction?: unknown;
+  };
+  company: { name?: string | null; settings?: unknown } | null;
+  previewLocked: boolean;
+  emailVerified: boolean;
+}): VendorInvoiceView {
+  const issuer = companyIssuer(
+    (input.company?.settings ?? null) as Record<string, unknown> | null,
+    input.company?.name ?? "発注元",
+  );
+  const craftsman = Array.isArray(input.order.craftsman) ? input.order.craftsman[0] : input.order.craftsman as {
+    name?: string | null;
+    company_name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    bank_name?: string | null;
+    bank_branch?: string | null;
+    bank_account_type?: string | null;
+    bank_account_number?: string | null;
+    bank_account_kana?: string | null;
+  } | null;
+  const construction = Array.isArray(input.order.construction)
+    ? input.order.construction[0]
+    : input.order.construction as { title?: string | null; construction_no?: string | null } | null;
+  const bankName = craftsman?.bank_name ?? "";
+  const bankBranch = craftsman?.bank_branch ?? "";
+  const bankAccountType = craftsman?.bank_account_type ?? "";
+  const bankAccountNumber = craftsman?.bank_account_number ?? "";
+  const bankAccountKana = craftsman?.bank_account_kana ?? "";
+  const bank = [bankName, bankBranch, bankAccountType, bankAccountNumber].filter(Boolean).join(" ");
+  const expired = input.order.invoice_token_expires_at
+    ? new Date(input.order.invoice_token_expires_at) < new Date()
+    : false;
+  const vendorEmail = (craftsman?.email ?? "").trim();
+  const submitted = Boolean(input.order.vendor_invoice_submitted_at);
+  const locked = input.previewLocked;
+  return {
+    token: input.token,
+    expiresAt: input.order.invoice_token_expires_at ?? null,
+    expired,
+    submitted,
+    companyName: issuer.name,
+    companyAddress: locked ? "" : issuer.address,
+    companyInvoiceNo: locked ? "" : issuer.invoiceNo,
+    constructionNo: locked ? "" : construction?.construction_no ?? "",
+    constructionTitle: locked ? "" : construction?.title ?? "",
+    orderTitle: locked ? "" : input.order.title,
+    poNo: locked ? "" : input.order.po_no ?? "",
+    amount: locked ? 0 : Number(input.order.amount ?? 0),
+    deliveryDate: locked ? null : input.order.delivery_date ?? null,
+    workContent: locked ? null : input.order.work_content ?? null,
+    vendorName: locked ? "" : craftsman?.company_name || craftsman?.name || "業者",
+    vendorAddress: "",
+    vendorPhone: locked ? "" : craftsman?.phone ?? "",
+    paymentDate: locked ? null : input.order.payment_date ?? null,
+    bankName: locked ? "" : bankName,
+    bankBranch: locked ? "" : bankBranch,
+    bankAccountType: locked ? "" : bankAccountType,
+    bankAccountNumber: locked ? "" : bankAccountNumber,
+    bankAccountKana: locked ? "" : bankAccountKana,
+    bankInfo: locked
+      ? ""
+      : bank || "（口座情報は発注元の業者マスタに登録された内容が表示されます）",
+    invoiceDate: locked ? null : input.order.vendor_invoice_date ?? null,
+    invoiceNo: locked ? null : input.order.vendor_invoice_no ?? null,
+    registrationNumber: locked ? null : input.order.vendor_registration_no ?? null,
+    remarks: locked ? null : input.order.vendor_invoice_remarks ?? null,
+    vendorPdfName: locked
+      ? null
+      : input.order.vendor_invoice_pdf_path
+        ? String(input.order.vendor_invoice_pdf_path).split("/").pop() ?? "請求書.pdf"
+        : null,
+    hasVendorPdf: locked ? false : Boolean(input.order.vendor_invoice_pdf_path),
+    attachments: locked
+      ? []
+      : Array.isArray(input.order.delivery_attachments)
+        ? input.order.delivery_attachments as ProcurementAttachment[]
+        : [],
+    hasEmail: Boolean(vendorEmail),
+    maskedEmail: vendorEmail ? maskEmail(vendorEmail) : null,
+    emailVerified: input.emailVerified,
+    previewLocked: locked,
+  };
+}
+
 function companyIssuer(settings: Record<string, unknown> | null, fallbackName: string) {
   const pdf = (settings?.pdf ?? settings?.pdfTemplates ?? {}) as Record<string, unknown>;
   const invoice = (pdf?.invoice ?? pdf) as Record<string, unknown>;
@@ -858,70 +961,54 @@ export async function getVendorInvoiceByToken(token: string): Promise<VendorInvo
       .select("name, settings")
       .eq("id", order.company_id)
       .maybeSingle();
-    const issuer = companyIssuer(
-      (company?.settings ?? null) as Record<string, unknown> | null,
-      company?.name ?? "発注元",
-    );
-    const craftsman = Array.isArray(order.craftsman) ? order.craftsman[0] : order.craftsman;
-    const construction = Array.isArray(order.construction) ? order.construction[0] : order.construction;
-    const bankName = craftsman?.bank_name ?? "";
-    const bankBranch = craftsman?.bank_branch ?? "";
-    const bankAccountType = craftsman?.bank_account_type ?? "";
-    const bankAccountNumber = craftsman?.bank_account_number ?? "";
-    const bankAccountKana = craftsman?.bank_account_kana ?? "";
-    const bank = [bankName, bankBranch, bankAccountType, bankAccountNumber].filter(Boolean).join(" ");
     const expired = order.invoice_token_expires_at
       ? new Date(order.invoice_token_expires_at) < new Date()
       : false;
-    const vendorEmail = (craftsman?.email ?? "").trim();
-    const submitted = Boolean(order.vendor_invoice_submitted_at);
-    const emailVerified = submitted || expired || await isInvoiceAuthVerified(raw);
-    const previewLocked = !emailVerified;
-    return {
+    const emailVerified = Boolean(order.vendor_invoice_submitted_at) || expired || await isInvoiceAuthVerified(raw);
+    return mapVendorInvoiceView({
       token: raw,
-      expiresAt: order.invoice_token_expires_at,
-      expired,
-      submitted,
-      companyName: issuer.name,
-      companyAddress: previewLocked ? "" : issuer.address,
-      companyInvoiceNo: previewLocked ? "" : issuer.invoiceNo,
-      constructionNo: previewLocked ? "" : construction?.construction_no ?? "",
-      constructionTitle: previewLocked ? "" : construction?.title ?? "",
-      orderTitle: previewLocked ? "" : order.title,
-      poNo: previewLocked ? "" : order.po_no ?? "",
-      amount: previewLocked ? 0 : Number(order.amount ?? 0),
-      deliveryDate: previewLocked ? null : order.delivery_date,
-      workContent: previewLocked ? null : order.work_content,
-      vendorName: previewLocked ? "" : craftsman?.company_name || craftsman?.name || "業者",
-      vendorAddress: "",
-      vendorPhone: previewLocked ? "" : craftsman?.phone ?? "",
-      paymentDate: previewLocked ? null : order.payment_date ?? null,
-      bankName: previewLocked ? "" : bankName,
-      bankBranch: previewLocked ? "" : bankBranch,
-      bankAccountType: previewLocked ? "" : bankAccountType,
-      bankAccountNumber: previewLocked ? "" : bankAccountNumber,
-      bankAccountKana: previewLocked ? "" : bankAccountKana,
-      bankInfo: previewLocked
-        ? ""
-        : bank || "（口座情報は発注元の業者マスタに登録された内容が表示されます）",
-      invoiceDate: previewLocked ? null : order.vendor_invoice_date,
-      invoiceNo: previewLocked ? null : order.vendor_invoice_no,
-      registrationNumber: previewLocked ? null : order.vendor_registration_no,
-      remarks: previewLocked ? null : order.vendor_invoice_remarks,
-      vendorPdfName: previewLocked
-        ? null
-        : order.vendor_invoice_pdf_path
-          ? String(order.vendor_invoice_pdf_path).split("/").pop() ?? "請求書.pdf"
-          : null,
-      hasVendorPdf: previewLocked ? false : Boolean(order.vendor_invoice_pdf_path),
-      attachments: previewLocked ? [] : Array.isArray(order.delivery_attachments) ? order.delivery_attachments : [],
-      hasEmail: Boolean(vendorEmail),
-      maskedEmail: vendorEmail ? maskEmail(vendorEmail) : null,
+      order,
+      company,
+      previewLocked: !emailVerified,
       emailVerified,
-      previewLocked,
-    };
+    });
   } catch {
     return null;
+  }
+}
+
+export async function getStaffVendorInvoicePreview(orderId: string): Promise<ActionResult<{ invoice: VendorInvoiceView }>> {
+  try {
+    const { supabase, companyId } = await getAuthContext();
+    const { data: order } = await supabase
+      .from("contractor_orders")
+      .select(`
+        *,
+        craftsman:craftsmen(name, company_name, phone, email, bank_name, bank_branch, bank_account_type, bank_account_number, bank_account_kana),
+        construction:constructions(title, construction_no, company_id)
+      `)
+      .eq("id", orderId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!order) return actionFail("発注が見つかりません", "発注が見つかりません");
+
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name, settings")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    return actionOk({
+      invoice: mapVendorInvoiceView({
+        token: order.invoice_token ?? "",
+        order,
+        company,
+        previewLocked: false,
+        emailVerified: true,
+      }),
+    });
+  } catch (e) {
+    return actionFail(e, "請求書プレビューの取得に失敗しました");
   }
 }
 
