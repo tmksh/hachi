@@ -57,7 +57,7 @@ import {
 import {
   buildBiDashboardMock,
   shouldUseBiDashboardMock,
-  applyLiveRatesToProspectMock,
+  resolveDashboardProspectSummary,
   buildBiDashboardMonthlyCombo,
 } from "@/lib/bi-mock-data";
 import {
@@ -521,9 +521,9 @@ export function BiClient({
   const effectiveSettings         = dashboardMock?.settings ?? settings;
   const effectiveActuals          = dashboardMock?.actuals ?? actuals;
   const effectivePrevActuals      = dashboardMock?.prevActuals ?? prevActuals;
-  // 当年度モック時はデモ母数に会社設定の確度%／特需率を掛けて表示（実CRMが空で¥0になるのを防ぐ）
+  // 見込み売上は実CRMの見込度を優先。空のときだけデモ母数＋会社設定の確度%
   const effectiveProspectSummary  = useDashboardMock && dashboardMock
-    ? applyLiveRatesToProspectMock(dashboardMock.prospectSummary, prospectSummary)
+    ? resolveDashboardProspectSummary(dashboardMock.prospectSummary, prospectSummary)
     : prospectSummary;
 
   const settingsConfigured = effectiveSettings !== null;

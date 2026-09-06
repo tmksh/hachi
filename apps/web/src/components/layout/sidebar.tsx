@@ -141,7 +141,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     setFlyoutGroup(null);
   }, [pathname]);
 
-  // ダッシュボードの ToDo バナーなどから通知パネルを開く
+  // 他画面から通知パネルを開く（互換イベント）
   useEffect(() => {
     const open = () => setNotifOpen(true);
     window.addEventListener("bridge:open-notifications", open);

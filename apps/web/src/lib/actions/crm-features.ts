@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createGoogleCalendarEventDetailed } from "@/lib/google-calendar";
 import { getValidGoogleAccessToken } from "@/lib/google-token-server";
 import { callLlm, resolveLinqAiConfig } from "@/lib/integrations/linq-ai";
+import { invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 async function getCompanyContext() {
   const supabase = await createClient();
@@ -1042,6 +1043,7 @@ export async function applyAssessedProspectGrade(
     performed_by: user_id,
   });
 
+  await invalidateMyCompanyCache();
   return data;
 }
 

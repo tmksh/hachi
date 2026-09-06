@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -117,6 +117,8 @@ export function DashboardClient({
   const [inquiryContent, setInquiryContent] = useState("");
   const [inquirySending, setInquirySending] = useState(false);
   const [dealsTab, setDealsTab] = useState<"deals" | "unfollowed">("deals");
+  const [focusHighlight, setFocusHighlight] = useState(false);
+  const pendingFocusScroll = useRef(false);
   const now = new Date();
 
   const { widgets, hydrated, reorder, resizeWidget, toggleVisible, reset } = useWidgets();
@@ -201,6 +203,38 @@ export function DashboardClient({
       (typeof t.due_date === "string" && t.due_date.slice(0, 10) <= todayKey)
     );
   const urgentCount = todos.filter(isUrgentTodo).length;
+
+  const scrollToTodaysFocus = useCallback(() => {
+    const el = document.getElementById("todays-focus");
+    if (!(el instanceof HTMLElement)) return false;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.focus({ preventScroll: true });
+    return true;
+  }, []);
+
+  const goToTodaysFocus = useCallback(() => {
+    setFocusHighlight(true);
+    if (scrollToTodaysFocus()) return;
+    if (!isVisible("ai-focus")) {
+      pendingFocusScroll.current = true;
+      toggleVisible("ai-focus");
+    }
+  }, [isVisible, scrollToTodaysFocus, toggleVisible]);
+
+  useEffect(() => {
+    if (!pendingFocusScroll.current) return;
+    if (!isVisible("ai-focus")) return;
+    pendingFocusScroll.current = false;
+    requestAnimationFrame(() => {
+      scrollToTodaysFocus();
+    });
+  }, [isVisible, scrollToTodaysFocus, widgets]);
+
+  useEffect(() => {
+    if (!focusHighlight) return;
+    const t = window.setTimeout(() => setFocusHighlight(false), 1800);
+    return () => window.clearTimeout(t);
+  }, [focusHighlight]);
 
   const kpis = [
     { id: "kpi-won",           label: "受注額",      value: formatYen(data?.kpis.wonValue ?? 0),                              sub: "今月",   icon: TrendingUp },
@@ -310,7 +344,14 @@ export function DashboardClient({
 
       case "ai-focus":
         return !isVisible("ai-focus") ? null : (
-          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full">
+          <div
+            id="todays-focus"
+            tabIndex={-1}
+            className={cn(
+              "bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-2 h-full outline-none scroll-mt-4 transition-shadow",
+              focusHighlight && "ring-2 ring-rose-400 ring-offset-2",
+            )}
+          >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-slate-400" />
@@ -842,7 +883,7 @@ export function DashboardClient({
           </div>
           <button
             type="button"
-            onClick={() => window.dispatchEvent(new Event("bridge:open-notifications"))}
+            onClick={goToTodaysFocus}
             className="text-xs font-medium text-rose-700 hover:underline shrink-0"
           >
             確認する

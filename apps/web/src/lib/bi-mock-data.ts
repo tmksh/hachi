@@ -202,7 +202,7 @@ export function buildBiDashboardMock(
 
 /**
  * ダッシュボードモックの見込み母数に、会社設定の確度%／特需契約率を掛け直す。
- * （着地予測はモックのまま、見込み売上だけ実CRMで¥0になる不整合を防ぐ）
+ * 実CRMが空のときのフォールバック専用。実データがあるときは使わない。
  */
 export function applyLiveRatesToProspectMock(
   mock: BiProspectSummary,
@@ -237,6 +237,19 @@ export function applyLiveRatesToProspectMock(
     hasData: true,
     hasSpecial: special.customerCount > 0,
   };
+}
+
+/**
+ * 見込み売上（期待値）は CRM の見込度を正とする。
+ * 当年度デモモック中でも実集計があればそれを出し、空のときだけデモ母数を使う。
+ */
+export function resolveDashboardProspectSummary(
+  mock: BiProspectSummary | undefined,
+  live: BiProspectSummary | null | undefined,
+): BiProspectSummary | null | undefined {
+  if (live?.hasData) return live;
+  if (mock) return applyLiveRatesToProspectMock(mock, live);
+  return live;
 }
 
 /** No.75 モック案件行（部門別・万円）。規定割れが一目で分かるよう粗利率にばらつきを持たせる */
