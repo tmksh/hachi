@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ComponentType, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -19,12 +19,13 @@ import {
   updateAdminLinqAiSettings,
   testAdminLinqAiConnection,
 } from "@/lib/actions/admin";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/shared/page-header";
+import { KpiRow } from "@/components/shared/kpi-row";
 import {
   Dialog,
   DialogContent,
@@ -41,12 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Building2,
   Users,
@@ -66,12 +61,14 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { LineChart } from "@/components/charts/line-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
-import { BarChart } from "@/components/charts/bar-chart";
+import { GroupedBarChart } from "@/components/charts/grouped-bar-chart";
+import { TEAL_CARD_SM, TEAL_KPI_ICON } from "@/lib/teal-theme";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { downloadAdminBiPdf } from "@/lib/admin-bi-pdf";
+import { toast } from "sonner";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "オーナー",
@@ -95,7 +92,20 @@ const STATUS_LABEL: Record<string, string> = {
   delayed: "遅延",
 };
 
-const PIE_COLORS = ["#0F5132", "#1A7A52", "#2D9E6B", "#4DB88A", "#7DCFAA", "#A8DFC5"];
+const STATUS_COLOR: Record<string, string> = {
+  preparing: "var(--brand-mid)",
+  in_progress: "var(--brand-light)",
+  completed: "var(--brand-dark)",
+  suspended: "color-mix(in srgb, var(--brand-mid) 45%, #94a3b8)",
+  delayed: "color-mix(in srgb, var(--brand-dark) 42%, #64748b)",
+};
+
+const DIST_COLORS = [
+  "var(--brand-mid)",
+  "var(--brand-light)",
+  "color-mix(in srgb, var(--brand-light) 45%, var(--brand-dark))",
+  "var(--brand-dark)",
+];
 
 type BiOverview = Awaited<ReturnType<typeof getAdminBiOverview>>;
 type BiRanking = Awaited<ReturnType<typeof getAdminBiCompanyRanking>>;
@@ -126,19 +136,13 @@ function extractErrorMessage(e: unknown): string {
 }
 
 const yen = (n: number) => `¥${Math.round(n).toLocaleString()}`;
+const compactYen = (n: number) => {
+  const abs = Math.abs(n);
+  if (abs >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
+  if (abs >= 10_000) return `¥${Math.round(n / 10_000).toLocaleString()}万`;
+  return yen(n);
+};
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
-
-function downloadCsv(filename: string, rows: string[][]) {
-  const bom = "\uFEFF";
-  const csv = bom + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export type AdminInitialData = {
   stats: { companyCount: number; userCount: number; constructionCount: number; contractCount: number };
@@ -183,6 +187,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const [aiSaving, setAiSaving] = useState(false);
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const loadAiSettings = useCallback(async () => {
     const s = await getAdminLinqAiSettings();
@@ -317,71 +322,48 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
     }
   };
 
-  const exportCompaniesCsv = () => {
-    const headers = ["企業名", "プラン", "ユーザー数", "登録日"];
-    const rows = companies.map((c) => [
-      c.name,
-      c.plan ?? "Free",
-      String(users.filter((u) => u.company_id === c.id).length),
-      format(new Date(c.created_at), "yyyy/MM/dd", { locale: ja }),
-    ]);
-    downloadCsv(`companies_${format(new Date(), "yyyyMMdd")}.csv`, [headers, ...rows]);
-  };
-
-  const exportUsersCsv = () => {
-    const headers = ["名前", "メール", "ロール", "企業", "登録日"];
-    const rows = users.map((u) => [
-      u.display_name,
-      u.email,
-      ROLE_LABELS[u.role] ?? u.role,
-      u.companies?.name ?? "",
-      format(new Date(u.created_at), "yyyy/MM/dd", { locale: ja }),
-    ]);
-    downloadCsv(`users_${format(new Date(), "yyyyMMdd")}.csv`, [headers, ...rows]);
-  };
-
-  const exportBiCsv = () => {
-    if (!biRanking.length) return;
-    const headers = ["順位", "加盟店名", "工事件数", "完了件数", "受注額", "粗利", "粗利率", "平均単価"];
-    const rows = biRanking.map((r, i) => [
-      String(i + 1),
-      r.companyName,
-      String(r.constructionCount),
-      String(r.completedCount),
-      String(Math.round(r.revenue)),
-      String(Math.round(r.gross)),
-      r.revenue > 0 ? pct(r.grossRate) : "—",
-      r.constructionCount > 0 ? String(Math.round(r.avgUnitPrice)) : "—",
-    ]);
-    downloadCsv(`bi_ranking_${format(new Date(), "yyyyMMdd")}.csv`, [headers, ...rows]);
+  const exportBiPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      await downloadAdminBiPdf({
+        stats,
+        bi,
+        status: biStatus,
+        dist: biDist,
+        trend: biTrend,
+        ranking: biRanking,
+      });
+    } catch (e) {
+      toast.error(extractErrorMessage(e) || "PDFの出力に失敗しました");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
     <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
-      <PageHeader title="管理コンソール" description="プラットフォーム全体の管理 / 全国加盟店BI">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" />
-              レポート出力
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={exportBiCsv} disabled={!biRanking.length}>
-              <FileText className="h-4 w-4 mr-2" />
-              加盟店BI（CSV）
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportCompaniesCsv} disabled={!companies.length}>
-              <Building2 className="h-4 w-4 mr-2" />
-              企業一覧（CSV）
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportUsersCsv} disabled={!users.length}>
-              <Users className="h-4 w-4 mr-2" />
-              ユーザー一覧（CSV）
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <PageHeader
+        title={currentTab === "companies" ? "企業一覧" : currentTab === "ai" ? "AI設定" : "全国加盟店BI"}
+        description={
+          currentTab === "companies" ? "加盟店の追加・編集"
+            : currentTab === "ai" ? "全テナント共通の Linq AI 設定"
+              : "プラットフォーム全体の実績"
+        }
+      >
+        {currentTab === "bi" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={exportingPdf || loading}
+            onClick={exportBiPdf}
+          >
+            {exportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            レポート出力
+          </Button>
+        )}
       </PageHeader>
 
       {/* Error */}
@@ -392,214 +374,130 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
         </div>
       )}
 
-      {/* Top KPIs */}
-      <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
-        <CardContent className="py-2">
-          <div className="grid grid-cols-2 lg:grid-cols-4">
-            {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="px-4 first:pl-0 last:pr-0 space-y-1.5 py-3">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              ))
-            ) : (
-              [
-                { label: "登録企業数", value: String(stats?.companyCount ?? 0), icon: Building2 },
-                { label: "総ユーザー数", value: String(stats?.userCount ?? 0), icon: Users },
-                { label: "工事案件数", value: String(stats?.constructionCount ?? 0), icon: HardHat },
-                { label: "契約書数", value: String(stats?.contractCount ?? 0), icon: FileText },
-              ].map((kpi, i) => (
-                <div key={i} className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-muted-foreground">{kpi.label}</span>
-                    <div className="neumorph-icon h-8 w-8">
-                      <kpi.icon className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold tabular-nums tracking-tight">{kpi.value}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* コンテンツ（サイドバーのtabパラメータで切り替え） */}
       <div>
 
         {/* BI */}
-        {currentTab === "bi" && <div className="space-y-6 mt-4">
-          {loading || !bi ? (
-            <>
-              <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
-                <CardContent className="py-2">
-                  <div className="grid grid-cols-2 lg:grid-cols-4">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="px-4 space-y-1.5 py-3">
-                        <Skeleton className="h-3 w-20" />
-                        <Skeleton className="h-6 w-28" />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
-                <CardContent className="py-2">
-                  <div className="grid grid-cols-2 lg:grid-cols-4">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="px-4 space-y-1.5 py-3">
-                        <Skeleton className="h-3 w-20" />
-                        <Skeleton className="h-6 w-28" />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <>
-              <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
-                <CardContent className="py-2">
-                  <div className="grid grid-cols-2 lg:grid-cols-4">
-                    <BiKpi label="総受注金額" value={yen(bi.totalRevenue)} sub={`${bi.constructionCount}件の合計`} icon={Wallet} />
-                    <BiKpi label="総粗利" value={yen(bi.totalGross)} sub={`加重粗利率 ${pct(bi.grossRateWeighted)}`} icon={TrendingUp} />
-                    <BiKpi label="平均工事単価" value={yen(bi.avgUnitPrice)} sub={`全国 ${bi.companyCount}社`} icon={HardHat} />
-                    <BiKpi label="加盟店平均粗利率" value={pct(bi.grossRateAvg)} sub="(各社単純平均)" icon={Percent} />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="stat-card transition-[box-shadow,background-color] duration-200 py-0">
-                <CardContent className="py-2">
-                  <div className="grid grid-cols-2 lg:grid-cols-4">
-                    <BiKpi label="アクティブ社数" value={`${bi.activeCompanyCount} / ${bi.companyCount}`} sub="直近30日に工事登録のある社" icon={Activity} />
-                    <BiKpi label="進行中工事" value={`${bi.inProgressCount}`} sub={`完了: ${bi.completedCount} / 遅延: ${bi.delayedCount}`} icon={HardHat} />
-                    <BiKpi label="登録顧客数" value={`${bi.customerCount.toLocaleString()}`} sub="全社合計" icon={Users} />
-                    <BiKpi label="総原価" value={yen(bi.totalCost)} sub={`粗利 ${yen(bi.totalGross)}`} icon={Wallet} />
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
+        {currentTab === "bi" && <div className="space-y-3">
+          <KpiRow
+            loading={loading}
+            columns={4}
+            items={[
+              { label: "登録企業数", value: stats?.companyCount ?? 0, icon: Building2 },
+              { label: "総ユーザー数", value: stats?.userCount ?? 0, icon: Users },
+              { label: "工事案件数", value: stats?.constructionCount ?? 0, icon: HardHat },
+              { label: "契約書数", value: stats?.contractCount ?? 0, icon: FileText },
+            ]}
+          />
+          <CompactKpiGrid
+            loading={loading || !bi}
+            items={[
+              { label: "総受注金額", value: bi ? compactYen(bi.totalRevenue) : "—", sub: bi ? `${bi.constructionCount}件` : undefined, icon: Wallet },
+              { label: "総粗利", value: bi ? compactYen(bi.totalGross) : "—", sub: bi ? pct(bi.grossRateWeighted) : undefined, icon: TrendingUp },
+              { label: "平均単価", value: bi ? compactYen(bi.avgUnitPrice) : "—", sub: bi ? `${bi.companyCount}社` : undefined, icon: HardHat },
+              { label: "平均粗利率", value: bi ? pct(bi.grossRateAvg) : "—", icon: Percent },
+              { label: "アクティブ", value: bi ? `${bi.activeCompanyCount}/${bi.companyCount}` : "—", sub: "直近30日", icon: Activity },
+              { label: "進行中", value: bi ? `${bi.inProgressCount}` : "—", sub: bi ? `完了 ${bi.completedCount}` : undefined, icon: HardHat },
+              { label: "顧客数", value: bi ? bi.customerCount.toLocaleString() : "—", icon: Users },
+              { label: "総原価", value: bi ? compactYen(bi.totalCost) : "—", icon: Wallet },
+            ]}
+          />
 
-          {/* チャート Row 1 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />月次トレンド（直近12ヶ月）
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading ? <Skeleton className="h-[280px] w-full" /> : (
-                  <div className="h-[280px]">
-                    <LineChart
-                      data={biTrend}
-                      labelKey="label"
-                      height={280}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <ChartPanel
+              title="月次トレンド（直近12ヶ月）"
+              icon={BarChart3}
+              right={<span className="text-[11px] text-muted-foreground">単位：万円</span>}
+            >
+              {loading ? <Skeleton className="h-[200px] w-full" /> : (
+                <div className="space-y-2">
+                  <div className="h-[200px]">
+                    <GroupedBarChart
+                      data={biTrend.map((row) => ({
+                        month: row.label,
+                        受注額: Math.round(row.revenue / 10_000),
+                        粗利: Math.round(row.gross / 10_000),
+                      }))}
+                      labelKey="month"
+                      idPrefix="admin-trend"
                       series={[
-                        { key: "revenue", label: "受注額", color: "#0F5132", formatValue: yen },
-                        { key: "gross", label: "粗利", color: "#2D9E6B", formatValue: yen },
-                        { key: "count", label: "件数", color: "#f59e0b", yAxis: "right", formatValue: (v) => `${v}件` },
+                        { key: "受注額", label: "受注額", gradient: ["var(--brand-light)", "var(--brand-dark)"] },
+                        { key: "粗利", label: "粗利", gradient: ["var(--brand-accent)", "var(--brand-mid)"] },
                       ]}
+                      formatValue={(v) => `¥${v.toLocaleString()}万`}
+                      gridColor="rgba(var(--brand-accent-rgb),0.55)"
+                      labelColor="#64748b"
+                      tickColor="#94a3b8"
                     />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <HardHat className="h-4 w-4 text-primary" />工事ステータス分布
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading || !biStatus ? <Skeleton className="h-[280px] w-full" /> : (
-                  <DonutChart
-                    data={Object.entries(biStatus).map(([k, v], i) => ({
-                      label: STATUS_LABEL[k] ?? k,
-                      value: v,
-                      color: PIE_COLORS[i % PIE_COLORS.length],
-                    }))}
-                    height={280}
-                    formatValue={(v) => `${v}件`}
-                  />
-                )}
-              </CardContent>
-            </Card>
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-sm" style={{ background: "var(--brand-dark)" }} />受注額
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-sm" style={{ background: "var(--brand-mid)" }} />粗利
+                    </span>
+                  </div>
+                </div>
+              )}
+            </ChartPanel>
+            <ChartPanel title="工事ステータス分布" icon={HardHat}>
+              {loading || !biStatus ? <Skeleton className="h-[200px] w-full" /> : (
+                <StatusBreakdown status={biStatus} />
+              )}
+            </ChartPanel>
           </div>
 
-          {/* チャート Row 2 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-primary" />加盟店粗利率分布
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading ? <Skeleton className="h-[220px] w-full" /> : (
-                  <div className="h-[220px]">
-                    <BarChart
-                      data={biDist.map((d) => ({ label: d.label, value: d.count }))}
-                      height={220}
-                      formatValue={(v) => `${v}社`}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div className="flex items-center justify-between w-full">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-primary" />加盟店ランキング（受注額順）
-                  </CardTitle>
-                  <span className="text-[11px] text-muted-foreground">{biRanking.length}社</span>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? <div className="p-4 space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 rounded-lg" />)}</div> : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-[11px] text-muted-foreground">
-                          <th className="px-4 py-2 text-left w-10">#</th>
-                          <th className="px-4 py-2 text-left">加盟店</th>
-                          <th className="px-4 py-2 text-right">工事</th>
-                          <th className="px-4 py-2 text-right">受注額</th>
-                          <th className="px-4 py-2 text-right">粗利</th>
-                          <th className="px-4 py-2 text-right">粗利率</th>
-                          <th className="px-4 py-2 text-right">平均単価</th>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <ChartPanel title="加盟店粗利率分布" icon={Percent}>
+              {loading ? <Skeleton className="h-[180px] w-full" /> : (
+                <DistBreakdown rows={biDist} />
+              )}
+            </ChartPanel>
+            <ChartPanel
+              title="加盟店ランキング"
+              icon={Building2}
+              className="lg:col-span-2"
+              flush
+              right={<span className="text-[11px] text-muted-foreground">{biRanking.length}社</span>}
+            >
+              {loading ? (
+                <div className="px-4 pb-4 space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-8 rounded-lg" />)}</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50/80 text-[11px] text-muted-foreground">
+                        <th className="px-3 py-1.5 text-left w-8 font-medium">#</th>
+                        <th className="px-3 py-1.5 text-left font-medium">加盟店</th>
+                        <th className="px-3 py-1.5 text-right font-medium">工事</th>
+                        <th className="px-3 py-1.5 text-right font-medium">受注額</th>
+                        <th className="px-3 py-1.5 text-right font-medium">粗利</th>
+                        <th className="px-3 py-1.5 text-right font-medium">粗利率</th>
+                        <th className="px-3 py-1.5 text-right font-medium">平均単価</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {biRanking.length === 0 ? (
+                        <tr><td colSpan={7} className="px-3 py-10 text-center text-sm text-muted-foreground">データがありません</td></tr>
+                      ) : biRanking.slice(0, 20).map((r, i) => (
+                        <tr key={r.companyId} className="border-b last:border-0 hover:bg-slate-50/80 transition-colors">
+                          <td className="px-3 py-2 text-xs tabular-nums text-muted-foreground">{i + 1}</td>
+                          <td className="px-3 py-2">
+                            <span className="text-xs font-medium truncate block max-w-[180px]">{r.companyName}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{r.constructionCount}<span className="text-muted-foreground">/{r.completedCount}</span></td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums font-medium">{compactYen(r.revenue)}</td>
+                          <td className={cn("px-3 py-2 text-right text-xs tabular-nums", r.gross < 0 && "text-rose-600")}>{compactYen(r.gross)}</td>
+                          <td className={cn("px-3 py-2 text-right text-xs tabular-nums", r.grossRate < 0 ? "text-rose-600" : r.grossRate >= 0.2 ? "text-emerald-700" : "")}>{r.revenue > 0 ? pct(r.grossRate) : "—"}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">{r.constructionCount > 0 ? compactYen(r.avgUnitPrice) : "—"}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {biRanking.length === 0 ? (
-                          <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">データがありません</td></tr>
-                        ) : biRanking.slice(0, 20).map((r, i) => (
-                          <tr key={r.companyId} className="border-b hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-2">
-                                <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                                  <Building2 className="h-3 w-3 text-primary" />
-                                </div>
-                                <span className="text-xs font-medium truncate">{r.companyName}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-xs tabular-nums">{r.constructionCount}<span className="text-muted-foreground"> ({r.completedCount})</span></td>
-                            <td className="px-4 py-2.5 text-right text-xs tabular-nums font-medium">{yen(r.revenue)}</td>
-                            <td className={cn("px-4 py-2.5 text-right text-xs tabular-nums", r.gross < 0 && "text-rose-600")}>{yen(r.gross)}</td>
-                            <td className={cn("px-4 py-2.5 text-right text-xs tabular-nums", r.grossRate < 0 ? "text-rose-600" : r.grossRate >= 0.2 ? "text-emerald-600" : "")}>{r.revenue > 0 ? pct(r.grossRate) : "—"}</td>
-                            <td className="px-4 py-2.5 text-right text-xs tabular-nums text-muted-foreground">{r.constructionCount > 0 ? yen(r.avgUnitPrice) : "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </ChartPanel>
           </div>
         </div>}
 
@@ -1032,17 +930,164 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   );
 }
 
-function BiKpi({ label, value, sub, icon: Icon }: { label: string; value: string; sub?: string; icon: React.ComponentType<{ className?: string }> }) {
+function CompactKpiGrid({
+  items,
+  loading,
+}: {
+  items: { label: string; value: string; sub?: string; icon: ComponentType<{ className?: string }> }[];
+  loading?: boolean;
+}) {
   return (
-    <div className="px-4 rounded-lg transition-all duration-300 cursor-default hover:-translate-y-0.5 hover:shadow-[0_0_12px_2px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_0_12px_2px_rgba(255,255,255,0.06)]">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          <Icon className="h-4 w-4 text-primary" />
-        </div>
-      </div>
-      <p className="text-xl font-bold tabular-nums tracking-tight">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+      {(loading ? items.map((it) => ({ ...it, value: "" })) : items).map((item) => {
+        const Icon = item.icon;
+        return (
+          <div key={item.label} className={cn(TEAL_CARD_SM, "px-3 py-2 flex items-center gap-2.5 min-w-0")}>
+            <div className={TEAL_KPI_ICON} style={{ background: "var(--brand-gradient)" }}>
+              <Icon className="h-3.5 w-3.5 text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              {loading ? (
+                <Skeleton className="h-8 w-full" />
+              ) : (
+                <>
+                  <p className="text-[11px] text-slate-500 leading-none truncate">{item.label}</p>
+                  <p className="mt-1 text-sm font-bold tabular-nums tracking-tight text-slate-900 leading-none">
+                    {item.value}
+                    {item.sub ? (
+                      <span className="ml-1.5 text-[11px] font-medium text-slate-400">{item.sub}</span>
+                    ) : null}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+function StatusBreakdown({ status }: { status: Record<string, number> }) {
+  const rows = (Object.keys(STATUS_LABEL) as Array<keyof typeof STATUS_LABEL>).map((key) => ({
+    key,
+    label: STATUS_LABEL[key],
+    value: status[key] ?? 0,
+    color: STATUS_COLOR[key] ?? "var(--brand-dark)",
+  }));
+  const total = rows.reduce((s, r) => s + r.value, 0) || 1;
+  const donut = rows.filter((r) => r.value > 0);
+
+  return (
+    <div className="flex items-stretch gap-4 min-h-[180px]">
+      <div className="w-[140px] shrink-0 self-center aspect-square">
+        <DonutChart
+          data={donut}
+          height={140}
+          innerRadius={40}
+          outerRadius={62}
+          showLabels={false}
+          showLegend={false}
+          formatValue={(v) => `${v}件`}
+          centerLabel={
+            <>
+              <p className="text-[10px] font-semibold text-slate-400 leading-none">工事</p>
+              <p className="text-lg font-bold tabular-nums mt-1 leading-none text-slate-900">
+                {rows.reduce((s, r) => s + r.value, 0)}件
+              </p>
+            </>
+          }
+        />
+      </div>
+      <div className="min-w-0 flex-1 flex flex-col justify-center gap-2 py-1">
+        {rows.map((row) => {
+          const share = Math.round((row.value / total) * 100);
+          return (
+            <div key={row.key}>
+              <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                <span className="flex items-center gap-1.5 min-w-0 font-medium text-slate-700">
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: row.color }} />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span className="tabular-nums text-slate-900 shrink-0">
+                  {row.value}件
+                  <span className="text-slate-400 ml-1.5">{share}%</span>
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(var(--brand-accent-rgb),0.4)" }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${Math.min(100, share)}%`, background: row.color }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DistBreakdown({ rows }: { rows: BiDist }) {
+  const total = rows.reduce((s, r) => s + r.count, 0) || 1;
+  return (
+    <div className="flex flex-col justify-center gap-2.5 min-h-[180px] py-1">
+      {rows.map((row, i) => {
+        const share = Math.round((row.count / total) * 100);
+        const color = DIST_COLORS[i] ?? "var(--brand-dark)";
+        const label = row.label.replace(/^粗利率\s*/, "");
+        return (
+          <div key={row.key}>
+            <div className="flex items-center justify-between gap-2 text-xs mb-1">
+              <span className="flex items-center gap-1.5 min-w-0 font-medium text-slate-700">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
+                <span className="truncate">{label}</span>
+              </span>
+              <span className="tabular-nums text-slate-900 shrink-0">
+                {row.count}社
+                <span className="text-slate-400 ml-1.5">{share}%</span>
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(var(--brand-accent-rgb),0.4)" }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.min(100, share)}%`, background: color }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChartPanel({
+  title,
+  icon: Icon,
+  right,
+  children,
+  className,
+  flush,
+}: {
+  title: string;
+  icon: ComponentType<{ className?: string }>;
+  right?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  flush?: boolean;
+}) {
+  return (
+    <div className={cn("frost-card rounded-xl flex flex-col min-h-0", flush ? "overflow-hidden" : "p-4 gap-3", className)}>
+      <div className={cn("flex items-center justify-between gap-2 shrink-0", flush && "px-4 pt-3.5 pb-2")}>
+        <p className="flex items-center gap-2 text-xs font-bold text-foreground">
+          <Icon className="h-3.5 w-3.5 text-[var(--brand-dark)]" />
+          {title}
+        </p>
+        {right}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+

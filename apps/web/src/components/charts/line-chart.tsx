@@ -18,6 +18,7 @@ type LineChartProps = {
   gridColor?: string;
   labelColor?: string;
   tickColor?: string;
+  hideLegend?: boolean;
 };
 
 export function LineChart({
@@ -28,9 +29,10 @@ export function LineChart({
   gridColor = "#f0f0f0",
   labelColor = "#64748b",
   tickColor = "#64748b",
+  hideLegend = false,
 }: LineChartProps) {
   const width = 480;
-  const pad = { top: 12, right: 40, bottom: 28, left: 44 };
+  const pad = { top: hideLegend ? 8 : 16, right: 40, bottom: 28, left: 44 };
   const chartW = width - pad.left - pad.right;
   const chartH = height - pad.top - pad.bottom;
 
@@ -73,11 +75,11 @@ export function LineChart({
         );
       })}
 
-      {rightTicks.map((tick) => {
+      {rightTicks.map((tick, index) => {
         const y = toRightY(tick);
         return (
           <text
-            key={`right-${tick}`}
+            key={`right-${index}-${tick}`}
             x={width - pad.right + 6}
             y={y + 4}
             textAnchor="start"
@@ -132,16 +134,18 @@ export function LineChart({
         );
       })}
 
-      <g transform={`translate(${pad.left}, ${pad.top - 4})`}>
-        {series.map((s, index) => (
-          <g key={s.key} transform={`translate(${index * 88}, 0)`}>
-            <circle cx={0} cy={0} r={4} fill={s.color} />
-            <text x={10} y={4} fontSize={11} fill={labelColor}>
-              {s.label}
-            </text>
-          </g>
-        ))}
-      </g>
+      {!hideLegend && (
+        <g transform={`translate(${pad.left}, ${pad.top - 4})`}>
+          {series.map((s, index) => (
+            <g key={s.key} transform={`translate(${index * 88}, 0)`}>
+              <circle cx={0} cy={0} r={4} fill={s.color} />
+              <text x={10} y={4} fontSize={11} fill={labelColor}>
+                {s.label}
+              </text>
+            </g>
+          ))}
+        </g>
+      )}
     </svg>
   );
 }

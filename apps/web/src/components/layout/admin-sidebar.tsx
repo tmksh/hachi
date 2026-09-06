@@ -1,15 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { BrandLogo, BrandMark } from "@/components/layout/brand-logo";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,9 +15,7 @@ import {
 import {
   BarChart3,
   Building2,
-  ShieldCheck,
   LogOut,
-  ArrowLeft,
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -35,60 +28,81 @@ const ADMIN_NAV = [
 
 type TabKey = (typeof ADMIN_NAV)[number]["key"];
 
-export function AdminSidebar() {
-  const [expanded, setExpanded] = useState(true);
+const sidebarActiveStyle = { background: "var(--brand-gradient)" } as const;
+
+export function AdminSidebar({
+  expanded,
+  onExpandedChange,
+}: {
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentTab = (searchParams.get("tab") ?? "bi") as TabKey;
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const goTab = (tab: TabKey) => {
     router.replace(`/admin?tab=${tab}`, { scroll: false });
   };
 
-  const initial = user?.email?.charAt(0).toUpperCase() ?? "A";
+  const displayName = profile?.display_name?.trim() || "運営管理者";
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <TooltipProvider delayDuration={300}>
       <aside
-        style={{ width: expanded ? 220 : 68 }}
+        style={{ width: expanded ? 196 : 68 }}
         className="fixed left-3 top-3 z-40 hidden md:flex h-[calc(100vh-24px)] flex-col frost-sidebar overflow-hidden rounded-2xl transition-[width] duration-300 ease-out"
       >
-        {/* Logo */}
-        <div className="flex h-16 items-center px-3 gap-2 mb-1">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl sidebar-nav-hover"
-          >
-            <Image src="/logo.png" alt="BRIDGE" width={40} height={34} className="object-contain w-8 h-auto" />
-          </button>
-          {expanded && (
-              <div className="flex flex-col leading-tight overflow-hidden animate-in fade-in slide-in-from-left-2 duration-150">
-                <span className="text-sm font-semibold text-foreground whitespace-nowrap">BRIDGE</span>
-                <span className="text-[10px] text-amber-600 font-medium whitespace-nowrap flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3" /> 運営管理
-                </span>
-              </div>
-            )}
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            expanded ? "h-14 px-3" : "h-12 justify-center px-1",
+          )}
+        >
+          {expanded ? (
+            <button
+              type="button"
+              onClick={() => onExpandedChange(!expanded)}
+              aria-label="BRIDGE Linq"
+              className="h-10 flex items-center px-1 transition-transform hover:scale-[1.03] shrink-0 rounded-xl sidebar-nav-hover animate-in fade-in slide-in-from-left-2 duration-150"
+            >
+              <BrandLogo compact />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onExpandedChange(!expanded)}
+              aria-label="BRIDGE Linq"
+              className="h-10 w-10 flex items-center justify-center transition-transform hover:scale-105 shrink-0 rounded-xl sidebar-nav-hover"
+            >
+              <BrandMark className="h-8 w-auto" />
+            </button>
+          )}
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 flex flex-col gap-0.5 py-3 overflow-y-auto px-2">
+        <nav
+          className={cn(
+            "flex-1 flex flex-col gap-1 min-h-0 overflow-y-auto",
+            expanded ? "py-3 px-2" : "py-2 px-1 items-center",
+          )}
+        >
           {ADMIN_NAV.map(({ key, label, icon: Icon }) => {
             const active = currentTab === key;
             if (expanded) {
               return (
                 <button
                   key={key}
+                  type="button"
                   onClick={() => goTab(key)}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left sidebar-nav-hover",
-                    active ? "text-primary" : "text-muted-foreground",
+                    active ? "text-white shadow-sm" : "text-muted-foreground",
                   )}
+                  style={active ? sidebarActiveStyle : undefined}
                 >
-                  <span className="shrink-0 relative">
-                    <Icon className="h-5 w-5" />
-                  </span>
+                  <Icon className="h-5 w-5 shrink-0" />
                   <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
                 </button>
               );
@@ -97,11 +111,14 @@ export function AdminSidebar() {
               <Tooltip key={key}>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
                     onClick={() => goTab(key)}
+                    aria-label={label}
                     className={cn(
                       "relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover",
-                      active ? "bg-primary/10 text-primary" : "text-muted-foreground",
+                      active ? "text-white shadow-sm" : "text-muted-foreground",
                     )}
+                    style={active ? sidebarActiveStyle : undefined}
                   >
                     <Icon className="h-5 w-5" />
                   </button>
@@ -112,84 +129,63 @@ export function AdminSidebar() {
           })}
         </nav>
 
-        {/* Bottom actions */}
-        <div className="flex flex-col gap-0.5 pb-3 pt-3 px-2">
+        <div
+          className={cn(
+            "flex shrink-0 flex-col gap-1",
+            expanded ? "py-3 px-2" : "py-2 px-1 items-center",
+          )}
+        >
           {expanded ? (
-            <>
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground sidebar-nav-hover hover:text-foreground"
-              >
-                <ArrowLeft className="h-4 w-4 shrink-0" />
-                <span className="whitespace-nowrap">通常画面に戻る</span>
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-3 px-3 py-2 rounded-xl sidebar-nav-hover mt-1">
-                    <Avatar className="h-7 w-7">
-                      <AvatarFallback className="bg-amber-100 text-amber-700 text-xs font-semibold">
-                        {initial}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col items-start text-left overflow-hidden">
-                      <span className="text-xs font-medium text-foreground whitespace-nowrap truncate w-[140px]">
-                        運営管理者
-                      </span>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap truncate w-[140px]">
-                        {user?.email ?? ""}
-                      </span>
-                    </div>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href="/dashboard">
-                      <ArrowLeft className="h-4 w-4 mr-2" />通常画面に戻る
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={signOut}>
-                    <LogOut className="h-4 w-4 mr-2" />ログアウト
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm sidebar-nav-hover">
+                  <Avatar className="h-6 w-6 shrink-0 border-2 border-transparent hover:border-primary/20 transition-colors">
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+                    {displayName}
+                  </span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end" className="w-56">
+                <div className="px-2 py-2">
+                  <p className="text-sm font-medium">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email ?? ""}</p>
+                  <p className="text-xs text-primary font-medium mt-0.5">運営管理</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={signOut} className="gap-2 text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  ログアウト
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    href="/dashboard"
-                    className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover hover:text-foreground transition-all"
-                  >
-                    <ArrowLeft className="h-5 w-5" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right">通常画面に戻る</TooltipContent>
-              </Tooltip>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover transition-all">
-                    <Avatar className="h-7 w-7">
-                      <AvatarFallback className="bg-amber-100 text-amber-700 text-xs font-semibold">
-                        {initial}
-                      </AvatarFallback>
-                    </Avatar>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="end" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href="/dashboard">
-                      <ArrowLeft className="h-4 w-4 mr-2" />通常画面に戻る
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={signOut}>
-                    <LogOut className="h-4 w-4 mr-2" />ログアウト
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover">
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end" className="w-56">
+                <div className="px-2 py-2">
+                  <p className="text-sm font-medium">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email ?? ""}</p>
+                  <p className="text-xs text-primary font-medium mt-0.5">運営管理</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={signOut} className="gap-2 text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  ログアウト
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </aside>

@@ -46,15 +46,15 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const { profile, signOut } = useAuth();
-  const [expanded, setExpanded] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [bridgeSeed, setBridgeSeed] = useState<BridgeSeed | null>(null);
-  const [internalChatSeed, setInternalChatSeed] = useState<InternalChatSeed | null>(null);
-  const [internalChatOpen, setInternalChatOpen] = useState(false);
   const pathname = usePathname();
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
   const pageBg = pathname?.startsWith("/dashboard2") ? BLUE_PAGE_BG : TEAL_PAGE_BG;
+  const [expanded, setExpanded] = useState(isAdminConsole);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [bridgeSeed, setBridgeSeed] = useState<BridgeSeed | null>(null);
+  const [internalChatSeed, setInternalChatSeed] = useState<InternalChatSeed | null>(null);
+  const [internalChatOpen, setInternalChatOpen] = useState(false);
 
   const openInternalChat = useCallback((opts?: OpenInternalChatOptions) => {
     if (opts?.userId) {
@@ -96,13 +96,12 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   if (isAdminConsole) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen" style={{ backgroundColor: pageBg, ...mainStyle }}>
+        <BrandColorBootstrap />
         <Suspense fallback={null}>
-          <AdminSidebar />
+          <AdminSidebar expanded={expanded} onExpandedChange={setExpanded} />
         </Suspense>
-        <main
-          className="mx-auto max-w-[1600px] min-w-0 pb-20 md:pb-0 md:pl-[244px]"
-        >
+        <main className="w-full min-w-0 pb-20 md:pb-0 md:pl-[var(--main-pl)] transition-[padding] duration-300 ease-out">
           {children}
         </main>
       </div>

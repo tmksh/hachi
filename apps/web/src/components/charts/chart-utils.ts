@@ -10,7 +10,8 @@ export function niceMax(value: number): number {
 export function buildTicks(max: number, count = 4): number[] {
   const ceiling = niceMax(max);
   const step = ceiling / count;
-  return Array.from({ length: count + 1 }, (_, i) => Math.round(step * i));
+  return Array.from({ length: count + 1 }, (_, i) => Math.round(step * i))
+    .filter((t, i, arr) => i === 0 || t !== arr[i - 1]);
 }
 
 // 上下で必要な分だけ軸を確保する非対称目盛り（財務P&L向け）

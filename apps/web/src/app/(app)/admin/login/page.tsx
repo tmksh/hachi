@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -52,19 +53,11 @@ export default function AdminLoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <div className="w-full max-w-md">
         <Card className="border-0 shadow-xl shadow-primary/5">
-          <CardHeader className="text-center space-y-4 pb-2">
-            <div className="flex items-center justify-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center shadow-md">
-                <ShieldCheck className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <div className="text-left">
-                <h1 className="text-xl font-bold tracking-tight">BRIDGE 運営管理</h1>
-                <p className="text-[11px] text-primary">Super Admin Console</p>
-              </div>
+          <CardHeader className="flex-col items-center justify-center text-center space-y-3 pb-2">
+            <div className="flex justify-center pt-2">
+              <BrandLogo />
             </div>
-            <p className="text-sm text-muted-foreground">
-              運営管理者専用のログイン画面です
-            </p>
+            <p className="text-sm text-muted-foreground">運営管理者専用のログイン画面です</p>
           </CardHeader>
 
           <CardContent className="space-y-5 pt-6">
