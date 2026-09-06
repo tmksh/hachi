@@ -9,6 +9,7 @@ export default async function FulfillmentPage() {
       departments: [] as string[],
       accountItems: [] as string[],
       sender: EMPTY_TRANSFER_SENDER,
+      closingDay: "20" as const,
     })),
   ]);
   return <FulfillmentClient initialOrders={orders} departments={masters.departments} />;

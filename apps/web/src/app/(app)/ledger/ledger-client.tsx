@@ -27,12 +27,14 @@ import {
   inclOf,
   isZenginAccountReady,
   isZenginSenderReady,
+  ledgerMonthOf,
   printHtml,
   resolveZenginAccount,
   taxOf,
   toCsv,
   yen,
   type CsvOutputColumnKey,
+  type InvoiceClosingDay,
   type TransferSender,
 } from "@/lib/procurement";
 
@@ -57,6 +59,7 @@ type Props = {
     departments: string[];
     accountItems: string[];
     sender: TransferSender;
+    closingDay: InvoiceClosingDay;
   };
 };
 
@@ -86,19 +89,20 @@ export function LedgerClient({ initialOrders, masters }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [showUnexportable, setShowUnexportable] = useState(false);
   const [sender, setSender] = useState(masters.sender);
+  const closingDay: InvoiceClosingDay = "20";
 
   const approved = useMemo(() => approvedOnly(initialOrders), [initialOrders]);
 
   const filtered = useMemo(() => {
     return approved.filter((o) => {
-      const payMonth = (o.delivery_date ?? o.vendor_invoice_date ?? o.payment_date ?? "").slice(0, 7);
+      const payMonth = ledgerMonthOf(o, closingDay);
       if (month !== "all" && payMonth && payMonth !== month) return false;
       if (department !== "all" && (o.department ?? "") !== department) return false;
       if (accountItem !== "all" && (o.account_item ?? "") !== accountItem) return false;
       if (project !== "all" && o.construction_id !== project) return false;
       return true;
     });
-  }, [approved, month, department, accountItem, project]);
+  }, [approved, month, department, accountItem, project, closingDay]);
 
   const projects = useMemo(() => {
     const map = new Map<string, string>();
@@ -116,11 +120,11 @@ export function LedgerClient({ initialOrders, masters }: Props) {
       set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
     }
     for (const o of approved) {
-      const ym = (o.delivery_date ?? o.vendor_invoice_date ?? o.payment_date ?? "").slice(0, 7);
+      const ym = ledgerMonthOf(o, closingDay);
       if (/^\d{4}-\d{2}$/.test(ym)) set.add(ym);
     }
     return [...set].sort().reverse();
-  }, [approved]);
+  }, [approved, closingDay]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -310,7 +314,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader
         title="帳票データ作成"
-        description="ネットバンキング用の全銀データと、案件別確認用CSVを請求データから作成します。経理が承認した請求だけが対象です。"
+        description="ネットバンキング用の全銀データと、案件別確認用CSVを請求データから作成します。支払い確定した請求だけが対象です。"
       >
         <div className="flex items-center gap-2">
           <Badge className="bg-amber-100 text-amber-800 border-amber-200">経理・営業事務・ディレクター</Badge>
@@ -421,7 +425,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
         <p className="text-xs text-muted-foreground -mt-2">下の表に出す請求を選びます。初期は全部です。</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <Label className="text-xs">納品月</Label>
+            <Label className="text-xs">対象月（納品日）</Label>
             <Select value={month} onValueChange={setMonth}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -432,6 +436,9 @@ export function LedgerClient({ initialOrders, masters }: Props) {
                 })}
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-muted-foreground">
+              請求日ではなく納品日で判定。21日以降は翌月度（例: 9/21納品→10月度）
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">振込指定日</Label>
@@ -511,7 +518,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
         <div className="px-4 py-3 border-b text-sm font-semibold">
           {format === "zengin" ? "振込明細" : "請求一覧"}
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            経理承認済み {approved.length} 件 / 表示 {format === "csv" ? csvRows.length : visibleZengin.length} 件
+            支払い確定 {approved.length} 件 / 表示 {format === "csv" ? csvRows.length : visibleZengin.length} 件
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -534,8 +541,8 @@ export function LedgerClient({ initialOrders, masters }: Props) {
                 {csvRows.length === 0 ? (
                   <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {approved.length === 0
-                      ? "承認済みの請求がありません。納品・検収管理で経理承認するとここに表示されます。"
-                      : `承認済みは ${approved.length} 件ありますが、選んだ納品月にはありません。納品月を「すべて」にしてください。`}
+                      ? "支払い確定の請求がありません。納品・検収管理で総務が支払い確定するとここに表示されます。"
+                      : `支払い確定は ${approved.length} 件ありますが、選んだ対象月にはありません。対象月を「すべて」にしてください。`}
                   </td></tr>
                 ) : csvRows.map((r) => (
                   <tr key={r.id} className="border-t">
@@ -573,7 +580,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
                     {approved.length === 0
                       ? "出力対象がありません。"
                       : filtered.length === 0
-                        ? `承認済みは ${approved.length} 件ありますが、選んだ納品月にはありません。納品月を「すべて」にしてください。`
+                        ? `支払い確定は ${approved.length} 件ありますが、選んだ対象月にはありません。対象月を「すべて」にしてください。`
                         : "口座未登録のため表に出していません。上の警告から「該当件を表示」を押すと確認できます。"}
                   </td></tr>
                 ) : visibleZengin.map((g) => {

@@ -9,6 +9,7 @@ export default async function LedgerPage() {
       departments: [] as string[],
       accountItems: [] as string[],
       sender: EMPTY_TRANSFER_SENDER,
+      closingDay: "20" as const,
     })),
   ]);
   return <LedgerClient initialOrders={orders} masters={masters} />;

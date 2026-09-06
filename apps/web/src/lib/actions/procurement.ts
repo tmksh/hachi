@@ -261,6 +261,7 @@ export async function getProcurementMasters(): Promise<{
   departments: string[];
   accountItems: string[];
   sender: TransferSender;
+  closingDay: "20" | "end_of_month";
 }> {
   const { supabase, companyId } = await getAuthContext();
   const [locations, { data: company }] = await Promise.all([
@@ -272,6 +273,7 @@ export async function getProcurementMasters(): Promise<{
     departments: locations.map((l) => l.name),
     accountItems: PROCUREMENT_ACCOUNT_ITEMS.map((i) => i.name),
     sender: parseTransferSender(settings, company?.name ?? ""),
+    closingDay: settings.invoice_closing_day === "end_of_month" ? "end_of_month" : "20",
   };
 }
 
@@ -414,7 +416,7 @@ export async function attachStaffInvoicePdf(
     const { supabase, companyId } = await getAuthContext();
     const { data: current } = await supabase
       .from("contractor_orders")
-      .select("id, ledger_status, vendor_invoice_submitted_at")
+      .select("id, ledger_status, vendor_invoice_submitted_at, delivery_date, inspection_date")
       .eq("id", orderId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -446,20 +448,24 @@ export async function attachStaffInvoicePdf(
       upsert: false,
     });
 
-    const invoiceDate = String(formData.get("invoiceDate") ?? "").trim();
     const invoiceNo = String(formData.get("invoiceNo") ?? "").trim();
     const rawAmount = String(formData.get("invoiceAmount") ?? "").trim();
-    const invoiceAmount = rawAmount === "" ? null : Number(rawAmount);
+    if (rawAmount === "") {
+      return actionFail("請求書の金額を入力してください", "請求書の金額を入力してください");
+    }
+    const invoiceAmount = Number(rawAmount);
+    if (!Number.isFinite(invoiceAmount)) {
+      return actionFail("請求書の金額が不正です", "請求書の金額が不正です");
+    }
+    const tradeDate = current.delivery_date || current.inspection_date || todayIso();
     const patch: Record<string, unknown> = {
       vendor_invoice_pdf_path: path,
-      vendor_invoice_date: invoiceDate || todayIso(),
+      vendor_invoice_date: tradeDate,
       vendor_invoice_no: invoiceNo || null,
+      vendor_invoice_amount: invoiceAmount,
       vendor_invoice_submitted_at: new Date().toISOString(),
       ledger_status: "invoice_received",
     };
-    if (invoiceAmount != null && Number.isFinite(invoiceAmount)) {
-      patch.vendor_invoice_amount = invoiceAmount;
-    }
     let order: ProcurementOrder;
     try {
       order = await updateOrderProcurement(orderId, patch);
@@ -494,15 +500,13 @@ export async function registerDelivery(input: {
   orderId: string;
   deliveryDate: string;
   content: string;
-  partial: string;
   attachments?: ProcurementAttachment[];
-  lotAmount?: number | null;
-}): Promise<ActionResult<{ order: ProcurementOrder; remainingOrder?: ProcurementOrder }>> {
+}): Promise<ActionResult<{ order: ProcurementOrder }>> {
   try {
     const { supabase, companyId } = await getAuthContext();
     const { data: before } = await supabase
       .from("contractor_orders")
-      .select("id, amount, parent_order_id, lot_no, company_id, concluded_at")
+      .select("id, concluded_at, ledger_status")
       .eq("id", input.orderId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -510,108 +514,93 @@ export async function registerDelivery(input: {
     if (!before.concluded_at) {
       return actionFail("請書の受領後に納品できます", "請書の受領後に納品できます");
     }
-
-    const originalAmount = Number(before.amount ?? 0);
-    const lotAmount = input.lotAmount != null && Number.isFinite(input.lotAmount) ? Number(input.lotAmount) : null;
-    if (input.partial === "partial") {
-      if (lotAmount == null || lotAmount <= 0) {
-        return actionFail("分納の金額を入力してください", "分納の金額を入力してください");
-      }
-      if (lotAmount >= originalAmount) {
-        return actionFail("分納の金額は発注額未満にしてください", "分納の金額は発注額未満にしてください");
-      }
+    if (before.ledger_status !== "ordered" && before.ledger_status !== "delivered") {
+      return actionFail("発注済みの行だけ納品できます", "発注済みの行だけ納品できます");
     }
+
     const patch: Record<string, unknown> = {
       delivery_date: input.deliveryDate || todayIso(),
       delivery_content: input.content.trim() || null,
-      delivery_partial: input.partial || "none",
+      delivery_partial: "none",
       ledger_status: "delivered",
     };
     if (input.attachments && input.attachments.length > 0) {
       patch.delivery_attachments = input.attachments;
     }
-    if (input.partial === "partial" && lotAmount != null) {
-      patch.amount = lotAmount;
-    }
-
     const order = await updateOrderProcurement(input.orderId, patch);
-    let remainingOrder: ProcurementOrder | undefined;
-    if (input.partial === "partial") {
-      remainingOrder = await createRemainingLot(order, {
-        originalAmount,
-        lotAmount,
-        rootId: before.parent_order_id ?? before.id,
-      });
-    }
-    return actionOk({ order, remainingOrder });
+    return actionOk({ order });
   } catch (e) {
     return actionFail(e, "納品の登録に失敗しました");
   }
 }
 
-async function createRemainingLot(
-  order: ProcurementOrder,
-  opts: { originalAmount: number; lotAmount: number | null; rootId: string },
-): Promise<ProcurementOrder | undefined> {
-  const { supabase, companyId } = await getAuthContext();
-  const { data: siblings } = await supabase
-    .from("contractor_orders")
-    .select("lot_no")
-    .eq("company_id", companyId)
-    .or(`id.eq.${opts.rootId},parent_order_id.eq.${opts.rootId}`);
-  const nextLot = Math.max(1, ...(siblings ?? []).map((s) => Number(s.lot_no ?? 1))) + 1;
-  const remainingAmount = opts.lotAmount != null
-    ? Math.max(0, opts.originalAmount - opts.lotAmount)
-    : 0;
-  if (remainingAmount <= 0) return undefined;
-
-  const payload: Record<string, unknown> = {
-    company_id: order.company_id,
-    construction_id: order.construction_id,
-    craftsman_id: order.craftsman_id,
-    title: /分納残/.test(order.title) ? order.title : `${order.title}（分納残）`,
-    amount: remainingAmount,
-    status: "approved",
-    approved_by: order.approved_by,
-    approved_at: order.approved_at,
-    notes: order.notes,
-    order_date: order.order_date,
-    start_date: order.start_date,
-    end_date: order.end_date,
-    completion_date: order.completion_date,
-    payment_date: order.payment_date,
-    payment_count: order.payment_count,
-    work_content: order.work_content,
-    special_notes: order.special_notes,
-    payment_schedule: order.payment_schedule,
-    po_no: order.po_no,
-    department: order.department,
-    account_item: order.account_item,
-    account_item_source: order.account_item_source,
-    ledger_status: "ordered",
-    parent_order_id: opts.rootId,
-    lot_no: nextLot,
-    concluded_at: order.concluded_at ?? new Date().toISOString(),
-  };
-
-  const { data, error } = await supabase
-    .from("contractor_orders")
-    .insert(payload)
-    .select(ORDER_SELECT)
-    .single();
-  if (error) {
-    const { parent_order_id: _p, lot_no: _l, ...fallbackPayload } = payload;
-    void _p;
-    void _l;
-    const retry = await supabase
+export async function registerDeliveryAndInspect(input: {
+  orderId: string;
+  deliveryDate: string;
+  content: string;
+  attachments?: ProcurementAttachment[];
+  comment?: string;
+  sendEmail: boolean;
+}): Promise<ActionResult<{
+  order: ProcurementOrder;
+  invoiceUrl?: string;
+  emailSent?: boolean;
+  emailTo?: string;
+  emailError?: string;
+}>> {
+  try {
+    const { supabase, companyId, displayName, user } = await getAuthContext();
+    const { data: before } = await supabase
       .from("contractor_orders")
-      .insert(fallbackPayload)
-      .select(ORDER_SELECT)
-      .single();
-    if (retry.error) throw new Error(retry.error.message);
-    return retry.data as ProcurementOrder;
+      .select("id, concluded_at, ledger_status")
+      .eq("id", input.orderId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!before) return actionFail("発注が見つかりません", "発注が見つかりません");
+    if (!before.concluded_at) {
+      return actionFail("請書の受領後に納品検収できます", "請書の受領後に納品検収できます");
+    }
+    if (before.ledger_status !== "ordered" && before.ledger_status !== "delivered") {
+      return actionFail("発注済みの行だけ納品検収できます", "発注済みの行だけ納品検収できます");
+    }
+
+    const deliveryDate = input.deliveryDate || todayIso();
+    const token = crypto.randomUUID().replace(/-/g, "");
+    const expires = addDaysIso(todayIso(), 30);
+    const invoiceUrl = `/partner/invoice/${token}`;
+    const patch: Record<string, unknown> = {
+      delivery_date: deliveryDate,
+      delivery_content: input.content.trim() || null,
+      delivery_partial: "none",
+      inspection_result: "pass",
+      inspection_date: deliveryDate,
+      inspection_comment: input.comment?.trim() || null,
+      inspector_name: displayName,
+      ledger_status: "inspected",
+      invoice_token: token,
+      invoice_token_expires_at: `${expires}T23:59:59.000Z`,
+    };
+    if (input.attachments && input.attachments.length > 0) {
+      patch.delivery_attachments = input.attachments;
+    }
+    const order = await updateOrderProcurement(input.orderId, patch);
+
+    let mail: { sent: boolean; to?: string; error?: string } = { sent: false };
+    if (input.sendEmail) {
+      mail = isPaperInvoice(order.craftsman)
+        ? await notifyVendorPaperInvoice(order, user.id)
+        : await notifyVendorInvoiceUrl(order, invoiceUrl, expires, user.id);
+    }
+    return actionOk({
+      order,
+      invoiceUrl,
+      emailSent: mail.sent,
+      emailTo: mail.to,
+      emailError: mail.error,
+    });
+  } catch (e) {
+    return actionFail(e, "納品検収に失敗しました");
   }
-  return data as ProcurementOrder;
 }
 
 export async function completeInspection(input: {
@@ -754,13 +743,82 @@ export async function approveVendorInvoice(orderId: string): Promise<Procurement
     .eq("company_id", companyId)
     .maybeSingle();
   if (!current) throw new Error("発注が見つかりません");
-  if (current.ledger_status !== "confirmed" || !current.director_confirmed_at) {
-    throw new Error("ディレクター確認のあとで経理承認できます");
+  if (current.ledger_status !== "confirmed" && current.ledger_status !== "invoice_received") {
+    throw new Error("請求書受領または確認済みの行だけ支払い確定できます");
   }
+  const now = new Date().toISOString();
   return updateOrderProcurement(orderId, {
-    accounting_approved_at: new Date().toISOString(),
+    director_confirmed_at: current.director_confirmed_at ?? now,
+    accounting_approved_at: now,
     ledger_status: "payment_approved",
   });
+}
+
+function constructionAssigneeId(order: ProcurementOrder): string | null {
+  const assigned = order.construction?.assigned_to;
+  if (assigned) return assigned;
+  const raw = order.construction?.assignee;
+  const a = Array.isArray(raw) ? raw[0] ?? null : raw ?? null;
+  return a?.id ?? null;
+}
+
+export async function returnVendorInvoice(input: {
+  orderId: string;
+  reason: string;
+}): Promise<ActionResult<{ order: ProcurementOrder; notified: boolean }>> {
+  try {
+    const reason = input.reason.trim();
+    if (!reason) {
+      return actionFail("差し戻し理由を入力してください", "差し戻し理由を入力してください");
+    }
+    await assertCanApproveVendorInvoice();
+    const { supabase, companyId, user, displayName } = await getAuthContext();
+    const { data: current } = await supabase
+      .from("contractor_orders")
+      .select("id, ledger_status")
+      .eq("id", input.orderId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!current) return actionFail("発注が見つかりません", "発注が見つかりません");
+    if (current.ledger_status !== "invoice_received" && current.ledger_status !== "confirmed") {
+      return actionFail(
+        "請求書受領または確認済みの行だけ差し戻せます",
+        "請求書受領または確認済みの行だけ差し戻せます",
+      );
+    }
+
+    const order = await updateOrderProcurement(input.orderId, {
+      ledger_status: "inspected",
+      vendor_invoice_submitted_at: null,
+      director_confirmed_at: null,
+      accounting_approved_at: null,
+      vendor_invoice_remarks: `差し戻し: ${reason}`,
+    });
+
+    const assigneeId = constructionAssigneeId(order);
+    let notified = false;
+    if (assigneeId) {
+      try {
+        const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+        await notifySalesFlowUser(supabase, companyId, assigneeId, {
+          title: `請求書が差し戻されています — ${order.po_no ?? order.title}`,
+          description: [
+            `${displayName ?? "総務"}が請求書を差し戻しました。対応するまで支払い確定に進めません。`,
+            `理由: ${reason}`,
+          ].join("\n"),
+          href: "/fulfillment",
+          urgent: true,
+          extraTags: ["fulfillment"],
+        }, user.id);
+        notified = true;
+      } catch {
+        notified = false;
+      }
+    }
+    return actionOk({ order, notified });
+  } catch (e) {
+    return actionFail(e, "差し戻しに失敗しました");
+  }
 }
 
 export async function confirmAccountItems(

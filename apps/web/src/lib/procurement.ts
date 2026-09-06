@@ -40,13 +40,13 @@ export const LEDGER_STATUS_META: Record<
     label: "発注済み",
     cls: "bg-slate-100 text-slate-700",
     bar: "bg-slate-100 text-slate-700",
-    nextActor: "担当者が納品を登録",
+    nextActor: "担当者が納品検収",
   },
   delivered: {
     label: "納品済み（検収待ち）",
     cls: "bg-orange-100 text-orange-800",
     bar: "bg-orange-50 text-orange-800 border-orange-200",
-    nextActor: "担当者が検収完了",
+    nextActor: "担当者が納品検収（旧データ）",
   },
   inspected: {
     label: "検収完了（請求待ち）",
@@ -58,16 +58,16 @@ export const LEDGER_STATUS_META: Record<
     label: "請求書受領",
     cls: "bg-sky-100 text-sky-800",
     bar: "bg-sky-50 text-sky-800 border-sky-200",
-    nextActor: "ディレクターが確認",
+    nextActor: "ディレクター確認／総務が支払い確定",
   },
   confirmed: {
     label: "確認済み",
     cls: "bg-violet-100 text-violet-800",
     bar: "bg-violet-50 text-violet-800 border-violet-200",
-    nextActor: "経理が承認",
+    nextActor: "総務が支払い確定",
   },
   payment_approved: {
-    label: "承認済み",
+    label: "支払い確定",
     cls: "bg-green-100 text-green-800",
     bar: "bg-green-50 text-green-800 border-green-200",
     nextActor: "帳票データへ",
@@ -170,6 +170,31 @@ export function addDaysIso(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+export type InvoiceClosingDay = "20" | "end_of_month";
+
+/**
+ * 帳票データの対象月。請求日は使わず、納品日（なければ納品検収日）で判定する。
+ * 20日締め: 9/19納品→9月度、9/21納品→10月度。
+ */
+export function ledgerMonthOf(
+  order: {
+    delivery_date?: string | null;
+    inspection_date?: string | null;
+  },
+  closingDay: InvoiceClosingDay = "20",
+): string {
+  const iso = (order.delivery_date || order.inspection_date || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const y = Number(iso.slice(0, 4));
+  const m = Number(iso.slice(5, 7));
+  const d = Number(iso.slice(8, 10));
+  if (closingDay === "20" && d >= 21) {
+    const next = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
+    return `${next.y}-${String(next.m).padStart(2, "0")}`;
+  }
+  return `${y}-${String(m).padStart(2, "0")}`;
 }
 
 const ACCOUNT_HINTS: Array<{ re: RegExp; item: string }> = [
