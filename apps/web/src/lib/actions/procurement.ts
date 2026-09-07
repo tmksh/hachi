@@ -82,8 +82,25 @@ const DELIVERY_MIME = new Set([
   "image/heif",
 ]);
 
+/**
+ * Supabase Storage のオブジェクトキーは ASCII のみ（日本語・# などは Invalid key）。
+ * 表示用の元ファイル名は呼び出し側で file.name を別途保持する。
+ */
 function safeFileName(name: string): string {
-  return name.replace(/[^\w.\-()\u3000-\u9fff]/g, "_").slice(0, 80) || "file";
+  const base = name.replace(/\\/g, "/").split("/").pop()?.trim() || "file";
+  const dot = base.lastIndexOf(".");
+  const extRaw = (dot > 0 ? base.slice(dot + 1) : "").toLowerCase();
+  const ext = /^[a-z0-9]{1,8}$/.test(extRaw) ? extRaw : "bin";
+  const rawStem = dot > 0 ? base.slice(0, dot) : base;
+  if (/[^\u0000-\u007F]/.test(rawStem)) {
+    return `file.${ext}`;
+  }
+  const stem = rawStem
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[._]+|[._]+$/g, "")
+    .slice(0, 60);
+  return `${stem || "file"}.${ext}`;
 }
 
 async function resolveAppOrigin(): Promise<string> {
