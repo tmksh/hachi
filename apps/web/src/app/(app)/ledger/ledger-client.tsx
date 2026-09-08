@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
-import { fetchProcurementMasters, fetchProcurementOrders, LIST_STALE_MS, MASTER_STALE_MS, QK } from "@/lib/queries/portal";
+import { fetchProcurementMasters, fetchProcurementOrders, LIST_STALE_MS, MASTER_STALE_MS, QK, type ProcurementMasters } from "@/lib/queries/portal";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,12 +59,7 @@ type SortKey =
 
 type Props = {
   initialOrders?: ProcurementOrder[];
-  masters?: {
-    departments: string[];
-    accountItems: string[];
-    sender: TransferSender;
-    closingDay: InvoiceClosingDay;
-  };
+  masters?: ProcurementMasters;
 };
 
 function approvedOnly(orders: ProcurementOrder[]) {

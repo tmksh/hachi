@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { canUserViewAnnouncement } from "@/lib/announcement-visibility";
-import { EMPTY_TRANSFER_SENDER, PROCUREMENT_ACCOUNT_ITEMS, parseTransferSender } from "@/lib/procurement";
+import { EMPTY_TRANSFER_SENDER, PROCUREMENT_ACCOUNT_ITEMS, parseTransferSender, type InvoiceClosingDay, type TransferSender } from "@/lib/procurement";
 import { PDF_FORM_TEMPLATES_KEY, resolvePdfFormTemplates } from "@/lib/pdf-form-template";
 import { PROVIDER_DEFINITIONS } from "@/lib/app-integrations/providers/registry";
 import { DEFAULT_DEPARTMENTS, buildFiscalMonthLabels, getCurrentFiscalYear } from "@/lib/bi-utils";
@@ -83,7 +83,14 @@ export async function fetchProcurementOrders() {
   return fallback ?? [];
 }
 
-export async function fetchProcurementMasters() {
+export type ProcurementMasters = {
+  departments: string[];
+  accountItems: string[];
+  sender: TransferSender;
+  closingDay: InvoiceClosingDay;
+};
+
+export async function fetchProcurementMasters(): Promise<ProcurementMasters> {
   const { supabase, profile } = await authContext();
   if (!profile) {
     return {
