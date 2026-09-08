@@ -94,9 +94,9 @@ function getTrendChartData(trend: DashboardData["monthlyTrend"] | undefined) {
 
 
 type DashboardClientProps = {
-  initialData: DashboardData;
-  initialAttendance: AttendanceEntry | null;
-  initialUnfollowedLeads: UnfollowedLead[];
+  initialData?: DashboardData;
+  initialAttendance?: AttendanceEntry | null;
+  initialUnfollowedLeads?: UnfollowedLead[];
 };
 
 export function DashboardClient({

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Search, UserPlus, Ban, Phone, Mail, Inbox } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -43,11 +44,14 @@ import {
   enableInboundWebhook,
   rotateInboundWebhookSecret,
   disableInboundWebhook,
+  getInboundWebhookConfig,
   type InboundWebhookPublicConfig,
 } from "@/lib/actions/leads";
+import { fetchInboundLeads } from "@/lib/queries/lists";
 import type { InboundLead } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
 import { getPublicAppOrigin } from "@/lib/public-app-origin";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { Copy, Link2, RefreshCw, FlaskConical } from "lucide-react";
 
 const STATUS_LABELS: Record<InboundLead["status"], string> = {
@@ -90,15 +94,38 @@ function formatDate(iso: string) {
   }
 }
 
+const EMPTY_WEBHOOK: InboundWebhookPublicConfig = {
+  enabled: false,
+  token: null,
+  secret_prefix: null,
+  path: null,
+  created_at: null,
+  rotated_at: null,
+  canManage: false,
+};
+
 type Props = {
-  initialLeads: InboundLead[];
-  initialWebhook: InboundWebhookPublicConfig;
+  initialLeads?: InboundLead[];
+  initialWebhook?: InboundWebhookPublicConfig;
 };
 
 export function LeadsClient({ initialLeads, initialWebhook }: Props) {
   const router = useRouter();
-  const [leads, setLeads] = useState(initialLeads);
-  const [webhook, setWebhook] = useState(initialWebhook);
+  const queryClient = useQueryClient();
+  const { data: leads = [], isPending } = useQuery({
+    queryKey: ["inbound-leads", "all"],
+    queryFn: () => fetchInboundLeads("all"),
+    staleTime: 120_000,
+    initialData: initialLeads,
+    initialDataUpdatedAt: initialLeads ? Date.now() : undefined,
+  });
+  const { data: webhook = initialWebhook ?? EMPTY_WEBHOOK } = useQuery({
+    queryKey: ["inbound-webhook"],
+    queryFn: getInboundWebhookConfig,
+    staleTime: 120_000,
+    initialData: initialWebhook,
+    initialDataUpdatedAt: initialWebhook ? Date.now() : undefined,
+  });
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("open");
@@ -113,13 +140,20 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
     inquiry_content: "",
   });
 
-  useEffect(() => {
-    setLeads(initialLeads);
-  }, [initialLeads]);
-
-  useEffect(() => {
-    setWebhook(initialWebhook);
-  }, [initialWebhook]);
+  const setLeads = (updater: InboundLead[] | ((prev: InboundLead[]) => InboundLead[])) => {
+    queryClient.setQueryData<InboundLead[]>(["inbound-leads", "all"], (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
+  const setWebhook = (
+    updater:
+      | InboundWebhookPublicConfig
+      | ((prev: InboundWebhookPublicConfig) => InboundWebhookPublicConfig),
+  ) => {
+    queryClient.setQueryData<InboundWebhookPublicConfig>(["inbound-webhook"], (prev = EMPTY_WEBHOOK) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const [origin, setOrigin] = useState("");
   useEffect(() => {
@@ -155,6 +189,10 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
       );
     });
   }, [leads, search, statusFilter]);
+
+  if (isPending && leads.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   function resetForm() {
     setForm({

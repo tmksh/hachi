@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { getCustomers } from "@/lib/actions/customers";
-import { getProfiles } from "@/lib/actions/profiles";
+import { fetchCustomers } from "@/lib/queries/customers";
+import { fetchProfiles } from "@/lib/queries/lists";
 import { createDeal } from "@/lib/actions/deals";
 import type { Deal } from "@/lib/database.types";
 
@@ -52,8 +52,8 @@ export function AddDealDialog({ open, onOpenChange, onCreated, stages = [] }: Pr
 
   useEffect(() => {
     if (open) {
-      getCustomers({ limit: 100 }).then(r => setCustomers(r.customers.map(x => ({ id: x.id, name: x.name })))).catch(() => {});
-      getProfiles().then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
+      fetchCustomers({ limit: 100 }).then(r => setCustomers(r.customers.map(x => ({ id: x.id, name: x.name })))).catch(() => {});
+      fetchProfiles().then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
     }
   }, [open]);
 

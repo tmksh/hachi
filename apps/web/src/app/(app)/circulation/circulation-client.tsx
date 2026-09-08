@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,36 +11,32 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/shared/page-header";
 import { Plus, Pin, AlertTriangle, Users, Search, X, SlidersHorizontal } from "lucide-react";
-import { getAnnouncements } from "@/lib/actions/announcements";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchAnnouncements, LIST_STALE_MS, QK } from "@/lib/queries/portal";
+import { prefetchAnnouncementDetail } from "@/lib/nav-prefetch";
 
-type Ann = Awaited<ReturnType<typeof getAnnouncements>>[number];
+type Ann = Awaited<ReturnType<typeof fetchAnnouncements>>[number];
 
 type CirculationClientProps = {
-  initialItems: Ann[];
+  initialItems?: Ann[];
 };
 
 export function CirculationClient({ initialItems }: CirculationClientProps) {
-  const [items, setItems] = useState<Ann[]>(initialItems);
+  const queryClient = useQueryClient();
+  const { data: items = [], isPending } = useQuery({
+    queryKey: QK.announcements,
+    queryFn: fetchAnnouncements,
+    staleTime: LIST_STALE_MS,
+    initialData: initialItems,
+    initialDataUpdatedAt: initialItems ? Date.now() : undefined,
+  });
   const [keyword, setKeyword] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filterUrgent, setFilterUrgent] = useState(false);
   const [filterPinned, setFilterPinned] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-
-  const reload = useCallback(() => {
-    getAnnouncements().then(setItems).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
-
-  // 詳細から戻った直後など、SSRキャッシュずれを避けるためマウント時に再取得
-  useEffect(() => {
-    reload();
-  }, [reload]);
 
   const filtered = useMemo(() => {
     return items.filter(a => {
@@ -65,6 +62,10 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
     setFilterUrgent(false);
     setFilterPinned(false);
   };
+
+  if (isPending && items.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -156,7 +157,12 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
       ) : (
         <div className="space-y-3">
           {filtered.map(a => (
-            <Link key={a.id} href={`/circulation/${a.id}`} className="block">
+            <Link
+              key={a.id}
+              href={`/circulation/${a.id}`}
+              className="block"
+              onMouseEnter={() => prefetchAnnouncementDetail(queryClient, a.id)}
+            >
               <Card className="hover:shadow-md transition-shadow cursor-pointer">
                 <CardContent className="px-6 py-4">
                   <div className="flex items-start justify-between gap-4">

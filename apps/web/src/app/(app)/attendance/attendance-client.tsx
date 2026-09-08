@@ -13,11 +13,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { LogIn, LogOut, Check, X, ChevronLeft, ChevronRight, Clock, Sun, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { getAttendanceEntries, clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType, recordLeaveDay } from "@/lib/actions/attendance";
+import { clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType, recordLeaveDay } from "@/lib/actions/attendance";
+import { fetchAttendanceEntries } from "@/lib/queries/portal";
 import type { Company } from "@/lib/database.types";
 import { AnalogClock } from "@/components/shared/analog-clock";
 
-type Entry = Awaited<ReturnType<typeof getAttendanceEntries>>[number];
+type Entry = Awaited<ReturnType<typeof fetchAttendanceEntries>>[number];
 
 type AttSettings = {
   start_time?: string;
@@ -120,7 +121,7 @@ export function AttendanceClient({
 
   const load = useCallback(() => {
     setLoading(true);
-    getAttendanceEntries({ month }).then(data => {
+    fetchAttendanceEntries(month).then(data => {
       setEntries(data as Entry[]);
       if (isCurrentMonth) {
         const todayJST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/\//g, "-");

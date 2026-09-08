@@ -1,19 +1,28 @@
 "use client";
 
+import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
-import { getEmailThread } from "@/lib/actions/mail";
+import { fetchMailThread, DETAIL_STALE_MS, QK } from "@/lib/queries/portal";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 
-type Detail = Awaited<ReturnType<typeof getEmailThread>>;
+type Detail = Awaited<ReturnType<typeof fetchMailThread>>;
 
-type MarketingEmailDetailClientProps = {
-  initialData: Detail | null;
-};
+export function MarketingEmailDetailClient() {
+  const { id } = useParams<{ id: string }>();
+  const { data: initialData, isPending } = useQuery({
+    queryKey: QK.mailThread(id),
+    queryFn: () => fetchMailThread(id).catch(() => null),
+    staleTime: DETAIL_STALE_MS,
+    enabled: !!id,
+  });
 
-export function MarketingEmailDetailClient({ initialData }: MarketingEmailDetailClientProps) {
+  if (isPending) return <PageLoadingFallback />;
+
   if (!initialData) {
     return (
       <div className="p-4 md:p-6 space-y-4">

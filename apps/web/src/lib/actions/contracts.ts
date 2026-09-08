@@ -13,7 +13,7 @@ async function loadContracts() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("contracts")
-    .select("*, customer:customers(id, name, company_name), assignee:profiles!contracts_assigned_to_fkey(id, display_name)")
+    .select("id, company_id, contract_no, title, status, amount, contract_date, customer_id, assigned_to, created_at, customer:customers(id, name, company_name), assignee:profiles!contracts_assigned_to_fkey(id, display_name)")
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;

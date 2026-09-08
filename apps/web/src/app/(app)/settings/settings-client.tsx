@@ -13,21 +13,39 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { CrmMasterTab, type CrmMasterInitialData } from "@/components/settings/crm-master-tab";
-import { CraftsmenMasterTab, type CraftsmenMasterInitialData } from "@/components/settings/craftsmen-master-tab";
-import { IntegrationsTab } from "@/components/settings/integrations-tab";
-import { AppIntegrationsTab, type AppIntegrationsInitialData } from "@/components/settings/app-integrations-tab";
-import { GoogleCalendarSettingsCard } from "@/components/settings/google-calendar-settings";
+import type { CrmMasterInitialData } from "@/components/settings/crm-master-tab";
+import type { CraftsmenMasterInitialData } from "@/components/settings/craftsmen-master-tab";
+import type { AppIntegrationsInitialData } from "@/components/settings/app-integrations-tab";
 
 const tabSkeleton = () => <Skeleton className="h-48 w-full rounded-xl" />;
 
-// 使用頻度が低いタブだけ code-split（メイン4タブは静的 import で切替即時）
+// 個人・組織以外のタブは後から読む
 const WorkflowTypesTab = dynamic(
   () => import("@/components/settings/workflow-types-tab").then((m) => m.WorkflowTypesTab),
   { loading: tabSkeleton },
 );
 const PdfBuilderTab = dynamic(
   () => import("@/components/settings/pdf-builder-tab").then((m) => m.PdfBuilderTab),
+  { loading: tabSkeleton },
+);
+const CrmMasterTab = dynamic(
+  () => import("@/components/settings/crm-master-tab").then((m) => m.CrmMasterTab),
+  { loading: tabSkeleton },
+);
+const CraftsmenMasterTab = dynamic(
+  () => import("@/components/settings/craftsmen-master-tab").then((m) => m.CraftsmenMasterTab),
+  { loading: tabSkeleton },
+);
+const IntegrationsTab = dynamic(
+  () => import("@/components/settings/integrations-tab").then((m) => m.IntegrationsTab),
+  { loading: tabSkeleton },
+);
+const AppIntegrationsTab = dynamic(
+  () => import("@/components/settings/app-integrations-tab").then((m) => m.AppIntegrationsTab),
+  { loading: tabSkeleton },
+);
+const GoogleCalendarSettingsCard = dynamic(
+  () => import("@/components/settings/google-calendar-settings").then((m) => m.GoogleCalendarSettingsCard),
   { loading: tabSkeleton },
 );
 import {

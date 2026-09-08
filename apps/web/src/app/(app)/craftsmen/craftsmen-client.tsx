@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,10 @@ import { Search, Plus, Phone, Mail, LayoutGrid, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Craftsman } from "@/lib/database.types";
 import { isPaperInvoice } from "@/lib/procurement";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchCraftsmen, LIST_STALE_MS } from "@/lib/queries/lists";
+import { prefetchCraftsmanDetail } from "@/lib/nav-prefetch";
+import { ensureSystemCraftsmen } from "@/lib/actions/craftsmen";
 
 const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"電気", interior:"内装", plumbing:"配管", general:"総合" };
 
@@ -28,19 +33,26 @@ function KindBadge({ craftsman }: { craftsman: Craftsman }) {
 type ViewMode = "grid" | "list";
 
 type CraftsmenClientProps = {
-  initialRows: Craftsman[];
+  initialRows?: Craftsman[];
 };
 
 export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
   const router = useRouter();
-  const [data, setData] = useState<Craftsman[]>(initialRows);
+  const queryClient = useQueryClient();
+  const { data = [], isPending } = useQuery({
+    queryKey: ["craftsmen"],
+    queryFn: fetchCraftsmen,
+    staleTime: LIST_STALE_MS,
+    initialData: initialRows,
+    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+  });
   const [search, setSearch] = useState("");
   const [specFilter, setSpecFilter] = useState("all");
   const [view, setView] = useState<ViewMode>("list");
 
   useEffect(() => {
-    setData(initialRows);
-  }, [initialRows]);
+    void ensureSystemCraftsmen().catch(() => {});
+  }, []);
 
   const filtered = data.filter(c => {
     const q = search.toLowerCase();
@@ -48,6 +60,10 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
     const matchSpec = specFilter === "all" || c.specialty === specFilter;
     return matchSearch && matchSpec;
   });
+
+  if (isPending && data.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -93,7 +109,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
       ) : view === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(c => (
-            <Link key={c.id} href={`/craftsmen/${c.id}`}>
+            <Link key={c.id} href={`/craftsmen/${c.id}`} onMouseEnter={() => prefetchCraftsmanDetail(queryClient, c.id)}>
               <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-start justify-between">
@@ -139,7 +155,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
               </TableHeader>
               <TableBody>
                 {filtered.map(c => (
-                  <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => router.push(`/craftsmen/${c.id}`)}>
+                  <TableRow key={c.id} className="cursor-pointer glass-row" onMouseEnter={() => prefetchCraftsmanDetail(queryClient, c.id)} onClick={() => router.push(`/craftsmen/${c.id}`)}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         <CustomerAvatar seed={c.id} name={c.name} />

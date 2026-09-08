@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,14 +15,17 @@ import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { Search, Plus, HardHat, ArrowUpDown, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { getConstructions, deleteConstruction, updateConstruction } from "@/lib/actions/constructions";
+import { deleteConstruction, updateConstruction } from "@/lib/actions/constructions";
 import { getStatusOption } from "@/lib/status-config";
+import { fetchConstructions, fetchProfiles, LIST_STALE_MS, type ConstructionListRow } from "@/lib/queries/lists";
+import { prefetchConstructionDetail } from "@/lib/nav-prefetch";
 import type { Profile } from "@/lib/database.types";
 
-type Row = Awaited<ReturnType<typeof getConstructions>>[number];
+type Row = ConstructionListRow;
 
 type SortKey = "created_at" | "order_amount_asc" | "order_amount_desc" | "start_date";
 
@@ -42,14 +46,27 @@ function fmtPeriod(start: string | null, end: string | null) {
 }
 
 type ConstructionsClientProps = {
-  initialRows: Row[];
-  initialProfiles: Profile[];
+  initialRows?: Row[];
+  initialProfiles?: Profile[];
 };
 
 export function ConstructionsClient({ initialRows, initialProfiles }: ConstructionsClientProps) {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>(initialRows);
-  const [profiles] = useState<Profile[]>(initialProfiles);
+  const queryClient = useQueryClient();
+  const { data: rows = [], isPending } = useQuery({
+    queryKey: ["constructions"],
+    queryFn: fetchConstructions,
+    staleTime: LIST_STALE_MS,
+    initialData: initialRows,
+    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+  });
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["profiles"],
+    queryFn: fetchProfiles,
+    staleTime: 5 * 60_000,
+    initialData: initialProfiles,
+    initialDataUpdatedAt: initialProfiles ? Date.now() : undefined,
+  });
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("_all");
@@ -57,6 +74,12 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
+
+  const setRows = (updater: Row[] | ((prev: Row[]) => Row[])) => {
+    queryClient.setQueryData<Row[]>(["constructions"], (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -103,6 +126,10 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
 
     return result;
   }, [rows, search, tab, assigneeFilter, sortKey]);
+
+  if (isPending && rows.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -211,6 +238,7 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
                       <TableRow
                         key={r.id}
                         className="cursor-pointer glass-row group"
+                        onMouseEnter={() => prefetchConstructionDetail(queryClient, r.id)}
                         onClick={() => router.push(`/constructions/${r.id}`)}
                       >
                         <TableCell>

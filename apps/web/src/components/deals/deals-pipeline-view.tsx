@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import { TEAL_CARD_SM } from "@/lib/teal-theme";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { getDeals, updateDeal, getDealStages, deleteDeal } from "@/lib/actions/deals";
-import { getProfiles } from "@/lib/actions/profiles";
+import { updateDeal, deleteDeal } from "@/lib/actions/deals";
+import { fetchDeals, fetchDealStages, fetchProfiles } from "@/lib/queries/lists";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
@@ -128,17 +128,17 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
   // React Query でキャッシュし、再訪時は即表示（staleTime 内は再取得なし）
   const { data: dealsData, isPending: dealsPending } = useQuery({
     queryKey: ["deals", "pipeline"],
-    queryFn: () => getDeals(),
+    queryFn: () => fetchDeals(),
     staleTime: 60_000,
   });
   const { data: profilesData } = useQuery({
     queryKey: ["profiles"],
-    queryFn: () => getProfiles(),
+    queryFn: () => fetchProfiles(),
     staleTime: 5 * 60_000,
   });
   const { data: stagesData } = useQuery({
     queryKey: ["deal-stages"],
-    queryFn: () => getDealStages(),
+    queryFn: () => fetchDealStages(),
     staleTime: 5 * 60_000,
   });
 

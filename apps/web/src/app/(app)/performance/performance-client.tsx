@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Target, TrendingUp, Percent, Info } from "lucide-react";
-import { getPerformanceData, type PerformanceData } from "@/lib/actions/performance";
+import type { PerformanceData } from "@/lib/actions/performance";
 import { getCurrentFiscalYear, fiscalYearLabel, listFiscalYears } from "@/lib/bi-utils";
 import { cn } from "@/lib/utils";
+import { fetchPerformance, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 
 const ALL_DEPARTMENTS = "__all__";
 
@@ -23,24 +25,21 @@ function rateClass(rate: number | null) {
 }
 
 export function PerformanceClient({ initialData }: { initialData: PerformanceData | null }) {
-  const [data, setData] = useState<PerformanceData | null>(initialData);
-  const [loading, setLoading] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(initialData?.fiscalYear ?? getCurrentFiscalYear());
   const [department, setDepartment] = useState<string>(ALL_DEPARTMENTS);
   const fiscalYearOptions = listFiscalYears(5);
-
-  const didMount = useRef(false);
-  useEffect(() => {
-    if (!didMount.current) { didMount.current = true; return; }
-    setLoading(true);
-    getPerformanceData({
-      year: fiscalYear,
-      department: department === ALL_DEPARTMENTS ? undefined : department,
-    })
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [fiscalYear, department]);
+  const dept = department === ALL_DEPARTMENTS ? undefined : department;
+  const { data, isFetching } = useQuery({
+    queryKey: QK.performance(fiscalYear, dept),
+    queryFn: () => fetchPerformance(fiscalYear, dept),
+    staleTime: LIST_STALE_MS,
+    placeholderData: keepPreviousData,
+    initialData: fiscalYear === (initialData?.fiscalYear ?? getCurrentFiscalYear()) && !dept
+      ? initialData
+      : undefined,
+    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+  });
+  const loading = isFetching && !data;
 
   const months = data?.months ?? [];
   const maxBarValue = Math.max(1, ...months.flatMap((m) => [m.plan, m.actual]));

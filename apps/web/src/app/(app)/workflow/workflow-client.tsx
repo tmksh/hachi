@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,26 +15,38 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { StatusSelect } from "@/components/shared/status-select";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
-import { getWorkflowRequests, updateWorkflowRequestStatus } from "@/lib/actions/workflow";
+import { updateWorkflowRequestStatus } from "@/lib/actions/workflow";
+import { fetchWorkflowRequests } from "@/lib/queries/lists";
 import { getStatusOption, getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { prefetchWorkflowDetail } from "@/lib/nav-prefetch";
 
-type Row = Awaited<ReturnType<typeof getWorkflowRequests>>[number];
+type Row = Awaited<ReturnType<typeof fetchWorkflowRequests>>[number];
 const TYPE_LABELS: Record<string, string> = { expense: "経費", leave: "休暇", purchase: "購入", custom: "その他" };
 
 type WorkflowClientProps = {
-  initialRows: Row[];
+  initialRows?: Row[];
 };
 
 export function WorkflowClient({ initialRows }: WorkflowClientProps) {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>(initialRows);
+  const queryClient = useQueryClient();
+  const { data: rows = [], isPending } = useQuery({
+    queryKey: ["workflow-requests"],
+    queryFn: () => fetchWorkflowRequests(),
+    staleTime: 120_000,
+    initialData: initialRows,
+    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+  });
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState<string | null>(null);
 
-  useEffect(() => {
-    setRows(initialRows);
-  }, [initialRows]);
+  const setRows = (updater: Row[] | ((prev: Row[]) => Row[])) => {
+    queryClient.setQueryData<Row[]>(["workflow-requests"], (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const handleStatusChange = async (id: string, status: Row["status"]) => {
     const prev = rows;
@@ -62,6 +75,10 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
     return match && matchTab;
   });
 
+  if (isPending && rows.length === 0) {
+    return <PageLoadingFallback />;
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="ワークフロー" description="申請と承認の管理"><Link href="/workflow/new"><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />新規申請</Button></Link></PageHeader>
@@ -85,7 +102,7 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
       <Card variant="inset"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>タイプ</TableHead><TableHead>件名</TableHead><TableHead>申請者</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead></TableRow></TableHeader>
             <TableBody>
               {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
-                <TableRow key={r.id} className="cursor-pointer glass-row" onClick={() => router.push(`/workflow/${r.id}`)}>
+                <TableRow key={r.id} className="cursor-pointer glass-row" onMouseEnter={() => prefetchWorkflowDetail(queryClient, r.id)} onClick={() => router.push(`/workflow/${r.id}`)}>
                   <TableCell><Badge variant="outline">{TYPE_LABELS[r.workflow_type?.key ?? ""] || "その他"}</Badge></TableCell>
                   <TableCell className="font-medium">{r.title}</TableCell>
                   <TableCell>{r.requester?.display_name ?? "-"}</TableCell>

@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchProcurementMasters, fetchProcurementOrders, LIST_STALE_MS, MASTER_STALE_MS, QK } from "@/lib/queries/portal";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +39,7 @@ import {
   type CsvOutputColumnKey,
   type InvoiceClosingDay,
   type TransferSender,
+  EMPTY_TRANSFER_SENDER,
 } from "@/lib/procurement";
 
 type Format = "zengin" | "csv";
@@ -54,8 +58,8 @@ type SortKey =
   | "fee";
 
 type Props = {
-  initialOrders: ProcurementOrder[];
-  masters: {
+  initialOrders?: ProcurementOrder[];
+  masters?: {
     departments: string[];
     accountItems: string[];
     sender: TransferSender;
@@ -67,8 +71,28 @@ function approvedOnly(orders: ProcurementOrder[]) {
   return orders.filter((o) => o.ledger_status === "payment_approved");
 }
 
-export function LedgerClient({ initialOrders, masters }: Props) {
+export function LedgerClient({ initialOrders, masters: initialMasters }: Props) {
   const router = useRouter();
+  const { data: orders = [], isPending: ordersPending } = useQuery({
+    queryKey: QK.procurementOrders,
+    queryFn: fetchProcurementOrders,
+    staleTime: LIST_STALE_MS,
+    initialData: initialOrders,
+    initialDataUpdatedAt: initialOrders ? Date.now() : undefined,
+  });
+  const { data: masters, isPending: mastersPending } = useQuery({
+    queryKey: QK.procurementMasters,
+    queryFn: fetchProcurementMasters,
+    staleTime: MASTER_STALE_MS,
+    initialData: initialMasters,
+    initialDataUpdatedAt: initialMasters ? Date.now() : undefined,
+  });
+  const loadedMasters = masters ?? {
+    departments: [] as string[],
+    accountItems: [] as string[],
+    sender: EMPTY_TRANSFER_SENDER,
+    closingDay: "20" as const,
+  };
   const [format, setFormat] = useState<Format>("zengin");
   const [month, setMonth] = useState("all");
   const [transferDate, setTransferDate] = useState(() => {
@@ -88,10 +112,14 @@ export function LedgerClient({ initialOrders, masters }: Props) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selected, setSelected] = useState<string[]>([]);
   const [showUnexportable, setShowUnexportable] = useState(false);
-  const [sender, setSender] = useState(masters.sender);
+  const [sender, setSender] = useState(EMPTY_TRANSFER_SENDER);
   const closingDay: InvoiceClosingDay = "20";
 
-  const approved = useMemo(() => approvedOnly(initialOrders), [initialOrders]);
+  useEffect(() => {
+    if (masters?.sender) setSender(masters.sender);
+  }, [masters]);
+
+  const approved = useMemo(() => approvedOnly(orders), [orders]);
 
   const filtered = useMemo(() => {
     return approved.filter((o) => {
@@ -310,6 +338,10 @@ export function LedgerClient({ initialOrders, masters }: Props) {
     setSelectedCols((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
   };
 
+  if ((ordersPending && orders.length === 0) || (mastersPending && !masters)) {
+    return <PageLoadingFallback />;
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader
@@ -393,7 +425,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
                 variant="ghost"
                 size="sm"
                 className="text-xs"
-                onClick={() => setSender(masters.sender)}
+                onClick={() => setSender(loadedMasters.sender)}
               >
                 会社設定から取得
               </Button>
@@ -450,7 +482,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">すべて</SelectItem>
-                {masters.departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                {loadedMasters.departments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -460,7 +492,7 @@ export function LedgerClient({ initialOrders, masters }: Props) {
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">すべて</SelectItem>
-                {masters.accountItems.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                {loadedMasters.accountItems.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

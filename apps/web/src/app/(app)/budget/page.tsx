@@ -1,8 +1,5 @@
-import { getBudgets } from "@/lib/actions/budgets";
-import { BudgetClient } from "./budget-client";
+import { BudgetPageClient } from "./budget-page-client";
 
-export default async function BudgetPage() {
-  const initialBudgets = await getBudgets().catch(() => []);
-
-  return <BudgetClient initialBudgets={initialBudgets} />;
+export default function BudgetPage() {
+  return <BudgetPageClient />;
 }

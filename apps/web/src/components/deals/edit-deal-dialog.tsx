@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { getProfiles } from "@/lib/actions/profiles";
 import { updateDeal } from "@/lib/actions/deals";
-import { getBiDepartmentNames } from "@/lib/actions/bi";
+import { fetchProfiles } from "@/lib/queries/lists";
+import { fetchDepartmentNames } from "@/lib/queries/portal";
 import type { Deal } from "@/lib/database.types";
 
 type StageRow = { key: string; label: string; sort_order: number };
@@ -50,7 +50,7 @@ export function EditDealDialog({ open, onOpenChange, deal, stages, onUpdated }: 
 
   useEffect(() => {
     if (open) {
-      Promise.all([getProfiles(), getBiDepartmentNames()])
+      Promise.all([fetchProfiles(), fetchDepartmentNames()])
         .then(([p, depts]) => {
           setProfiles(p.map((x) => ({ id: x.id, display_name: x.display_name })));
           setDepartments(depts);

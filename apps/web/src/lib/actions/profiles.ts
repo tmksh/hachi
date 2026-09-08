@@ -59,6 +59,10 @@ export async function updateProfile(input: Partial<Pick<Profile, "display_name" 
 }
 
 export async function getCompany() {
+  return cachedByCompany("company", CACHE_TTL.settings, loadCompany);
+}
+
+async function loadCompany() {
   const supabase = await createClient();
   const user = await getAuthUser();
   if (!user) throw new Error("Not authenticated");

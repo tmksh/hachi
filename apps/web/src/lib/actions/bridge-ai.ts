@@ -282,7 +282,7 @@ async function fetchInvoicesContext(): Promise<string> {
   let unpaidTotal = 0;
   for (const inv of invoices ?? []) {
     statusMap[inv.status ?? "不明"] = (statusMap[inv.status ?? "不明"] ?? 0) + 1;
-    if (inv.status === "sent") unpaidTotal += Number(inv.amount ?? 0);
+    if (inv.status === "sent") unpaidTotal += Number(inv.total ?? 0);
   }
   const statusLine = Object.entries(statusMap)
     .map(([k, v]) => `${STATUS_LABELS[k] ?? k}: ${v}件`)

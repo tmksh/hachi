@@ -1,29 +1,37 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getEstimate } from "@/lib/actions/estimates";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchEstimate } from "@/lib/queries/details";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Copy } from "lucide-react";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 
-type EstimateDetail = Awaited<ReturnType<typeof getEstimate>>;
+type EstimateDetail = Awaited<ReturnType<typeof fetchEstimate>>;
 
 type QuoteDetailClientProps = {
-  initialData: EstimateDetail | null;
+  initialData?: EstimateDetail | null;
 };
 
 export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
   const { id } = useParams();
+  const estimateId = id as string;
   const router = useRouter();
-  const [data, setData] = useState<EstimateDetail | null>(initialData);
+  const queryClient = useQueryClient();
+  const { data, isPending, isError } = useQuery({
+    queryKey: ["estimate", estimateId],
+    queryFn: () => fetchEstimate(estimateId),
+    staleTime: 60_000,
+    initialData: initialData ?? undefined,
+    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    enabled: !!estimateId,
+  });
 
-  useEffect(() => {
-    setData(initialData);
-  }, [initialData]);
+  if (isPending) return <PageLoadingFallback />;
 
-  if (!data) {
+  if (!data || isError) {
     return (
       <div className="p-4 md:p-6 space-y-4">
         <Link
@@ -53,7 +61,12 @@ export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
 
       <EstimateDetailView
         estimate={data as unknown as EstimateForView}
-        onEstimateChange={(est) => setData((prev) => ({ ...(prev as EstimateDetail), ...(est as unknown as EstimateDetail) }))}
+        onEstimateChange={(est) => {
+          queryClient.setQueryData(["estimate", estimateId], (prev: EstimateDetail | undefined) => ({
+            ...(prev as EstimateDetail),
+            ...(est as unknown as EstimateDetail),
+          }));
+        }}
         pdfCustomer={data.customer ? {
           name: data.customer.name,
           company_name: data.customer.company_name,

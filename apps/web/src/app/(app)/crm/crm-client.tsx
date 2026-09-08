@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { prefetchCustomerDetail } from "@/lib/nav-prefetch";
 import { format, differenceInDays } from "date-fns";
 import { ja } from "date-fns/locale";
 import { PageHeader } from "@/components/shared/page-header";
@@ -34,10 +35,10 @@ import type { UnfollowedCustomer } from "@/lib/queries/customers";
 import type { CustomerListResult } from "@/lib/actions/customers";
 
 type CrmClientProps = {
-  initialCustomers: CustomerListResult;
-  initialCounts: { total: number; corporation: number; individual: number };
-  initialUnfollowedCount: number;
-  initialDealSummaries: Record<string, string>;
+  initialCustomers?: CustomerListResult;
+  initialCounts?: { total: number; corporation: number; individual: number };
+  initialUnfollowedCount?: number;
+  initialDealSummaries?: Record<string, string>;
 };
 
 type ViewMode = "grid" | "list" | "pipeline";
@@ -73,12 +74,12 @@ export function CrmClient({
     void import("@/components/deals/deals-pipeline-view");
     void queryClient.prefetchQuery({
       queryKey: ["deals", "pipeline"],
-      queryFn: () => import("@/lib/actions/deals").then((m) => m.getDeals()),
+      queryFn: () => import("@/lib/queries/lists").then((m) => m.fetchDeals()),
       staleTime: 60_000,
     });
     void queryClient.prefetchQuery({
       queryKey: ["deal-stages"],
-      queryFn: () => import("@/lib/actions/deals").then((m) => m.getDealStages()),
+      queryFn: () => import("@/lib/queries/lists").then((m) => m.fetchDealStages()),
       staleTime: 5 * 60_000,
     });
   }, [queryClient]);
@@ -169,7 +170,7 @@ export function CrmClient({
                 <SelectItem value="corporation">法人 ({counts?.corporation ?? 0})</SelectItem>
                 <SelectItem value="individual">個人 ({counts?.individual ?? 0})</SelectItem>
                 <SelectItem value="unfollowed">
-                  未フォローアップ{unfollowedCount > 0 ? ` (${unfollowedCount})` : ""}
+                  未フォローアップ{(unfollowedCount ?? 0) > 0 ? ` (${unfollowedCount})` : ""}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -215,7 +216,11 @@ export function CrmClient({
                 {filtered.map(c => {
                   const followup = getFollowupStatus(c, getLastDealUpdated(c));
                   return (
-                    <Link key={c.id} href={`/crm/${c.id}`}>
+                    <Link
+                      key={c.id}
+                      href={`/crm/${c.id}`}
+                      onMouseEnter={() => prefetchCustomerDetail(queryClient, c.id)}
+                    >
                       <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                         <CardContent className="p-5 space-y-3">
                           <div className="flex items-start justify-between">
@@ -275,7 +280,12 @@ export function CrmClient({
                       {filtered.map(c => {
                         const followup = getFollowupStatus(c, getLastDealUpdated(c));
                         return (
-                          <TableRow key={c.id} className="cursor-pointer glass-row" onClick={() => router.push(`/crm/${c.id}`)}>
+                          <TableRow
+                            key={c.id}
+                            className="cursor-pointer glass-row"
+                            onMouseEnter={() => prefetchCustomerDetail(queryClient, c.id)}
+                            onClick={() => router.push(`/crm/${c.id}`)}
+                          >
                             <TableCell>
                               <div className="flex items-center gap-2.5">
                                 <CustomerAvatar seed={c.id} name={c.name} />

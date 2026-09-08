@@ -1,21 +1,36 @@
 "use client";
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { BarChart } from "@/components/charts/bar-chart";
-import { getDeals } from "@/lib/actions/deals";
+import { fetchDeals } from "@/lib/queries/lists";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { LIST_STALE_MS } from "@/lib/queries/lists";
 
 const STAGE_LABELS: Record<string, string> = { inquiry:"問い合わせ", first_meeting:"初回面談", materials_sent:"資料送付", quote_submitted:"見積提出", negotiation:"交渉中", closing:"クロージング", won:"受注", lost:"失注" };
 
-type Deal = Awaited<ReturnType<typeof getDeals>>[number];
+type Deal = Awaited<ReturnType<typeof fetchDeals>>[number];
 
 type MarketingRoiClientProps = {
-  initialDeals: Deal[];
+  initialDeals?: Deal[];
 };
 
 export function MarketingRoiClient({ initialDeals }: MarketingRoiClientProps) {
-  const deals = initialDeals;
+  const { data: deals = [], isPending } = useQuery({
+    queryKey: ["deals"],
+    queryFn: async (): Promise<Deal[]> => {
+      try {
+        return await fetchDeals();
+      } catch {
+        return [];
+      }
+    },
+    staleTime: LIST_STALE_MS,
+    initialData: initialDeals,
+    initialDataUpdatedAt: initialDeals ? Date.now() : undefined,
+  });
 
   const stageData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -27,6 +42,8 @@ export function MarketingRoiClient({ initialDeals }: MarketingRoiClientProps) {
   const totalDeals = deals.length;
   const wonCount = deals.filter(d => d.stage === "won").length;
   const convRate = totalDeals > 0 ? ((wonCount / totalDeals) * 100).toFixed(1) : "0";
+
+  if (isPending && deals.length === 0) return <PageLoadingFallback />;
 
   return (
     <div className="p-4 md:p-6 space-y-4">

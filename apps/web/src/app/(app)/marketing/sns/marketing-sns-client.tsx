@@ -1,27 +1,39 @@
 "use client";
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { getCustomers } from "@/lib/actions/customers";
+import { fetchCustomers } from "@/lib/queries/customers";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { LIST_STALE_MS } from "@/lib/queries/lists";
 
 const COLORS = ["#0F5132", "#1A7A52", "#2D9E6B", "#4DB88A", "#7DCFAA", "#A8DFC5"];
 
 type Customer = Awaited<ReturnType<typeof getCustomers>>["customers"][number];
 
 type MarketingSnsClientProps = {
-  initialCustomers: Customer[];
+  initialCustomers?: Customer[];
 };
 
 export function MarketingSnsClient({ initialCustomers }: MarketingSnsClientProps) {
-  const customers = initialCustomers;
+  const { data: customers = [], isPending } = useQuery({
+    queryKey: ["customers", 1, ""],
+    queryFn: () => fetchCustomers({ page: 1, limit: 100 }).then((r) => r.customers as Customer[]),
+    staleTime: LIST_STALE_MS,
+    initialData: initialCustomers,
+    initialDataUpdatedAt: initialCustomers ? Date.now() : undefined,
+  });
 
   const sourceData = useMemo(() => {
     const counts: Record<string, number> = {};
     customers.forEach(c => { const s = c.source || "不明"; counts[s] = (counts[s]||0)+1; });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [customers]);
+
+  if (isPending && customers.length === 0) return <PageLoadingFallback />;
 
   return (
     <div className="p-4 md:p-6 space-y-4">

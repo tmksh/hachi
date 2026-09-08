@@ -10,11 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, FileDown, Sparkles, Loader2 } from "lucide-react";
-import { createEstimate, getEstimate, type CreateEstimateCategoryInput } from "@/lib/actions/estimates";
-import { getCustomer, getCustomers } from "@/lib/actions/customers";
-import type { PdfCustomerRef } from "@/lib/customer-pdf";
+import { createEstimate, type CreateEstimateCategoryInput } from "@/lib/actions/estimates";
 import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actions/deals";
 import { generateEstimateDraftForCustomer } from "@/lib/actions/sales-flow";
+import type { PdfCustomerRef } from "@/lib/customer-pdf";
+import { fetchCustomers } from "@/lib/queries/customers";
+import { fetchCustomer } from "@/lib/queries/customer-detail";
+import { fetchEstimate } from "@/lib/queries/details";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { EstimatePdfPreviewDialog, toEstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
 import {
@@ -41,7 +43,7 @@ function newCategory(name = "本体工事"): CategoryGroup {
   return { id: uid(), name, items: [newDetailItem()], collapsed: false };
 }
 
-function mapEstimateToCategories(estimate: Awaited<ReturnType<typeof getEstimate>>): CategoryGroup[] {
+function mapEstimateToCategories(estimate: Awaited<ReturnType<typeof fetchEstimate>>): CategoryGroup[] {
   const categories = estimate.categories ?? [];
   const items = estimate.items ?? [];
 
@@ -83,9 +85,9 @@ function mapEstimateToCategories(estimate: Awaited<ReturnType<typeof getEstimate
 }
 
 export function QuoteNewClient({
-  initialCustomers,
+  initialCustomers = [],
 }: {
-  initialCustomers: { id: string; name: string }[];
+  initialCustomers?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -130,7 +132,7 @@ export function QuoteNewClient({
 
   useEffect(() => {
     if (initialCustomers.length > 0) return;
-    getCustomers({ limit: 100 })
+    fetchCustomers({ page: 1, limit: 100 })
       .then(({ customers: rows }) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => {});
   }, [initialCustomers.length]);
@@ -141,7 +143,7 @@ export function QuoteNewClient({
       return;
     }
     let cancelled = false;
-    getCustomer(customerId)
+    fetchCustomer(customerId)
       .then((c) => {
         if (cancelled) return;
         setPdfCustomer({
@@ -166,7 +168,7 @@ export function QuoteNewClient({
   useEffect(() => {
     if (!copyFromId) return;
     setLoadingSource(true);
-    getEstimate(copyFromId)
+    fetchEstimate(copyFromId)
       .then((estimate) => {
         setTitle(estimate.title ? `${estimate.title}（コピー）` : "見積（コピー）");
         setNotes(estimate.notes ?? "");
@@ -648,9 +650,9 @@ export function QuoteNewClient({
 }
 
 export function QuoteNewPageShell({
-  initialCustomers,
+  initialCustomers = [],
 }: {
-  initialCustomers: { id: string; name: string }[];
+  initialCustomers?: { id: string; name: string }[];
 }) {
   return (
     <Suspense fallback={<div className="p-4 md:p-8 text-sm text-muted-foreground">読み込み中...</div>}>

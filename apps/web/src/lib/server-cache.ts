@@ -66,13 +66,13 @@ export async function cachedCompanyRead<T>(
 }
 
 export const CACHE_TTL = {
-  list: 20_000,
-  dashboard: 20_000,
-  counts: 30_000,
-  profiles: 60_000,
-  bi: 60_000,
-  settings: 60_000,
-  locations: 120_000,
+  list: 120_000,
+  dashboard: 60_000,
+  counts: 120_000,
+  profiles: 300_000,
+  bi: 120_000,
+  settings: 300_000,
+  locations: 300_000,
   systemSeed: 3_600_000,
-  unread: 15_000,
+  unread: 30_000,
 } as const;

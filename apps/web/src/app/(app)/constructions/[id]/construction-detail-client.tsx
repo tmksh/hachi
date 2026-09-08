@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,27 +20,23 @@ import {
   CalendarDays, ScrollText, PencilLine, BookOpen, FolderOpen,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import {
-  getConstruction,
-  getConstructionContractDocs,
-} from "@/lib/actions/constructions";
+import { fetchConstruction, fetchChangeOrders, fetchInvoicesForConstruction, fetchConstructionContractDocs, fetchEstimate } from "@/lib/queries/details";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
 import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
 import type { Customer } from "@/lib/database.types";
 import type { CustomerEntryMasters } from "@/lib/actions/customers";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchCompany } from "@/lib/queries/portal";
 import { CreateEstimateDialog } from "@/components/estimate/create-estimate-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import type { EstimateCategory, EstimateItem } from "@/lib/database.types";
 import {
-  getConstructionEstimate,
   seedConstructionEstimates,
   createEmptyEstimateForConstruction,
   copyEstimateForConstruction,
 } from "@/lib/actions/constructions";
-import { getChangeOrders } from "@/lib/actions/change-orders";
-import { getInvoicesForConstruction } from "@/lib/actions/invoices";
 import type { OrderRow } from "@/components/constructions/invoices-tab";
 import type { EstimateForView } from "@/components/estimate/estimate-detail-view";
 import type { EstimateListItem } from "@/components/estimate/estimate-list-view";
@@ -85,7 +82,7 @@ const EstimateListView = dynamic(
   { loading: () => tabFallback },
 );
 
-type Detail = Awaited<ReturnType<typeof getConstruction>>;
+type Detail = Awaited<ReturnType<typeof fetchConstruction>>;
 type Order = Detail["orders"][number] & { craftsman?: { id: string; name: string } | null };
 
 /* ──────────────────────────────────────────────────
@@ -178,7 +175,7 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
     }
     setLoadingEstimate(true);
     try {
-      const est = await getConstructionEstimate(id);
+      const est = await fetchEstimate(id);
       onEstimateChange(est as Detail["estimate"]);
     } catch { toast.error("見積もりの読み込みに失敗しました"); }
     finally { setLoadingEstimate(false); }
@@ -212,7 +209,7 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
     }
     setLoadingEstimate(true);
     try {
-      const est = await getConstructionEstimate(estimateId);
+      const est = await fetchEstimate(estimateId);
       onEstimateChange(est as Detail["estimate"]);
       setSelectedId(estimateId);
       onRefresh?.();
@@ -326,8 +323,8 @@ function EstimateTab({ data, constructionId, onEstimateChange, onRefresh, initia
 /* ──────────────────────────────────────────────────
    メインページ
 ────────────────────────────────────────────────── */
-type ContractDoc = Awaited<ReturnType<typeof getConstructionContractDocs>>[number];
-type ChangeOrderRow = Awaited<ReturnType<typeof getChangeOrders>>[number];
+type ContractDoc = Awaited<ReturnType<typeof fetchConstructionContractDocs>>[number];
+type ChangeOrderRow = Awaited<ReturnType<typeof fetchChangeOrders>>[number];
 
 type InvoiceRow = {
   id: string;
@@ -340,11 +337,11 @@ type InvoiceRow = {
 };
 
 type ConstructionDetailClientProps = {
-  initialData: Detail | null;
-  initialDocs: ContractDoc[];
-  initialChangeOrders: ChangeOrderRow[];
-  initialClosingDayLabel: string;
-  initialInvoices: InvoiceRow[];
+  initialData?: Detail | null;
+  initialDocs?: ContractDoc[];
+  initialChangeOrders?: ChangeOrderRow[];
+  initialClosingDayLabel?: string;
+  initialInvoices?: InvoiceRow[];
   initialMasters?: CustomerEntryMasters;
 };
 
@@ -358,13 +355,52 @@ function ConstructionDetailPageContent({
 }: ConstructionDetailClientProps) {
   useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
+  const constructionId = id as string;
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { profile } = useAuth();
-  const [data, setData] = useState<Detail | null>(initialData);
-  const [docs, setDocs] = useState<ContractDoc[]>(initialDocs);
-  const [changeOrders, setChangeOrders] = useState<ChangeOrderRow[]>(initialChangeOrders);
-  const [closingDayLabel, setClosingDayLabel] = useState(initialClosingDayLabel);
-  const [invoices, setInvoices] = useState<InvoiceRow[]>(initialInvoices);
+  const { data, isPending, isError } = useQuery({
+    queryKey: ["construction", constructionId],
+    queryFn: () => fetchConstruction(constructionId),
+    staleTime: 60_000,
+    initialData: initialData ?? undefined,
+    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    enabled: !!constructionId,
+  });
+  const { data: docs = [] } = useQuery({
+    queryKey: ["construction-docs", constructionId],
+    queryFn: () => fetchConstructionContractDocs(constructionId),
+    staleTime: 60_000,
+    initialData: initialDocs,
+    initialDataUpdatedAt: initialDocs ? Date.now() : undefined,
+    enabled: !!constructionId,
+  });
+  const { data: changeOrders = [] } = useQuery({
+    queryKey: ["construction-change-orders", constructionId],
+    queryFn: () => fetchChangeOrders(constructionId),
+    staleTime: 60_000,
+    initialData: initialChangeOrders,
+    initialDataUpdatedAt: initialChangeOrders ? Date.now() : undefined,
+    enabled: !!constructionId,
+  });
+  const { data: invoices = [] } = useQuery({
+    queryKey: ["construction-invoices", constructionId],
+    queryFn: () => fetchInvoicesForConstruction(constructionId),
+    staleTime: 60_000,
+    initialData: initialInvoices,
+    initialDataUpdatedAt: initialInvoices ? Date.now() : undefined,
+    enabled: !!constructionId,
+  });
+  const { data: closingDayLabel = initialClosingDayLabel ?? "月末締め" } = useQuery({
+    queryKey: ["invoice-closing-day"],
+    queryFn: async () => {
+      const s = await fetchCompany();
+      return s?.settings && (s.settings as Record<string, unknown>).invoice_closing_day === "20"
+        ? "20日締め"
+        : "月末締め";
+    },
+    staleTime: 5 * 60_000,
+  });
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") ?? "schedule");
   const [completionOpen, setCompletionOpen] = useState(false);
   const [prefillOrder, setPrefillOrder] = useState<{ title?: string; amount?: string; workContent?: string; accountItem?: string } | null>(null);
@@ -376,29 +412,21 @@ function ConstructionDetailPageContent({
   }, [searchParams]);
 
   const reload = () => {
-    if (!id) return;
-    Promise.all([
-      getConstruction(id as string).catch(() => null),
-      getConstructionContractDocs(id as string).catch(() => []),
-      getChangeOrders(id as string).catch(() => []),
-      getInvoicesForConstruction(id as string).catch(() => []),
-    ]).then(([d, docsList, cos, invs]) => {
-      setData(d);
-      setDocs(docsList);
-      setChangeOrders(cos);
-      setInvoices(invs);
+    void queryClient.invalidateQueries({ queryKey: ["construction", constructionId] });
+    void queryClient.invalidateQueries({ queryKey: ["construction-docs", constructionId] });
+    void queryClient.invalidateQueries({ queryKey: ["construction-change-orders", constructionId] });
+    void queryClient.invalidateQueries({ queryKey: ["construction-invoices", constructionId] });
+  };
+
+  const setData = (updater: Detail | null | ((prev: Detail | null) => Detail | null)) => {
+    queryClient.setQueryData<Detail | null>(["construction", constructionId], (prev: Detail | null | undefined) => {
+      const current = prev ?? null;
+      return typeof updater === "function" ? updater(current) : updater;
     });
   };
 
-  useEffect(() => {
-    setData(initialData);
-    setDocs(initialDocs);
-    setChangeOrders(initialChangeOrders);
-    setClosingDayLabel(initialClosingDayLabel);
-    setInvoices(initialInvoices);
-  }, [initialData, initialDocs, initialChangeOrders, initialClosingDayLabel, initialInvoices]);
-
-  if (!data) return (
+  if (isPending) return <PageLoadingFallback />;
+  if (!data || isError) return (
     <div className="p-4 md:p-8">
       <Link href="/constructions" className="text-sm text-muted-foreground flex items-center gap-1"><ArrowLeft className="h-4 w-4" />戻る</Link>
       <p className="mt-4">見つかりません</p>

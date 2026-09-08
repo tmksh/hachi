@@ -1,13 +1,5 @@
-import { getInvoice } from "@/lib/actions/invoices";
-import { InvoiceDetailClient } from "./invoice-detail-client";
+import { InvoiceDetailPageClient } from "./invoice-detail-page-client";
 
-export default async function InvoiceDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const initialData = await getInvoice(id).catch(() => null);
-
-  return <InvoiceDetailClient initialData={initialData} />;
+export default function InvoiceDetailPage() {
+  return <InvoiceDetailPageClient />;
 }

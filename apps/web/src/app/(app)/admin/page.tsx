@@ -1,52 +1,11 @@
-import {
-  getAdminStats,
-  getAdminCompanies,
-  getAdminUsers,
-  getAdminBiOverview,
-  getAdminBiCompanyRanking,
-  getAdminBiMonthlyTrend,
-  getAdminBiStatusBreakdown,
-  getAdminBiGrossRateDistribution,
-  getAdminLinqAiSettings,
-} from "@/lib/actions/admin";
-import { AdminClient } from "./admin-client";
+import { Suspense } from "react";
+import { AdminPageClient } from "./admin-page-client";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 
-export default async function AdminPage() {
-  const [
-    stats,
-    companies,
-    users,
-    bi,
-    biRanking,
-    biTrend,
-    biStatus,
-    biDist,
-    aiSettings,
-  ] = await Promise.all([
-    getAdminStats(),
-    getAdminCompanies(),
-    getAdminUsers(),
-    getAdminBiOverview(),
-    getAdminBiCompanyRanking(),
-    getAdminBiMonthlyTrend(),
-    getAdminBiStatusBreakdown(),
-    getAdminBiGrossRateDistribution(),
-    getAdminLinqAiSettings(),
-  ]);
-
+export default function AdminPage() {
   return (
-    <AdminClient
-      initialData={{
-        stats,
-        companies: companies ?? [],
-        users: users ?? [],
-        bi,
-        biRanking,
-        biTrend,
-        biStatus,
-        biDist,
-        aiSettings,
-      }}
-    />
+    <Suspense fallback={<PageLoadingFallback />}>
+      <AdminPageClient />
+    </Suspense>
   );
 }

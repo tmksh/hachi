@@ -15,7 +15,7 @@ async function loadInvoices() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("invoices")
-    .select("*, customer:customers(id, name, company_name), construction:constructions(id, title)")
+    .select("id, invoice_no, invoice_date, due_date, total, status, customer_id, construction_id, customer:customers(id, name, company_name), construction:constructions(id, title)")
     .order("created_at", { ascending: false })
     .limit(500);
   // PostgrestError をそのまま throw すると本番で Server Components エラーになる

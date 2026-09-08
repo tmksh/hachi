@@ -1,21 +1,34 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, CalendarDays, Cloud, Users, AlertCircle, ClipboardList } from "lucide-react";
-import { getConstructionReport } from "@/lib/actions/construction-reports";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { DETAIL_STALE_MS, fetchConstructionReport, QK } from "@/lib/queries/portal";
 
-export default async function ConstructionReportDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string; reportId: string }>;
-}) {
-  const { id, reportId } = await params;
-  const report = await getConstructionReport(reportId);
+export default function ConstructionReportDetailPage() {
+  const { id, reportId } = useParams<{ id: string; reportId: string }>();
+  const { data: report, isPending } = useQuery({
+    queryKey: QK.constructionReport(reportId),
+    queryFn: () => fetchConstructionReport(reportId),
+    staleTime: DETAIL_STALE_MS,
+    enabled: !!reportId,
+  });
 
-  if (!report) notFound();
+  if (isPending) return <PageLoadingFallback />;
+  if (!report) {
+    return (
+      <div className="p-4 md:p-6">
+        <Link href={`/constructions/${id}`} className="text-sm text-muted-foreground">工事詳細に戻る</Link>
+        <p className="mt-4">日報が見つかりません</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -34,7 +47,6 @@ export default async function ConstructionReportDetailPage({
         </div>
       </div>
 
-      {/* 概要バッジ */}
       <div className="flex flex-wrap gap-3">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <CalendarDays className="h-4 w-4" />

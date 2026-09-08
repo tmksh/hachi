@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,15 +9,25 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { Plus, FileText } from "lucide-react";
 import { getDocuments } from "@/lib/actions/documents";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchDocuments, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 
 type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
 
 type MarketingCreativeClientProps = {
-  initialDocs: Doc[];
+  initialDocs?: Doc[];
 };
 
 export function MarketingCreativeClient({ initialDocs }: MarketingCreativeClientProps) {
-  const docs = initialDocs;
+  const { data: docs = [], isPending } = useQuery({
+    queryKey: QK.documents,
+    queryFn: () => fetchDocuments().catch(() => []),
+    staleTime: LIST_STALE_MS,
+    initialData: initialDocs,
+    initialDataUpdatedAt: initialDocs ? Date.now() : undefined,
+  });
+
+  if (isPending && docs.length === 0) return <PageLoadingFallback />;
 
   return (
     <div className="p-4 md:p-6 space-y-4">

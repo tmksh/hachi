@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ComboChart } from "@/components/charts/combo-chart";
-import { TrendAreaChart } from "@/components/charts/trend-area-chart";
-import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
-import { DonutChart } from "@/components/charts/donut-chart";
+import dynamic from "next/dynamic";
 import { getBiSettings, getBiActuals, getBiProspectSummary, releaseReserve, type BiProspectSummary } from "@/lib/actions/bi";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCompanyPermissions } from "@/hooks/use-company-permissions";
@@ -56,10 +54,30 @@ import {
   resolveDashboardProspectSummary,
   buildBiDashboardMonthlyCombo,
 } from "@/lib/bi-mock-data";
-import { BiSettingsDialog } from "@/components/bi/bi-settings-dialog";
 import { cn } from "@/lib/utils";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { buildBrandSeriesPalette, computeBrandFromHex } from "@/lib/brand-color";
+
+const chartFallback = () => <div className="h-64 animate-pulse rounded-xl bg-muted" />;
+const ComboChart = dynamic(
+  () => import("@/components/charts/combo-chart").then((m) => m.ComboChart),
+  { loading: chartFallback },
+);
+const TrendAreaChart = dynamic(
+  () => import("@/components/charts/trend-area-chart").then((m) => m.TrendAreaChart),
+  { loading: chartFallback },
+);
+const HorizontalBarChart = dynamic(
+  () => import("@/components/charts/horizontal-bar-chart").then((m) => m.HorizontalBarChart),
+  { loading: chartFallback },
+);
+const DonutChart = dynamic(
+  () => import("@/components/charts/donut-chart").then((m) => m.DonutChart),
+  { loading: chartFallback },
+);
+const BiSettingsDialog = dynamic(
+  () => import("@/components/bi/bi-settings-dialog").then((m) => m.BiSettingsDialog),
+);
 
 const BI_NEGATIVE = "#e11d48";
 
@@ -445,12 +463,13 @@ function Segmented<T extends string>({
 }
 
 export function Bi2Client({
-  initialSettings,
-  initialActuals,
+  initialSettings = null,
+  initialActuals = null,
 }: {
-  initialSettings: BiAnnualSettings | null;
-  initialActuals: BiActuals | null;
+  initialSettings?: BiAnnualSettings | null;
+  initialActuals?: BiActuals | null;
 }) {
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { role, profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
@@ -458,8 +477,12 @@ export function Bi2Client({
   const canManageReserve = role ? canAccess("reserve_fee", permissionRoleSlugs(profile ?? { role })) : false;
   const [showActualReserve, setShowActualReserve] = useState(false);
   const [releasingReserve, setReleasingReserve] = useState(false);
-  const [settings, setSettings] = useState<BiAnnualSettings | null>(initialSettings);
-  const [actuals, setActuals] = useState<BiActuals | null>(initialActuals);
+  const [settings, setSettings] = useState<BiAnnualSettings | null>(
+    () => initialSettings ?? queryClient.getQueryData(["bi-settings", getCurrentFiscalYear()]) ?? null,
+  );
+  const [actuals, setActuals] = useState<BiActuals | null>(
+    () => initialActuals ?? queryClient.getQueryData(["bi-actuals", getCurrentFiscalYear()]) ?? null,
+  );
   const [prevActuals, setPrevActuals] = useState<BiActuals | null>(null);
   const [prospectSummary, setProspectSummary] = useState<BiProspectSummary | null>(null);
   const [yoyMode, setYoyMode] = useState<"cumulative" | "monthly">("cumulative");
@@ -467,7 +490,9 @@ export function Bi2Client({
   const [monthlyChartMode, setMonthlyChartMode] = useState<"stream" | "pnl">("stream");
   const [showTheoretical, setShowTheoretical] = useState(false);
   const [includeSpecial, setIncludeSpecial] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(
+    () => !!(initialSettings ?? queryClient.getQueryData(["bi-settings", getCurrentFiscalYear()])),
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fiscalYear, setFiscalYear] = useState(getCurrentFiscalYear());
   const fiscalYearOptions = listFiscalYears(5);
@@ -522,6 +547,8 @@ export function Bi2Client({
       .then(([s, a, p, ps]) => {
         setSettings(s);
         setActuals(a);
+        queryClient.setQueryData(["bi-settings", fiscalYear], s);
+        queryClient.setQueryData(["bi-actuals", fiscalYear], a);
         if (p !== undefined) setPrevActuals(p);
         setProspectSummary(ps);
       })
@@ -529,7 +556,7 @@ export function Bi2Client({
         biFetchInflight.current = false;
         setSettingsLoaded(true);
       });
-  }, [fiscalYear]);
+  }, [fiscalYear, queryClient]);
 
   // 初回マウントは SSR の初期データを使い、不足分（前年実績・見込みサマリ）のみ取得。
   // 年度変更時はローディング表示付きで全体を再取得。
@@ -537,12 +564,16 @@ export function Bi2Client({
   useEffect(() => {
     if (!didMount.current) {
       didMount.current = true;
+      if (!settings) {
+        void loadBiData(false);
+        return;
+      }
       Promise.all([getBiActuals(fiscalYear - 1), getBiProspectSummary()])
         .then(([p, ps]) => { setPrevActuals(p); setProspectSummary(ps); });
       return;
     }
     loadBiData(false);
-  }, [fiscalYear, loadBiData]);
+  }, [fiscalYear, loadBiData, initialSettings]);
 
   // タブ復帰時のみ静かに更新（window focus は頻発するので使わない）+ 2分ポーリング
   useEffect(() => {

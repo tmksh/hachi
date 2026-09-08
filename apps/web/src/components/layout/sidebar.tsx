@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, memo, useRef } from "react";
 import Link from "next/link";
 import { BrandLogo, BrandMark } from "@/components/layout/brand-logo";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchRouteData } from "@/lib/nav-prefetch";
 import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, ROLE_LABELS } from "@/lib/constants";
@@ -132,6 +134,11 @@ interface SidebarProps {
 export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onExpandedChange, onInternalChatOpen }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const prefetchNav = (href: string) => {
+    router.prefetch(href);
+    prefetchRouteData(queryClient, href);
+  };
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   /** 折りたたみ時: 選択中グループの詳細メニュー */
   const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
@@ -336,7 +343,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
       const next = prev === key ? null : key;
       if (next) {
         const group = visibleGroups.find((g) => g.key === next);
-        group?.items.forEach((item) => router.prefetch(item.href));
+        group?.items.forEach((item) => prefetchNav(item.href));
       }
       return next;
     });
@@ -437,6 +444,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                               <Link
                                 key={item.key}
                                 href={item.href}
+                                prefetch
+                                onMouseEnter={() => prefetchNav(item.href)}
+                                onFocus={() => prefetchNav(item.href)}
                                 className={cn(
                                   "flex items-center px-3 py-1.5 rounded-lg text-sm whitespace-nowrap overflow-hidden text-ellipsis sidebar-nav-hover",
                                   isActive(item.href)
@@ -486,6 +496,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                           <Link
                             key={item.key}
                             href={item.href}
+                            prefetch
+                            onMouseEnter={() => prefetchNav(item.href)}
+                            onFocus={() => prefetchNav(item.href)}
                             onClick={() => setFlyoutGroup(null)}
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block sidebar-nav-hover",
@@ -503,6 +516,8 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   /* 折りたたみ＋未選択: 先頭ページへ遷移のみ */
                   <Link
                     href={group.items[0]?.href ?? "#"}
+                    prefetch
+                    onMouseEnter={() => group.items[0] && prefetchNav(group.items[0].href)}
                     aria-label={group.label}
                     className="relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover text-muted-foreground"
                   >
@@ -565,19 +580,19 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/settings" className="gap-2">
+                    <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
                       <User className="h-4 w-4" />
                       プロフィール
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/settings" className="gap-2">
+                    <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
                       <Settings className="h-4 w-4" />
                       設定
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/settings?tab=external_integrations" className="gap-2">
+                    <Link href="/settings?tab=external_integrations" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
                       <Link2 className="h-4 w-4" />
                       外部連携
                     </Link>
@@ -642,19 +657,19 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                       </div>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
-                        <Link href="/settings" className="gap-2">
+                        <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
                           <User className="h-4 w-4" />
                           プロフィール
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href="/settings" className="gap-2">
+                        <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
                           <Settings className="h-4 w-4" />
                           設定
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href="/settings?tab=external_integrations" className="gap-2">
+                        <Link href="/settings?tab=external_integrations" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
                           <Link2 className="h-4 w-4" />
                           外部連携
                         </Link>

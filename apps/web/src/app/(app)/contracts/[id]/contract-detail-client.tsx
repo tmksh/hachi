@@ -1,38 +1,44 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { ContractDetailTabs } from "@/components/contracts/contract-detail-tabs";
 import { ArrowLeft } from "lucide-react";
-import { getContract } from "@/lib/actions/contracts";
+import { fetchContract } from "@/lib/queries/details";
 import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
 import type { CustomerEntryMasters } from "@/lib/actions/customers";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 
-type ContractDetail = Awaited<ReturnType<typeof getContract>>;
+type ContractDetail = Awaited<ReturnType<typeof fetchContract>>;
 
 type ContractDetailClientProps = {
-  initialData: ContractDetail | null;
+  initialData?: ContractDetail | null;
   initialMasters?: CustomerEntryMasters;
 };
 
 export function ContractDetailClient({ initialData, initialMasters }: ContractDetailClientProps) {
   useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
-  const [data, setData] = useState<ContractDetail | null>(initialData);
-
-  useEffect(() => {
-    setData(initialData);
-  }, [initialData]);
+  const contractId = id as string;
+  const queryClient = useQueryClient();
+  const { data, isPending, isError } = useQuery({
+    queryKey: ["contract", contractId],
+    queryFn: () => fetchContract(contractId),
+    staleTime: 60_000,
+    initialData: initialData ?? undefined,
+    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    enabled: !!contractId,
+  });
 
   const reload = () => {
-    if (!id) return;
-    getContract(id as string).then(setData).catch(() => {});
+    void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
   };
 
-  if (!data) return <div className="p-4 md:p-8"><Link href="/contracts" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-4"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="text-muted-foreground">契約が見つかりません</p></div>;
+  if (isPending) return <PageLoadingFallback />;
+  if (!data || isError) return <div className="p-4 md:p-8"><Link href="/contracts" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-4"><ArrowLeft className="h-4 w-4" />戻る</Link><p className="text-muted-foreground">契約が見つかりません</p></div>;
 
   return (
     <div className="p-4 md:p-6 space-y-4">

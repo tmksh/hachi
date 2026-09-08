@@ -23,9 +23,10 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, Save, Plus, Trash2, Pencil, X, Printer, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { getInvoice, updateInvoice, deleteInvoice, updateInvoiceStatus, sendInvoiceEmail } from "@/lib/actions/invoices";
+import { updateInvoice, deleteInvoice, updateInvoiceStatus, sendInvoiceEmail } from "@/lib/actions/invoices";
+import { fetchInvoice } from "@/lib/queries/portal";
 
-type Detail = Awaited<ReturnType<typeof getInvoice>>;
+type Detail = Awaited<ReturnType<typeof fetchInvoice>>;
 type LineItem = { description: string; quantity: number; unit_price: number };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -77,7 +78,7 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
 
   const reload = useCallback(() => {
     if (!id) return;
-    getInvoice(id as string)
+    fetchInvoice(id as string)
       .then((d) => {
         setData(d as Detail);
         resetForm(d as Detail);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,16 +20,18 @@ import { Search, Trash2, FileText, Upload, Download, Settings2, Plus, Pencil, Gr
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  getDocuments, createDocument, deleteDocument,
-  getDocumentCategories, createDocumentCategory,
+  createDocument, deleteDocument,
+  createDocumentCategory,
   updateDocumentCategory, deleteDocumentCategory,
   type DocCategory,
 } from "@/lib/actions/documents";
-import { getCustomers } from "@/lib/actions/customers";
-import { getConstructions } from "@/lib/actions/constructions";
+import { fetchCustomers } from "@/lib/queries/customers";
+import { fetchConstructions } from "@/lib/queries/lists";
 import { uploadToStorage, getSignedStorageUrl } from "@/lib/storage-browser";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchDocumentCategories, fetchDocuments, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 
-type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
+type Doc = Awaited<ReturnType<typeof fetchDocuments>>[number];
 type CustomerOption = { id: string; name: string; company_name: string | null };
 type ConstructionOption = { id: string; title: string; customer_id: string | null };
 
@@ -42,23 +45,37 @@ export function DocumentsClient({
   initialCategories,
   initialDocuments,
 }: {
-  initialCategories: DocCategory[];
-  initialDocuments: Doc[];
+  initialCategories?: DocCategory[];
+  initialDocuments?: Doc[];
 }) {
-  const [docs, setDocs] = useState<Doc[]>(initialDocuments);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: docs = [], isPending: docsPending } = useQuery({
+    queryKey: QK.documents,
+    queryFn: fetchDocuments,
+    staleTime: LIST_STALE_MS,
+    initialData: initialDocuments,
+    initialDataUpdatedAt: initialDocuments ? Date.now() : undefined,
+  });
+  const { data: categories = [], isPending: catsPending } = useQuery({
+    queryKey: QK.documentCategories,
+    queryFn: fetchDocumentCategories,
+    staleTime: LIST_STALE_MS,
+    initialData: initialCategories,
+    initialDataUpdatedAt: initialCategories ? Date.now() : undefined,
+  });
+  const setCategories = (updater: DocCategory[] | ((prev: DocCategory[]) => DocCategory[])) => {
+    queryClient.setQueryData<DocCategory[]>(QK.documentCategories, (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
-  // カテゴリ
-  const [categories, setCategories] = useState<DocCategory[]>(initialCategories);
-  const [catLoading, setCatLoading] = useState(false);
-
   // アップロード
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadName, setUploadName] = useState("");
-  const [uploadCategory, setUploadCategory] = useState(initialCategories[0]?.key ?? "");
+  const [uploadCategory, setUploadCategory] = useState(initialCategories?.[0]?.key ?? "");
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCustomerId, setUploadCustomerId] = useState("");
@@ -78,31 +95,17 @@ export function DocumentsClient({
   const [deleteCatTarget, setDeleteCatTarget] = useState<DocCategory | null>(null);
 
   const loadCategories = async () => {
-    setCatLoading(true);
     try {
-      const cats = await getDocumentCategories();
+      const cats = await fetchDocumentCategories();
       setCategories(cats);
       if (!uploadCategory && cats.length > 0) setUploadCategory(cats[0].key);
-    } catch { /* empty */ } finally { setCatLoading(false); }
+    } catch { /* empty */ }
   };
 
   const load = () => {
-    setLoading(true);
-    getDocuments({ category: tab === "all" ? undefined : tab }).then(setDocs).catch(() => {}).finally(() => setLoading(false));
+    void queryClient.invalidateQueries({ queryKey: QK.documents });
   };
 
-  // 初回マウント時は SSR の初期データをそのまま使い、再取得しない
-  const didMountRef = useRef(false);
-  useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true;
-      if (tab === "all") return;
-    }
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
-
-  // カテゴリラベルをkeyから引く
   const catLabel = (key: string) => categories.find(c => c.key === key)?.label ?? key;
 
   const handleDelete = async (id: string) => {
@@ -118,8 +121,8 @@ export function DocumentsClient({
     if (customers.length > 0 && constructions.length > 0) return;
     setLinkOptionsLoading(true);
     Promise.all([
-      getCustomers({ limit: 100 }),
-      getConstructions(),
+      fetchCustomers({ page: 1, limit: 100 }),
+      fetchConstructions(),
     ])
       .then(([custResult, cons]) => {
         setCustomers(
@@ -225,8 +228,13 @@ export function DocumentsClient({
 
   const filtered = docs.filter(d => {
     const q = search.toLowerCase();
-    return !q || d.name.toLowerCase().includes(q) || d.file_name.toLowerCase().includes(q);
+    const matchTab = tab === "all" || d.category === tab;
+    return matchTab && (!q || d.name.toLowerCase().includes(q) || d.file_name.toLowerCase().includes(q));
   });
+
+  if ((docsPending && docs.length === 0) || (catsPending && categories.length === 0)) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -251,7 +259,7 @@ export function DocumentsClient({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">すべて</SelectItem>
-              {catLoading
+              {catsPending
                 ? <SelectItem value="_loading" disabled>読込中...</SelectItem>
                 : categories.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)
               }
@@ -281,7 +289,7 @@ export function DocumentsClient({
 
       {viewMode === "grid" ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {loading ? Array.from({ length: 4 }).map((_, i) => (
+              {docsPending ? Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
               )) : filtered.length === 0 ? (
                 <p className="col-span-full text-center py-12 text-muted-foreground">文書なし</p>
@@ -328,7 +336,7 @@ export function DocumentsClient({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading
+                  {docsPending
                     ? Array.from({ length: 4 }).map((_, i) => (
                         <TableRow key={i}>
                           {Array.from({ length: 8 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
@@ -466,7 +474,7 @@ export function DocumentsClient({
           <div className="space-y-4 py-2">
             {/* カテゴリ一覧 */}
             <div className="space-y-1">
-              {catLoading ? (
+              {catsPending ? (
                 <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
               ) : categories.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">カテゴリなし</p>

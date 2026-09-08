@@ -1,16 +1,7 @@
 import { Suspense } from "react";
-import { getBiSettings, getBiActuals } from "@/lib/actions/bi";
-import { getCurrentFiscalYear } from "@/lib/bi-utils";
 import { Bi2Client } from "./bi2-client";
 
-/** BIデザイン案（/bi をベースにした文言少なめ版） */
-export default async function Bi2DashboardPage() {
-  const fiscalYear = getCurrentFiscalYear();
-  const [initialSettings, initialActuals] = await Promise.all([
-    getBiSettings(fiscalYear),
-    getBiActuals(fiscalYear),
-  ]);
-
+export default function Bi2DashboardPage() {
   return (
     <Suspense
       fallback={
@@ -20,10 +11,7 @@ export default async function Bi2DashboardPage() {
         </div>
       }
     >
-      <Bi2Client
-        initialSettings={initialSettings}
-        initialActuals={initialActuals}
-      />
+      <Bi2Client />
     </Suspense>
   );
 }

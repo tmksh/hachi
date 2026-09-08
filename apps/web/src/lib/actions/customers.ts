@@ -108,6 +108,10 @@ function emptyMasters(departments: string[] = []): CustomerEntryMasters {
 
 /** 顧客フォーム用マスタを 1 ラウンドトリップで取得（部門は BI 全設定を読まない） */
 export async function getCustomerEntryMasters(): Promise<CustomerEntryMasters> {
+  return cachedByCompany("customer-entry-masters", CACHE_TTL.settings, loadCustomerEntryMasters);
+}
+
+async function loadCustomerEntryMasters(): Promise<CustomerEntryMasters> {
   const supabase = await createClient();
   const user = await getAuthUser();
   if (!user) return emptyMasters([...DEFAULT_DEPARTMENTS]);

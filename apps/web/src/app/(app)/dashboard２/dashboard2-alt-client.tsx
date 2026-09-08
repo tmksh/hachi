@@ -29,6 +29,7 @@ import { clockIn as clockInAction, clockOut as clockOutAction } from "@/lib/acti
 import type { DashboardData } from "@/lib/queries/dashboard";
 import type { AttendanceEntry } from "@/lib/database.types";
 import { AnalogClock } from "@/components/shared/analog-clock";
+import { useDashboardData, useTodayAttendance } from "@/hooks/use-dashboard-data";
 
 function adjustHex(hex: string, factor: number): string {
   const h = hex.replace("#", "");
@@ -90,26 +91,22 @@ export function Dashboard2AltClient({
   initialData,
   initialAttendance,
 }: {
-  initialData: DashboardData;
-  initialAttendance: AttendanceEntry | null;
+  initialData?: DashboardData;
+  initialAttendance?: AttendanceEntry | null;
 }) {
-  const [clockedIn, setClockedIn] = useState(
-    Boolean(initialAttendance?.clock_in_at && !initialAttendance?.clock_out_at),
-  );
-  const [clockInTime, setClockInTime] = useState<Date | null>(
-    initialAttendance?.clock_in_at ? new Date(initialAttendance.clock_in_at) : null,
-  );
+  const { data, isLoading: loading } = useDashboardData(initialData);
+  const { data: attendanceEntry } = useTodayAttendance(initialAttendance);
+  const [clockedIn, setClockedIn] = useState(false);
+  const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const { widgets, hydrated, toggleVisible, moveUp, moveDown, reset } = useWidgets();
   const { color: kpiColor, setGradientColor: setKpiColor, reset: resetKpiColor } = useKpiColor();
-  const [data] = useState<DashboardData>(initialData);
-  const loading = false;
 
   useEffect(() => {
-    if (initialAttendance?.clock_in_at) {
-      setClockedIn(!initialAttendance.clock_out_at);
-      setClockInTime(new Date(initialAttendance.clock_in_at));
+    if (attendanceEntry?.clock_in_at) {
+      setClockedIn(!attendanceEntry.clock_out_at);
+      setClockInTime(new Date(attendanceEntry.clock_in_at));
     }
-  }, [initialAttendance]);
+  }, [attendanceEntry]);
 
   const now = new Date();
 

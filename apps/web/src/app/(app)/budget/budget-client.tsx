@@ -14,11 +14,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Wallet, Percent } from "lucide-react";
 import { toast } from "sonner";
-import { getBudgets, deleteBudget, updateBudget } from "@/lib/actions/budgets";
+import { deleteBudget, updateBudget } from "@/lib/actions/budgets";
+import { fetchBudgets } from "@/lib/queries/portal";
 import { BudgetEditDialog } from "@/components/budget/budget-edit-dialog";
 import type { Budget, BudgetItem } from "@/lib/database.types";
 
-type BudgetRow = Awaited<ReturnType<typeof getBudgets>>[number];
+type BudgetRow = Awaited<ReturnType<typeof fetchBudgets>>[number];
 
 function fmt(n: number) { return `¥${n.toLocaleString()}`; }
 function pct(n: number) { return `${n.toFixed(1)}%`; }
@@ -34,7 +35,7 @@ export function BudgetClient({ initialBudgets }: BudgetClientProps) {
   const [deleteTarget, setDeleteTarget] = useState<BudgetRow | null>(null);
 
   const load = useCallback(() => {
-    getBudgets().then(setBudgets).catch(() => {});
+    fetchBudgets().then(setBudgets).catch(() => {});
   }, []);
 
   const handleEdit = (b: BudgetRow) => {

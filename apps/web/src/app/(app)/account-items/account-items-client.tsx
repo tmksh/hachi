@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +13,12 @@ import {
 } from "@/components/ui/select";
 import { confirmAccountItems, type ProcurementOrder } from "@/lib/actions/procurement";
 import { suggestAccountItem, yen } from "@/lib/procurement";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchProcurementMasters, fetchProcurementOrders, LIST_STALE_MS, MASTER_STALE_MS, QK } from "@/lib/queries/portal";
 
 type Props = {
-  initialOrders: ProcurementOrder[];
-  accountItems: string[];
+  initialOrders?: ProcurementOrder[];
+  accountItems?: string[];
 };
 
 type VendorGroup = {
@@ -47,8 +50,26 @@ function basisFor(vendorName: string, all: ProcurementOrder[]) {
   return { label: `過去${past.length}件中${n}件`, cls: "bg-orange-100 text-orange-800", item: top };
 }
 
-export function AccountItemsClient({ initialOrders, accountItems }: Props) {
-  const [orders, setOrders] = useState(initialOrders);
+export function AccountItemsClient({ initialOrders, accountItems: initialAccountItems }: Props) {
+  const queryClient = useQueryClient();
+  const { data: orders = [], isPending: ordersPending } = useQuery({
+    queryKey: QK.procurementOrders,
+    queryFn: fetchProcurementOrders,
+    staleTime: LIST_STALE_MS,
+    initialData: initialOrders,
+    initialDataUpdatedAt: initialOrders ? Date.now() : undefined,
+  });
+  const { data: masters, isPending: mastersPending } = useQuery({
+    queryKey: QK.procurementMasters,
+    queryFn: fetchProcurementMasters,
+    staleTime: MASTER_STALE_MS,
+  });
+  const accountItems = initialAccountItems ?? masters?.accountItems ?? [];
+  const setOrders = (updater: ProcurementOrder[] | ((prev: ProcurementOrder[]) => ProcurementOrder[])) => {
+    queryClient.setQueryData<ProcurementOrder[]>(QK.procurementOrders, (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
   const [selected, setSelected] = useState<string[]>([]);
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -119,6 +140,10 @@ export function AccountItemsClient({ initialOrders, accountItems }: Props) {
     toast.success(`${res.updated}件の勘定科目を確定しました`);
     void ids;
   };
+
+  if ((ordersPending && orders.length === 0) || (mastersPending && !masters && !initialAccountItems)) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">

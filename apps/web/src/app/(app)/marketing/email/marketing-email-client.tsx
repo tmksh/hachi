@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -9,17 +10,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader } from "@/components/shared/page-header";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getEmailThreads } from "@/lib/actions/mail";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchMailThreads, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 
-type Thread = Awaited<ReturnType<typeof getEmailThreads>>[number];
+type Thread = Awaited<ReturnType<typeof fetchMailThreads>>[number];
 
 type MarketingEmailClientProps = {
-  initialThreads: Thread[];
+  initialThreads?: Thread[];
 };
 
 export function MarketingEmailClient({ initialThreads }: MarketingEmailClientProps) {
   const router = useRouter();
-  const threads = initialThreads;
+  const { data: threads = [], isPending } = useQuery({
+    queryKey: QK.mailThreads,
+    queryFn: fetchMailThreads,
+    staleTime: LIST_STALE_MS,
+    initialData: initialThreads,
+    initialDataUpdatedAt: initialThreads ? Date.now() : undefined,
+  });
+
+  if (isPending && threads.length === 0) return <PageLoadingFallback />;
 
   return (
     <div className="p-4 md:p-6 space-y-4">

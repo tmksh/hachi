@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
@@ -18,32 +19,44 @@ import { KpiRow } from "@/components/shared/kpi-row";
 import { StatusSelect } from "@/components/shared/status-select";
 import { Plus, Receipt, FileText, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { getInvoices, updateInvoiceStatus } from "@/lib/actions/invoices";
+import { updateInvoiceStatus } from "@/lib/actions/invoices";
 import { humanizeClientError } from "@/lib/humanize-error";
 import { getStatusOption } from "@/lib/status-config";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchInvoices, LIST_STALE_MS, type InvoiceListRow } from "@/lib/queries/lists";
+import { prefetchInvoiceDetail } from "@/lib/nav-prefetch";
 
 function currentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-type Invoice = Awaited<ReturnType<typeof getInvoices>>[number];
+type Invoice = InvoiceListRow;
 
 type InvoicesClientProps = {
-  initialInvoices: Invoice[];
+  initialInvoices?: Invoice[];
 };
 
 export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
   const router = useRouter();
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
+  const queryClient = useQueryClient();
+  const { data: invoices = [], isPending } = useQuery({
+    queryKey: ["invoices"],
+    queryFn: fetchInvoices,
+    staleTime: LIST_STALE_MS,
+    initialData: initialInvoices,
+    initialDataUpdatedAt: initialInvoices ? Date.now() : undefined,
+  });
   const [updating, setUpdating] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkMonth, setBulkMonth] = useState(currentMonth);
   const [bulkGenerating, setBulkGenerating] = useState(false);
 
-  useEffect(() => {
-    setInvoices(initialInvoices);
-  }, [initialInvoices]);
+  const setInvoices = (updater: Invoice[] | ((prev: Invoice[]) => Invoice[])) => {
+    queryClient.setQueryData<Invoice[]>(["invoices"], (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const handleBulkGenerate = async () => {
     if (!bulkMonth) {
@@ -80,11 +93,7 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
         );
       }
       setBulkOpen(false);
-      try {
-        setInvoices(await getInvoices());
-      } catch {
-        router.refresh();
-      }
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
     } catch (e) {
       toast.error(humanizeClientError(e, "月次一括生成に失敗しました"));
     } finally {
@@ -115,6 +124,10 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
   const totalPaid = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.total, 0);
   const totalSent = invoices.filter(i => i.status === "sent").reduce((s, i) => s + i.total, 0);
   const draftCount = invoices.filter(i => i.status === "draft").length;
+
+  if (isPending && invoices.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -175,6 +188,7 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
                 <TableRow key={inv.id}>
                   <TableCell
                     className="font-medium cursor-pointer hover:text-primary"
+                    onMouseEnter={() => prefetchInvoiceDetail(queryClient, inv.id)}
                     onClick={() => router.push(`/invoices/${inv.id}`)}
                   >
                     {inv.invoice_no || "-"}

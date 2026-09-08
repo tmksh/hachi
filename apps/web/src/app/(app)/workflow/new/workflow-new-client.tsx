@@ -19,10 +19,10 @@ import {
 import { ArrowLeft, Save } from "lucide-react";
 import {
   createWorkflowRequest,
-  getWorkflowTypes,
   type FieldDef,
   type ApprovalStep,
 } from "@/lib/actions/workflow";
+import type { getWorkflowTypes } from "@/lib/actions/workflow";
 
 type WfType = Awaited<ReturnType<typeof getWorkflowTypes>>[number];
 

@@ -17,7 +17,7 @@ import {
   getConstructionMarginThreshold,
   submitBudgetApproval,
 } from "@/lib/actions/sales-flow";
-import { getProfiles } from "@/lib/actions/profiles";
+import { fetchProfiles } from "@/lib/queries/lists";
 
 type Props = {
   constructionId: string;
@@ -37,7 +37,7 @@ export function BudgetApprovalActions({ constructionId, grossProfitRate }: Props
 
   useEffect(() => {
     getConstructionMarginThreshold(constructionId).then(setInfo).catch(() => {});
-    getProfiles().then((p) => setProfiles(p.map((x) => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
+    fetchProfiles().then((p) => setProfiles(p.map((x) => ({ id: x.id, display_name: x.display_name })))).catch(() => {});
   }, [constructionId]);
 
   if (!info) return null;

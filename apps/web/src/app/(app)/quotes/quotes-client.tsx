@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { Card } from "@/components/ui/card";
@@ -22,11 +23,13 @@ import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { getStatusOption } from "@/lib/status-config";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { getEstimates } from "@/lib/actions/estimates";
-import type { getCustomers } from "@/lib/actions/customers";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchEstimates, LIST_STALE_MS, type EstimateListRow } from "@/lib/queries/lists";
+import { fetchCustomers, type CustomerListItem } from "@/lib/queries/customers";
+import { prefetchEstimateDetail } from "@/lib/nav-prefetch";
 
-type Row = Awaited<ReturnType<typeof getEstimates>>[number];
-type CustomerRow = Awaited<ReturnType<typeof getCustomers>>["customers"][number];
+type Row = EstimateListRow;
+type CustomerRow = CustomerListItem;
 
 function fmt(v: number) { return `¥${Math.round(v / 10000).toLocaleString()}万`; }
 
@@ -54,17 +57,30 @@ function StatusFilterSelect({ value, onChange }: { value: string; onChange: (v: 
 }
 
 type QuotesClientProps = {
-  initialRows: Row[];
-  initialCustomers: CustomerRow[];
-  initialCustomerId: string | null;
+  initialRows?: Row[];
+  initialCustomers?: CustomerRow[];
+  initialCustomerId?: string | null;
 };
 
 function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }: QuotesClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const customerId = searchParams.get("customer") ?? initialCustomerId;
-  const [rows, setRows] = useState<Row[]>(initialRows);
-  const [customers, setCustomers] = useState<CustomerRow[]>(initialCustomers);
+  const customerId = searchParams.get("customer") ?? initialCustomerId ?? null;
+  const { data: rows = [], isPending } = useQuery({
+    queryKey: ["estimates"],
+    queryFn: fetchEstimates,
+    staleTime: LIST_STALE_MS,
+    initialData: initialRows,
+    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+  });
+  const { data: customers = [] } = useQuery({
+    queryKey: ["quotes-customers"],
+    queryFn: () => fetchCustomers({ page: 1, limit: 100 }).then((r) => r.customers),
+    staleTime: LIST_STALE_MS,
+    initialData: initialCustomers,
+    initialDataUpdatedAt: initialCustomers ? Date.now() : undefined,
+  });
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
@@ -73,10 +89,11 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
   const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"customers" | "all">("customers");
 
-  useEffect(() => {
-    setRows(initialRows);
-    setCustomers(initialCustomers);
-  }, [initialRows, initialCustomers]);
+  const setRows = (updater: Row[] | ((prev: Row[]) => Row[])) => {
+    queryClient.setQueryData<Row[]>(["estimates"], (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const handleStatusChange = async (id: string, status: Row["status"]) => {
     // 粗利率未達かつ未承認の見積は draft 以外のステータスへ変更不可
@@ -151,6 +168,10 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
     const matchTab = tab === "all" || r.status === tab;
     return matchSearch && matchTab;
   });
+
+  if (isPending && rows.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   if (!customerId) {
     return (
@@ -247,6 +268,7 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
                         <TableRow
                           key={r.id}
                           className="cursor-pointer glass-row group"
+                          onMouseEnter={() => prefetchEstimateDetail(queryClient, r.id)}
                           onClick={() => router.push(`/quotes/${r.id}`)}
                         >
                           <TableCell>
@@ -355,7 +377,12 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
             <Table><TableHeader><TableRow><TableHead>見積番号</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
               <TableBody>
                 {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
-                  <TableRow key={r.id} className="cursor-pointer glass-row group" onClick={() => router.push(`/quotes/${r.id}`)}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer glass-row group"
+                    onMouseEnter={() => prefetchEstimateDetail(queryClient, r.id)}
+                    onClick={() => router.push(`/quotes/${r.id}`)}
+                  >
                     <TableCell><Link href={`/quotes/${r.id}`} className="font-medium text-primary hover:underline" onClick={e => e.stopPropagation()}>{r.estimate_no}</Link></TableCell>
                     <TableCell>{r.title ?? "-"}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">{fmt(r.total ?? 0)}</TableCell>

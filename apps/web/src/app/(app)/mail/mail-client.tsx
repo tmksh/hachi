@@ -33,22 +33,20 @@ import {
 import { toast } from "sonner";
 import { humanizeClientError } from "@/lib/humanize-error";
 import {
-  getEmailThreads,
-  getEmailThread,
   markThreadRead,
   toggleThreadStar,
-  getEmailAccounts,
   disconnectEmailAccount,
   replyToThread,
   type EmailAccount,
   type MailProvider,
 } from "@/lib/actions/mail";
+import { fetchMailAccounts, fetchMailThread, fetchMailThreads } from "@/lib/queries/portal";
 import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mock";
 import { ConnectMailDialog } from "@/components/mail/connect-mail-dialog";
 import { guessReplyAddress } from "@/lib/mail-reply";
 
-type Thread = Awaited<ReturnType<typeof getEmailThreads>>[number];
-type ThreadDetail = Awaited<ReturnType<typeof getEmailThread>>;
+type Thread = Awaited<ReturnType<typeof fetchMailThreads>>[number];
+type ThreadDetail = Awaited<ReturnType<typeof fetchMailThread>>;
 
 const isMockId = (id: string) => id.startsWith("mock_");
 
@@ -133,8 +131,8 @@ export function MailClient({
     setLoading(true);
     try {
       const [accs, data] = await Promise.all([
-        getEmailAccounts(),
-        getEmailThreads().catch(() => []),
+        fetchMailAccounts(),
+        fetchMailThreads().catch(() => []),
       ]);
       setAccounts(accs);
       if (accs.length > 0) {
@@ -210,7 +208,7 @@ export function MailClient({
         setThreads((prev) => prev.map((x) => (x.id === t.id ? { ...x, is_read: true } : x)));
         void markThreadRead(t.id);
       }
-      const detail = await getEmailThread(t.id);
+      const detail = await fetchMailThread(t.id);
       setSelected(detail as ThreadDetail);
     } catch {
       toast.error("読み込みに失敗");

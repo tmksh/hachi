@@ -23,8 +23,8 @@ import {
   submitChangeOrderApproval,
   rejectChangeOrder,
 } from "@/lib/actions/change-orders";
-import { getEstimate } from "@/lib/actions/estimates";
-import { getProfiles } from "@/lib/actions/profiles";
+import { fetchEstimate } from "@/lib/queries/details";
+import { fetchProfiles } from "@/lib/queries/lists";
 import type { ChangeOrder } from "@/lib/database.types";
 import type { EstimateListItem } from "@/components/estimate/estimate-list-view";
 
@@ -122,7 +122,7 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
 
   useEffect(() => {
-    getProfiles()
+    fetchProfiles()
       .then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name }))))
       .catch(() => {});
   }, []);
@@ -153,7 +153,7 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
     if (!bId || !aId) return;
     setDiffLoading(true);
     try {
-      const [bEst, aEst] = await Promise.all([getEstimate(bId), getEstimate(aId)]);
+      const [bEst, aEst] = await Promise.all([fetchEstimate(bId), fetchEstimate(aId)]);
       const bItems = (bEst.items ?? []) as EstimateItem[];
       const aItems = (aEst.items ?? []) as EstimateItem[];
       setBeforeTotal(bEst.subtotal ?? 0);

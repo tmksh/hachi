@@ -25,7 +25,7 @@ import {
   CheckCircle2, Undo2, CloudUpload, ChevronDown, ChevronUp, Link2, MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getProcurementMasters, listAccountItemHistory, type AccountItemHistory } from "@/lib/actions/procurement";
+import { type AccountItemHistory } from "@/lib/actions/procurement";
 import { updateOrderAccountItem } from "@/lib/actions/procurement";
 import {
   ORDER_DISPLAY_STATUS_META,
@@ -40,7 +40,6 @@ import {
   createContractorOrder,
   deleteContractorOrder,
   createOrdersFromEstimate,
-  getConstructionEstimate,
 } from "@/lib/actions/constructions";
 import {
   submitContractorOrder,
@@ -50,10 +49,11 @@ import {
   markContractorOrderAcknowledged,
 } from "@/lib/actions/contractor-orders";
 import { getOrCreatePartnerOrderLink } from "@/lib/actions/partner-portal";
-import { getCraftsmen } from "@/lib/actions/craftsmen";
+import { fetchEstimate } from "@/lib/queries/details";
+import { fetchCraftsmen, fetchProfiles } from "@/lib/queries/lists";
+import { fetchAccountItemHistory, fetchProcurementMasters } from "@/lib/queries/portal";
 import { vendorNameMatches } from "@/lib/vendor-normalize";
 import { OrderDocumentPreview, type OrderDocKind } from "@/components/constructions/order-document-preview";
-import { getProfiles } from "@/lib/actions/profiles";
 import { useAuth } from "@/hooks/use-auth";
 import type { ContractorOrder, Craftsman, EstimateItem, Profile } from "@/lib/database.types";
 import { buildPaymentSchedule, type PaymentScheduleItem } from "@/lib/construction/payment-schedule";
@@ -338,14 +338,14 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
       }));
 
   useEffect(() => {
-    void listAccountItemHistory().then(setAccountHistory).catch(() => {});
+    void fetchAccountItemHistory().then(setAccountHistory).catch(() => {});
   }, []);
 
   const loadEstimateItems = async () => {
     if (!estimateId || estimateItems.length > 0) return;
     setLoadingItems(true);
     try {
-      const est = await getConstructionEstimate(estimateId);
+      const est = await fetchEstimate(estimateId);
       setEstimateItems((est.items ?? []) as EstimateItem[]);
     } catch { /* silent */ } finally {
       setLoadingItems(false);
@@ -356,9 +356,9 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
   useEffect(() => {
     if (showCreateForm) {
       if (estimateId) void loadEstimateItems();
-      if (craftsmen.length === 0) getCraftsmen().then(setCraftsmen).catch(() => {});
+      if (craftsmen.length === 0) fetchCraftsmen().then(setCraftsmen).catch(() => {});
       if (departments.length === 0) {
-        getProcurementMasters().then((m) => {
+        fetchProcurementMasters().then((m) => {
           setDepartments(m.departments);
           if (m.accountItems.length) setAccountItems(m.accountItems);
         }).catch(() => {});
@@ -425,7 +425,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     });
     setCustomSchedule([]);
     setShowCreateForm(true);
-    if (craftsmen.length === 0) getCraftsmen().then(setCraftsmen).catch(() => {});
+    if (craftsmen.length === 0) fetchCraftsmen().then(setCraftsmen).catch(() => {});
     void loadEstimateItems();
   };
 
@@ -442,7 +442,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
     setApproverId("");
     setSubmitComment("");
     if (profiles.length === 0) {
-      getProfiles().then(setProfiles).catch(() => toast.error("承認者一覧の取得に失敗しました"));
+      fetchProfiles().then(setProfiles).catch(() => toast.error("承認者一覧の取得に失敗しました"));
     }
   };
 
@@ -939,7 +939,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
             onValueChange={setListDept}
             onOpenChange={(open) => {
               if (open && departments.length === 0) {
-                getProcurementMasters().then((m) => setDepartments(m.departments)).catch(() => {});
+                fetchProcurementMasters().then((m) => setDepartments(m.departments)).catch(() => {});
               }
             }}
           >

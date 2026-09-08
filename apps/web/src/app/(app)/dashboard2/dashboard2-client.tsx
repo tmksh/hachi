@@ -87,8 +87,8 @@ export function Dashboard2Client({
   initialData,
   initialAttendance,
 }: {
-  initialData: DashboardData;
-  initialAttendance: AttendanceEntry | null;
+  initialData?: DashboardData;
+  initialAttendance?: AttendanceEntry | null;
 }) {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);

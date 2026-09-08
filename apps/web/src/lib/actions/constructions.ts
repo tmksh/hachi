@@ -181,7 +181,6 @@ export async function getConstruction(id: string) {
   if (error) throw error;
 
   // 契約に紐づく見積もり + 工事に直接紐づく見積もり一覧
-  let estimate = null;
   let estimates: Array<{
     id: string;
     estimate_no: string;
@@ -212,58 +211,45 @@ export async function getConstruction(id: string) {
   }
 
   if (contractData.contract_id) {
-    // 契約の estimate_id は本体クエリの join（contract:contracts(...)）で取得済み
     type ContractRel = { estimate_id?: string | null } | Array<{ estimate_id?: string | null }> | null | undefined;
     const contractRel = (data as { contract?: ContractRel }).contract;
     const contractEstimateId = Array.isArray(contractRel)
       ? contractRel[0]?.estimate_id
       : contractRel?.estimate_id;
-    if (contractEstimateId) {
+    if (contractEstimateId && !estimates.some((e) => e.id === contractEstimateId)) {
       const { data: est } = await supabase
         .from("estimates")
-        .select("*, categories:estimate_categories(*), items:estimate_items(*)")
+        .select("id, estimate_no, title, version, status, total, subtotal, gross_profit_rate, created_at, updated_at, notes")
         .eq("id", contractEstimateId)
-        .single();
+        .maybeSingle();
       if (est) {
-        estimate = est;
-        if (!estimates.some((e) => e.id === est.id)) {
-          estimates = [
-            {
-              id: est.id,
-              estimate_no: est.estimate_no,
-              title: est.title,
-              version: est.version ?? 1,
-              status: est.status,
-              total: est.total,
-              subtotal: est.subtotal,
-              gross_profit_rate: est.gross_profit_rate,
-              created_at: est.created_at,
-              updated_at: est.updated_at ?? est.created_at,
-              created_by_name: resolveEstimateAuthor(est),
-              assignee: null,
-            },
-            ...estimates,
-          ];
-        }
+        estimates = [
+          {
+            id: est.id,
+            estimate_no: est.estimate_no,
+            title: est.title,
+            version: est.version ?? 1,
+            status: est.status,
+            total: est.total,
+            subtotal: est.subtotal,
+            gross_profit_rate: est.gross_profit_rate,
+            created_at: est.created_at,
+            updated_at: est.updated_at ?? est.created_at,
+            created_by_name: resolveEstimateAuthor(est),
+            assignee: null,
+          },
+          ...estimates,
+        ];
       }
     }
   }
 
-  // 契約見積がなければ最新版を詳細表示用に取得
-  if (!estimate && estimates.length > 0) {
-    const { data: est } = await supabase
-      .from("estimates")
-      .select("*, categories:estimate_categories(*), items:estimate_items(*)")
-      .eq("id", estimates[0].id)
-      .single();
-    if (est) estimate = est;
-  }
-
+  // 明細（categories/items）は見積タブ選択時に getConstructionEstimate で取る
   return {
     ...data,
     tasks: tasks || [],
     orders: orders || [],
-    estimate,
+    estimate: estimates[0] ? { id: estimates[0].id } : null,
     estimates: estimates || [],
     invoices: invoices || [],
   };

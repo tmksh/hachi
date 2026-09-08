@@ -34,14 +34,12 @@ import type {
   FinancialStatement,
 } from "@/lib/database.types";
 import {
-  getFinancialStatement,
-  listFinancialStatements,
   updateFinancialStatementLines,
   setFinancialStatementStatus,
   deleteFinancialStatement,
   type FinancialLineUpdate,
 } from "@/lib/actions/financial-statements";
-import { getCompanyFiscalMonthStart } from "@/lib/actions/profiles";
+import { fetchCompany, fetchFinancialStatement, fetchFinancialStatements } from "@/lib/queries/portal";
 import type { FinancialDisplayUnit } from "@/lib/financial-statements-utils";
 import {
   Select,
@@ -114,12 +112,17 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   const isMockPreview = statements.length === 0 && showSample;
 
   useEffect(() => {
-    void getCompanyFiscalMonthStart().then(setFiscalMonthStart).catch(() => {});
+    void fetchCompany()
+      .then((c) => {
+        const v = (c?.settings as Record<string, unknown> | null)?.fiscal_month_start;
+        if (typeof v === "number" && v >= 1 && v <= 12) setFiscalMonthStart(v);
+      })
+      .catch(() => {});
   }, []);
 
   const loadStatement = useCallback(async (id: string) => {
     setLoading(true);
-    const data = await getFinancialStatement(id);
+    const data = await fetchFinancialStatement(id);
     setStatement(data);
     setValues(buildEditableValues(data?.lines ?? []));
     setDirty(false);
@@ -137,7 +140,7 @@ export function FinancialsClient({ initialItems, initialStatements, initialSetti
   }, [selectedId, loadStatement]);
 
   const refreshStatements = useCallback(async () => {
-    const list = await listFinancialStatements();
+    const list = await fetchFinancialStatements();
     setStatements(list);
     return list;
   }, []);

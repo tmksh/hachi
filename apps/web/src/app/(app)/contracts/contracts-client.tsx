@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,29 +16,41 @@ import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { Search, Plus, FileSignature, TrendingUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { getContracts, deleteContract, updateContract } from "@/lib/actions/contracts";
+import { deleteContract, updateContract } from "@/lib/actions/contracts";
 import { getStatusOption } from "@/lib/status-config";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchContracts, LIST_STALE_MS, type ContractListRow } from "@/lib/queries/lists";
+import { prefetchContractDetail } from "@/lib/nav-prefetch";
 
-type ContractRow = Awaited<ReturnType<typeof getContracts>>[number];
+type ContractRow = ContractListRow;
 
 function fmt(v: number) { return `¥${Math.round(v / 10000).toLocaleString()}万`; }
 
 type ContractsClientProps = {
-  initialRows: ContractRow[];
+  initialRows?: ContractRow[];
 };
 
 export function ContractsClient({ initialRows }: ContractsClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: rows = [], isPending } = useQuery({
+    queryKey: ["contracts"],
+    queryFn: fetchContracts,
+    staleTime: LIST_STALE_MS,
+    initialData: initialRows,
+    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+  });
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
-  const [rows, setRows] = useState<ContractRow[]>(initialRows);
   const [deleteTarget, setDeleteTarget] = useState<ContractRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
 
-  useEffect(() => {
-    setRows(initialRows);
-  }, [initialRows]);
+  const setRows = (updater: ContractRow[] | ((prev: ContractRow[]) => ContractRow[])) => {
+    queryClient.setQueryData<ContractRow[]>(["contracts"], (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const handleStatusChange = async (id: string, status: ContractRow["status"]) => {
     const prev = rows;
@@ -69,6 +82,10 @@ export function ContractsClient({ initialRows }: ContractsClientProps) {
     const matchTab = tab === "all" || c.status === tab || (tab === "active" && (c.status === "executing" || c.status === "contracted"));
     return match && matchTab;
   });
+
+  if (isPending && rows.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -116,7 +133,7 @@ export function ContractsClient({ initialRows }: ContractsClientProps) {
             <Table><TableHeader><TableRow><TableHead>顧客名</TableHead><TableHead>契約番号</TableHead><TableHead>件名</TableHead><TableHead className="text-right">金額</TableHead><TableHead>契約日</TableHead><TableHead>ステータス</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
             <TableBody>
               {filtered.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(c => (
-                <TableRow key={c.id} className="cursor-pointer glass-row group" onClick={() => router.push(`/contracts/${c.id}`)}>
+                <TableRow key={c.id} className="cursor-pointer glass-row group" onMouseEnter={() => prefetchContractDetail(queryClient, c.id)} onClick={() => router.push(`/contracts/${c.id}`)}>
                   <TableCell>
                     {c.customer ? (
                       <div className="flex items-center gap-2.5">

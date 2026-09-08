@@ -2,7 +2,10 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
+import { fetchProcurementOrders, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 import { ArrowUpDown, ChevronDown, ChevronUp, CircleCheck, ClipboardList, FileText, PackageCheck, Paperclip, Receipt } from "lucide-react";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import { cn } from "@/lib/utils";
@@ -51,8 +54,7 @@ import {
 } from "@/lib/procurement";
 
 type Props = {
-  initialOrders: ProcurementOrder[];
-  departments: string[];
+  initialOrders?: ProcurementOrder[];
 };
 
 const FLOW: LedgerStatus[] = [
@@ -105,7 +107,19 @@ export function FulfillmentClient({ initialOrders }: Props) {
   const { profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
   const canAccount = profile?.role ? canAccess("fulfillment_approve", permissionRoleSlugs(profile)) : false;
-  const [orders, setOrders] = useState(initialOrders);
+  const queryClient = useQueryClient();
+  const { data: orders = [], isPending } = useQuery({
+    queryKey: QK.procurementOrders,
+    queryFn: fetchProcurementOrders,
+    staleTime: LIST_STALE_MS,
+    initialData: initialOrders,
+    initialDataUpdatedAt: initialOrders ? Date.now() : undefined,
+  });
+  const setOrders = (updater: ProcurementOrder[] | ((prev: ProcurementOrder[]) => ProcurementOrder[])) => {
+    queryClient.setQueryData<ProcurementOrder[]>(QK.procurementOrders, (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
   const [project, setProject] = useState("all");
   const [vendor, setVendor] = useState("all");
   const [assignee, setAssignee] = useState("all");
@@ -231,6 +245,10 @@ export function FulfillmentClient({ initialOrders }: Props) {
     toast.success(`${targets.length}件を納品検収しました`);
     setSelected([]);
   };
+
+  if (isPending && orders.length === 0) {
+    return <PageLoadingFallback />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4">

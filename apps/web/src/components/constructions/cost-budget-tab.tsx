@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { getCostBudget, saveCostBudget } from "@/lib/actions/cost-budgets";
-import { getConstructionEstimate } from "@/lib/actions/constructions";
+import { saveCostBudget } from "@/lib/actions/cost-budgets";
 import { bulkCreateContractorOrders } from "@/lib/actions/contractor-orders";
-import { getProcurementMasters, listAccountItemHistory, type AccountItemHistory } from "@/lib/actions/procurement";
+import { type AccountItemHistory } from "@/lib/actions/procurement";
+import { fetchCostBudget, fetchEstimate } from "@/lib/queries/details";
+import { fetchAccountItemHistory, fetchProcurementMasters } from "@/lib/queries/portal";
 import { PROCUREMENT_ACCOUNT_ITEMS, suggestAccountItem } from "@/lib/procurement";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -525,14 +526,14 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     ledgerContractAmount ?? (propAmount && propAmount > 0 ? propAmount : 0);
 
   useEffect(() => {
-    void getProcurementMasters().then((m) => {
+    void fetchProcurementMasters().then((m) => {
       if (m.accountItems.length) setAccountItems(m.accountItems);
     }).catch(() => {});
-    void listAccountItemHistory().then(setHistory).catch(() => {});
+    void fetchAccountItemHistory().then(setHistory).catch(() => {});
   }, []);
 
   useEffect(() => {
-    getCostBudget(constructionId).then((data) => {
+    fetchCostBudget(constructionId).then((data) => {
       if (data?.rows?.length) {
         const normalized = data.rows.map((r) => normalizeRow(r as unknown as Record<string, unknown>));
         const cc = Math.max(2, ...normalized.map((r) => r.add_contracts.length));
@@ -540,7 +541,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
         setContractColCount(cc);
         setOrderColCount(oc);
         setRows(normalized.map((r) => padRow(r, cc, oc)));
-        setComments(data.comments ?? []);
+        setComments((data.comments ?? []) as CellComment[]);
       }
       if (data && Number(data.contract_amount) > 0) {
         setLedgerContractAmount(Number(data.contract_amount));
@@ -613,7 +614,7 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   const applyFromEstimate = useCallback(async (estimateId: string) => {
     const loadingId = toast.loading("見積もりを読み込み中...");
     try {
-      const est = await getConstructionEstimate(estimateId);
+      const est = await fetchEstimate(estimateId);
       const newRows = mapEstimateToBudgetRows(
         (est.categories ?? []) as { id: string; name: string }[],
         (est.items ?? []) as {

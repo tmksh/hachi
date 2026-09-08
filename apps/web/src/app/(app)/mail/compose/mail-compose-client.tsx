@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Send, PenLine } from "lucide-react";
-import { getMailSignature, sendEmail } from "@/lib/actions/mail";
+import { sendEmail } from "@/lib/actions/mail";
+import { fetchMailSignature } from "@/lib/queries/portal";
 
 const SIGNATURE_STORAGE_KEY = "bridge_mail_signature";
 
@@ -20,7 +21,7 @@ function applySignature(current: string, next: string) {
   return current.trim() ? `${current}\n\n${next}` : `\n\n${next}`;
 }
 
-export function MailComposeClient({ initialSignature }: { initialSignature: string }) {
+export function MailComposeClient({ initialSignature = "" }: { initialSignature?: string }) {
   const router = useRouter();
   const [sending, setSending] = useState(false);
   const [to, setTo] = useState("");
@@ -43,7 +44,7 @@ export function MailComposeClient({ initialSignature }: { initialSignature: stri
       setBody((prev) => applySignature(prev, seed));
     }
 
-    void getMailSignature()
+    void fetchMailSignature()
       .then((fresh) => {
         if (!fresh) return;
         try {

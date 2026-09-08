@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo, memo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchRouteData } from "@/lib/nav-prefetch";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "@/lib/constants";
 import type { Profile } from "@/hooks/use-auth";
@@ -26,8 +28,15 @@ const GROUP_ICONS = {
 
 export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const { canAccess } = useCompanyPermissions();
+
+  const prefetchNav = (href: string) => {
+    router.prefetch(href);
+    prefetchRouteData(queryClient, href);
+  };
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -73,6 +82,8 @@ export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile
                   <Link
                     key={item.key}
                     href={item.href}
+                    prefetch
+                    onMouseEnter={() => prefetchNav(item.href)}
                     onClick={() => setOpenGroup(null)}
                     className={cn(
                       "flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm transition-colors",
@@ -100,7 +111,13 @@ export const MobileNav = memo(function MobileNav({ profile }: { profile: Profile
                 <button
                   key={group.key}
                   type="button"
-                  onClick={() => setOpenGroup(openGroup === group.key ? null : group.key)}
+                  onClick={() => {
+                    const next = openGroup === group.key ? null : group.key;
+                    setOpenGroup(next);
+                    if (next) {
+                      group.items.forEach((item) => prefetchNav(item.href));
+                    }
+                  }}
                   className={cn(
                     "relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors",
                     active ? "text-primary" : "text-muted-foreground",

@@ -3,32 +3,36 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Deal, DealActivity } from "@/lib/database.types";
 import { dispatchWebhook } from "@/lib/webhooks";
-import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
+import { CACHE_TTL, cachedByCompany, getAuthContext, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 
 export async function getDealStages() {
+  return cachedByCompany("deal-stages", CACHE_TTL.settings, loadDealStages);
+}
+
+async function loadDealStages() {
+  const ctx = await getAuthContext();
+  if (!ctx.companyId) return [];
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-  if (!profile) return [];
   const { data } = await supabase
     .from("deal_stages")
     .select("*")
-    .eq("company_id", profile.company_id)
+    .eq("company_id", ctx.companyId)
     .order("sort_order");
   return data ?? [];
 }
 
 export async function getLostReasons() {
+  return cachedByCompany("lost-reasons", CACHE_TTL.settings, loadLostReasons);
+}
+
+async function loadLostReasons() {
+  const ctx = await getAuthContext();
+  if (!ctx.companyId) return [];
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-  if (!profile) return [];
   const { data } = await supabase
     .from("lost_reasons")
     .select("*")
-    .eq("company_id", profile.company_id)
+    .eq("company_id", ctx.companyId)
     .order("sort_order");
   return data ?? [];
 }

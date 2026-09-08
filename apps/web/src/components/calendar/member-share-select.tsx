@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,9 +9,8 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Users, ChevronDown, X } from "lucide-react";
-import { getCompanyMembers } from "@/lib/actions/calendar";
-
-type Member = { id: string; display_name: string; email: string };
+import { useQuery } from "@tanstack/react-query";
+import { CAL_QK, CALENDAR_STALE_MS, fetchCompanyMembers } from "@/lib/queries/calendar";
 
 /** 予定の共有先メンバー選択（No.4-6-2） */
 export function MemberShareSelect({
@@ -23,12 +22,12 @@ export function MemberShareSelect({
   onChange: (ids: string[]) => void;
   disabled?: boolean;
 }) {
-  const [members, setMembers] = useState<Member[]>([]);
+  const { data: members = [] } = useQuery({
+    queryKey: CAL_QK.members,
+    queryFn: fetchCompanyMembers,
+    staleTime: CALENDAR_STALE_MS,
+  });
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    getCompanyMembers().then(setMembers).catch(() => {});
-  }, []);
 
   const toggle = (id: string) => {
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);

@@ -1,8 +1,5 @@
-import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
-import { PdfBuilderClient } from "./pdf-builder-client";
+import { PdfBuilderPageClient } from "./pdf-builder-page-client";
 
-export default async function PdfBuilderListPage() {
-  const initialTemplates = await getPdfFormTemplates();
-
-  return <PdfBuilderClient initialTemplates={initialTemplates} />;
+export default function PdfBuilderListPage() {
+  return <PdfBuilderPageClient />;
 }

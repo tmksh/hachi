@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +30,11 @@ import {
   ChevronRight, Inbox, Mic, ListTodo, Calendar, FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getCustomer, deleteCustomer, getCustomerRelated, updateCustomer } from "@/lib/actions/customers";
+import { deleteCustomer, updateCustomer } from "@/lib/actions/customers";
 import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
-import type { Customer } from "@/lib/database.types";
+import { fetchCustomer, fetchCustomerRelated, type CustomerDetail, type CustomerRelated } from "@/lib/queries/customer-detail";
+import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import type { CustomerEntryMasters } from "@/lib/actions/customers";
-
-type CustomerDetail = Customer & { assigned_to_profile: { id: string; display_name: string } | null };
-type Related = Awaited<ReturnType<typeof getCustomerRelated>>;
 
 const STAGE_LABELS: Record<string, string> = {
   lead: "リード", negotiation: "商談中", proposal: "提案中",
@@ -85,8 +84,8 @@ function RelatedRow({ onClick, children }: { onClick?: () => void; children: Rea
 }
 
 type CrmDetailClientProps = {
-  initialData: CustomerDetail | null;
-  initialRelated: Related | null;
+  initialData?: CustomerDetail | null;
+  initialRelated?: CustomerRelated | null;
   initialMasters?: CustomerEntryMasters;
 };
 
@@ -100,14 +99,30 @@ function normalizeMainTab(tab: string | null) {
 function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: CrmDetailClientProps) {
   useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
+  const customerId = id as string;
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [mainTab, setMainTab] = useState(() => {
     const tab = normalizeMainTab(searchParams.get("tab"));
     return tab && ALLOWED_TABS.includes(tab) ? tab : "overview";
   });
-  const [data, setData] = useState<CustomerDetail | null>(initialData);
-  const [related] = useState<Related | null>(initialRelated);
+  const { data, isPending, isError } = useQuery({
+    queryKey: ["customer", customerId],
+    queryFn: () => fetchCustomer(customerId),
+    staleTime: 60_000,
+    initialData: initialData ?? undefined,
+    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    enabled: !!customerId,
+  });
+  const { data: related } = useQuery({
+    queryKey: ["customer-related", customerId],
+    queryFn: () => fetchCustomerRelated(customerId),
+    staleTime: 60_000,
+    initialData: initialRelated ?? undefined,
+    initialDataUpdatedAt: initialRelated ? Date.now() : undefined,
+    enabled: !!customerId,
+  });
 
   useEffect(() => {
     const tab = normalizeMainTab(searchParams.get("tab"));
@@ -116,22 +131,23 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    setData(initialData);
-  }, [initialData]);
-
   const reloadCustomer = () => {
-    if (!id) return;
-    getCustomer(id as string).then(c => setData(c as CustomerDetail)).catch(() => {});
+    void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
+    void queryClient.invalidateQueries({ queryKey: ["customer-related", customerId] });
   };
 
   const handleDelete = async () => {
     if (!confirm("この顧客を削除しますか？")) return;
-    try { await deleteCustomer(id as string); toast.success("削除しました"); router.push("/crm"); }
+    try { await deleteCustomer(customerId); toast.success("削除しました"); router.push("/crm"); }
     catch { toast.error("削除に失敗しました"); }
   };
 
-  if (!data) return (
+  const setData = (next: CustomerDetail) => {
+    queryClient.setQueryData(["customer", customerId], next);
+  };
+
+  if (isPending) return <PageLoadingFallback />;
+  if (!data || isError) return (
     <div className="p-4 md:p-6 space-y-4">
       <Link href="/crm" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
         <ArrowLeft className="h-4 w-4" />顧客一覧
