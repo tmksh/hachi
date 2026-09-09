@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,14 @@ import { useTextareaSelection } from "@/hooks/use-textarea-selection";
 import { SelectionToolbarButton, TextSelectionToolbar } from "@/components/ui/text-selection-toolbar";
 import type { DealActivity } from "@/lib/database.types";
 import {
-  getCustomerDealsWithActivities, updateDealSummary, createCustomerTodo,
+  DEAL_QK,
+  DEAL_STALE_MS,
+  fetchCustomerDealsWithActivities,
+  type DealWithActivities,
+} from "@/lib/queries/deals";
+import { CUSTOMER_QK } from "@/lib/queries/customer-detail";
+import {
+  updateDealSummary, createCustomerTodo,
   assessDealConfidence, applyAssessedProspectGrade,
   type DealConfidenceAssessment, type ProspectGrade,
 } from "@/lib/actions/crm-features";
@@ -47,7 +55,6 @@ const VERDICT_META: Record<DealConfidenceAssessment["verdict"], { label: string;
   too_pessimistic: { label: "慎重すぎる可能性", className: "text-sky-700 bg-sky-50 border-sky-200" },
 };
 
-type DealWithActivities = Awaited<ReturnType<typeof getCustomerDealsWithActivities>>[number];
 type ActivityRow = DealActivity & { performer?: { display_name: string } | null };
 
 function getAssigneeName(deal: DealWithActivities | undefined) {
@@ -69,8 +76,17 @@ function EmptyTimeline() {
 
 export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const router = useRouter();
-  const [deals, setDeals] = useState<DealWithActivities[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const {
+    data: deals = [],
+    isPending: loading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: DEAL_QK.customer(customerId),
+    queryFn: () => fetchCustomerDealsWithActivities(customerId),
+    staleTime: DEAL_STALE_MS,
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [summaryDraft, setSummaryDraft] = useState("");
   const { ref: summaryRef, selection, anchorRect, handlers: summarySelectionHandlers, clear: clearSelection } =
@@ -81,16 +97,17 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
-    getCustomerDealsWithActivities(customerId)
-      .then((d) => {
-        setDeals(d);
-        if (d[0]) {
-          setSelectedId(d[0].id);
-          setSummaryDraft(d[0].summary ?? "");
-        }
-      })
-      .finally(() => setLoading(false));
+    setSelectedId(null);
+    setSummaryDraft("");
+    setAssessment(null);
   }, [customerId]);
+
+  useEffect(() => {
+    if (deals.length === 0) return;
+    if (selectedId && deals.some((d) => d.id === selectedId)) return;
+    setSelectedId(deals[0].id);
+    setSummaryDraft(deals[0].summary ?? "");
+  }, [deals, selectedId]);
 
   const selected = deals.find((d) => d.id === selectedId);
   const assigneeName = getAssigneeName(selected);
@@ -129,8 +146,9 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
         assessment.suggestedGrade,
         assessment.reasons.join(" / "),
       );
-      const refreshed = await getCustomerDealsWithActivities(customerId);
-      setDeals(refreshed);
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: CUSTOMER_QK.detail(customerId) });
+      void queryClient.invalidateQueries({ queryKey: DEAL_QK.all });
       setAssessment({ ...assessment, currentGrade: assessment.suggestedGrade, verdict: "appropriate" });
       router.refresh();
       toast.success(`見込度を「${assessment.suggestedGrade}」に修正しました`);
@@ -151,7 +169,12 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
       const saved = await updateDealSummary(selectedId, summaryDraft);
       const nextSummary = saved.summary ?? summaryDraft;
       setSummaryDraft(nextSummary);
-      setDeals((prev) => prev.map((d) => (d.id === selectedId ? { ...d, summary: nextSummary } : d)));
+      queryClient.setQueryData<DealWithActivities[]>(DEAL_QK.customer(customerId), (prev) =>
+        (prev ?? []).map((d) => (d.id === selectedId ? { ...d, summary: nextSummary } : d)),
+      );
+      void queryClient.invalidateQueries({ queryKey: DEAL_QK.all });
+      void queryClient.invalidateQueries({ queryKey: CUSTOMER_QK.related(customerId) });
+      void queryClient.invalidateQueries({ queryKey: ["customer-deal-summaries"] });
       toast.success("要約を保存しました");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "保存に失敗しました");
@@ -160,9 +183,8 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
     }
     // 保存成功後の履歴再取得は失敗しても「保存失敗」と誤表示しない
     try {
-      const refreshed = await getCustomerDealsWithActivities(customerId);
-      setDeals(refreshed);
-      if (!refreshed.some((d) => d.id === selectedId) && refreshed[0]) {
+      const { data: refreshed } = await refetch();
+      if (refreshed && !refreshed.some((d) => d.id === selectedId) && refreshed[0]) {
         setSelectedId(refreshed[0].id);
         setSummaryDraft(refreshed[0].summary ?? "");
       }
@@ -196,6 +218,15 @@ export function DealsTimelineTab({ customerId }: { customerId: string }) {
   };
 
   if (loading) return <Skeleton className="h-64 w-full rounded-lg" />;
+
+  if (isError) {
+    return (
+      <div className="rounded-lg border bg-card p-8 text-center space-y-3">
+        <p className="text-sm text-muted-foreground">商談の読み込みに失敗しました</p>
+        <Button size="sm" variant="outline" onClick={() => void refetch()}>再試行</Button>
+      </div>
+    );
+  }
 
   if (deals.length === 0) {
     return (

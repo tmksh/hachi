@@ -26,12 +26,14 @@ import { Search, Trash2, FileText, Upload, Download, LayoutGrid, List } from "lu
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  getCustomerDocumentsAll, createDocument, deleteDocument,
-  getDocumentCategories, type DocCategory,
+  createDocument, deleteDocument,
+  type DocCategory,
 } from "@/lib/actions/documents";
+import { fetchCustomerDocumentsAll } from "@/lib/queries/customer-detail";
+import { fetchDocumentCategories } from "@/lib/queries/portal";
 import { uploadToStorage, getSignedStorageUrl } from "@/lib/storage-browser";
 
-type Doc = Awaited<ReturnType<typeof getCustomerDocumentsAll>>[number] & {
+type Doc = Awaited<ReturnType<typeof fetchCustomerDocumentsAll>>[number] & {
   construction?: { id: string; title: string } | null;
 };
 
@@ -86,14 +88,14 @@ export function CustomerFilesTab({ customerId, constructionId, contractId, descr
 
   const load = () => {
     setLoading(true);
-    getCustomerDocumentsAll(customerId)
+    fetchCustomerDocumentsAll(customerId)
       .then(setDocs)
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    getDocumentCategories().then(cats => {
+    fetchDocumentCategories().then(cats => {
       setCategories(cats);
       if (cats.length > 0) setUploadCategory(cats[0].key);
     }).catch(() => {});

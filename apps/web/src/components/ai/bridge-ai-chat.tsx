@@ -14,7 +14,8 @@ import {
 import { Send, X, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { sendBridgeAiMessage } from "@/lib/actions/bridge-ai";
-import { getChatContacts, sendChatMessage } from "@/lib/actions/internal-messages";
+import { sendChatMessage } from "@/lib/actions/internal-messages";
+import { fetchChatContacts } from "@/lib/queries/internal-messages";
 import type { BridgeSeed } from "@/contexts/chat-panel-context";
 import { useInternalChat } from "@/contexts/chat-panel-context";
 import { BrandMark } from "@/components/layout/brand-logo";
@@ -23,10 +24,7 @@ import { cn } from "@/lib/utils";
 export const BRIDGE_AI_PANEL_WIDTH = 400;
 const INTERNAL_CHAT_PANEL_WIDTH = 360;
 
-/** 長いパスを先に評価（/dashboard2 が /dashboard に吸われないように） */
 const GREETINGS: { prefix: string; text: string }[] = [
-  { prefix: "/dashboard2", text: "KPIやウィジェットの見方、\n気になるところはありますか？" },
-  { prefix: "/dashboard3", text: "KPIやウィジェットの見方、\n気になるところはありますか？" },
   { prefix: "/dashboard", text: "今日のKPIやフォーカス、\n確認したい項目はありますか？" },
   { prefix: "/bi", text: "指標の見方やグラフの意味、\n知りたいことはありますか？" },
   { prefix: "/crm", text: "顧客登録や商談ステージ、\nお困りのことはありますか？" },
@@ -65,7 +63,7 @@ type ChatMessage = {
   displayText?: string;
 };
 
-type Contact = Awaited<ReturnType<typeof getChatContacts>>[number];
+type Contact = Awaited<ReturnType<typeof fetchChatContacts>>[number];
 
 function toApiHistory(messages: ChatMessage[]) {
   return messages.map(({ role, text }) => ({ role, text }));
@@ -146,7 +144,7 @@ export function BridgeAiChat({
       setAllowForward(true);
       setForwarded(false);
       setAssigneeId("");
-      void getChatContacts().then(setContacts).catch(() => setContacts([]));
+      void fetchChatContacts().then(setContacts).catch(() => setContacts([]));
     }
     const greeting = getGreeting(pathname ?? "");
 

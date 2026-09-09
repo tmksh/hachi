@@ -6,6 +6,7 @@ import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchContract } from "@/lib/queries/details";
 import { fetchCustomers } from "@/lib/queries/customers";
 import { fetchEstimates, fetchProfiles, LIST_STALE_MS } from "@/lib/queries/lists";
+import { ESTIMATE_QK } from "@/lib/queries/estimates";
 import { DETAIL_STALE_MS } from "@/lib/queries/portal";
 import { ContractEditClient } from "./contract-edit-client";
 
@@ -23,7 +24,7 @@ export function ContractEditPageClient() {
     staleTime: LIST_STALE_MS,
   });
   const { data: estimates, isPending: ePending } = useQuery({
-    queryKey: ["estimates"],
+    queryKey: ESTIMATE_QK.all,
     queryFn: fetchEstimates,
     staleTime: LIST_STALE_MS,
   });

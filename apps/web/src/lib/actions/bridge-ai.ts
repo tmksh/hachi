@@ -33,7 +33,7 @@ export async function fetchPageContext(pathname: string): Promise<string | null>
 
   try {
     // ダッシュボード系
-    if (path === "/dashboard" || path.startsWith("/dashboard2") || path.startsWith("/dashboard３") || path.startsWith("/dashboard3") || path.startsWith("/bi")) {
+    if (path === "/dashboard" || path.startsWith("/bi")) {
       return await fetchDashboardContext();
     }
     // CRM（顧客・商談）

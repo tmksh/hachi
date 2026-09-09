@@ -6,14 +6,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { DonutChart } from "@/components/charts/donut-chart";
-import { getCustomers } from "@/lib/actions/customers";
-import { fetchCustomers } from "@/lib/queries/customers";
+import { fetchCustomers, type CustomerListItem } from "@/lib/queries/customers";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { LIST_STALE_MS } from "@/lib/queries/lists";
 
 const COLORS = ["#0F5132", "#1A7A52", "#2D9E6B", "#4DB88A", "#7DCFAA", "#A8DFC5"];
 
-type Customer = Awaited<ReturnType<typeof getCustomers>>["customers"][number];
+type Customer = CustomerListItem;
 
 type MarketingSnsClientProps = {
   initialCustomers?: Customer[];

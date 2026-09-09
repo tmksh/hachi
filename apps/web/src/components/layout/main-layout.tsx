@@ -15,7 +15,6 @@ import { AdminSidebar } from "./admin-sidebar";
 import { MobileNav } from "./mobile-nav";
 import { NavigationProgress } from "./navigation-progress";
 import { Sidebar } from "./sidebar";
-import { BLUE_PAGE_BG } from "@/lib/blue-theme";
 import { TEAL_PAGE_BG } from "@/lib/teal-theme";
 import { useBrandColor } from "@/hooks/use-brand-color";
 
@@ -49,7 +48,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname();
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
-  const pageBg = pathname?.startsWith("/dashboard2") ? BLUE_PAGE_BG : TEAL_PAGE_BG;
+  const pageBg = TEAL_PAGE_BG;
   const [expanded, setExpanded] = useState(isAdminConsole);
   const [chatOpen, setChatOpen] = useState(false);
   const [bridgeSeed, setBridgeSeed] = useState<BridgeSeed | null>(null);

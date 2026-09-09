@@ -34,16 +34,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Trash2, GripVertical, X } from "lucide-react";
 import {
-  getWorkflowTypes,
   createWorkflowType,
   updateWorkflowType,
   deleteWorkflowType,
   type FieldDef,
 } from "@/lib/actions/workflow";
-import { getProfiles } from "@/lib/actions/profiles";
+import { fetchWorkflowTypes } from "@/lib/queries/portal";
+import { fetchProfiles } from "@/lib/queries/lists";
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 
-type WfType = Awaited<ReturnType<typeof getWorkflowTypes>>[number];
+type WfType = Awaited<ReturnType<typeof fetchWorkflowTypes>>[number];
 type Profile = { id: string; display_name: string; role?: string | null };
 
 const FIELD_TYPE_LABELS: Record<FieldDef["type"], string> = {
@@ -75,7 +75,7 @@ export function WorkflowTypesTab() {
   const [selectOptionsInput, setSelectOptionsInput] = useState<Record<number, string>>({});
 
   const load = useCallback(() => {
-    Promise.all([getWorkflowTypes(), getProfiles()])
+    Promise.all([fetchWorkflowTypes(), fetchProfiles()])
       .then(([t, p]) => {
         setTypes(t);
         setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name, role: x.role })));

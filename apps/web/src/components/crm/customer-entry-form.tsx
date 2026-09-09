@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Save, Sparkles, Trash2 } from "lucide-react";
-import { getCustomer, updateCustomer, createCustomer, type CustomerEntryMasters } from "@/lib/actions/customers";
+import { updateCustomer, createCustomer, type CustomerEntryMasters } from "@/lib/actions/customers";
+import { fetchCustomer } from "@/lib/queries/customer-detail";
 import { suggestLeadAssignee } from "@/lib/actions/sales-flow";
 import { suggestCustomFieldsFromInquiry } from "@/lib/actions/crm-features";
 import { useCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
@@ -261,7 +262,7 @@ export function CustomerEntryForm({
 
   useEffect(() => {
     if (mode !== "edit" || !customerId || initialCustomer) return;
-    getCustomer(customerId)
+    fetchCustomer(customerId)
       .then(c => setForm(customerToForm(c)))
       .catch(() => toast.error("取得に失敗しました"))
       .finally(() => setLoading(false));

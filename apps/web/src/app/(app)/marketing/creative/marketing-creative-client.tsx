@@ -9,11 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { Plus, FileText } from "lucide-react";
-import { getDocuments } from "@/lib/actions/documents";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchDocuments, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 
-type Doc = Awaited<ReturnType<typeof getDocuments>>[number];
+type Doc = Awaited<ReturnType<typeof fetchDocuments>>[number];
 
 type MarketingCreativeClientProps = {
   initialDocs?: Doc[];

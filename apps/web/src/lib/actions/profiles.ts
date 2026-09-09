@@ -193,7 +193,7 @@ export async function updateCompany(input: {
 
   await invalidateMyCompanyCache();
   // middleware の権限キャッシュを破棄（次リクエストで再取得）
-  if (input.role_permissions !== undefined) {
+  if (input.role_permissions !== undefined || input.custom_roles !== undefined) {
     const jar = await cookies();
     jar.set("bl_az", "", { path: "/", maxAge: 0 });
   }

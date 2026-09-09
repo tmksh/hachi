@@ -1,7 +1,7 @@
-import type { getContract } from "@/lib/actions/contracts";
+import type { fetchContract } from "@/lib/queries/details";
 import type { Customer } from "@/lib/database.types";
 
-export type ContractDetail = Awaited<ReturnType<typeof getContract>> & {
+export type ContractDetail = Awaited<ReturnType<typeof fetchContract>> & {
   customer?: Customer | null;
   customer_id?: string;
   customer_assignee_name?: string | null;

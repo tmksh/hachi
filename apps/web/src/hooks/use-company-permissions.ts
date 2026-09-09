@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { type AssignableRole } from "@/lib/constants";
-import { getCompanySettings } from "@/lib/actions/profiles";
+import { fetchCompanySettings } from "@/lib/queries/portal";
 import {
   DEFAULT_ROLE_PERMISSIONS,
   mergeRolePermissions,
@@ -33,7 +33,7 @@ let inflightSettings: Promise<{
 function fetchCompanySettingsOnce(force = false) {
   if (force) inflightSettings = null;
   if (!inflightSettings) {
-    inflightSettings = getCompanySettings()
+    inflightSettings = fetchCompanySettings()
       .then((s) => s)
       .finally(() => {
         // 短いクールダウン後に再取得可能にする

@@ -470,27 +470,23 @@ export async function sendInvoiceEmail(
     .single();
   if (!invoice) throw new Error("請求書が見つかりません");
 
-  if (!process.env.RESEND_API_KEY) {
+  const { hasResendApiKey, sendResendEmail, CUSTOMER_FROM_EMAIL, textToEmailHtml } = await import("@/lib/resend");
+
+  if (!hasResendApiKey()) {
     const statusResult = await updateInvoiceStatus(id, "sent");
     if (!statusResult.ok) throw new Error(statusResult.error);
     return { sent: false as const };
   }
 
-  const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
-  const escaped = input.body
-    .split("\n")
-    .map((line) => `<p style="margin:0 0 8px;white-space:pre-wrap;">${line.replace(/</g, "&lt;").replace(/>/g, "&gt;") || "&nbsp;"}</p>`)
-    .join("");
-
-  const { error: mailError } = await getResend().emails.send({
+  const { error: mailError } = await sendResendEmail({
     from: CUSTOMER_FROM_EMAIL,
     to,
     subject: input.subject.trim() || `請求書のご送付（${invoice.invoice_no ?? ""}）`,
-    html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${escaped}</div>`,
+    html: textToEmailHtml(input.body),
     text: input.body,
   });
   if (mailError) {
-    throw new Error(`メール送信に失敗しました: ${mailError.message}`);
+    throw new Error(`メール送信に失敗しました: ${mailError}`);
   }
 
   const statusResult = await updateInvoiceStatus(id, "sent");

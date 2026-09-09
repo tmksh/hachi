@@ -2,16 +2,17 @@ import type { QueryClient } from "@tanstack/react-query";
 import { fetchDashboardData, fetchUnfollowedLeads } from "@/lib/queries/dashboard";
 import { fetchTodayAttendance } from "@/lib/queries/attendance";
 import { fetchCustomers, fetchCustomerCounts } from "@/lib/queries/customers";
-import { fetchCustomer, fetchCustomerRelated } from "@/lib/queries/customer-detail";
+import { fetchCustomer, fetchCustomerRelated, CUSTOMER_QK } from "@/lib/queries/customer-detail";
 import {
   LIST_STALE_MS,
   fetchConstructions,
   fetchContracts,
   fetchCraftsmen,
-  fetchEstimates,
   fetchInvoices,
   fetchProfiles,
 } from "@/lib/queries/lists";
+import { ESTIMATE_QK, ESTIMATE_STALE_MS, fetchEstimates } from "@/lib/queries/estimates";
+import { DEAL_QK, DEAL_STALE_MS, fetchDeals, fetchDealStages } from "@/lib/queries/deals";
 import { getCurrentFiscalYear } from "@/lib/bi-utils";
 
 const LIST = LIST_STALE_MS;
@@ -37,9 +38,11 @@ export function prefetchRouteData(queryClient: QueryClient, href: string) {
         staleTime: LIST,
       });
       void queryClient.prefetchQuery({ queryKey: ["customer-counts"], queryFn: fetchCustomerCounts, staleTime: LIST });
+      void queryClient.prefetchQuery({ queryKey: DEAL_QK.all, queryFn: fetchDeals, staleTime: DEAL_STALE_MS });
+      void queryClient.prefetchQuery({ queryKey: DEAL_QK.stages, queryFn: fetchDealStages, staleTime: 5 * 60_000 });
       break;
     case "/quotes":
-      void queryClient.prefetchQuery({ queryKey: ["estimates"], queryFn: fetchEstimates, staleTime: LIST });
+      void queryClient.prefetchQuery({ queryKey: ESTIMATE_QK.all, queryFn: fetchEstimates, staleTime: ESTIMATE_STALE_MS });
       void queryClient.prefetchQuery({
         queryKey: ["quotes-customers"],
         queryFn: () => fetchCustomers({ page: 1, limit: 100 }).then((r) => r.customers),
@@ -201,12 +204,12 @@ export function prefetchRouteData(queryClient: QueryClient, href: string) {
 
 export function prefetchCustomerDetail(queryClient: QueryClient, id: string) {
   void queryClient.prefetchQuery({
-    queryKey: ["customer", id],
+    queryKey: CUSTOMER_QK.detail(id),
     queryFn: () => fetchCustomer(id),
     staleTime: DETAIL,
   });
   void queryClient.prefetchQuery({
-    queryKey: ["customer-related", id],
+    queryKey: CUSTOMER_QK.related(id),
     queryFn: () => fetchCustomerRelated(id),
     staleTime: DETAIL,
   });
@@ -222,7 +225,7 @@ export function prefetchConstructionDetail(queryClient: QueryClient, id: string)
 
 export function prefetchEstimateDetail(queryClient: QueryClient, id: string) {
   void queryClient.prefetchQuery({
-    queryKey: ["estimate", id],
+    queryKey: ESTIMATE_QK.detail(id),
     queryFn: () => import("@/lib/queries/details").then((m) => m.fetchEstimate(id)),
     staleTime: DETAIL,
   });

@@ -18,7 +18,7 @@ import {
   submitEstimateApproval,
   confirmEstimateIssued,
 } from "@/lib/actions/sales-flow";
-import { getProfiles } from "@/lib/actions/profiles";
+import { fetchProfiles } from "@/lib/queries/lists";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { humanizeClientError } from "@/lib/humanize-error";
 
@@ -60,7 +60,7 @@ export function EstimateApprovalActions({
       getEstimateMarginThreshold(estimateId).then(setMarginInfo).catch(() => {});
     };
     loadMargin();
-    getProfiles()
+    fetchProfiles()
       .then((p) =>
         setProfiles(
           p

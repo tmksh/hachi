@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Save } from "lucide-react";
-import { getContract, updateContract } from "@/lib/actions/contracts";
+import { updateContract } from "@/lib/actions/contracts";
+import type { fetchContract } from "@/lib/queries/details";
 import { ContractFormFields } from "@/components/contracts/contract-form-fields";
 
-type Contract = Awaited<ReturnType<typeof getContract>>;
+type Contract = Awaited<ReturnType<typeof fetchContract>>;
 
 type ContractEditClientProps = {
   id: string;

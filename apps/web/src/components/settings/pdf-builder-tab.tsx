@@ -23,10 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  getPdfFormTemplates,
-  deletePdfFormTemplate,
-} from "@/lib/actions/pdf-form-templates";
+import { deletePdfFormTemplate } from "@/lib/actions/pdf-form-templates";
+import { fetchPdfFormTemplates } from "@/lib/queries/portal";
 import {
   PDF_FORM_DOC_TYPE_LABELS,
   PDF_FORM_DOC_TYPES,
@@ -42,7 +40,7 @@ export function PdfBuilderTab() {
 
   const load = () => {
     setLoading(true);
-    getPdfFormTemplates()
+    fetchPdfFormTemplates()
       .then(setTemplates)
       .catch(() => {})
       .finally(() => setLoading(false));

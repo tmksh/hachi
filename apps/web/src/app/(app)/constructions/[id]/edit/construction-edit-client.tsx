@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
-import { getConstruction, updateConstruction } from "@/lib/actions/constructions";
+import { updateConstruction } from "@/lib/actions/constructions";
+import type { fetchConstruction } from "@/lib/queries/details";
 
 const STATUS_OPTIONS = [{value:"preparing",label:"着工前"},{value:"in_progress",label:"施工中"},{value:"completed",label:"完工"},{value:"suspended",label:"中断"},{value:"delayed",label:"遅延"}];
 
-type Construction = Awaited<ReturnType<typeof getConstruction>>;
+type Construction = Awaited<ReturnType<typeof fetchConstruction>>;
 
 type ConstructionEditClientProps = {
   id: string;

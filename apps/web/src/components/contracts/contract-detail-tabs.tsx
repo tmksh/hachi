@@ -21,12 +21,12 @@ import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { ContractMessagingTab } from "@/components/contracts/contract-messaging-tab";
 import { ContractWorkflowTab } from "@/components/contracts/contract-workflow-tab";
 import {
-  getContractEstimates, sendContractCloudSign, generateContractEsignMessage,
+  sendContractCloudSign, generateContractEsignMessage,
   createEmptyEstimateForContract, copyEstimateForContract,
   getContractApprovalWorkflowTypes, getContractWorkflowRequests, submitContractWorkflow,
   type ContractApprovalWorkflowType,
 } from "@/lib/actions/contract-features";
-import { getEstimate } from "@/lib/actions/estimates";
+import { fetchContractEstimates, fetchEstimate } from "@/lib/queries/details";
 import { Calendar, FileText, RefreshCw, Download, Loader2, RotateCcw, FolderOpen, CheckCircle2, Sparkles, Lock } from "lucide-react";
 import { toast } from "sonner";
 import type { ContractDetail } from "./contract-detail-types";
@@ -38,10 +38,10 @@ import { Label } from "@/components/ui/label";
 import { updateContract } from "@/lib/actions/contracts";
 import { CONTRACT_TEMPLATES, buildDefaults, renderPreview, mergeDefaults, syncFromContext, prepareFormForOutput, resolveCompanyContext, type FormValues, type RenderContext } from "@/lib/contract-templates";
 import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
-import { getCompany } from "@/lib/actions/profiles";
+import { fetchCompany } from "@/lib/queries/portal";
 import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
-import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
+import { fetchPdfFormTemplates } from "@/lib/queries/portal";
 import { buildFillContext, type PdfFormTemplate } from "@/lib/pdf-form-template";
 import { PdfFormFillerPanel } from "@/components/settings/pdf-form-filler";
 import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
@@ -216,7 +216,7 @@ function CustomerTab({
   }, [data.status, data.estimate_id]);
 
   useEffect(() => {
-    getContractEstimates(contractId)
+    fetchContractEstimates(contractId)
       .then((rows) =>
         setEstimateOptions(
           rows.map((r) => ({
@@ -486,7 +486,7 @@ function DocumentsTab({
   }, [contractId, data.notes, templateId]);
 
   useEffect(() => {
-    getPdfFormTemplates().then(setFormTemplates).catch(() => {});
+    fetchPdfFormTemplates().then(setFormTemplates).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -499,7 +499,11 @@ function DocumentsTab({
   }, []);
 
   useEffect(() => {
-    getCompany().then((c) => {
+    fetchCompany().then((c) => {
+      if (!c) {
+        setCompanyReady(true);
+        return;
+      }
       const templates = resolvePdfTemplates((c?.settings as Record<string, unknown> | undefined)?.pdf_templates);
       const pdf = templates.contract ?? templates.estimate ?? null;
       setPdfTemplate(pdf);
@@ -943,7 +947,7 @@ function EstimatesTab({
   const [createOpen, setCreateOpen] = useState(false);
 
   const loadRows = () => {
-    getContractEstimates(contractId)
+    fetchContractEstimates(contractId)
       .then((data) => setRows(data as unknown as EstimateListItem[]))
       .catch(() => toast.error("見積一覧の読み込みに失敗"));
   };
@@ -958,7 +962,7 @@ function EstimatesTab({
       return;
     }
     setLoadingEstimate(true);
-    getEstimate(selectedId)
+    fetchEstimate(selectedId)
       .then((est) => setSelectedEstimate(est as unknown as EstimateForView))
       .catch(() => toast.error("見積の読み込みに失敗"))
       .finally(() => setLoadingEstimate(false));

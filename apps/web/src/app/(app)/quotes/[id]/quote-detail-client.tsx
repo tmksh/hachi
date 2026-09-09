@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchEstimate } from "@/lib/queries/details";
+import { ESTIMATE_QK, ESTIMATE_DETAIL_STALE_MS } from "@/lib/queries/estimates";
 import { EstimateDetailView, type EstimateForView } from "@/components/estimate/estimate-detail-view";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Copy } from "lucide-react";
@@ -23,9 +24,9 @@ export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data, isPending, isError } = useQuery({
-    queryKey: ["estimate", estimateId],
+    queryKey: ESTIMATE_QK.detail(estimateId),
     queryFn: () => fetchEstimate(estimateId),
-    staleTime: 60_000,
+    staleTime: ESTIMATE_DETAIL_STALE_MS,
     initialData: initialData ?? undefined,
     initialDataUpdatedAt: initialData ? querySeedAt : undefined,
     enabled: !!estimateId,
@@ -64,7 +65,7 @@ export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
       <EstimateDetailView
         estimate={data as unknown as EstimateForView}
         onEstimateChange={(est) => {
-          queryClient.setQueryData(["estimate", estimateId], (prev: EstimateDetail | undefined) => ({
+          queryClient.setQueryData(ESTIMATE_QK.detail(estimateId), (prev: EstimateDetail | undefined) => ({
             ...(prev as EstimateDetail),
             ...(est as unknown as EstimateDetail),
           }));

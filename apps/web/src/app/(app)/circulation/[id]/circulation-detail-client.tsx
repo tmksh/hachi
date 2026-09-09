@@ -25,13 +25,14 @@ import { ArrowLeft, Send, Users, Pencil, Trash2, Save, Loader2, CheckCircle2 } f
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  getAnnouncement, addAnnouncementComment,
+  addAnnouncementComment,
   updateAnnouncement, deleteAnnouncement,
 } from "@/lib/actions/announcements";
+import { fetchAnnouncement } from "@/lib/queries/portal";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-type Detail = Awaited<ReturnType<typeof getAnnouncement>>;
+type Detail = Awaited<ReturnType<typeof fetchAnnouncement>>;
 type AnnouncementReadRow = { user_id: string; read_at: string; display_name: string };
 
 const ROLE_ORDER_LIST: Role[] = [
@@ -65,7 +66,7 @@ function CirculationDetailContent({ initialData }: CirculationDetailClientProps)
   const [deleting, setDeleting] = useState(false);
 
   const reload = () => {
-    if (id) getAnnouncement(id as string).then(setData).catch(() => {});
+    if (id) fetchAnnouncement(id as string).then(setData).catch(() => {});
   };
 
   const handleComment = async () => {

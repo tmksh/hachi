@@ -16,6 +16,8 @@ export type AuthzCache = {
   c?: string | null;
   /** company_id */
   o?: string | null;
+  /** companies.slug（サブドメイン時の RPC を省略するため） */
+  s?: string | null;
   p: RolePermissions | null;
 };
 

@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save, X, Plus } from "lucide-react";
-import { getCraftsman, updateCraftsman } from "@/lib/actions/craftsmen";
+import { updateCraftsman } from "@/lib/actions/craftsmen";
+import type { fetchCraftsman } from "@/lib/queries/portal";
 import { splitLeadingCode } from "@/lib/procurement";
 
-type Craftsman = Awaited<ReturnType<typeof getCraftsman>>;
+type Craftsman = Awaited<ReturnType<typeof fetchCraftsman>>;
 
 function TagInput({
   label,

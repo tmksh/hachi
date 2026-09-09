@@ -10,13 +10,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Trash2, Pencil, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  getDealStages, createDealStage, updateDealStage, deleteDealStage, reorderDealStages,
-  getLostReasons, createLostReason, deleteLostReason,
-  getLeadSources, createLeadSource, deleteLeadSource,
-  getCustomerTagMasters, createCustomerTagMaster, deleteCustomerTagMaster,
+  createDealStage, updateDealStage, deleteDealStage, reorderDealStages,
+  createLostReason, deleteLostReason,
+  createLeadSource, deleteLeadSource,
+  createCustomerTagMaster, deleteCustomerTagMaster,
   getDepartmentMarginRates, createDepartmentMarginRate, updateDepartmentMarginRate, deleteDepartmentMarginRate,
   type DepartmentMarginRate,
 } from "@/lib/actions/deals";
+import {
+  fetchCrmDealStages,
+  fetchLostReasons,
+  fetchLeadSources,
+  fetchCustomerTagMasters,
+} from "@/lib/queries/crm-masters";
 import {
   getCompanyLocations,
   createCompanyLocation,
@@ -651,10 +657,10 @@ export function CrmMasterTab({ initialData }: { initialData?: CrmMasterInitialDa
 
   const reload = useCallback(async () => {
     const [s, l, ls, t, dm, locs] = await Promise.all([
-      getDealStages(),
-      getLostReasons(),
-      getLeadSources(),
-      getCustomerTagMasters(),
+      fetchCrmDealStages(),
+      fetchLostReasons(),
+      fetchLeadSources(),
+      fetchCustomerTagMasters(),
       getDepartmentMarginRates(),
       getCompanyLocations(),
     ]);

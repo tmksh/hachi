@@ -97,10 +97,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { updateProfile, getCompany, updateCompany } from "@/lib/actions/profiles";
+import { updateProfile, updateCompany } from "@/lib/actions/profiles";
 import { getBiCompanyConfig, saveBiCompanyConfig } from "@/lib/actions/bi";
 import type { BiCompanyConfig } from "@/lib/bi-config";
-import { getMailSignature, saveMailSignature } from "@/lib/actions/mail";
+import { saveMailSignature } from "@/lib/actions/mail";
 import {
   listTeamMembers,
   inviteTeamMember,

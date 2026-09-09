@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Pencil, Trash2, Phone, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
-import { getCraftsman, deleteCraftsman } from "@/lib/actions/craftsmen";
+import { deleteCraftsman } from "@/lib/actions/craftsmen";
 import type { Craftsman } from "@/lib/database.types";
 
 const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"電気", interior:"内装", plumbing:"配管", general:"総合" };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getCustomerRecordings, saveCustomerRecording, createCustomerTodo, type CustomerRecording } from "@/lib/actions/crm-features";
+import { saveCustomerRecording, createCustomerTodo } from "@/lib/actions/crm-features";
+import { CUSTOMER_QK, fetchCustomerRecordings } from "@/lib/queries/customer-detail";
 import { sendRecordingSummaryEmail } from "@/lib/actions/sales-flow";
 import { uploadVoiceRecording, saveVoiceTranscriptResult } from "@/lib/actions/voice-recording";
 import { improveRecordingText } from "@/lib/actions/bridge-ai";
@@ -46,7 +48,11 @@ export function RecordingSummaryTab({
   customerEmail?: string | null;
   onComplete?: () => void;
 }) {
-  const [recordings, setRecordings] = useState<CustomerRecording[]>([]);
+  const { data: recordings = [], refetch: refetchRecordings } = useQuery({
+    queryKey: CUSTOMER_QK.recordings(customerId),
+    queryFn: () => fetchCustomerRecordings(customerId),
+    staleTime: 60_000,
+  });
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [transcript, setTranscript] = useState("");
@@ -72,10 +78,8 @@ export function RecordingSummaryTab({
   const startedAtRef = useRef<number>(0);
 
   const load = useCallback(() => {
-    getCustomerRecordings(customerId).then(setRecordings).catch(() => {});
-  }, [customerId]);
-
-  useEffect(() => { load(); }, [load]);
+    void refetchRecordings();
+  }, [refetchRecordings]);
 
   useEffect(() => {
     return () => {

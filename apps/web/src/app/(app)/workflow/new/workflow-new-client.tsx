@@ -22,9 +22,9 @@ import {
   type FieldDef,
   type ApprovalStep,
 } from "@/lib/actions/workflow";
-import type { getWorkflowTypes } from "@/lib/actions/workflow";
+import type { fetchWorkflowTypes } from "@/lib/queries/portal";
 
-type WfType = Awaited<ReturnType<typeof getWorkflowTypes>>[number];
+type WfType = Awaited<ReturnType<typeof fetchWorkflowTypes>>[number];
 
 type WorkflowNewClientProps = {
   initialTypes: WfType[];

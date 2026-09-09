@@ -14,8 +14,9 @@ import {
   LEGACY_ROLE_PERM_COOKIE,
   decodeAuthz,
   encodeAuthz,
+  type AuthzCache,
 } from "@/lib/authz-cookie";
-import { jwtIsFresh, jwtUserAsUser, readSupabaseJwtUser } from "@/lib/supabase/session-jwt";
+import { hasSupabaseAuthCookie, jwtIsFresh, jwtUserAsUser, readSupabaseJwtUser } from "@/lib/supabase/session-jwt";
 
 /** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
 const LEGACY_ROUTE_PREFIXES = [
@@ -103,6 +104,137 @@ function rescueGoogleOAuthFromLogin(request: NextRequest): NextResponse | null {
   return NextResponse.redirect(dest);
 }
 
+type GateUser = { id: string; email?: string };
+
+function isSessionlessPath(pathname: string): boolean {
+  if (
+    pathname === "/api/health"
+    || pathname === "/partner"
+    || pathname.startsWith("/api/auth/callback")
+    || pathname.startsWith("/api/auth/accept-invite")
+    || isGoogleOAuthCallbackPath(pathname)
+  ) {
+    return true;
+  }
+  return (
+    pathname.startsWith("/api/webhooks/")
+    || pathname.startsWith("/api/v1/")
+    || pathname.startsWith("/partner/")
+  );
+}
+
+function publicPathPrefixes(): string[] {
+  return [
+    "/login",
+    "/admin/login",
+    "/api/auth/callback",
+    "/api/auth/accept-invite",
+    "/api/gmail/callback",
+    "/api/google-calendar/callback",
+    "/api/webhooks/",
+    "/unauthorized",
+    "/reset-password",
+    "/update-password",
+    "/onboarding",
+    "/partner",
+    ...(process.env.NODE_ENV === "development" ? ["/api/dev/"] : []),
+  ];
+}
+
+function isPublicPath(pathname: string): boolean {
+  return publicPathPrefixes().some((path) => pathname.startsWith(path));
+}
+
+function pass(request: NextRequest): NextResponse {
+  return NextResponse.next({ request });
+}
+
+function redirectTo(request: NextRequest, pathname: string): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  return NextResponse.redirect(url);
+}
+
+/** ログイン有無によるリダイレクト。続行なら null */
+function applyAuthGate(request: NextRequest, user: GateUser | null): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  const publicPath = isPublicPath(pathname);
+  const isExternalApi = pathname.startsWith("/api/v1/");
+
+  if (
+    pathname.startsWith("/admin")
+    && pathname !== "/admin/login"
+    && (!user || user.email !== "super-admin@example.com")
+  ) {
+    return redirectTo(request, "/admin/login");
+  }
+
+  if (!user && !publicPath && !isExternalApi) {
+    return redirectTo(request, "/login");
+  }
+
+  if (user && pathname === "/login") {
+    return redirectTo(request, "/dashboard");
+  }
+
+  if (user && pathname === "/admin/login" && user.email === "super-admin@example.com") {
+    return redirectTo(request, "/admin");
+  }
+
+  if (user && pathname === "/") {
+    return redirectTo(request, "/dashboard");
+  }
+
+  return null;
+}
+
+function applyRoleCheck(
+  request: NextRequest,
+  role: string | undefined,
+  permissions: RolePermissions | null,
+  customRoleId: string | undefined,
+): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  const needsRoleCheck =
+    !!featureKeyForPath(pathname)
+    || LEGACY_ROUTE_PREFIXES.some((p) => pathname.startsWith(p));
+  if (!needsRoleCheck) return null;
+  if (!role || !canAccessPathWithPermissions(pathname, role, permissions, customRoleId)) {
+    return redirectTo(request, "/unauthorized");
+  }
+  return null;
+}
+
+function withLegacyCookieCleared(response: NextResponse, request: NextRequest): NextResponse {
+  if (request.cookies.has(LEGACY_ROLE_PERM_COOKIE)) {
+    response.cookies.set(LEGACY_ROLE_PERM_COOKIE, "", { path: "/", maxAge: 0 });
+  }
+  return response;
+}
+
+function withTenantHeaders(response: NextResponse, slug: string, companyId: string): NextResponse {
+  response.headers.set("x-tenant-slug", slug);
+  response.headers.set("x-tenant-id", companyId);
+  return response;
+}
+
+function setAuthzCookie(response: NextResponse, data: AuthzCache) {
+  try {
+    const encoded = encodeAuthz(data);
+    if (encoded.length < 3500) {
+      response.cookies.set(AUTHZ_COOKIE, encoded, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: AUTHZ_MAX_AGE_SEC,
+      });
+    }
+  } catch {
+    // ignore encode errors
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   const canonicalRedirect = redirectToCanonicalDomain(request);
   if (canonicalRedirect) return canonicalRedirect;
@@ -110,14 +242,57 @@ export async function updateSession(request: NextRequest) {
   const oauthRescue = rescueGoogleOAuthFromLogin(request);
   if (oauthRescue) return oauthRescue;
 
+  const { pathname } = request.nextUrl;
+  if (isSessionlessPath(pathname)) {
+    return pass(request);
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.next({ request });
+    return pass(request);
   }
 
-  let supabaseResponse = NextResponse.next({ request });
+  const getCookie = (name: string) => request.cookies.get(name)?.value;
+  const jwt = readSupabaseJwtUser(getCookie, supabaseUrl);
+  const freshUser = jwt && jwtIsFresh(jwt.exp) ? jwtUserAsUser(jwt) : null;
+  const hasAuthCookie = hasSupabaseAuthCookie(getCookie, supabaseUrl);
+  const slug = extractSubdomain(request);
+  const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
+  const authzOk = Boolean(freshUser && cached && cached.u === freshUser.id && cached.o);
+
+  // JWT が新しく権限 cookie もある → Supabase クライアントも DB も不要
+  if (freshUser && cached && authzOk) {
+    if (slug) {
+      const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN!;
+      if (cached.s && cached.s !== slug) {
+        const url = request.nextUrl.clone();
+        url.host = `${cached.s}.${appDomain}`;
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+      if (cached.s === slug && cached.o) {
+        if (pathname === "/login") return redirectTo(request, "/dashboard");
+        return withTenantHeaders(pass(request), slug, cached.o);
+      }
+    } else {
+      const gated = applyAuthGate(request, freshUser);
+      if (gated) return gated;
+      const denied = applyRoleCheck(request, cached.r, cached.p ?? null, cached.c ?? undefined);
+      if (denied) return denied;
+      return withLegacyCookieCleared(pass(request), request);
+    }
+  }
+
+  // セッション cookie 自体がない → getUser のネットワークを省略
+  if (!freshUser && !hasAuthCookie && !slug) {
+    const gated = applyAuthGate(request, null);
+    if (gated) return gated;
+    return pass(request);
+  }
+
+  let supabaseResponse = pass(request);
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
@@ -136,31 +311,25 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const jwt = readSupabaseJwtUser((name) => request.cookies.get(name)?.value, supabaseUrl);
-  const { data: { user } } = jwt && jwtIsFresh(jwt.exp)
-    ? { data: { user: jwtUserAsUser(jwt) } }
+  const { data: { user } } = freshUser
+    ? { data: { user: freshUser } }
     : await supabase.auth.getUser();
 
   // ── サブドメイン解決（NEXT_PUBLIC_APP_DOMAIN 設定後に有効） ─────────────────
-  const slug = extractSubdomain(request);
   if (slug) {
     const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN!;
-    const { pathname } = request.nextUrl;
 
-    // slug が DB に存在するか確認（RLS を避け id のみ取得）
     const { data: companyId } = await supabase.rpc("resolve_company_id_by_slug", {
       p_slug: slug,
     });
 
     if (!companyId) {
-      // 存在しない slug → apex ドメインのトップにリダイレクト
       const url = request.nextUrl.clone();
       url.host = appDomain;
       url.pathname = "/";
       return NextResponse.redirect(url);
     }
 
-    // 未ログインで /login 以外にアクセス → サブドメインの /login へ
     if (
       !user
       && !pathname.startsWith("/login")
@@ -168,28 +337,21 @@ export async function updateSession(request: NextRequest) {
       && !pathname.startsWith("/onboarding")
       && !isGoogleOAuthCallbackPath(pathname)
     ) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return redirectTo(request, "/login");
     }
 
-    // ログイン済みで /login → /dashboard へ
     if (user && pathname === "/login") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
+      return redirectTo(request, "/dashboard");
     }
 
-    // ログイン済みユーザーが別テナントのサブドメインにアクセスしようとした場合は弾く
     if (user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("company_id")
+        .select("role, company_id")
         .eq("id", user.id)
         .single();
 
       if (profile && profile.company_id !== companyId) {
-        // 自テナントのサブドメインにリダイレクト
         const { data: myCompany } = await supabase
           .from("companies")
           .select("slug")
@@ -205,90 +367,54 @@ export async function updateSession(request: NextRequest) {
         url.pathname = "/dashboard";
         return NextResponse.redirect(url);
       }
+
+      if (profile && profile.company_id === companyId) {
+        if (cached && cached.u === user.id && cached.o) {
+          setAuthzCookie(supabaseResponse, { ...cached, s: slug });
+        } else {
+          const { data: company } = await supabase
+            .from("companies")
+            .select("settings, slug")
+            .eq("id", profile.company_id)
+            .maybeSingle();
+          const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+          const customRoleId = readMemberCustomRoles(settings)[user.id];
+          const permissions =
+            settings?.role_permissions && typeof settings.role_permissions === "object"
+              ? mergeRolePermissions(settings.role_permissions as RolePermissions)
+              : null;
+          const role = profile.role as string | undefined;
+          if (role) {
+            setAuthzCookie(supabaseResponse, {
+              u: user.id,
+              r: role,
+              c: customRoleId ?? null,
+              o: profile.company_id,
+              s: slug,
+              p: permissions,
+            });
+          }
+        }
+      }
     }
 
-    // サブドメイン情報をヘッダーで Server Components に伝搬
-    supabaseResponse.headers.set("x-tenant-slug", slug);
-    supabaseResponse.headers.set("x-tenant-id", companyId);
-    return supabaseResponse;
-  }
-  // ── ここから下は従来のシングルドメイン動作（現状と完全に同一） ─────────────
-
-  const publicPaths = [
-    "/login",
-    "/admin/login",
-    "/api/auth/callback",
-    "/api/auth/accept-invite",
-    "/api/gmail/callback",
-    "/api/google-calendar/callback",
-    "/api/webhooks/",
-    "/unauthorized",
-    "/reset-password",
-    "/update-password",
-    "/onboarding",
-    "/partner",
-    ...(process.env.NODE_ENV === "development" ? ["/api/dev/"] : []),
-  ];
-  const isPublicPath = publicPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path),
-  );
-  const isExternalApi = request.nextUrl.pathname.startsWith("/api/v1/");
-
-  // /admin 配下は super-admin@example.com 以外なら /admin/login へ
-  if (
-    request.nextUrl.pathname.startsWith("/admin") &&
-    request.nextUrl.pathname !== "/admin/login" &&
-    (!user || user.email !== "super-admin@example.com")
-  ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin/login";
-    return NextResponse.redirect(url);
+    return withTenantHeaders(supabaseResponse, slug, companyId);
   }
 
-  if (!user && !isPublicPath && !isExternalApi) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  if (user && request.nextUrl.pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
-
-  if (user && request.nextUrl.pathname === "/admin/login" && user.email === "super-admin@example.com") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin";
-    return NextResponse.redirect(url);
-  }
-
-  if (user && request.nextUrl.pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
+  const gated = applyAuthGate(request, user);
+  if (gated) return gated;
 
   if (user) {
-    const { pathname } = request.nextUrl;
-
-    const needsRoleCheck =
-      !!featureKeyForPath(pathname)
-      || LEGACY_ROUTE_PREFIXES.some((p) => pathname.startsWith(p));
-
-    if (request.cookies.has(LEGACY_ROLE_PERM_COOKIE)) {
-      supabaseResponse.cookies.set(LEGACY_ROLE_PERM_COOKIE, "", { path: "/", maxAge: 0 });
-    }
-
     let role: string | undefined;
     let customRoleId: string | undefined;
     let permissions: RolePermissions | null = null;
+    let companySlug: string | null = null;
 
-    const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
-    if (cached && cached.u === user.id && cached.o) {
+    if (authzOk && cached && cached.u === user.id) {
       role = cached.r;
       customRoleId = cached.c ?? undefined;
       permissions = cached.p ?? null;
+      companySlug = cached.s ?? null;
     } else {
       const { data: profile } = await supabase
         .from("profiles")
@@ -301,10 +427,11 @@ export async function updateSession(request: NextRequest) {
       if (profile?.company_id) {
         const { data: company } = await supabase
           .from("companies")
-          .select("settings")
+          .select("settings, slug")
           .eq("id", profile.company_id)
           .maybeSingle();
         const settings = (company?.settings ?? null) as Record<string, unknown> | null;
+        companySlug = (company?.slug as string | null) ?? null;
         customRoleId = readMemberCustomRoles(settings)[user.id];
         if (settings?.role_permissions && typeof settings.role_permissions === "object") {
           permissions = mergeRolePermissions(settings.role_permissions as RolePermissions);
@@ -312,36 +439,20 @@ export async function updateSession(request: NextRequest) {
       }
 
       if (role) {
-        try {
-          const encoded = encodeAuthz({
-            u: user.id,
-            r: role,
-            c: customRoleId ?? null,
-            o: profile?.company_id ?? null,
-            p: permissions,
-          });
-          if (encoded.length < 3500) {
-            supabaseResponse.cookies.set(AUTHZ_COOKIE, encoded, {
-              path: "/",
-              httpOnly: true,
-              sameSite: "lax",
-              secure: process.env.NODE_ENV === "production",
-              maxAge: AUTHZ_MAX_AGE_SEC,
-            });
-          }
-        } catch {
-          // ignore encode errors
-        }
+        setAuthzCookie(supabaseResponse, {
+          u: user.id,
+          r: role,
+          c: customRoleId ?? null,
+          o: profile?.company_id ?? null,
+          s: companySlug,
+          p: permissions,
+        });
       }
     }
 
-    if (needsRoleCheck) {
-      if (!role || !canAccessPathWithPermissions(pathname, role, permissions, customRoleId)) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/unauthorized";
-        return NextResponse.redirect(url);
-      }
-    }
+    const denied = applyRoleCheck(request, role, permissions, customRoleId);
+    if (denied) return denied;
+    return withLegacyCookieCleared(supabaseResponse, request);
   }
 
   return supabaseResponse;

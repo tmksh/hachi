@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getDashboardSettings, saveDashboardSettings } from "@/lib/actions/dashboard-settings";
+import { saveDashboardSettings } from "@/lib/actions/dashboard-settings";
+import { fetchDashboardSettings } from "@/lib/queries/dashboard-settings";
 import { ROW_H, MIN_ROWS } from "@/components/shared/sortable-widget";
 
 function snapHeight(px: number): number {
@@ -93,9 +94,9 @@ export function useWidgets() {
     skipPersistRef.current = false;
 
     const syncFromDb = () => {
-      getDashboardSettings().then((dbWidgets) => {
+      fetchDashboardSettings().then((dbWidgets) => {
         if (dbWidgets && dbWidgets.length > 0) {
-          const merged = mergeWithDefaults(dbWidgets);
+          const merged = mergeWithDefaults(dbWidgets as WidgetConfig[]);
           setWidgets(merged);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
         }

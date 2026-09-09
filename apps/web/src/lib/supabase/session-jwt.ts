@@ -80,6 +80,16 @@ function parseCookieSession(raw: string): { access_token?: string } | null {
   }
 }
 
+/** 期限切れ JWT でも refresh 用 cookie が残っているか（getUser が必要） */
+export function hasSupabaseAuthCookie(
+  getCookie: (name: string) => string | undefined,
+  supabaseUrl: string,
+): boolean {
+  const storageKey = supabaseStorageKey(supabaseUrl);
+  if (!storageKey) return false;
+  return Boolean(getCookie(storageKey) || getCookie(`${storageKey}.0`));
+}
+
 export function readSupabaseJwtUser(
   getCookie: (name: string) => string | undefined,
   supabaseUrl: string,

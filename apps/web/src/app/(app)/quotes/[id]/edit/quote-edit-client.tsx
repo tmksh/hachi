@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
-import { getEstimate, updateEstimate } from "@/lib/actions/estimates";
+import { updateEstimate } from "@/lib/actions/estimates";
+import type { fetchEstimate } from "@/lib/queries/details";
 
 type LineItem = { name: string; quantity: number; unit: string; selling_price: number };
-type EstimateDetail = Awaited<ReturnType<typeof getEstimate>>;
+type EstimateDetail = Awaited<ReturnType<typeof fetchEstimate>>;
 
 const DEFAULT_ITEMS: LineItem[] = [
   { name: "仮設工事", quantity: 1, unit: "式", selling_price: 300000 },

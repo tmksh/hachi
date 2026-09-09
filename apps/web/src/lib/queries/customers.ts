@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Customer } from "@/lib/database.types";
+import { DEFAULT_DEPARTMENTS, getCurrentFiscalYear } from "@/lib/bi-utils";
+import type { CustomerEntryMasters } from "@/lib/actions/customers";
 
 const CUSTOMER_LIST_SELECT =
   "id, company_id, name, company_name, email, phone, customer_type, status, source, assigned_to, address, department, prospect_grade, inquiry_category, inquiry_date, created_at, updated_at, deleted_at, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)";
@@ -164,4 +166,67 @@ export async function fetchCustomerDealSummaries(customerIds: string[]) {
     }
   }
   return map;
+}
+
+export async function fetchCustomerEntryMasters(): Promise<CustomerEntryMasters> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const fallback = [...DEFAULT_DEPARTMENTS];
+  if (!user) {
+    return { profiles: [], tagMasters: [], leadSources: [], departments: fallback };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (profileError) throw profileError;
+  if (!profile) {
+    return { profiles: [], tagMasters: [], leadSources: [], departments: fallback };
+  }
+
+  const year = getCurrentFiscalYear();
+  const [profilesRes, tagsRes, sourcesRes, deptRes] = await Promise.all([
+    supabase.from("profiles").select("id, display_name").order("display_name"),
+    supabase
+      .from("customer_tag_masters")
+      .select("id, label")
+      .eq("company_id", profile.company_id)
+      .order("sort_order"),
+    supabase
+      .from("lead_sources")
+      .select("id, label")
+      .eq("company_id", profile.company_id)
+      .order("sort_order"),
+    supabase
+      .from("bi_annual_settings")
+      .select("department_targets:bi_department_targets(department_name, sort_order)")
+      .eq("company_id", profile.company_id)
+      .eq("fiscal_year", year)
+      .maybeSingle(),
+  ]);
+  if (profilesRes.error) throw profilesRes.error;
+  if (tagsRes.error) throw tagsRes.error;
+  if (sourcesRes.error) throw sourcesRes.error;
+  if (deptRes.error) throw deptRes.error;
+
+  const targets = (deptRes.data?.department_targets ?? []) as {
+    department_name: string;
+    sort_order: number;
+  }[];
+  const departments = targets.length
+    ? [...targets]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((d) => d.department_name)
+    : fallback;
+
+  return {
+    profiles: (profilesRes.data ?? []).map((p) => ({ id: p.id, display_name: p.display_name })),
+    tagMasters: (tagsRes.data ?? []).map((t) => ({ id: t.id, label: t.label })),
+    leadSources: (sourcesRes.data ?? []).map((s) => ({ id: s.id, label: s.label })),
+    departments,
+  };
 }

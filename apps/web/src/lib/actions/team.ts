@@ -2,7 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getResend, INVITE_FROM_EMAIL, buildInviteEmailHtml } from "@/lib/resend";
+import {
+  hasResendApiKey,
+  sendResendEmail,
+  INVITE_FROM_EMAIL,
+  buildInviteEmailHtml,
+} from "@/lib/resend";
 import type { Profile } from "@/lib/database.types";
 import type { AssignableRole } from "@/lib/constants";
 import {
@@ -12,6 +17,30 @@ import {
 } from "@/lib/role-assignment";
 
 export type TeamRole = AssignableRole;
+
+async function sendTeamInviteMail(opts: {
+  to: string;
+  subject: string;
+  inviteeName: string;
+  inviterName: string;
+  companyName: string;
+  inviteUrl: string;
+  appUrl: string;
+}): Promise<string | null> {
+  const { error } = await sendResendEmail({
+    from: INVITE_FROM_EMAIL,
+    to: opts.to,
+    subject: opts.subject,
+    html: buildInviteEmailHtml({
+      inviteeName: opts.inviteeName,
+      inviterName: opts.inviterName,
+      companyName: opts.companyName,
+      inviteUrl: opts.inviteUrl,
+      appUrl: opts.appUrl,
+    }),
+  });
+  return error;
+}
 
 async function assertTenantAdmin(): Promise<{
   companyId: string;
@@ -258,7 +287,7 @@ async function recoverAndResendInvite(input: {
   const companyName = company?.name ?? "業務管理システム";
   const inviterName = actorProfile?.display_name ?? "管理者";
 
-  if (!process.env.RESEND_API_KEY) {
+  if (!hasResendApiKey()) {
     return {
       ok: true,
       emailSent: false,
@@ -267,24 +296,21 @@ async function recoverAndResendInvite(input: {
     };
   }
 
-  const { error: mailError } = await getResend().emails.send({
-    from: INVITE_FROM_EMAIL,
+  const mailError = await sendTeamInviteMail({
     to: email,
     subject: `【${companyName}】システムへのご招待（再送）`,
-    html: buildInviteEmailHtml({
-      inviteeName: displayName,
-      inviterName,
-      companyName,
-      inviteUrl,
-      appUrl,
-    }),
+    inviteeName: displayName,
+    inviterName,
+    companyName,
+    inviteUrl,
+    appUrl,
   });
   if (mailError) {
     return {
       ok: true,
       emailSent: false,
       inviteUrl,
-      error: `一覧に追加しましたがメール送信に失敗しました（${mailError.message}）。招待リンクを共有してください。`,
+      error: `一覧に追加しましたがメール送信に失敗しました（${mailError}）。招待リンクを共有してください。`,
     };
   }
 
@@ -461,7 +487,7 @@ async function inviteTeamMemberInner(input: {
 
   // メール送信に失敗してもアカウント（招待）自体は作成済みのため、
   // 招待リンクを返して管理者が手動共有できるようにする
-  if (!process.env.RESEND_API_KEY) {
+  if (!hasResendApiKey()) {
     return {
       ok: true,
       emailSent: false,
@@ -470,24 +496,21 @@ async function inviteTeamMemberInner(input: {
     };
   }
 
-  const { error: mailError } = await getResend().emails.send({
-    from: INVITE_FROM_EMAIL,
+  const mailError = await sendTeamInviteMail({
     to: input.email.trim(),
     subject: `【${companyName}】システムへのご招待`,
-    html: buildInviteEmailHtml({
-      inviteeName: input.displayName.trim(),
-      inviterName,
-      companyName,
-      inviteUrl,
-      appUrl,
-    }),
+    inviteeName: input.displayName.trim(),
+    inviterName,
+    companyName,
+    inviteUrl,
+    appUrl,
   });
   if (mailError) {
     return {
       ok: true,
       emailSent: false,
       inviteUrl,
-      error: `招待メールの送信に失敗しました（${mailError.message}）。招待リンクを直接共有してください。`,
+      error: `招待メールの送信に失敗しました（${mailError}）。招待リンクを直接共有してください。`,
     };
   }
 
@@ -678,19 +701,20 @@ export async function resendTeamInvite(userId: string): Promise<void> {
 
   const inviteUrl = `${appUrl}/api/auth/accept-invite?token_hash=${encodeURIComponent(hashedToken)}&type=${linkType}`;
 
-  const { error: mailError } = await getResend().emails.send({
-    from: INVITE_FROM_EMAIL,
+  if (!hasResendApiKey()) {
+    throw new Error("RESEND_API_KEY が未設定のため招待メールを再送できません");
+  }
+
+  const mailError = await sendTeamInviteMail({
     to: target.email,
     subject: `【${companyName}】招待メール（再送）`,
-    html: buildInviteEmailHtml({
-      inviteeName,
-      inviterName,
-      companyName,
-      inviteUrl,
-      appUrl,
-    }),
+    inviteeName,
+    inviterName,
+    companyName,
+    inviteUrl,
+    appUrl,
   });
   if (mailError) {
-    throw new Error(`招待メールの再送に失敗しました: ${mailError.message}`);
+    throw new Error(`招待メールの再送に失敗しました: ${mailError}`);
   }
 }

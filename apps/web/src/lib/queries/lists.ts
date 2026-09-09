@@ -1,35 +1,27 @@
 import { createClient } from "@/lib/supabase/client";
-import type { Craftsman, Estimate, InboundLead, Profile } from "@/lib/database.types";
+import type { Craftsman, InboundLead, Profile } from "@/lib/database.types";
+
+import { DEAL_QK } from "./deals";
 
 export const LIST_STALE_MS = 120_000;
 
 export const LIST_QK = {
-  deals: ["deals"] as const,
-  dealStages: ["deal-stages"] as const,
+  deals: DEAL_QK.all,
+  dealStages: DEAL_QK.stages,
   profiles: ["profiles"] as const,
 };
 
-export type EstimateListRow = {
-  id: string;
-  company_id: string;
-  estimate_no: string;
-  title: string;
-  version: number | null;
-  status: Estimate["status"];
-  total: number | null;
-  subtotal: number | null;
-  tax: number | null;
-  gross_profit_rate: number | null;
-  customer_id: string | null;
-  construction_id: string | null;
-  assigned_to: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-  customer: { id: string; name: string; company_name: string | null; customer_type?: string | null; notes?: string | null } | null;
-  construction: { id: string; title: string; construction_no: string } | null;
-  assignee: { id: string; display_name: string } | null;
-};
+export {
+  fetchDeals,
+  fetchDealStages,
+  type DealListRow,
+  type DealStageRow,
+} from "./deals";
+
+export {
+  fetchEstimates,
+  type EstimateListRow,
+} from "./estimates";
 
 const CONSTRUCTION_LIST_SELECT =
   "id, company_id, construction_no, title, status, customer_id, contract_id, estimate_id, assigned_to, department_name, location_id, order_amount, order_cost, budget_cost, actual_cost, payment_date, payment_amount, worker_count, progress, start_date, end_date, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!constructions_assigned_to_fkey(id, display_name)";
@@ -71,19 +63,6 @@ export async function fetchConstructions(): Promise<ConstructionListRow[]> {
     .limit(500);
   if (error) throw error;
   return (data ?? []) as unknown as ConstructionListRow[];
-}
-
-export async function fetchEstimates(): Promise<EstimateListRow[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("estimates")
-    .select(
-      "id, company_id, estimate_no, title, version, status, total, subtotal, tax, gross_profit_rate, customer_id, construction_id, assigned_to, notes, created_at, updated_at, customer:customers(id, name, company_name, customer_type, notes), construction:constructions!construction_id(id, title, construction_no), assignee:profiles!estimates_assigned_to_fkey(id, display_name)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) throw error;
-  return (data ?? []) as unknown as EstimateListRow[];
 }
 
 const CONTRACT_LIST_SELECT =
@@ -162,60 +141,6 @@ export async function fetchProfiles(): Promise<Profile[]> {
     .order("display_name");
   if (error) throw error;
   return (data ?? []) as Profile[];
-}
-
-const DEAL_LIST_SELECT =
-  "id, company_id, customer_id, title, stage, value, priority, expected_close_date, assigned_to, department_name, tags, next_action, summary, days_in_stage, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!deals_assigned_to_fkey(id, display_name)";
-
-export type DealListRow = {
-  id: string;
-  company_id: string;
-  customer_id: string | null;
-  title: string;
-  stage: string;
-  value: number | null;
-  priority: string;
-  expected_close_date: string | null;
-  assigned_to: string | null;
-  department_name: string | null;
-  tags: string[] | null;
-  next_action: string | null;
-  summary: string | null;
-  days_in_stage: number | null;
-  created_at: string;
-  updated_at: string;
-  customer: { id: string; name: string; company_name: string | null } | null;
-  assignee: { id: string; display_name: string } | null;
-};
-
-export type DealStageRow = {
-  key: string;
-  label: string;
-  color: string;
-  is_won: boolean;
-  is_lost: boolean;
-  sort_order: number;
-};
-
-export async function fetchDeals(): Promise<DealListRow[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("deals")
-    .select(DEAL_LIST_SELECT)
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) throw error;
-  return (data ?? []) as unknown as DealListRow[];
-}
-
-export async function fetchDealStages(): Promise<DealStageRow[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("deal_stages")
-    .select("key, label, color, is_won, is_lost, sort_order")
-    .order("sort_order");
-  if (error) throw error;
-  return (data ?? []) as DealStageRow[];
 }
 
 export async function fetchWorkflowRequests(status?: string) {

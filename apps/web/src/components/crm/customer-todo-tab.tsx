@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { addDays, format, isToday, isFuture, isPast, parseISO, startOfDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -9,11 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { getCustomerTodos, createCustomerTodo, updateCustomerTodo, deleteCustomerTodo } from "@/lib/actions/crm-features";
+import { createCustomerTodo, updateCustomerTodo, deleteCustomerTodo } from "@/lib/actions/crm-features";
+import { CUSTOMER_QK, fetchCustomerTodos } from "@/lib/queries/customer-detail";
 import { CheckCircle2, Circle, Inbox, Plus, Trash2, CalendarDays, FileText } from "lucide-react";
 import { toast } from "sonner";
 
-type TodoRow = Awaited<ReturnType<typeof getCustomerTodos>>[number];
+type TodoRow = Awaited<ReturnType<typeof fetchCustomerTodos>>[number];
 type Bucket = "today" | "upcoming" | "all";
 
 const BUCKETS: { key: Bucket; label: string; description: string }[] = [
@@ -38,7 +40,12 @@ function defaultDueDateForBucket(bucket: Bucket) {
 }
 
 export function CustomerTodoTab({ customerId }: { customerId: string }) {
-  const [todos, setTodos] = useState<TodoRow[]>([]);
+  const queryClient = useQueryClient();
+  const { data: todos = [], refetch } = useQuery({
+    queryKey: CUSTOMER_QK.todos(customerId),
+    queryFn: () => fetchCustomerTodos(customerId),
+    staleTime: 60_000,
+  });
   const [bucket, setBucket] = useState<Bucket>("today");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -50,15 +57,18 @@ export function CustomerTodoTab({ customerId }: { customerId: string }) {
 
   const load = async () => {
     try {
-      const rows = await getCustomerTodos(customerId);
-      setTodos(rows);
-      return rows;
+      const result = await refetch();
+      return result.data ?? [];
     } catch {
       toast.error("ToDoの取得に失敗しました");
       return [];
     }
   };
-  useEffect(() => { void load(); }, [customerId]);
+  const setTodos = (updater: TodoRow[] | ((prev: TodoRow[]) => TodoRow[])) => {
+    queryClient.setQueryData<TodoRow[]>(CUSTOMER_QK.todos(customerId), (prev = []) =>
+      typeof updater === "function" ? updater(prev) : updater,
+    );
+  };
 
   const counts = useMemo(() => ({
     today: todos.filter((t) => matchesBucket(t, "today")).length,

@@ -1,6 +1,13 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Customer } from "@/lib/database.types";
 
+export const CUSTOMER_QK = {
+  detail: (id: string) => ["customer", id] as const,
+  related: (id: string) => ["customer-related", id] as const,
+  recordings: (id: string) => ["customer-recordings", id] as const,
+  todos: (id: string) => ["customer-todos", id] as const,
+};
+
 export type CustomerDetail = Customer & {
   assigned_to_profile: { id: string; display_name: string } | null;
 };
@@ -37,4 +44,79 @@ export async function fetchCustomerRelated(customerId: string): Promise<Customer
     contracts: contractsRes.data ?? [],
     constructions: constructionsRes.data ?? [],
   };
+}
+
+export type CustomerRecordingRow = {
+  id: string;
+  customer_id: string;
+  deal_id: string | null;
+  title: string;
+  transcript: string;
+  summary: string;
+  memo: string;
+  duration_seconds: number;
+  status: string;
+  recorded_at: string;
+  created_at: string;
+};
+
+export async function fetchCustomerRecordings(customerId: string): Promise<CustomerRecordingRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("customer_recordings")
+    .select("*")
+    .eq("customer_id", customerId)
+    .order("recorded_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as CustomerRecordingRow[];
+}
+
+export async function fetchCustomerTodos(customerId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("todos")
+    .select("*")
+    .eq("customer_id", customerId)
+    .order("due_date", { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    due_date: string | null;
+    status: string;
+    priority: string;
+    source?: string | null;
+    created_at: string;
+  }>;
+}
+
+export async function fetchCustomerDocumentsAll(customerId: string) {
+  const supabase = createClient();
+  const { data: constructions } = await supabase
+    .from("constructions")
+    .select("id")
+    .eq("customer_id", customerId);
+
+  const constructionIds = (constructions ?? []).map((c) => c.id);
+  const select =
+    "*, uploader:profiles!documents_uploaded_by_fkey(id, display_name), customer:customers(id, name), construction:constructions(id, title)";
+
+  let query = supabase
+    .from("documents")
+    .select(select)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (constructionIds.length > 0) {
+    query = query.or(
+      `customer_id.eq.${customerId},construction_id.in.(${constructionIds.join(",")})`,
+    );
+  } else {
+    query = query.eq("customer_id", customerId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
 }

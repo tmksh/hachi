@@ -1,21 +1,59 @@
 import { Resend } from "resend";
 
-export const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL ?? "noreply@example.com";
-
 /** 招待メール専用の送信元（Resend で eightdesign.jp を verify 済みであること） */
 export const INVITE_FROM_EMAIL =
   process.env.RESEND_INVITE_FROM_EMAIL ?? "BRIDGE <info@eightdesign.jp>";
 
-/** 顧客向けメールの送信元（未設定時は INVITE_FROM_EMAIL と同じ） */
+/** 顧客・業者向けメールの送信元 */
 export const CUSTOMER_FROM_EMAIL =
-  process.env.RESEND_CUSTOMER_FROM_EMAIL ?? INVITE_FROM_EMAIL;
+  process.env.RESEND_CUSTOMER_FROM_EMAIL
+  ?? process.env.RESEND_FROM_EMAIL
+  ?? INVITE_FROM_EMAIL;
+
+let resendClient: Resend | null = null;
+
+export function hasResendApiKey(): boolean {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
 
 /** Resend クライアントを遅延初期化（APIキー未設定時のクラッシュを防ぐ） */
 export function getResend(): Resend {
-  const key = process.env.RESEND_API_KEY;
+  const key = process.env.RESEND_API_KEY?.trim();
   if (!key) throw new Error("RESEND_API_KEY が設定されていません。.env.local を確認してください。");
-  return new Resend(key);
+  if (!resendClient) resendClient = new Resend(key);
+  return resendClient;
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function textToEmailHtml(body: string): string {
+  const escaped = body
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 8px;white-space:pre-wrap;">${escapeHtml(line) || "&nbsp;"}</p>`)
+    .join("");
+  return `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${escaped}</div>`;
+}
+
+export async function sendResendEmail(input: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ error: string | null }> {
+  if (!hasResendApiKey()) {
+    return { error: "RESEND_API_KEY が設定されていません" };
+  }
+  const { error } = await getResend().emails.send(input);
+  if (!error) return { error: null };
+  const message = error.message?.trim();
+  return { error: message || "メール送信に失敗しました" };
 }
 
 /** 招待メールのHTML本文を生成 */
@@ -26,7 +64,11 @@ export function buildInviteEmailHtml(opts: {
   inviteUrl: string;
   appUrl: string;
 }): string {
-  const { inviteeName, inviterName, companyName, inviteUrl, appUrl } = opts;
+  const inviteeName = escapeHtml(opts.inviteeName);
+  const inviterName = escapeHtml(opts.inviterName);
+  const companyName = escapeHtml(opts.companyName);
+  const inviteUrl = escapeHtml(opts.inviteUrl);
+  const appUrl = escapeHtml(opts.appUrl);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -118,8 +160,12 @@ export function buildRecordingSummaryEmailHtml(opts: {
   summary: string;
   recordedAt: string;
 }): string {
-  const { customerName, companyName, senderName, title, summary, recordedAt } = opts;
-  const escapedSummary = summary.replace(/\n/g, "<br/>");
+  const customerName = escapeHtml(opts.customerName);
+  const companyName = escapeHtml(opts.companyName);
+  const senderName = escapeHtml(opts.senderName);
+  const title = escapeHtml(opts.title);
+  const recordedAt = escapeHtml(opts.recordedAt);
+  const escapedSummary = escapeHtml(opts.summary).replace(/\n/g, "<br/>");
 
   return `<!DOCTYPE html>
 <html lang="ja">

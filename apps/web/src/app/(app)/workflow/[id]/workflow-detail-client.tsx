@@ -21,7 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  getWorkflowRequest,
   approveWorkflowStep,
   approveWorkflowStepConditional,
   rejectWorkflowStep,
@@ -29,13 +28,14 @@ import {
   addWorkflowComment,
   getWorkflowApprovalSupport,
 } from "@/lib/actions/workflow";
+import { fetchWorkflowRequest } from "@/lib/queries/portal";
 import { saveContractAdminSupplement } from "@/lib/actions/contract-features";
 import type { ApprovalSupportResult } from "@/lib/integrations/linq-ai/types";
 import { useAuth } from "@/hooks/use-auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type Detail = Awaited<ReturnType<typeof getWorkflowRequest>>;
+type Detail = Awaited<ReturnType<typeof fetchWorkflowRequest>>;
 type Step = {
   id: string;
   step_order: number;
@@ -93,7 +93,7 @@ export function WorkflowDetailClient({
 
   const reload = () => {
     if (!id) return;
-    getWorkflowRequest(id as string)
+    fetchWorkflowRequest(id as string)
       .then((detail) => {
         setData(detail);
         const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;
@@ -154,7 +154,7 @@ export function WorkflowDetailClient({
       setActionDialog(null);
       await new Promise<void>((resolve) => {
         if (!id) { resolve(); return; }
-        getWorkflowRequest(id as string)
+        fetchWorkflowRequest(id as string)
           .then((detail) => {
             setData(detail);
             const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;

@@ -66,8 +66,8 @@ import { BombAlert } from "@/components/layout/bomb-alert";
 /** 緊急回覧: 未読1件で BombAlert（仕様どおり）。チャット未読では出さない。 */
 const ANNOUNCEMENT_BOMB_THRESHOLD = 1;
 const BOMB_ACK_KEY = "hachi_bomb_acked_ids";
-import { globalSearch, type SearchResult } from "@/lib/actions/search";
-import { getUnreadMessageCount } from "@/lib/actions/internal-messages";
+import { fetchGlobalSearch, type SearchResult } from "@/lib/queries/search";
+import { fetchUnreadMessageCount } from "@/lib/queries/internal-messages";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -169,7 +169,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   useEffect(() => {
     const fetchUnread = async () => {
       try {
-        const count = await getUnreadMessageCount();
+        const count = await fetchUnreadMessageCount();
         setChatUnreadCount((prev) => (prev === count ? prev : count));
       } catch {}
     };
@@ -275,7 +275,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     const timer = setTimeout(() => {
       setSearchLoading(true);
-      globalSearch(searchQuery)
+      fetchGlobalSearch(searchQuery)
         .then(setSearchResults)
         .catch(() => setSearchResults([]))
         .finally(() => setSearchLoading(false));
@@ -306,11 +306,9 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     setNotifOpen(true);
   };
 
-  const useBlueSidebar = false;
-
   const isActive = (href: string) => {
     if (href === "/dashboard") {
-      return pathname === "/dashboard" || pathname.startsWith("/dashboard2");
+      return pathname === "/dashboard";
     }
     return pathname.startsWith(href);
   };

@@ -23,7 +23,7 @@ import {
 import {
   createContractDoc, updateContractDoc, deleteContractDoc,
 } from "@/lib/actions/constructions";
-import { getCompany } from "@/lib/actions/profiles";
+import { fetchCompany } from "@/lib/queries/portal";
 import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
 import { buildContractPrintHtml } from "@/lib/contract-pdf";
 import { archiveContractDocumentHtml } from "@/lib/actions/documents";
@@ -33,7 +33,7 @@ import {
 } from "@/lib/contract-document-archive";
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
 import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
-import { getPdfFormTemplates } from "@/lib/actions/pdf-form-templates";
+import { fetchPdfFormTemplates } from "@/lib/queries/portal";
 import { buildFillContext, type PdfFormTemplate } from "@/lib/pdf-form-template";
 import type { Customer } from "@/lib/database.types";
 import { PdfFormFiller } from "@/components/settings/pdf-form-filler";
@@ -79,7 +79,7 @@ export function ContractTab({ constructionId, customerId, constructionNo, fillCu
   const [fillerTpl, setFillerTpl] = useState<PdfFormTemplate | null>(null);
 
   useEffect(() => {
-    getPdfFormTemplates().then(setFormTemplates).catch(() => {});
+    fetchPdfFormTemplates().then(setFormTemplates).catch(() => {});
   }, []);
 
   const fillCtx = useMemo(() => buildFillContext({
@@ -264,8 +264,12 @@ function ContractEditor({
   const isNew = docId === "__new__";
 
   useEffect(() => {
-    getCompany()
+    fetchCompany()
       .then((c) => {
+        if (!c) {
+          setPdfTpl(resolvePdfTemplates(null).contract);
+          return;
+        }
         const raw = (c.settings as Record<string, unknown> | null)?.pdf_templates;
         const pdf = resolvePdfTemplates(raw).contract;
         setPdfTpl(pdf);

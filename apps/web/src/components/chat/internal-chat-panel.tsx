@@ -17,18 +17,20 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import {
-  getChatContacts,
-  getConversation,
   sendChatMessage,
-  getLatestConversations,
   markConversationAsRead,
-  getUnreadMessageCount,
-  type InternalMessage,
 } from "@/lib/actions/internal-messages";
+import {
+  fetchChatContacts,
+  fetchConversation,
+  fetchLatestConversations,
+  fetchUnreadMessageCount,
+  type InternalMessage,
+} from "@/lib/queries/internal-messages";
 import { useAuth } from "@/hooks/use-auth";
 import { useInternalChat, type InternalChatSeed } from "@/contexts/chat-panel-context";
 
-type Contact = Awaited<ReturnType<typeof getChatContacts>>[number];
+type Contact = Awaited<ReturnType<typeof fetchChatContacts>>[number];
 type ConversationView = { type: "list" } | { type: "chat"; contact: Contact };
 
 
@@ -79,9 +81,9 @@ export function InternalChatPanel({
   const refreshContacts = useCallback(async () => {
     try {
       const [c, latest, count] = await Promise.all([
-        getChatContacts(),
-        getLatestConversations(),
-        getUnreadMessageCount(),
+        fetchChatContacts(),
+        fetchLatestConversations(),
+        fetchUnreadMessageCount(),
       ]);
       setContacts(c);
       setLatestConvs(latest);
@@ -109,7 +111,7 @@ export function InternalChatPanel({
     setMessages([]);
     setLoadingMessages(true);
     try {
-      const msgs = await getConversation(contact.id);
+      const msgs = await fetchConversation(contact.id);
       setMessages(msgs);
       setUnreadCount(prev => Math.max(0, prev - 1));
       void markConversationAsRead(contact.id);

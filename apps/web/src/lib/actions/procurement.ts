@@ -7,6 +7,7 @@ import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { getCompanyLocations } from "@/lib/actions/bi";
 import { uploadToStorage, uploadToStorageAsAdmin, getSignedStorageUrlAsAdmin } from "@/lib/storage-server";
 import { getPublicAppOrigin } from "@/lib/public-app-origin";
+import { CUSTOMER_FROM_EMAIL, escapeHtml, hasResendApiKey, sendResendEmail } from "@/lib/resend";
 import type { ContractorOrder } from "@/lib/database.types";
 import {
   PROCUREMENT_ACCOUNT_ITEMS,
@@ -161,24 +162,28 @@ async function sendVendorInvoiceRequestEmail(input: {
         "",
         "本メールに心当たりがない場合は破棄してください。",
       ].join("\n");
+  const vendorName = escapeHtml(input.vendorName);
+  const companyName = escapeHtml(input.companyName);
+  const poNo = escapeHtml(input.poNo);
+  const invoiceUrl = escapeHtml(url);
+  const expiresYmd = escapeHtml(input.expiresYmd ?? "");
   const html = paper
     ? `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
-<p>${input.vendorName} 御中</p>
-<p>${input.companyName} です。検収が完了しました。<br/>紙の請求書、またはPDFを発注元へご送付ください（ログイン用の画面はございません）。</p>
-<p>発注番号: ${input.poNo}</p>
+<p>${vendorName} 御中</p>
+<p>${companyName} です。検収が完了しました。<br/>紙の請求書、またはPDFを発注元へご送付ください（ログイン用の画面はございません）。</p>
+<p>発注番号: ${poNo}</p>
 </div>`
     : `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
-<p>${input.vendorName} 御中</p>
-<p>${input.companyName} です。検収が完了しました。<br/>下記ボタンから請求書をご送付ください（メール認証・ログイン不要）。</p>
-<p style="margin:24px 0"><a href="${url}" style="background:#047857;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">請求書を送る</a></p>
-<p style="font-size:12px;color:#64748b;word-break:break-all">${url}</p>
-<p style="font-size:12px;color:#64748b">有効期限: ${input.expiresYmd}（30日）</p>
+<p>${vendorName} 御中</p>
+<p>${companyName} です。検収が完了しました。<br/>下記ボタンから請求書をご送付ください（メール認証・ログイン不要）。</p>
+<p style="margin:24px 0"><a href="${invoiceUrl}" style="background:#047857;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">請求書を送る</a></p>
+<p style="font-size:12px;color:#64748b;word-break:break-all">${invoiceUrl}</p>
+<p style="font-size:12px;color:#64748b">有効期限: ${expiresYmd}（30日）</p>
 </div>`;
 
-  if (process.env.RESEND_API_KEY) {
+  if (hasResendApiKey()) {
     try {
-      const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
-      const { error } = await getResend().emails.send({
+      const { error } = await sendResendEmail({
         from: CUSTOMER_FROM_EMAIL,
         to,
         subject,
@@ -1160,17 +1165,16 @@ export async function sendVendorInvoiceAuthCode(token: string): Promise<ActionRe
       "有効期限は15分です。このメールに心当たりがない場合は破棄してください。",
     ].join("\n");
     const html = `<div style="font-family:sans-serif;font-size:14px;line-height:1.7;color:#111827">
-<p>${craftsman?.name ?? "業者"} 御中</p>
-<p>${companyName} です。請求書送信ページの確認コードです。</p>
-<p style="font-size:28px;letter-spacing:0.2em;font-weight:700;margin:20px 0">${code}</p>
+<p>${escapeHtml(craftsman?.name ?? "業者")} 御中</p>
+<p>${escapeHtml(companyName)} です。請求書送信ページの確認コードです。</p>
+<p style="font-size:28px;letter-spacing:0.2em;font-weight:700;margin:20px 0">${escapeHtml(code)}</p>
 <p style="font-size:12px;color:#64748b">有効期限は15分です。</p>
 </div>`;
 
     let mail: { sent: boolean; error?: string } = { sent: false };
-    if (process.env.RESEND_API_KEY) {
+    if (hasResendApiKey()) {
       try {
-        const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
-        const { error } = await getResend().emails.send({
+        const { error } = await sendResendEmail({
           from: CUSTOMER_FROM_EMAIL,
           to,
           subject,

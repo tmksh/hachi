@@ -295,3 +295,64 @@ export async function fetchCostBudget(constructionId: string) {
     comments: unknown[];
   } | null;
 }
+
+const CONTRACT_ESTIMATE_SELECT =
+  "id, estimate_no, title, status, total, subtotal, gross_profit_rate, version, construction_id, created_at, updated_at, notes, assignee:profiles!estimates_assigned_to_fkey(id, display_name)";
+
+export async function fetchContractEstimates(contractId: string) {
+  const supabase = createClient();
+  const { data: contract, error: contractError } = await supabase
+    .from("contracts")
+    .select("customer_id, estimate_id")
+    .eq("id", contractId)
+    .single();
+  if (contractError) throw contractError;
+  if (!contract?.customer_id) return [];
+
+  const { data, error } = await supabase
+    .from("estimates")
+    .select(CONTRACT_ESTIMATE_SELECT)
+    .eq("customer_id", contract.customer_id)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = (data ?? []).map((row) => ({
+    ...row,
+    created_by_name: resolveEstimateAuthor(row),
+  }));
+
+  if (contract.estimate_id && !rows.some((r) => r.id === contract.estimate_id)) {
+    const { data: linked } = await supabase
+      .from("estimates")
+      .select(CONTRACT_ESTIMATE_SELECT)
+      .eq("id", contract.estimate_id)
+      .maybeSingle();
+    if (linked) {
+      rows.unshift({ ...linked, created_by_name: resolveEstimateAuthor(linked) });
+    }
+  }
+
+  return rows;
+}
+
+export async function fetchContractCommunications(contractId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("contract_communications")
+    .select("*")
+    .eq("contract_id", contractId)
+    .order("sent_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchContractPostSignInfo(contractId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("contract_post_sign_info")
+    .select("*")
+    .eq("contract_id", contractId)
+    .order("created_at");
+  if (error) throw error;
+  return data ?? [];
+}

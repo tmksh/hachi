@@ -298,6 +298,18 @@ export async function fetchCompany() {
   return data as Company;
 }
 
+export async function fetchCompanySettings(): Promise<Record<string, unknown> | null> {
+  const { supabase, profile } = await authContext();
+  if (!profile) return null;
+  const { data, error } = await supabase
+    .from("companies")
+    .select("settings")
+    .eq("id", profile.company_id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.settings as Record<string, unknown> | null) ?? null;
+}
+
 function fiscalYearRange(year: number) {
   return { start: `${year}-04-01`, end: `${year + 1}-03-31` };
 }

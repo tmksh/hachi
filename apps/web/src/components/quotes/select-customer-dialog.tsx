@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { getCustomers } from "@/lib/actions/customers";
+import { fetchCustomers } from "@/lib/queries/customers";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 
 type CustomerOption = { id: string; name: string };
@@ -34,7 +34,7 @@ export function SelectCustomerDialog({
       return;
     }
     setLoading(true);
-    getCustomers({ limit: 100 })
+    fetchCustomers({ page: 1, limit: 100 })
       .then(({ customers: rows }) => setCustomers(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => setCustomers([]))
       .finally(() => setLoading(false));

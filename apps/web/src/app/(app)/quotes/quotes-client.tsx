@@ -25,8 +25,9 @@ import { getStatusOption } from "@/lib/status-config";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
-import { fetchEstimates, LIST_STALE_MS, type EstimateListRow } from "@/lib/queries/lists";
 import { fetchCustomers, type CustomerListItem } from "@/lib/queries/customers";
+import { LIST_STALE_MS } from "@/lib/queries/lists";
+import { fetchEstimates, ESTIMATE_QK, ESTIMATE_STALE_MS, type EstimateListRow } from "@/lib/queries/estimates";
 import { prefetchEstimateDetail } from "@/lib/nav-prefetch";
 
 type Row = EstimateListRow;
@@ -70,9 +71,9 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
   const searchParams = useSearchParams();
   const customerId = searchParams.get("customer") ?? initialCustomerId ?? null;
   const { data: rows = [], isPending } = useQuery({
-    queryKey: ["estimates"],
+    queryKey: ESTIMATE_QK.all,
     queryFn: fetchEstimates,
-    staleTime: LIST_STALE_MS,
+    staleTime: ESTIMATE_STALE_MS,
     initialData: initialRows,
     initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
@@ -92,7 +93,7 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
   const [viewMode, setViewMode] = useState<"customers" | "all">("customers");
 
   const setRows = (updater: Row[] | ((prev: Row[]) => Row[])) => {
-    queryClient.setQueryData<Row[]>(["estimates"], (prev = []) =>
+    queryClient.setQueryData<Row[]>(ESTIMATE_QK.all, (prev = []) =>
       typeof updater === "function" ? updater(prev) : updater,
     );
   };

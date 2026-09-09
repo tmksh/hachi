@@ -689,21 +689,17 @@ export async function sendSchedulingEmail(input: {
       // 連携はあるが送信失敗 → そのまま表面化（Resend に落とすと「届いたつもり」になる）
       throw gmailErr instanceof Error ? gmailErr : new Error("Gmail送信に失敗しました");
     }
-    const { getResend, CUSTOMER_FROM_EMAIL } = await import("@/lib/resend");
-    const html = body
-      .split("\n")
-      .map((line) => `<p style="margin:0 0 8px;white-space:pre-wrap;">${line.replace(/</g, "&lt;").replace(/>/g, "&gt;") || "&nbsp;"}</p>`)
-      .join("");
-    const { error: mailError } = await getResend().emails.send({
+    const { sendResendEmail, CUSTOMER_FROM_EMAIL, textToEmailHtml } = await import("@/lib/resend");
+    const { error: mailError } = await sendResendEmail({
       from: CUSTOMER_FROM_EMAIL,
       to: customer.email.trim(),
       subject,
-      html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${html}</div>`,
+      html: textToEmailHtml(body),
       text: body,
     });
     if (mailError) {
       throw new Error(
-        `メール送信に失敗しました: ${mailError.message}（Gmail未連携のため Resend 経由。届かない場合はメール設定でGmail連携してください）`,
+        `メール送信に失敗しました: ${mailError}（Gmail未連携のため Resend 経由。届かない場合はメール設定でGmail連携してください）`,
       );
     }
   }

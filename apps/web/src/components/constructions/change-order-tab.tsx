@@ -17,13 +17,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createChangeOrder,
   deleteChangeOrder,
-  getChangeOrders,
   sendChangeOrderToCloudSign,
   approveChangeOrder,
   submitChangeOrderApproval,
   rejectChangeOrder,
 } from "@/lib/actions/change-orders";
-import { fetchEstimate } from "@/lib/queries/details";
+import { fetchChangeOrders, fetchEstimate } from "@/lib/queries/details";
 import { fetchProfiles } from "@/lib/queries/lists";
 import type { ChangeOrder } from "@/lib/database.types";
 import type { EstimateListItem } from "@/components/estimate/estimate-list-view";
@@ -232,7 +231,7 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
         approverId,
         comment: submitComment.trim(),
       });
-      const refreshed = await getChangeOrders(constructionId);
+      const refreshed = await fetchChangeOrders(constructionId);
       setOrders(refreshed as ChangeOrderRow[]);
       toast.success("承認申請を送信しました。承認者に通知されます");
       setSubmitTarget(null);
@@ -249,7 +248,7 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
     setApprovingId(co.id);
     try {
       await approveChangeOrder(co.id);
-      const refreshed = await getChangeOrders(constructionId);
+      const refreshed = await fetchChangeOrders(constructionId);
       setOrders(refreshed as ChangeOrderRow[]);
       toast.success("承認しました。契約金額を更新しました");
       onRefresh();
@@ -264,7 +263,7 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
     setRejectingId(co.id);
     try {
       await rejectChangeOrder(co.id);
-      const refreshed = await getChangeOrders(constructionId);
+      const refreshed = await fetchChangeOrders(constructionId);
       setOrders(refreshed as ChangeOrderRow[]);
       toast.success("差戻しました。申請者に通知されます");
     } catch {
@@ -280,7 +279,7 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
       const { message } = await sendChangeOrderToCloudSign(co.id, [
         { name: "施主", email: "client@example.com" },
       ]);
-      const refreshed = await getChangeOrders(constructionId);
+      const refreshed = await fetchChangeOrders(constructionId);
       setOrders(refreshed as ChangeOrderRow[]);
       toast.info(message);
     } catch {

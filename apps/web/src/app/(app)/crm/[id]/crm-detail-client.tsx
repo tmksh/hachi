@@ -33,7 +33,7 @@ import {
 import { toast } from "sonner";
 import { deleteCustomer, updateCustomer } from "@/lib/actions/customers";
 import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
-import { fetchCustomer, fetchCustomerRelated, type CustomerDetail, type CustomerRelated } from "@/lib/queries/customer-detail";
+import { fetchCustomer, fetchCustomerRelated, CUSTOMER_QK, type CustomerDetail, type CustomerRelated } from "@/lib/queries/customer-detail";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import type { CustomerEntryMasters } from "@/lib/actions/customers";
 
@@ -110,7 +110,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
     return tab && ALLOWED_TABS.includes(tab) ? tab : "overview";
   });
   const { data, isPending, isError } = useQuery({
-    queryKey: ["customer", customerId],
+    queryKey: CUSTOMER_QK.detail(customerId),
     queryFn: () => fetchCustomer(customerId),
     staleTime: 60_000,
     initialData: initialData ?? undefined,
@@ -118,7 +118,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
     enabled: !!customerId,
   });
   const { data: related } = useQuery({
-    queryKey: ["customer-related", customerId],
+    queryKey: CUSTOMER_QK.related(customerId),
     queryFn: () => fetchCustomerRelated(customerId),
     staleTime: 60_000,
     initialData: initialRelated ?? undefined,
@@ -134,8 +134,8 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
   }, [searchParams]);
 
   const reloadCustomer = () => {
-    void queryClient.invalidateQueries({ queryKey: ["customer", customerId] });
-    void queryClient.invalidateQueries({ queryKey: ["customer-related", customerId] });
+    void queryClient.invalidateQueries({ queryKey: CUSTOMER_QK.detail(customerId) });
+    void queryClient.invalidateQueries({ queryKey: CUSTOMER_QK.related(customerId) });
   };
 
   const handleDelete = async () => {
@@ -145,7 +145,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
   };
 
   const setData = (next: CustomerDetail) => {
-    queryClient.setQueryData(["customer", customerId], next);
+    queryClient.setQueryData(CUSTOMER_QK.detail(customerId), next);
   };
 
   if (isPending) return <PageLoadingFallback />;

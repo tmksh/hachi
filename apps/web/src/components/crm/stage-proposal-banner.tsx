@@ -4,11 +4,8 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Check, X } from "lucide-react";
-import {
-  getPendingStageProposals,
-  reviewStageProposal,
-  type StageProposal,
-} from "@/lib/actions/sales-flow";
+import { reviewStageProposal } from "@/lib/actions/sales-flow";
+import { fetchPendingStageProposals, type StageProposal } from "@/lib/queries/deals";
 
 const STAGE_LABELS: Record<string, string> = {
   inquiry: "問い合わせ",
@@ -26,7 +23,7 @@ export function StageProposalBanner({ customerId }: { customerId?: string }) {
   const [loading, setLoading] = useState<string | null>(null);
 
   const load = () => {
-    getPendingStageProposals()
+    fetchPendingStageProposals()
       .then((all) => setProposals(customerId ? all.filter((p) => p.customer_id === customerId) : all))
       .catch(() => {});
   };

@@ -1157,7 +1157,7 @@ export async function sendRecordingSummaryEmail(input: {
     minute: "2-digit",
   });
 
-  const { getResend, CUSTOMER_FROM_EMAIL, buildRecordingSummaryEmailHtml } = await import("@/lib/resend");
+  const { sendResendEmail, CUSTOMER_FROM_EMAIL, buildRecordingSummaryEmailHtml } = await import("@/lib/resend");
   const html = buildRecordingSummaryEmailHtml({
     customerName,
     companyName,
@@ -1184,7 +1184,7 @@ export async function sendRecordingSummaryEmail(input: {
     senderName,
   ].join("\n");
 
-  const { error: mailError } = await getResend().emails.send({
+  const { error: mailError } = await sendResendEmail({
     from: CUSTOMER_FROM_EMAIL,
     to: customer.email.trim(),
     subject: `【${companyName}】商談内容のご共有`,
@@ -1192,7 +1192,7 @@ export async function sendRecordingSummaryEmail(input: {
     text,
   });
   if (mailError) {
-    throw new Error(`メール送信に失敗しました: ${mailError.message}`);
+    throw new Error(`メール送信に失敗しました: ${mailError}`);
   }
 
   return { sentTo: customer.email.trim() };

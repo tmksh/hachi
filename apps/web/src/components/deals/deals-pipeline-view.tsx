@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { updateDeal, deleteDeal } from "@/lib/actions/deals";
 import { fetchDeals, fetchDealStages, fetchProfiles, LIST_QK, LIST_STALE_MS, type DealListRow, type DealStageRow } from "@/lib/queries/lists";
+import { DEAL_QK } from "@/lib/queries/deals";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
@@ -161,6 +162,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
 
   const refreshDeals = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: LIST_QK.deals });
+    void queryClient.invalidateQueries({ queryKey: DEAL_QK.customerPrefix });
   }, [queryClient]);
 
   const assigneeFiltered = assigneeFilter === "_all"

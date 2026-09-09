@@ -9,16 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  getContractCommunications,
   addContractCommunication,
   updateCommunicationAgreementStatus,
   syncContractPlatformMessages,
   seedContractMessagingDemo,
-  getContractPostSignInfo,
   saveContractPostSignInfo,
   getContractMessagingContext,
   type ContractMessagingContext,
 } from "@/lib/actions/contract-features";
+import { fetchContractCommunications, fetchContractPostSignInfo } from "@/lib/queries/details";
 import { MessagingLinkSetup } from "@/components/contracts/messaging-link-setup";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { cn } from "@/lib/utils";
@@ -35,7 +34,7 @@ import {
 import { MESSAGING_PLATFORMS, type MessagingPlatform } from "@/components/shared/platform-icons";
 
 type Platform = MessagingPlatform;
-type Message = Awaited<ReturnType<typeof getContractCommunications>>[number];
+type Message = Awaited<ReturnType<typeof fetchContractCommunications>>[number];
 
 const PLATFORMS = MESSAGING_PLATFORMS;
 
@@ -61,7 +60,7 @@ export function ContractMessagingTab({
 
   const load = () => {
     setLoading(true);
-    getContractCommunications(contractId)
+    fetchContractCommunications(contractId)
       .then(setMessages)
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -74,7 +73,7 @@ export function ContractMessagingTab({
       setLoading(true);
       try {
         const [existing, context] = await Promise.all([
-          getContractCommunications(contractId),
+          fetchContractCommunications(contractId),
           getContractMessagingContext(contractId),
         ]);
         if (cancelled) return;
@@ -91,7 +90,7 @@ export function ContractMessagingTab({
       }
     })();
 
-    getContractPostSignInfo(contractId)
+    fetchContractPostSignInfo(contractId)
       .then((rows) => setPostSign(rows.map((r) => ({ label: r.label, value: r.value ?? "" }))))
       .catch(() => {});
 

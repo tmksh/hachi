@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -81,7 +82,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getEstimates, getEstimate, updateEstimate } from "@/lib/actions/estimates";
+import { updateEstimate } from "@/lib/actions/estimates";
+import { ESTIMATE_QK, ESTIMATE_STALE_MS, ESTIMATE_DETAIL_STALE_MS, fetchEstimates, fetchEstimate } from "@/lib/queries/estimates";
 import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actions/deals";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
@@ -1109,6 +1111,7 @@ export function EstimateDetailView({
   headerExtra?: React.ReactNode;
   pdfCustomer?: { name?: string | null; company_name?: string | null; customer_type?: string | null; notes?: string | null } | null;
 }) {
+  const queryClient = useQueryClient();
   const [pdfOpen, setPdfOpen] = useState(false);
   const [pdfData, setPdfData] = useState<EstimatePdfPreviewData | null>(null);
   const [refSelectOpen, setRefSelectOpen] = useState(false);
@@ -1323,7 +1326,11 @@ export function EstimateDetailView({
     if (refEstimateList.length > 0) return;
     setRefListLoading(true);
     try {
-      const list = await getEstimates();
+      const list = await queryClient.fetchQuery({
+        queryKey: ESTIMATE_QK.all,
+        queryFn: fetchEstimates,
+        staleTime: ESTIMATE_STALE_MS,
+      });
       setRefEstimateList(
         list
           .filter((e) => e.id !== estimate.id)
@@ -1347,7 +1354,11 @@ export function EstimateDetailView({
     setRefSelectOpen(false);
     setRefLoading(true);
     try {
-      const data = await getEstimate(id);
+      const data = await queryClient.fetchQuery({
+        queryKey: ESTIMATE_QK.detail(id),
+        queryFn: () => fetchEstimate(id),
+        staleTime: ESTIMATE_DETAIL_STALE_MS,
+      });
       setRefEstimate({
         id: data.id,
         estimate_no: data.estimate_no ?? null,
