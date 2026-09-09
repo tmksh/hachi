@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -104,6 +105,7 @@ async function openProcurementFile(path: string) {
 }
 
 export function FulfillmentClient({ initialOrders }: Props) {
+  const querySeedAt = useQuerySeedAt();
   const { profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
   const canAccount = profile?.role ? canAccess("fulfillment_approve", permissionRoleSlugs(profile)) : false;
@@ -113,7 +115,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
     queryFn: fetchProcurementOrders,
     staleTime: LIST_STALE_MS,
     initialData: initialOrders,
-    initialDataUpdatedAt: initialOrders ? Date.now() : undefined,
+    initialDataUpdatedAt: initialOrders ? querySeedAt : undefined,
   });
   const setOrders = (updater: ProcurementOrder[] | ((prev: ProcurementOrder[]) => ProcurementOrder[])) => {
     queryClient.setQueryData<ProcurementOrder[]>(QK.procurementOrders, (prev = []) =>

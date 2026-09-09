@@ -1,13 +1,13 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { BarChart } from "@/components/charts/bar-chart";
-import { fetchDeals } from "@/lib/queries/lists";
+import { fetchDeals, LIST_QK, LIST_STALE_MS } from "@/lib/queries/lists";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
-import { LIST_STALE_MS } from "@/lib/queries/lists";
 
 const STAGE_LABELS: Record<string, string> = { inquiry:"問い合わせ", first_meeting:"初回面談", materials_sent:"資料送付", quote_submitted:"見積提出", negotiation:"交渉中", closing:"クロージング", won:"受注", lost:"失注" };
 
@@ -18,18 +18,13 @@ type MarketingRoiClientProps = {
 };
 
 export function MarketingRoiClient({ initialDeals }: MarketingRoiClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const { data: deals = [], isPending } = useQuery({
-    queryKey: ["deals"],
-    queryFn: async (): Promise<Deal[]> => {
-      try {
-        return await fetchDeals();
-      } catch {
-        return [];
-      }
-    },
+    queryKey: LIST_QK.deals,
+    queryFn: fetchDeals,
     staleTime: LIST_STALE_MS,
     initialData: initialDeals,
-    initialDataUpdatedAt: initialDeals ? Date.now() : undefined,
+    initialDataUpdatedAt: initialDeals ? querySeedAt : undefined,
   });
 
   const stageData = useMemo(() => {

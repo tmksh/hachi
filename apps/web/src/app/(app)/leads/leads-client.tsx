@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -110,6 +111,7 @@ type Props = {
 };
 
 export function LeadsClient({ initialLeads, initialWebhook }: Props) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: leads = [], isPending } = useQuery({
@@ -117,14 +119,14 @@ export function LeadsClient({ initialLeads, initialWebhook }: Props) {
     queryFn: () => fetchInboundLeads("all"),
     staleTime: 120_000,
     initialData: initialLeads,
-    initialDataUpdatedAt: initialLeads ? Date.now() : undefined,
+    initialDataUpdatedAt: initialLeads ? querySeedAt : undefined,
   });
   const { data: webhook = initialWebhook ?? EMPTY_WEBHOOK } = useQuery({
     queryKey: ["inbound-webhook"],
     queryFn: getInboundWebhookConfig,
     staleTime: 120_000,
     initialData: initialWebhook,
-    initialDataUpdatedAt: initialWebhook ? Date.now() : undefined,
+    initialDataUpdatedAt: initialWebhook ? querySeedAt : undefined,
   });
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [search, setSearch] = useState("");

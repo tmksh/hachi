@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,13 +24,14 @@ type CirculationClientProps = {
 };
 
 export function CirculationClient({ initialItems }: CirculationClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const queryClient = useQueryClient();
   const { data: items = [], isPending } = useQuery({
     queryKey: QK.announcements,
     queryFn: fetchAnnouncements,
     staleTime: LIST_STALE_MS,
     initialData: initialItems,
-    initialDataUpdatedAt: initialItems ? Date.now() : undefined,
+    initialDataUpdatedAt: initialItems ? querySeedAt : undefined,
   });
   const [keyword, setKeyword] = useState("");
   const [dateFrom, setDateFrom] = useState("");

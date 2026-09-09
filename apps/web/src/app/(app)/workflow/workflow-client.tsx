@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +30,7 @@ type WorkflowClientProps = {
 };
 
 export function WorkflowClient({ initialRows }: WorkflowClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: rows = [], isPending } = useQuery({
@@ -36,7 +38,7 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
     queryFn: () => fetchWorkflowRequests(),
     staleTime: 120_000,
     initialData: initialRows,
-    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+    initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");

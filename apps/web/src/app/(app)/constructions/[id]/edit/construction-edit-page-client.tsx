@@ -4,8 +4,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchConstruction } from "@/lib/queries/details";
-import { fetchDepartmentNames, fetchCompanyLocations } from "@/lib/queries/portal";
-import { DETAIL_STALE_MS } from "@/lib/queries/portal";
+import { DETAIL_STALE_MS, fetchDepartmentNames, fetchCompanyLocations } from "@/lib/queries/portal";
 import { ConstructionEditClient } from "./construction-edit-client";
 
 export function ConstructionEditPageClient() {
@@ -18,12 +17,12 @@ export function ConstructionEditPageClient() {
   });
   const { data: departments = [], isPending: dPending } = useQuery({
     queryKey: ["bi-departments"],
-    queryFn: () => fetchDepartmentNames().catch(() => [] as string[]),
+    queryFn: fetchDepartmentNames,
     staleTime: 5 * 60_000,
   });
   const { data: locations = [], isPending: lPending } = useQuery({
     queryKey: ["company-locations"],
-    queryFn: () => fetchCompanyLocations().catch(() => []),
+    queryFn: fetchCompanyLocations,
     staleTime: 5 * 60_000,
   });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -353,6 +354,7 @@ function ConstructionDetailPageContent({
   initialInvoices,
   initialMasters,
 }: ConstructionDetailClientProps) {
+  const querySeedAt = useQuerySeedAt();
   useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
   const constructionId = id as string;
@@ -364,7 +366,7 @@ function ConstructionDetailPageContent({
     queryFn: () => fetchConstruction(constructionId),
     staleTime: 60_000,
     initialData: initialData ?? undefined,
-    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    initialDataUpdatedAt: initialData ? querySeedAt : undefined,
     enabled: !!constructionId,
   });
   const { data: docs = [] } = useQuery({
@@ -372,7 +374,7 @@ function ConstructionDetailPageContent({
     queryFn: () => fetchConstructionContractDocs(constructionId),
     staleTime: 60_000,
     initialData: initialDocs,
-    initialDataUpdatedAt: initialDocs ? Date.now() : undefined,
+    initialDataUpdatedAt: initialDocs ? querySeedAt : undefined,
     enabled: !!constructionId,
   });
   const { data: changeOrders = [] } = useQuery({
@@ -380,7 +382,7 @@ function ConstructionDetailPageContent({
     queryFn: () => fetchChangeOrders(constructionId),
     staleTime: 60_000,
     initialData: initialChangeOrders,
-    initialDataUpdatedAt: initialChangeOrders ? Date.now() : undefined,
+    initialDataUpdatedAt: initialChangeOrders ? querySeedAt : undefined,
     enabled: !!constructionId,
   });
   const { data: invoices = [] } = useQuery({
@@ -388,7 +390,7 @@ function ConstructionDetailPageContent({
     queryFn: () => fetchInvoicesForConstruction(constructionId),
     staleTime: 60_000,
     initialData: initialInvoices,
-    initialDataUpdatedAt: initialInvoices ? Date.now() : undefined,
+    initialDataUpdatedAt: initialInvoices ? querySeedAt : undefined,
     enabled: !!constructionId,
   });
   const { data: closingDayLabel = initialClosingDayLabel ?? "月末締め" } = useQuery({

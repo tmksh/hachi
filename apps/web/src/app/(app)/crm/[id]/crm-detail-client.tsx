@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState, useEffect, Suspense, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -97,6 +98,7 @@ function normalizeMainTab(tab: string | null) {
 }
 
 function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: CrmDetailClientProps) {
+  const querySeedAt = useQuerySeedAt();
   useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
   const customerId = id as string;
@@ -112,7 +114,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
     queryFn: () => fetchCustomer(customerId),
     staleTime: 60_000,
     initialData: initialData ?? undefined,
-    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    initialDataUpdatedAt: initialData ? querySeedAt : undefined,
     enabled: !!customerId,
   });
   const { data: related } = useQuery({
@@ -120,7 +122,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
     queryFn: () => fetchCustomerRelated(customerId),
     staleTime: 60_000,
     initialData: initialRelated ?? undefined,
-    initialDataUpdatedAt: initialRelated ? Date.now() : undefined,
+    initialDataUpdatedAt: initialRelated ? querySeedAt : undefined,
     enabled: !!customerId,
   });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -51,13 +52,14 @@ function basisFor(vendorName: string, all: ProcurementOrder[]) {
 }
 
 export function AccountItemsClient({ initialOrders, accountItems: initialAccountItems }: Props) {
+  const querySeedAt = useQuerySeedAt();
   const queryClient = useQueryClient();
   const { data: orders = [], isPending: ordersPending } = useQuery({
     queryKey: QK.procurementOrders,
     queryFn: fetchProcurementOrders,
     staleTime: LIST_STALE_MS,
     initialData: initialOrders,
-    initialDataUpdatedAt: initialOrders ? Date.now() : undefined,
+    initialDataUpdatedAt: initialOrders ? querySeedAt : undefined,
   });
   const { data: masters, isPending: mastersPending } = useQuery({
     queryKey: QK.procurementMasters,

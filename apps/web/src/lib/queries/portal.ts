@@ -79,7 +79,7 @@ export async function fetchProcurementOrders() {
     .from("contractor_orders")
     .select(ORDER_SELECT_FALLBACK)
     .order("created_at", { ascending: false });
-  if (fallbackErr) return [];
+  if (fallbackErr) throw fallbackErr;
   return fallback ?? [];
 }
 
@@ -128,7 +128,7 @@ export async function fetchDocuments() {
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
 export async function fetchDocumentCategories(): Promise<DocCategory[]> {
@@ -178,7 +178,7 @@ export async function fetchAnnouncement(id: string) {
   }
 
   let markedRead = false;
-  let readerName = profile?.display_name ?? "—";
+  const readerName = profile?.display_name ?? "—";
   if (user && profile) {
     const now = new Date().toISOString();
     const { error: readErr } = await supabase.from("announcement_reads").upsert({
@@ -219,7 +219,7 @@ export async function fetchMailAccounts(): Promise<EmailAccount[]> {
     .select("id, provider, email_address, last_sync_at, token_expires_at")
     .eq("user_id", user.id)
     .order("created_at");
-  if (error) return [];
+  if (error) throw error;
   return (data ?? []).map((row) => ({
     ...row,
     display_name: null,
@@ -294,7 +294,7 @@ export async function fetchCompany() {
   const { supabase, profile } = await authContext();
   if (!profile) return null;
   const { data, error } = await supabase.from("companies").select("*").eq("id", profile.company_id).single();
-  if (error) return null;
+  if (error) throw error;
   return data as Company;
 }
 
@@ -549,11 +549,12 @@ export async function fetchConstructionReport(reportId: string) {
 
 export async function fetchDepartmentNames() {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("company_locations")
     .select("name")
     .eq("is_active", true)
     .order("sort_order");
+  if (error) throw error;
   const names = (data ?? []).map((r) => r.name).filter(Boolean);
   return names.length > 0 ? names : [...DEFAULT_DEPARTMENTS];
 }
@@ -565,7 +566,7 @@ export async function fetchCompanyLocations() {
     .select("id, name, sort_order, is_active")
     .eq("is_active", true)
     .order("sort_order");
-  if (error) return [];
+  if (error) throw error;
   return data ?? [];
 }
 

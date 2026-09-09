@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
@@ -19,12 +20,13 @@ type MarketingCreativeClientProps = {
 };
 
 export function MarketingCreativeClient({ initialDocs }: MarketingCreativeClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const { data: docs = [], isPending } = useQuery({
     queryKey: QK.documents,
-    queryFn: () => fetchDocuments().catch(() => []),
+    queryFn: fetchDocuments,
     staleTime: LIST_STALE_MS,
     initialData: initialDocs,
-    initialDataUpdatedAt: initialDocs ? Date.now() : undefined,
+    initialDataUpdatedAt: initialDocs ? querySeedAt : undefined,
   });
 
   if (isPending && docs.length === 0) return <PageLoadingFallback />;

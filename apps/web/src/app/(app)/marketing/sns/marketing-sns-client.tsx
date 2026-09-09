@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,12 +20,13 @@ type MarketingSnsClientProps = {
 };
 
 export function MarketingSnsClient({ initialCustomers }: MarketingSnsClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const { data: customers = [], isPending } = useQuery({
     queryKey: ["customers", 1, ""],
     queryFn: () => fetchCustomers({ page: 1, limit: 100 }).then((r) => r.customers as Customer[]),
     staleTime: LIST_STALE_MS,
     initialData: initialCustomers,
-    initialDataUpdatedAt: initialCustomers ? Date.now() : undefined,
+    initialDataUpdatedAt: initialCustomers ? querySeedAt : undefined,
   });
 
   const sourceData = useMemo(() => {

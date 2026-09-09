@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -38,6 +39,7 @@ type InvoicesClientProps = {
 };
 
 export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: invoices = [], isPending } = useQuery({
@@ -45,7 +47,7 @@ export function InvoicesClient({ initialInvoices }: InvoicesClientProps) {
     queryFn: fetchInvoices,
     staleTime: LIST_STALE_MS,
     initialData: initialInvoices,
-    initialDataUpdatedAt: initialInvoices ? Date.now() : undefined,
+    initialDataUpdatedAt: initialInvoices ? querySeedAt : undefined,
   });
   const [updating, setUpdating] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);

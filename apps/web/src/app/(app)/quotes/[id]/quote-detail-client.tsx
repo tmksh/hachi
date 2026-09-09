@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ type QuoteDetailClientProps = {
 };
 
 export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const { id } = useParams();
   const estimateId = id as string;
   const router = useRouter();
@@ -25,7 +27,7 @@ export function QuoteDetailClient({ initialData }: QuoteDetailClientProps) {
     queryFn: () => fetchEstimate(estimateId),
     staleTime: 60_000,
     initialData: initialData ?? undefined,
-    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    initialDataUpdatedAt: initialData ? querySeedAt : undefined,
     enabled: !!estimateId,
   });
 

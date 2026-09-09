@@ -3,6 +3,12 @@ import type { Craftsman, Estimate, InboundLead, Profile } from "@/lib/database.t
 
 export const LIST_STALE_MS = 120_000;
 
+export const LIST_QK = {
+  deals: ["deals"] as const,
+  dealStages: ["deal-stages"] as const,
+  profiles: ["profiles"] as const,
+};
+
 export type EstimateListRow = {
   id: string;
   company_id: string;
@@ -161,7 +167,37 @@ export async function fetchProfiles(): Promise<Profile[]> {
 const DEAL_LIST_SELECT =
   "id, company_id, customer_id, title, stage, value, priority, expected_close_date, assigned_to, department_name, tags, next_action, summary, days_in_stage, created_at, updated_at, customer:customers(id, name, company_name), assignee:profiles!deals_assigned_to_fkey(id, display_name)";
 
-export async function fetchDeals() {
+export type DealListRow = {
+  id: string;
+  company_id: string;
+  customer_id: string | null;
+  title: string;
+  stage: string;
+  value: number | null;
+  priority: string;
+  expected_close_date: string | null;
+  assigned_to: string | null;
+  department_name: string | null;
+  tags: string[] | null;
+  next_action: string | null;
+  summary: string | null;
+  days_in_stage: number | null;
+  created_at: string;
+  updated_at: string;
+  customer: { id: string; name: string; company_name: string | null } | null;
+  assignee: { id: string; display_name: string } | null;
+};
+
+export type DealStageRow = {
+  key: string;
+  label: string;
+  color: string;
+  is_won: boolean;
+  is_lost: boolean;
+  sort_order: number;
+};
+
+export async function fetchDeals(): Promise<DealListRow[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("deals")
@@ -169,17 +205,17 @@ export async function fetchDeals() {
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as unknown as DealListRow[];
 }
 
-export async function fetchDealStages() {
+export async function fetchDealStages(): Promise<DealStageRow[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("deal_stages")
-    .select("*")
+    .select("key, label, color, is_won, is_lost, sort_order")
     .order("sort_order");
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as DealStageRow[];
 }
 
 export async function fetchWorkflowRequests(status?: string) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
@@ -20,13 +21,14 @@ type MarketingEmailClientProps = {
 };
 
 export function MarketingEmailClient({ initialThreads }: MarketingEmailClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const { data: threads = [], isPending } = useQuery({
     queryKey: QK.mailThreads,
     queryFn: fetchMailThreads,
     staleTime: LIST_STALE_MS,
     initialData: initialThreads,
-    initialDataUpdatedAt: initialThreads ? Date.now() : undefined,
+    initialDataUpdatedAt: initialThreads ? querySeedAt : undefined,
   });
 
   if (isPending && threads.length === 0) return <PageLoadingFallback />;

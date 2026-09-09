@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, Users, DollarSign, BarChart3, FileText, MoreVertical, Pencil, Trash2, GripVertical, User, Clock, ArrowRight, Search, LayoutList, KanbanSquare, Eye, EyeOff, Target } from "lucide-react";
+import { TrendingUp, Users, DollarSign, BarChart3, FileText, MoreVertical, Pencil, Trash2, User, Clock, ArrowRight, Search, LayoutList, KanbanSquare, Eye, EyeOff, Target } from "lucide-react";
 import { KpiRow } from "@/components/shared/kpi-row";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { cn } from "@/lib/utils";
@@ -16,12 +16,11 @@ import { TEAL_CARD_SM } from "@/lib/teal-theme";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { updateDeal, deleteDeal } from "@/lib/actions/deals";
-import { fetchDeals, fetchDealStages, fetchProfiles } from "@/lib/queries/lists";
+import { fetchDeals, fetchDealStages, fetchProfiles, LIST_QK, LIST_STALE_MS, type DealListRow, type DealStageRow } from "@/lib/queries/lists";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 import { WonDialog } from "@/components/deals/won-dialog";
 import type { Deal } from "@/lib/database.types";
-import type { Profile } from "@/lib/database.types";
 
 const PRIORITY_LABEL: Record<string, string> = { high: "高", medium: "中", low: "低" };
 const PRIORITY_CLASS: Record<string, string> = {
@@ -48,7 +47,7 @@ const STAGE_FALLBACK: Record<string, { label: string; color: string }> = {
 };
 
 /** DB上の旧stageキーを deal_stages マスタキーに揃える */
-function normalizeStageKey(stageKey: string, stages: StageRow[]): string {
+function normalizeStageKey(stageKey: string, stages: DealStageRow[]): string {
   if (stages.some(s => s.key === stageKey)) return stageKey;
   const legacyMap: Record<string, string> = {
     won: "delivered",
@@ -72,7 +71,7 @@ function normalizeStageKey(stageKey: string, stages: StageRow[]): string {
   return mapped ?? stageKey;
 }
 
-function resolveStage(stageKey: string, stages: StageRow[]) {
+function resolveStage(stageKey: string, stages: DealStageRow[]) {
   const key = normalizeStageKey(stageKey, stages);
   const found = stages.find(s => s.key === key);
   if (found) return { label: found.label, color: found.color, isWon: found.is_won, isLost: found.is_lost, key };
@@ -81,22 +80,17 @@ function resolveStage(stageKey: string, stages: StageRow[]) {
   return { label: stageKey, color: "#6B7280", isWon: false, isLost: false, key: stageKey };
 }
 
-function isWonStageKey(stageKey: string, stages: StageRow[]) {
+function isWonStageKey(stageKey: string, stages: DealStageRow[]) {
   if (stageKey === "won") return true;
   return stages.some(s => s.key === stageKey && s.is_won);
 }
 
-function isLostStageKey(stageKey: string, stages: StageRow[]) {
+function isLostStageKey(stageKey: string, stages: DealStageRow[]) {
   if (stageKey === "lost") return true;
   return stages.some(s => s.key === stageKey && s.is_lost);
 }
 
-type DealRow = Deal & {
-  customer: { id: string; name: string; company_name: string | null } | null;
-  assignee: { id: string; display_name: string } | null;
-};
-
-type StageRow = { key: string; label: string; color: string; is_won: boolean; is_lost: boolean; sort_order: number };
+type DealRow = DealListRow;
 
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
@@ -104,7 +98,7 @@ function formatYen(n: number) {
   return `¥${n.toLocaleString()}`;
 }
 
-function stageColumnClass(stage: StageRow) {
+function stageColumnClass(stage: DealStageRow) {
   if (stage.is_won) return "bg-emerald-50/60 border-emerald-200/70";
   if (stage.is_lost) return "bg-slate-100/70 border-slate-200/80";
   return "bg-white/70 border-border/60";
@@ -125,30 +119,28 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // React Query でキャッシュし、再訪時は即表示（staleTime 内は再取得なし）
-  const { data: dealsData, isPending: dealsPending } = useQuery({
-    queryKey: ["deals", "pipeline"],
-    queryFn: () => fetchDeals(),
-    staleTime: 60_000,
+  const { data: dealsData, isPending: dealsPending, isError: dealsError, refetch: refetchDeals } = useQuery({
+    queryKey: LIST_QK.deals,
+    queryFn: fetchDeals,
+    staleTime: LIST_STALE_MS,
   });
   const { data: profilesData } = useQuery({
-    queryKey: ["profiles"],
-    queryFn: () => fetchProfiles(),
+    queryKey: LIST_QK.profiles,
+    queryFn: fetchProfiles,
     staleTime: 5 * 60_000,
   });
   const { data: stagesData } = useQuery({
-    queryKey: ["deal-stages"],
-    queryFn: () => fetchDealStages(),
+    queryKey: LIST_QK.dealStages,
+    queryFn: fetchDealStages,
     staleTime: 5 * 60_000,
   });
 
-  // 楽観更新（D&D・削除）はローカル state を正とし、再取得時にサーバー値へ同期
   const [deals, setDeals]               = useState<DealRow[]>([]);
-  const profiles = (profilesData ?? []) as Profile[];
-  const stages   = (stagesData ?? []) as StageRow[];
+  const profiles = profilesData ?? [];
+  const stages   = stagesData ?? [];
   const loading  = dealsPending && deals.length === 0;
   useEffect(() => {
-    if (dealsData) setDeals(dealsData as DealRow[]);
+    if (dealsData) setDeals(dealsData);
   }, [dealsData]);
 
   const [draggedDeal, setDraggedDeal]   = useState<string | null>(null);
@@ -160,19 +152,16 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
   const [stageFilter, setStageFilter] = useState("_all");
   const [deleteTarget, setDeleteTarget] = useState<DealRow | null>(null);
   const [deleting, setDeleting]         = useState(false);
-  const [viewMode, setViewMode]         = useState<"list" | "kanban">("list");
+  const [viewMode, setViewMode]         = useState<"list" | "kanban">("kanban");
   const [searchQuery, setSearchQuery]   = useState("");
   const [showClosedDeals, setShowClosedDeals] = useState(false);
 
   const addOpen = addOpenProp ?? addOpenInternal;
   const setAddOpen = onAddOpenChange ?? setAddOpenInternal;
 
-  const fetchDeals = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["deals", "pipeline"] });
+  const refreshDeals = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: LIST_QK.deals });
   }, [queryClient]);
-
-  const wonStageKeys  = stages.filter(s => s.is_won).map(s => s.key);
-  const lostStageKeys = stages.filter(s => s.is_lost).map(s => s.key);
 
   const assigneeFiltered = assigneeFilter === "_all"
     ? deals
@@ -223,7 +212,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
     try {
       await deleteDeal(deleteTarget.id);
       setDeals(prev => prev.filter(d => d.id !== deleteTarget.id));
-      void fetchDeals();
+      void refreshDeals();
     } catch { /* ignore */ } finally {
       setDeleting(false);
       setDeleteTarget(null);
@@ -243,7 +232,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
         setWonDeal({ ...deal, stage: typedStage });
       }
     } catch {
-      fetchDeals();
+      void refreshDeals();
     }
   };
 
@@ -256,6 +245,13 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
     setDraggedDeal(null);
     await handleStageChange(deal, targetStage);
   };
+
+  if (dealsError) return (
+    <div className="rounded-xl border bg-card p-8 text-center space-y-3">
+      <p className="text-sm text-muted-foreground">商談の読み込みに失敗しました</p>
+      <Button size="sm" variant="outline" onClick={() => void refetchDeals()}>再試行</Button>
+    </div>
+  );
 
   if (loading) return (
     <div className="space-y-6">
@@ -606,14 +602,14 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
       </div>
       )}
 
-      <AddDealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={fetchDeals} stages={stages} />
+      <AddDealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={refreshDeals} stages={stages} />
 
       <EditDealDialog
         open={editDeal !== null}
         onOpenChange={(v) => { if (!v) setEditDeal(null); }}
         deal={editDeal}
         stages={stages}
-        onUpdated={fetchDeals}
+        onUpdated={refreshDeals}
       />
 
       {wonDeal && (

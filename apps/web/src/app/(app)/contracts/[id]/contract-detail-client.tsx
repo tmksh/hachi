@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ type ContractDetailClientProps = {
 };
 
 export function ContractDetailClient({ initialData, initialMasters }: ContractDetailClientProps) {
+  const querySeedAt = useQuerySeedAt();
   useSeedCustomerEntryMasters(initialMasters);
   const { id } = useParams();
   const contractId = id as string;
@@ -29,7 +31,7 @@ export function ContractDetailClient({ initialData, initialMasters }: ContractDe
     queryFn: () => fetchContract(contractId),
     staleTime: 60_000,
     initialData: initialData ?? undefined,
-    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    initialDataUpdatedAt: initialData ? querySeedAt : undefined,
     enabled: !!contractId,
   });
 

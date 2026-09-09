@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,12 +11,13 @@ import {
 export const CUSTOMER_ENTRY_MASTERS_KEY = ["customer-entry-masters"] as const;
 
 export function useCustomerEntryMasters(initialData?: CustomerEntryMasters) {
+  const querySeedAt = useQuerySeedAt();
   return useQuery({
     queryKey: CUSTOMER_ENTRY_MASTERS_KEY,
     queryFn: getCustomerEntryMasters,
     staleTime: 5 * 60_000,
     initialData,
-    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    initialDataUpdatedAt: initialData ? querySeedAt : undefined,
   });
 }
 

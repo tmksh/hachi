@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -63,6 +64,7 @@ type QuotesClientProps = {
 };
 
 function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }: QuotesClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -72,14 +74,14 @@ function QuotesPageContent({ initialRows, initialCustomers, initialCustomerId }:
     queryFn: fetchEstimates,
     staleTime: LIST_STALE_MS,
     initialData: initialRows,
-    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+    initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
   const { data: customers = [] } = useQuery({
     queryKey: ["quotes-customers"],
     queryFn: () => fetchCustomers({ page: 1, limit: 100 }).then((r) => r.customers),
     staleTime: LIST_STALE_MS,
     initialData: initialCustomers,
-    initialDataUpdatedAt: initialCustomers ? Date.now() : undefined,
+    initialDataUpdatedAt: initialCustomers ? querySeedAt : undefined,
   });
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");

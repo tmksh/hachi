@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -51,6 +52,7 @@ type ConstructionsClientProps = {
 };
 
 export function ConstructionsClient({ initialRows, initialProfiles }: ConstructionsClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: rows = [], isPending } = useQuery({
@@ -58,14 +60,14 @@ export function ConstructionsClient({ initialRows, initialProfiles }: Constructi
     queryFn: fetchConstructions,
     staleTime: LIST_STALE_MS,
     initialData: initialRows,
-    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+    initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
   const { data: profiles = [] } = useQuery({
     queryKey: ["profiles"],
     queryFn: fetchProfiles,
     staleTime: 5 * 60_000,
     initialData: initialProfiles,
-    initialDataUpdatedAt: initialProfiles ? Date.now() : undefined,
+    initialDataUpdatedAt: initialProfiles ? querySeedAt : undefined,
   });
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");

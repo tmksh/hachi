@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -38,7 +39,6 @@ import {
   yen,
   type CsvOutputColumnKey,
   type InvoiceClosingDay,
-  type TransferSender,
   EMPTY_TRANSFER_SENDER,
 } from "@/lib/procurement";
 
@@ -67,20 +67,21 @@ function approvedOnly(orders: ProcurementOrder[]) {
 }
 
 export function LedgerClient({ initialOrders, masters: initialMasters }: Props) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const { data: orders = [], isPending: ordersPending } = useQuery({
     queryKey: QK.procurementOrders,
     queryFn: fetchProcurementOrders,
     staleTime: LIST_STALE_MS,
     initialData: initialOrders,
-    initialDataUpdatedAt: initialOrders ? Date.now() : undefined,
+    initialDataUpdatedAt: initialOrders ? querySeedAt : undefined,
   });
   const { data: masters, isPending: mastersPending } = useQuery({
     queryKey: QK.procurementMasters,
     queryFn: fetchProcurementMasters,
     staleTime: MASTER_STALE_MS,
     initialData: initialMasters,
-    initialDataUpdatedAt: initialMasters ? Date.now() : undefined,
+    initialDataUpdatedAt: initialMasters ? querySeedAt : undefined,
   });
   const loadedMasters = masters ?? {
     departments: [] as string[],

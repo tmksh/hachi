@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { fetchDeals, fetchDealStages, LIST_QK, LIST_STALE_MS } from "@/lib/queries/lists";
 import { prefetchCustomerDetail } from "@/lib/nav-prefetch";
 import { format, differenceInDays } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -34,14 +35,16 @@ import {
 import type { UnfollowedCustomer } from "@/lib/queries/customers";
 import type { CustomerListResult } from "@/lib/actions/customers";
 
+type ViewMode = "grid" | "list" | "pipeline";
+
 type CrmClientProps = {
+  initialView?: ViewMode;
   initialCustomers?: CustomerListResult;
   initialCounts?: { total: number; corporation: number; individual: number };
   initialUnfollowedCount?: number;
   initialDealSummaries?: Record<string, string>;
 };
 
-type ViewMode = "grid" | "list" | "pipeline";
 type ListCustomer = CustomerWithDeals | UnfollowedCustomer;
 
 function getFollowupStatus(
@@ -56,6 +59,7 @@ function getFollowupStatus(
 }
 
 export function CrmClient({
+  initialView = "list",
   initialCustomers,
   initialCounts,
   initialUnfollowedCount: initialUnfollowedCountProp,
@@ -67,19 +71,19 @@ export function CrmClient({
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState("all");
-  const [view, setView] = useState<ViewMode>("list");
+  const [view, setView] = useState<ViewMode>(initialView);
   const [addDealOpen, setAddDealOpen] = useState(false);
 
   const prefetchPipeline = useCallback(() => {
     void import("@/components/deals/deals-pipeline-view");
     void queryClient.prefetchQuery({
-      queryKey: ["deals", "pipeline"],
-      queryFn: () => import("@/lib/queries/lists").then((m) => m.fetchDeals()),
-      staleTime: 60_000,
+      queryKey: LIST_QK.deals,
+      queryFn: fetchDeals,
+      staleTime: LIST_STALE_MS,
     });
     void queryClient.prefetchQuery({
-      queryKey: ["deal-stages"],
-      queryFn: () => import("@/lib/queries/lists").then((m) => m.fetchDealStages()),
+      queryKey: LIST_QK.dealStages,
+      queryFn: fetchDealStages,
       staleTime: 5 * 60_000,
     });
   }, [queryClient]);
@@ -122,10 +126,14 @@ export function CrmClient({
     setPage(1);
   }, [tab]);
 
-  useEffect(() => {
-    const v = new URLSearchParams(window.location.search).get("view");
-    if (v === "pipeline" || v === "grid" || v === "list") setView(v);
-  }, []);
+  const setViewAndUrl = useCallback((key: ViewMode) => {
+    setView(key);
+    const params = new URLSearchParams(window.location.search);
+    if (key === "list") params.delete("view");
+    else params.set("view", key);
+    const qs = params.toString();
+    router.replace(qs ? `/crm?${qs}` : "/crm", { scroll: false });
+  }, [router]);
 
   const filtered = useMemo(() => customers.filter((c) => {
     if (tab === "all") return true;
@@ -185,7 +193,7 @@ export function CrmClient({
             <button
               key={key}
               type="button"
-              onClick={() => setView(key)}
+              onClick={() => setViewAndUrl(key)}
               onMouseEnter={key === "pipeline" ? prefetchPipeline : undefined}
               onFocus={key === "pipeline" ? prefetchPipeline : undefined}
               className={cn(

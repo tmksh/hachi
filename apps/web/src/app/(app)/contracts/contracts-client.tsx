@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,6 +32,7 @@ type ContractsClientProps = {
 };
 
 export function ContractsClient({ initialRows }: ContractsClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: rows = [], isPending } = useQuery({
@@ -38,7 +40,7 @@ export function ContractsClient({ initialRows }: ContractsClientProps) {
     queryFn: fetchContracts,
     staleTime: LIST_STALE_MS,
     initialData: initialRows,
-    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+    initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");

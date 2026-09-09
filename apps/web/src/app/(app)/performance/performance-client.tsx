@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/page-header";
@@ -25,6 +26,7 @@ function rateClass(rate: number | null) {
 }
 
 export function PerformanceClient({ initialData }: { initialData: PerformanceData | null }) {
+  const querySeedAt = useQuerySeedAt();
   const [fiscalYear, setFiscalYear] = useState(initialData?.fiscalYear ?? getCurrentFiscalYear());
   const [department, setDepartment] = useState<string>(ALL_DEPARTMENTS);
   const fiscalYearOptions = listFiscalYears(5);
@@ -37,7 +39,7 @@ export function PerformanceClient({ initialData }: { initialData: PerformanceDat
     initialData: fiscalYear === (initialData?.fiscalYear ?? getCurrentFiscalYear()) && !dept
       ? initialData
       : undefined,
-    initialDataUpdatedAt: initialData ? Date.now() : undefined,
+    initialDataUpdatedAt: initialData ? querySeedAt : undefined,
   });
   const loading = isFetching && !data;
 

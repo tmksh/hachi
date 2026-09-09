@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
@@ -48,20 +49,21 @@ export function DocumentsClient({
   initialCategories?: DocCategory[];
   initialDocuments?: Doc[];
 }) {
+  const querySeedAt = useQuerySeedAt();
   const queryClient = useQueryClient();
   const { data: docs = [], isPending: docsPending } = useQuery({
     queryKey: QK.documents,
     queryFn: fetchDocuments,
     staleTime: LIST_STALE_MS,
     initialData: initialDocuments,
-    initialDataUpdatedAt: initialDocuments ? Date.now() : undefined,
+    initialDataUpdatedAt: initialDocuments ? querySeedAt : undefined,
   });
   const { data: categories = [], isPending: catsPending } = useQuery({
     queryKey: QK.documentCategories,
     queryFn: fetchDocumentCategories,
     staleTime: LIST_STALE_MS,
     initialData: initialCategories,
-    initialDataUpdatedAt: initialCategories ? Date.now() : undefined,
+    initialDataUpdatedAt: initialCategories ? querySeedAt : undefined,
   });
   const setCategories = (updater: DocCategory[] | ((prev: DocCategory[]) => DocCategory[])) => {
     queryClient.setQueryData<DocCategory[]>(QK.documentCategories, (prev = []) =>

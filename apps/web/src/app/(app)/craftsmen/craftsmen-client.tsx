@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,6 +38,7 @@ type CraftsmenClientProps = {
 };
 
 export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
+  const querySeedAt = useQuerySeedAt();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data = [], isPending } = useQuery({
@@ -44,7 +46,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
     queryFn: fetchCraftsmen,
     staleTime: LIST_STALE_MS,
     initialData: initialRows,
-    initialDataUpdatedAt: initialRows ? Date.now() : undefined,
+    initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
   const [search, setSearch] = useState("");
   const [specFilter, setSpecFilter] = useState("all");

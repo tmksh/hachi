@@ -11,15 +11,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { updateDeal } from "@/lib/actions/deals";
-import { fetchProfiles } from "@/lib/queries/lists";
+import { fetchProfiles, type DealListRow, type DealStageRow } from "@/lib/queries/lists";
 import { fetchDepartmentNames } from "@/lib/queries/portal";
 import type { Deal } from "@/lib/database.types";
-
-type StageRow = { key: string; label: string; sort_order: number };
-type DealRow = Deal & {
-  customer: { id: string; name: string; company_name: string | null } | null;
-  assignee: { id: string; display_name: string } | null;
-};
 
 const PRIORITIES = [
   { key: "high", label: "高" },
@@ -30,8 +24,8 @@ const PRIORITIES = [
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  deal: DealRow | null;
-  stages: StageRow[];
+  deal: DealListRow | null;
+  stages: DealStageRow[];
   onUpdated: () => void;
 }
 
