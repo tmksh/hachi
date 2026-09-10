@@ -11,8 +11,7 @@ import { toast } from "sonner";
 import { CustomerAvatar } from "@/components/shared/customer-avatar";
 import { deleteCraftsman } from "@/lib/actions/craftsmen";
 import type { Craftsman } from "@/lib/database.types";
-
-const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"電気", interior:"内装", plumbing:"配管", general:"総合" };
+import { specialtyLabel } from "@/lib/craftsmen-options";
 
 type CraftsmanDetailClientProps = {
   initialData: Craftsman | null;
@@ -45,7 +44,7 @@ export function CraftsmanDetailClient({ initialData }: CraftsmanDetailClientProp
           <CustomerAvatar seed={data.id} name={data.name} size="lg" />
           <div><h1 className="text-2xl font-semibold tracking-tight text-foreground">{data.name}</h1><p className="text-sm text-muted-foreground">{data.company_name || "-"}</p></div>
           {isSystem && <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">システム予約</Badge>}
-          {data.specialty && <Badge variant="secondary">{SPEC_LABELS[data.specialty]}</Badge>}
+          {data.specialty && <Badge variant="secondary">{specialtyLabel(data.specialty)}</Badge>}
           {data.rank && <Badge>{data.rank}ランク</Badge>}
         </div>
         <div className="flex gap-2">
@@ -98,6 +97,11 @@ export function CraftsmanDetailClient({ initialData }: CraftsmanDetailClientProp
         </CardContent>
       </Card>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card><CardHeader className="pb-3"><CardTitle className="text-sm">資格・保有免許</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-1.5">
+            {(data.qualifications ?? []).length ? (data.qualifications ?? []).map((q) => <Badge key={q} variant="secondary">{q}</Badge>) : <p className="text-sm text-muted-foreground">未登録</p>}
+          </CardContent>
+        </Card>
         <Card><CardHeader className="pb-3"><CardTitle className="text-sm">スキル</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-1.5">
             {(data.skills ?? []).length ? (data.skills ?? []).map((s) => <Badge key={s} variant="secondary">{s}</Badge>) : <p className="text-sm text-muted-foreground">未登録</p>}

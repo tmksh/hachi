@@ -97,7 +97,7 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateInvoice(id as string, {
+      const result = await updateInvoice(id as string, {
         recipient: recipient || null,
         invoice_date: invoiceDate || null,
         due_date: dueDate || null,
@@ -109,10 +109,16 @@ export function InvoiceDetailClient({ initialData }: InvoiceDetailClientProps) {
         unit_price: i.unit_price,
         amount: i.quantity * i.unit_price,
       })));
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("更新しました");
       setEditing(false);
       reload();
-    } catch { toast.error("更新に失敗"); } finally { setSaving(false); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "更新に失敗しました");
+    } finally { setSaving(false); }
   };
 
   const handleStatusChange = async (status: "draft" | "sent" | "paid" | "cancelled") => {

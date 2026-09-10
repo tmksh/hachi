@@ -138,36 +138,85 @@ export async function updateInvoice(
   id: string,
   input: Partial<Pick<Invoice, "recipient" | "invoice_date" | "due_date" | "payment_terms" | "notes">>,
   items?: Array<{ description: string; quantity: number; unit_price: number; amount: number }>,
-) {
-  const supabase = await createClient();
-  const { data: invoice, error } = await supabase
-    .from("invoices")
-    .update(input)
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    let patch: Record<string, unknown> = { ...input };
+    let invoice: { id: string; company_id: string } | null = null;
 
-  if (items) {
-    const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-    const tax = Math.floor(subtotal * 0.1);
-    await supabase.from("invoices").update({ subtotal, tax, total: subtotal + tax }).eq("id", id);
-    await supabase.from("invoice_items").delete().eq("invoice_id", id);
-    if (items.length > 0) {
-      await supabase.from("invoice_items").insert(
-        items.map((item, i) => ({
-          company_id: invoice.company_id,
-          invoice_id: id,
-          description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          amount: item.amount,
-          sort_order: i,
-        }))
-      );
+    for (let i = 0; i < 4; i++) {
+      const { data, error } = await supabase
+        .from("invoices")
+        .update(patch)
+        .eq("id", id)
+        .select("id, company_id")
+        .maybeSingle();
+      if (!error && data) {
+        invoice = data as { id: string; company_id: string };
+        break;
+      }
+      if (error && /notes/i.test(error.message) && "notes" in patch) {
+        const { notes: _notes, ...rest } = patch;
+        void _notes;
+        patch = rest;
+        continue;
+      }
+      return actionFail(error ?? "請求書が見つかりません", "請求書の更新に失敗しました");
     }
+    if (!invoice) return actionFail("請求書が見つかりません", "請求書が見つかりません");
+
+    if (items) {
+      const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+      const tax = Math.floor(subtotal * 0.1);
+      const totals = await supabase
+        .from("invoices")
+        .update({ subtotal, tax, total: subtotal + tax })
+        .eq("id", id);
+      if (totals.error) {
+        return actionFail(totals.error, "請求金額の更新に失敗しました");
+      }
+
+      const del = await supabase.from("invoice_items").delete().eq("invoice_id", id);
+      if (del.error) {
+        try {
+          const { createAdminClient } = await import("@/lib/supabase/admin");
+          const admin = createAdminClient();
+          const retry = await admin
+            .from("invoice_items")
+            .delete()
+            .eq("invoice_id", id)
+            .eq("company_id", invoice.company_id);
+          if (retry.error) {
+            return actionFail(retry.error, "明細の更新に失敗しました");
+          }
+        } catch (e) {
+          return actionFail(del.error.message || e, "明細の更新に失敗しました");
+        }
+      }
+
+      if (items.length > 0) {
+        const ins = await supabase.from("invoice_items").insert(
+          items.map((item, i) => ({
+            company_id: invoice.company_id,
+            invoice_id: id,
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            amount: item.amount,
+            sort_order: i,
+          })),
+        );
+        if (ins.error) {
+          return actionFail(ins.error, "明細の登録に失敗しました");
+        }
+      }
+    }
+
+    await invalidateMyCompanyCache();
+    return actionOk({});
+  } catch (e) {
+    return actionFail(e, "請求書の更新に失敗しました");
   }
-  await invalidateMyCompanyCache();
 }
 
 export async function deleteInvoice(id: string) {

@@ -130,26 +130,28 @@ export async function createCraftsman(input: Omit<Craftsman, "id" | "company_id"
   const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
   if (!profile) throw new Error("Profile not found");
 
-  const { data, error } = await supabase
-    .from("craftsmen")
-    .insert({ ...input, company_id: profile.company_id })
-    .select()
-    .single();
-  if (error && /invoice_channel/i.test(error.message)) {
-    const { invoice_channel: _channel, ...rest } = input;
-    void _channel;
-    const retry = await supabase
-      .from("craftsmen")
-      .insert({ ...rest, company_id: profile.company_id })
-      .select()
-      .single();
-    if (retry.error) throw retry.error;
-    await invalidateMyCompanyCache();
-    return retry.data as Craftsman;
+  let payload: Record<string, unknown> = { ...input, company_id: profile.company_id };
+  for (let i = 0; i < 4; i++) {
+    const { data, error } = await supabase.from("craftsmen").insert(payload).select().single();
+    if (!error) {
+      await invalidateMyCompanyCache();
+      return data as Craftsman;
+    }
+    if (/qualifications/i.test(error.message) && "qualifications" in payload) {
+      const { qualifications: _q, ...rest } = payload;
+      void _q;
+      payload = rest;
+      continue;
+    }
+    if (/invoice_channel/i.test(error.message) && "invoice_channel" in payload) {
+      const { invoice_channel: _channel, ...rest } = payload;
+      void _channel;
+      payload = rest;
+      continue;
+    }
+    throw error;
   }
-  if (error) throw error;
-  await invalidateMyCompanyCache();
-  return data as Craftsman;
+  throw new Error("職人の登録に失敗しました");
 }
 
 export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman, "id" | "company_id" | "created_at" | "updated_at">>) {
@@ -168,6 +170,12 @@ export async function updateCraftsman(id: string, input: Partial<Omit<Craftsman,
     .eq("id", id)
     .select()
     .single();
+  if (error && /qualifications/i.test(error.message)) {
+    const { qualifications: _q, ...rest } = payload;
+    void _q;
+    payload = rest;
+    ({ data, error } = await supabase.from("craftsmen").update(payload).eq("id", id).select().single());
+  }
   if (error && /invoice_channel/i.test(error.message)) {
     const { invoice_channel: _channel, ...rest } = payload;
     void _channel;
@@ -224,7 +232,9 @@ export async function deleteCraftsman(id: string) {
 // ── 職人マスタ CRUD ─────────────────────────
 
 export async function getCraftsmenSpecialties() {
-  return listCraftsmanMasterItems("specialties");
+  const result = await listCraftsmanMasterItems("specialties");
+  if ("error" in result) throw new Error(result.error);
+  return result.items;
 }
 
 export async function createCraftsmanSpecialty(label: string) {
@@ -239,7 +249,9 @@ export async function deleteCraftsmanSpecialty(id: string) {
 }
 
 export async function getCraftsmenQualifications() {
-  return listCraftsmanMasterItems("qualifications");
+  const result = await listCraftsmanMasterItems("qualifications");
+  if ("error" in result) throw new Error(result.error);
+  return result.items;
 }
 
 export async function createCraftsmanQualification(label: string) {

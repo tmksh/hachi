@@ -146,7 +146,9 @@ export type Craftsman = {
   kind?: 'vendor' | 'system';
   /** システム予約の識別キー（unregistered=未登録業者 / reserve=予備費）。kind=system のときのみ */
   system_key?: 'unregistered' | 'reserve' | 'management' | null;
-  specialty: 'carpenter' | 'electrical' | 'interior' | 'plumbing' | 'general' | null;
+  specialty: string | null;
+  /** 設定 › 職人マスタの資格ラベル */
+  qualifications?: string[];
   rank: 'A' | 'B' | 'C' | null;
   report_rate: number;
   active_projects: number;

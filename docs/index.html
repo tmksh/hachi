@@ -1149,7 +1149,7 @@
             <li>登録した職人は工事詳細の<b>発注書・請書</b>で発注先として選択できます。</li>
           </ol>
         </div>
-        <div class="feat-note">作業履歴は表示枠のみで、発注書とはまだつながっていません。設定の職種・資格マスタは、職人の登録画面の選択肢にはまだ出ません。口座・請求方法などの全項目は <a href="#data-map-craftsmen">入力 → 参照（職人）</a>。</div>
+        <div class="feat-note">作業履歴は表示枠のみで、発注書とはまだつながっていません。口座・請求方法などの全項目は <a href="#data-map-craftsmen">入力 → 参照（職人）</a>。</div>
       </div>
     </div>
 
@@ -1841,9 +1841,10 @@
           <tr><td class="td-name">職人 新規／編集</td><td>メール email</td><td>発注メール、業者請求 OTP、CloudSign</td></tr>
           <tr><td class="td-name">職人 新規／編集</td><td>請求書の受領方法 invoice_channel</td><td>納品・検収：paper＝社内PDF添付、email＝業者ポータルURL</td></tr>
           <tr><td class="td-name">職人 編集</td><td>銀行コード／名カナ、支店、種目、口座番号、受取人名カナ</td><td>帳票の全銀ファイル（必須）。表示用銀行名はプレビュー用</td></tr>
-          <tr><td class="td-name">職人 新規／編集</td><td>専門 specialty</td><td>一覧の絞り込み。発注先の自動選択には使わない</td></tr>
+          <tr><td class="td-name">職人 新規／編集</td><td>職種区分 specialty</td><td>一覧の絞り込み。選択肢は設定 › 職人マスタ</td></tr>
+          <tr><td class="td-name">職人 新規／編集</td><td>資格 qualifications</td><td>職人詳細。選択肢は設定 › 職人マスタ</td></tr>
           <tr><td class="td-name">職人 編集</td><td>ランク、スキル、対応エリア、契約単価、支払い予定、備考</td><td>職人詳細に出すだけ。発注金額・支払・BI には使わない</td></tr>
-          <tr><td class="td-name">設定 › 職人マスタ</td><td>職種区分／資格のラベル</td><td>ここに登録しても、職人の登録画面の選択肢にはまだ出ない</td></tr>
+          <tr><td class="td-name">設定 › 職人マスタ</td><td>職種区分／資格のラベル</td><td>職人の新規・編集の職種区分・資格の選択肢。一覧の専門フィルタ</td></tr>
         </tbody>
       </table>
     </div>

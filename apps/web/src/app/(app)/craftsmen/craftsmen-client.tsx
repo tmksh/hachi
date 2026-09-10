@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,8 +21,8 @@ import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchCraftsmen, LIST_STALE_MS } from "@/lib/queries/lists";
 import { prefetchCraftsmanDetail } from "@/lib/nav-prefetch";
 import { ensureSystemCraftsmen } from "@/lib/actions/craftsmen";
-
-const SPEC_LABELS: Record<string, string> = { carpenter:"大工", electrical:"電気", interior:"内装", plumbing:"配管", general:"総合" };
+import { useCraftsmenMasterOptions } from "@/hooks/use-craftsmen-master-options";
+import { specialtyLabel } from "@/lib/craftsmen-options";
 
 function KindBadge({ craftsman }: { craftsman: Craftsman }) {
   if (craftsman.kind === "system") {
@@ -48,6 +48,16 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
     initialData: initialRows,
     initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
+  const { specialties: masterSpecialties } = useCraftsmenMasterOptions();
+  const specOptions = useMemo(() => {
+    const labels = new Set<string>();
+    for (const s of masterSpecialties) labels.add(s.label);
+    for (const c of data) {
+      const label = specialtyLabel(c.specialty);
+      if (label) labels.add(label);
+    }
+    return [...labels];
+  }, [masterSpecialties, data]);
   const [search, setSearch] = useState("");
   const [specFilter, setSpecFilter] = useState("all");
   const [view, setView] = useState<ViewMode>("list");
@@ -59,7 +69,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
   const filtered = data.filter(c => {
     const q = search.toLowerCase();
     const matchSearch = !q || c.name.toLowerCase().includes(q) || (c.company_name ?? "").toLowerCase().includes(q);
-    const matchSpec = specFilter === "all" || c.specialty === specFilter;
+    const matchSpec = specFilter === "all" || specialtyLabel(c.specialty) === specFilter || c.specialty === specFilter;
     return matchSearch && matchSpec;
   });
 
@@ -81,8 +91,8 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">すべて</SelectItem>
-            {(["carpenter", "electrical", "interior", "plumbing", "general"] as const).map((s) => (
-              <SelectItem key={s} value={s}>{SPEC_LABELS[s]}</SelectItem>
+            {specOptions.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -122,7 +132,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
                     <div className="flex gap-1 flex-wrap justify-end">
                       <KindBadge craftsman={c} />
                       {isPaperInvoice(c) && <Badge className="text-xs bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注</Badge>}
-                      {c.specialty && <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge>}
+                      {c.specialty && <Badge variant="secondary" className="text-xs">{specialtyLabel(c.specialty)}</Badge>}
                       {c.rank && <Badge className="text-xs">{c.rank}</Badge>}
                     </div>
                   </div>
@@ -169,7 +179,7 @@ export function CraftsmenClient({ initialRows }: CraftsmenClientProps) {
                     </TableCell>
                     <TableCell><KindBadge craftsman={c} /></TableCell>
                     <TableCell className="text-muted-foreground">{c.company_name || "-"}</TableCell>
-                    <TableCell>{c.specialty ? <Badge variant="secondary" className="text-xs">{SPEC_LABELS[c.specialty] || c.specialty}</Badge> : "-"}</TableCell>
+                    <TableCell>{c.specialty ? <Badge variant="secondary" className="text-xs">{specialtyLabel(c.specialty)}</Badge> : "-"}</TableCell>
                     <TableCell>{c.rank ? <Badge className="text-xs">{c.rank}</Badge> : "-"}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.active_projects}件</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">{c.total_projects}件</TableCell>

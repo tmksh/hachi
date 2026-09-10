@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
 import { createCraftsman } from "@/lib/actions/craftsmen";
+import { CraftsmanMasterFields } from "@/components/craftsmen/craftsman-master-fields";
 
 export default function CraftsmanNewPage() {
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function CraftsmanNewPage() {
   const [email, setEmail] = useState("");
   const [invoiceChannel, setInvoiceChannel] = useState<"email" | "paper">("email");
   const [specialty, setSpecialty] = useState("");
+  const [qualifications, setQualifications] = useState<string[]>([]);
   const [rank, setRank] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -29,7 +31,24 @@ export default function CraftsmanNewPage() {
     if (!name.trim()) { toast.error("名前を入力してください"); return; }
     setSaving(true);
     try {
-      await createCraftsman({ name: name.trim(), company_name: companyName || null, phone: phone || null, email: email || null, invoice_channel: invoiceChannel, specialty: (specialty || null) as "carpenter"|"electrical"|"interior"|"plumbing"|"general"|null, rank: (rank || null) as "A"|"B"|"C"|null, report_rate: 0, active_projects: 0, total_projects: 0, notes: notes || null, skills: [], service_areas: [], contract_rate: null, payment_notes: null });
+      await createCraftsman({
+        name: name.trim(),
+        company_name: companyName || null,
+        phone: phone || null,
+        email: email || null,
+        invoice_channel: invoiceChannel,
+        specialty: specialty || null,
+        qualifications,
+        rank: (rank || null) as "A" | "B" | "C" | null,
+        report_rate: 0,
+        active_projects: 0,
+        total_projects: 0,
+        notes: notes || null,
+        skills: [],
+        service_areas: [],
+        contract_rate: null,
+        payment_notes: null,
+      });
       toast.success("登録しました"); router.push("/craftsmen");
     } catch { toast.error("登録に失敗"); } finally { setSaving(false); }
   };
@@ -54,7 +73,12 @@ export default function CraftsmanNewPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>専門</Label><Select value={specialty} onValueChange={setSpecialty}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="carpenter">大工</SelectItem><SelectItem value="electrical">電気</SelectItem><SelectItem value="interior">内装</SelectItem><SelectItem value="plumbing">配管</SelectItem><SelectItem value="general">総合</SelectItem></SelectContent></Select></div>
+            <CraftsmanMasterFields
+              specialty={specialty}
+              onSpecialtyChange={setSpecialty}
+              qualifications={qualifications}
+              onQualificationsChange={setQualifications}
+            />
             <div className="space-y-2"><Label>ランク</Label><Select value={rank} onValueChange={setRank}><SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger><SelectContent><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem><SelectItem value="C">C</SelectItem></SelectContent></Select></div>
           </div>
           <div className="space-y-2"><Label>備考</Label><Textarea rows={4} value={notes} onChange={e=>setNotes(e.target.value)} /></div>

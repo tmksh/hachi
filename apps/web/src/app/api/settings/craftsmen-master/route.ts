@@ -7,6 +7,7 @@ import {
 } from "@/lib/craftsmen-master";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function noStoreJson(body: unknown, init?: { status?: number }) {
   return NextResponse.json(body, {
@@ -22,19 +23,38 @@ function parseKind(raw: string | null | undefined): CraftsmanMasterKind | null {
   return null;
 }
 
+function failStatus(error: string): number {
+  return /ログイン|プロフィール|権限|管理者/.test(error) ? 403 : 400;
+}
+
+async function listOrFail(kind: CraftsmanMasterKind) {
+  const result = await listCraftsmanMasterItems(kind);
+  if ("error" in result) return { error: result.error };
+  return { items: result.items };
+}
+
 /** 職人マスタ（職種区分・資格）の CRUD — Server Action ハッシュ不一致 / throw 伏せを避ける */
 export async function GET(request: NextRequest) {
   const kind = parseKind(request.nextUrl.searchParams.get("kind"));
   if (!kind) {
     const [specialties, qualifications] = await Promise.all([
-      listCraftsmanMasterItems("specialties"),
-      listCraftsmanMasterItems("qualifications"),
+      listOrFail("specialties"),
+      listOrFail("qualifications"),
     ]);
-    return noStoreJson({ ok: true, specialties, qualifications });
+    if ("error" in specialties) {
+      return noStoreJson({ ok: false, error: specialties.error }, { status: failStatus(specialties.error) });
+    }
+    if ("error" in qualifications) {
+      return noStoreJson({ ok: false, error: qualifications.error }, { status: failStatus(qualifications.error) });
+    }
+    return noStoreJson({ ok: true, specialties: specialties.items, qualifications: qualifications.items });
   }
 
-  const items = await listCraftsmanMasterItems(kind);
-  return noStoreJson({ ok: true, items });
+  const result = await listOrFail(kind);
+  if ("error" in result) {
+    return noStoreJson({ ok: false, error: result.error }, { status: failStatus(result.error) });
+  }
+  return noStoreJson({ ok: true, items: result.items });
 }
 
 export async function POST(request: NextRequest) {
@@ -56,8 +76,7 @@ export async function POST(request: NextRequest) {
 
   const result = await createCraftsmanMasterItem(kind, label);
   if ("error" in result) {
-    const status = /ログイン|プロフィール|権限|管理者/.test(result.error) ? 403 : 400;
-    return noStoreJson({ ok: false, error: result.error }, { status });
+    return noStoreJson({ ok: false, error: result.error }, { status: failStatus(result.error) });
   }
 
   return noStoreJson({ ok: true, item: result.item });
@@ -75,8 +94,7 @@ export async function DELETE(request: NextRequest) {
 
   const result = await deleteCraftsmanMasterItem(kind, id);
   if ("error" in result) {
-    const status = /ログイン|プロフィール|権限|管理者/.test(result.error) ? 403 : 400;
-    return noStoreJson({ ok: false, error: result.error }, { status });
+    return noStoreJson({ ok: false, error: result.error }, { status: failStatus(result.error) });
   }
 
   return noStoreJson({ ok: true });

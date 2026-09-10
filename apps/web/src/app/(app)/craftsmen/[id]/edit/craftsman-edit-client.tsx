@@ -15,6 +15,8 @@ import { ArrowLeft, Save, X, Plus } from "lucide-react";
 import { updateCraftsman } from "@/lib/actions/craftsmen";
 import type { fetchCraftsman } from "@/lib/queries/portal";
 import { splitLeadingCode } from "@/lib/procurement";
+import { CraftsmanMasterFields } from "@/components/craftsmen/craftsman-master-fields";
+import { specialtyLabel } from "@/lib/craftsmen-options";
 
 type Craftsman = Awaited<ReturnType<typeof fetchCraftsman>>;
 
@@ -91,7 +93,8 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
   const [invoiceChannel, setInvoiceChannel] = useState<"email" | "paper">(
     initialCraftsman.invoice_channel === "paper" ? "paper" : "email",
   );
-  const [specialty, setSpecialty] = useState(initialCraftsman.specialty ?? "");
+  const [specialty, setSpecialty] = useState(specialtyLabel(initialCraftsman.specialty));
+  const [qualifications, setQualifications] = useState<string[]>(initialCraftsman.qualifications ?? []);
   const [rank, setRank] = useState(initialCraftsman.rank ?? "");
   const [notes, setNotes] = useState(initialCraftsman.notes ?? "");
   const [skills, setSkills] = useState<string[]>(initialCraftsman.skills ?? []);
@@ -120,7 +123,8 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
         phone: phone || null,
         email: email || null,
         invoice_channel: invoiceChannel,
-        specialty: (specialty || null) as "carpenter" | "electrical" | "interior" | "plumbing" | "general" | null,
+        specialty: specialty || null,
+        qualifications,
         rank: (rank || null) as "A" | "B" | "C" | null,
         notes: notes || null,
         skills,
@@ -170,19 +174,12 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
                 紙発注・自社書式の業者は、検収完了一覧から請求書PDFを添付すると「請求書受領」へ進みます。
               </p>
             </div>
-            <div className="space-y-2">
-              <Label>専門</Label>
-              <Select value={specialty} onValueChange={setSpecialty}>
-                <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="carpenter">大工</SelectItem>
-                  <SelectItem value="electrical">電気</SelectItem>
-                  <SelectItem value="interior">内装</SelectItem>
-                  <SelectItem value="plumbing">配管</SelectItem>
-                  <SelectItem value="general">総合</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <CraftsmanMasterFields
+              specialty={specialty}
+              onSpecialtyChange={setSpecialty}
+              qualifications={qualifications}
+              onQualificationsChange={setQualifications}
+            />
             <div className="space-y-2">
               <Label>ランク</Label>
               <Select value={rank} onValueChange={setRank}>

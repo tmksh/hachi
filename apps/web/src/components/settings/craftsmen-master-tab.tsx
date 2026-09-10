@@ -1,35 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
-type Item = { id: string; label: string; sort_order: number };
+import { useQueryClient } from "@tanstack/react-query";
+import { QK } from "@/lib/queries/portal";
+import { fetchCraftsmenMasterLists, type CraftsmanMasterItem } from "@/lib/queries/craftsmen-master";
 
+type Item = CraftsmanMasterItem;
 type MasterKind = "specialties" | "qualifications";
-
-async function fetchMasterLists(): Promise<{ specialties: Item[]; qualifications: Item[] }> {
-  const res = await fetch("/api/settings/craftsmen-master", { cache: "no-store" });
-  const data = (await res.json()) as {
-    ok?: boolean;
-    error?: string;
-    specialties?: Item[];
-    qualifications?: Item[];
-  };
-  if (!res.ok || !data.ok) {
-    throw new Error(data.error ?? "マスタ一覧の取得に失敗しました");
-  }
-  return {
-    specialties: data.specialties ?? [],
-    qualifications: data.qualifications ?? [],
-  };
-}
 
 async function createMasterItem(kind: MasterKind, label: string): Promise<Item> {
   const res = await fetch("/api/settings/craftsmen-master", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind, label }),
   });
@@ -43,11 +30,16 @@ async function createMasterItem(kind: MasterKind, label: string): Promise<Item> 
 async function deleteMasterItem(kind: MasterKind, id: string): Promise<void> {
   const res = await fetch(`/api/settings/craftsmen-master?kind=${kind}&id=${encodeURIComponent(id)}`, {
     method: "DELETE",
+    credentials: "same-origin",
   });
   const data = (await res.json()) as { ok?: boolean; error?: string };
   if (!res.ok || !data.ok) {
     throw new Error(data.error ?? "削除に失敗しました");
   }
+}
+
+function upsertItem(prev: Item[], item: Item): Item[] {
+  return [...prev.filter((x) => x.id !== item.id), item].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 function MasterList({
@@ -130,14 +122,24 @@ export type CraftsmenMasterInitialData = {
 };
 
 export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMasterInitialData }) {
-  const [specialties, setSpecialties]       = useState<Item[]>(initialData?.specialties ?? []);
+  const queryClient = useQueryClient();
+  const [specialties, setSpecialties] = useState<Item[]>(initialData?.specialties ?? []);
   const [qualifications, setQualifications] = useState<Item[]>(initialData?.qualifications ?? []);
+  const reloadGen = useRef(0);
 
   const reload = useCallback(async () => {
-    const { specialties: s, qualifications: q } = await fetchMasterLists();
-    setSpecialties(s);
-    setQualifications(q);
-  }, []);
+    const gen = ++reloadGen.current;
+    try {
+      const { specialties: s, qualifications: q } = await fetchCraftsmenMasterLists();
+      if (gen !== reloadGen.current) return;
+      setSpecialties(s);
+      setQualifications(q);
+      void queryClient.invalidateQueries({ queryKey: QK.craftsmenMaster });
+    } catch (e) {
+      if (gen !== reloadGen.current) return;
+      toast.error(e instanceof Error && e.message ? e.message : "マスタ一覧の取得に失敗しました");
+    }
+  }, [queryClient]);
 
   useEffect(() => {
     void reload();
@@ -146,7 +148,7 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        職種区分や資格は会社ごとにカスタマイズできます。
+        職種区分や資格は会社ごとにカスタマイズできます。職人の新規・編集画面の選択肢にそのまま出ます。
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MasterList
@@ -154,16 +156,18 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           description="協力職人の職種カテゴリ"
           items={specialties}
           onCreate={async (label) => {
+            reloadGen.current += 1;
             const item = await createMasterItem("specialties", label);
-            setSpecialties((prev) =>
-              [...prev.filter((x) => x.id !== item.id), item].sort((a, b) => a.sort_order - b.sort_order),
-            );
+            setSpecialties((prev) => upsertItem(prev, item));
             toast.success("追加しました");
+            await reload();
           }}
           onDelete={async (id) => {
+            reloadGen.current += 1;
             await deleteMasterItem("specialties", id);
             setSpecialties((prev) => prev.filter((x) => x.id !== id));
             toast.success("削除しました");
+            await reload();
           }}
           placeholder="例: 大工"
         />
@@ -172,16 +176,18 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           description="職人が保有できる資格の選択肢"
           items={qualifications}
           onCreate={async (label) => {
+            reloadGen.current += 1;
             const item = await createMasterItem("qualifications", label);
-            setQualifications((prev) =>
-              [...prev.filter((x) => x.id !== item.id), item].sort((a, b) => a.sort_order - b.sort_order),
-            );
+            setQualifications((prev) => upsertItem(prev, item));
             toast.success("追加しました");
+            await reload();
           }}
           onDelete={async (id) => {
+            reloadGen.current += 1;
             await deleteMasterItem("qualifications", id);
             setQualifications((prev) => prev.filter((x) => x.id !== id));
             toast.success("削除しました");
+            await reload();
           }}
           placeholder="例: 施工管理技士"
         />

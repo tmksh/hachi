@@ -36,6 +36,7 @@ export const QK = {
   settingsBundle: ["settings-bundle"] as const,
   invoice: (id: string) => ["invoice", id] as const,
   craftsman: (id: string) => ["craftsman", id] as const,
+  craftsmenMaster: ["craftsmen-master"] as const,
   workflowRequest: (id: string) => ["workflow-request", id] as const,
   workflowTypes: ["workflow-types"] as const,
   pdfTemplates: ["pdf-form-templates"] as const,
