@@ -369,36 +369,62 @@ export async function getCompanyOrders(): Promise<ProcurementOrder[]> {
   return (data ?? []) as ProcurementOrder[];
 }
 
+function serializeActionValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function procurementUpdateErrorMessage(message: string): string {
+  return /schema cache|column/i.test(message)
+    ? "納品・検収用の列が未作成です。マイグレーション 00076_sheet9_procurement_ledger.sql を適用してください。"
+    : message;
+}
+
 export async function updateOrderProcurement(
   orderId: string,
   patch: Record<string, unknown>,
 ): Promise<ProcurementOrder> {
   const { supabase, companyId } = await getAuthContext();
-  const { data, error } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("contractor_orders")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", orderId)
     .eq("company_id", companyId)
-    .select(ORDER_SELECT)
-    .single();
-  if (error) {
-    const { data: fallback, error: fallbackErr } = await supabase
-      .from("contractor_orders")
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq("id", orderId)
-      .eq("company_id", companyId)
-      .select(ORDER_SELECT_FALLBACK)
-      .single();
-    if (fallbackErr) {
-      throw new Error(
-        /schema cache|column/i.test(error.message)
-          ? "納品・検収用の列が未作成です。マイグレーション 00076_sheet9_procurement_ledger.sql を適用してください。"
-          : error.message,
-      );
-    }
-    return fallback as ProcurementOrder;
+    .select("id")
+    .maybeSingle();
+  if (updateError) {
+    throw new Error(procurementUpdateErrorMessage(updateError.message));
   }
-  return data as ProcurementOrder;
+  if (!updated) {
+    throw new Error("発注が見つかりません");
+  }
+
+  const { data, error } = await supabase
+    .from("contractor_orders")
+    .select(ORDER_SELECT)
+    .eq("id", orderId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!error && data) return serializeActionValue(data as ProcurementOrder);
+
+  const { data: fallback, error: fallbackErr } = await supabase
+    .from("contractor_orders")
+    .select(ORDER_SELECT_FALLBACK)
+    .eq("id", orderId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!fallbackErr && fallback) return serializeActionValue(fallback as ProcurementOrder);
+
+  const { data: plain } = await supabase
+    .from("contractor_orders")
+    .select("*")
+    .eq("id", orderId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (plain) return serializeActionValue(plain as ProcurementOrder);
+
+  throw new Error(
+    procurementUpdateErrorMessage(fallbackErr?.message || error?.message || "発注の更新後の取得に失敗しました"),
+  );
 }
 
 export async function uploadDeliveryAttachments(
@@ -723,22 +749,27 @@ export async function resendInvoiceUrl(orderId: string): Promise<ActionResult<{
   }
 }
 
-export async function confirmVendorInvoice(orderId: string): Promise<ProcurementOrder> {
-  const { supabase, companyId } = await getAuthContext();
-  const { data: current } = await supabase
-    .from("contractor_orders")
-    .select("ledger_status")
-    .eq("id", orderId)
-    .eq("company_id", companyId)
-    .maybeSingle();
-  if (!current) throw new Error("発注が見つかりません");
-  if (current.ledger_status !== "invoice_received") {
-    throw new Error("請求書受領の行だけ確認できます");
+export async function confirmVendorInvoice(orderId: string): Promise<ActionResult<{ order: ProcurementOrder }>> {
+  try {
+    const { supabase, companyId } = await getAuthContext();
+    const { data: current } = await supabase
+      .from("contractor_orders")
+      .select("ledger_status")
+      .eq("id", orderId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!current) return actionFail("発注が見つかりません", "発注が見つかりません");
+    if (current.ledger_status !== "invoice_received") {
+      return actionFail("請求書受領の行だけ確認できます", "請求書受領の行だけ確認できます");
+    }
+    const order = await updateOrderProcurement(orderId, {
+      director_confirmed_at: new Date().toISOString(),
+      ledger_status: "confirmed",
+    });
+    return actionOk({ order });
+  } catch (e) {
+    return actionFail(e, "請求書の確認に失敗しました");
   }
-  return updateOrderProcurement(orderId, {
-    director_confirmed_at: new Date().toISOString(),
-    ledger_status: "confirmed",
-  });
 }
 
 async function assertCanApproveVendorInvoice() {
@@ -755,25 +786,31 @@ async function assertCanApproveVendorInvoice() {
   }
 }
 
-export async function approveVendorInvoice(orderId: string): Promise<ProcurementOrder> {
-  await assertCanApproveVendorInvoice();
-  const { supabase, companyId } = await getAuthContext();
-  const { data: current } = await supabase
-    .from("contractor_orders")
-    .select("ledger_status, director_confirmed_at")
-    .eq("id", orderId)
-    .eq("company_id", companyId)
-    .maybeSingle();
-  if (!current) throw new Error("発注が見つかりません");
-  if (current.ledger_status !== "confirmed" && current.ledger_status !== "invoice_received") {
-    throw new Error("請求書受領または確認済みの行だけ支払い確定できます");
+export async function approveVendorInvoice(orderId: string): Promise<ActionResult<{ order: ProcurementOrder }>> {
+  try {
+    await assertCanApproveVendorInvoice();
+    const { supabase, companyId } = await getAuthContext();
+    const { data: current } = await supabase
+      .from("contractor_orders")
+      .select("ledger_status, director_confirmed_at")
+      .eq("id", orderId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!current) return actionFail("発注が見つかりません", "発注が見つかりません");
+    if (current.ledger_status !== "confirmed" || !current.director_confirmed_at) {
+      return actionFail(
+        "ディレクター確認が先に必要です。先に「確認済みにする」を実行してください。",
+        "ディレクター確認が先に必要です。先に「確認済みにする」を実行してください。",
+      );
+    }
+    const order = await updateOrderProcurement(orderId, {
+      accounting_approved_at: new Date().toISOString(),
+      ledger_status: "payment_approved",
+    });
+    return actionOk({ order });
+  } catch (e) {
+    return actionFail(e, "支払い確定に失敗しました");
   }
-  const now = new Date().toISOString();
-  return updateOrderProcurement(orderId, {
-    director_confirmed_at: current.director_confirmed_at ?? now,
-    accounting_approved_at: now,
-    ledger_status: "payment_approved",
-  });
 }
 
 function constructionAssigneeId(order: ProcurementOrder): string | null {

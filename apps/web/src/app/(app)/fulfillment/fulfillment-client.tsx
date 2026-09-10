@@ -223,7 +223,16 @@ export function FulfillmentClient({ initialOrders }: Props) {
 
   const replace = (updated: ProcurementOrder, extra?: ProcurementOrder) => {
     setOrders((prev) => {
-      const next = prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
+      const next = prev.map((o) => (
+        o.id === updated.id
+          ? {
+            ...o,
+            ...updated,
+            craftsman: updated.craftsman ?? o.craftsman,
+            construction: updated.construction ?? o.construction,
+          }
+          : o
+      ));
       if (extra && !next.some((o) => o.id === extra.id)) next.unshift(extra);
       return next;
     });
@@ -257,7 +266,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
       <div className="text-xs text-muted-foreground">工事管理 &gt; 発注・納品・検収</div>
       <PageHeader
         title="納品・検収管理"
-        description="業者から納品連絡を受けたら自社で納品検収します。紙・PDFは添付して金額を突合し、総務が支払い確定します。"
+        description="業者から納品連絡を受けたら自社で納品検収します。紙・PDFは添付して金額を突合し、ディレクター確認のあと経理が支払い確定します。"
       >
         <Button asChild variant="outline" size="sm">
           <Link href="/ledger">帳票データ作成 ↗</Link>
@@ -504,6 +513,7 @@ function RowActions({
   onDetail: () => void;
   onReplace: (o: ProcurementOrder) => void;
 }) {
+  const [busy, setBusy] = useState(false);
   if (status === "ordered") {
     if (!order.concluded_at) {
       return (
@@ -576,59 +586,54 @@ function RowActions({
   }
   if (status === "invoice_received") {
     return (
-      <div className="inline-flex items-center gap-1">
-        {order.vendor_invoice_pdf_path && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => void openProcurementFile(order.vendor_invoice_pdf_path!)}
-          >
-            業者PDF
-          </Button>
-        )}
-        {order.vendor_invoice_amount != null && Number(order.vendor_invoice_amount) !== Number(order.amount) && (
-          <Badge className="bg-amber-100 text-amber-900">金額差</Badge>
-        )}
-        {canAccount ? (
-          <>
+      <div className="inline-flex flex-col items-end gap-1">
+        <div className="inline-flex items-center gap-1">
+          {order.vendor_invoice_pdf_path && (
             <Button
               size="sm"
-              className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800"
-              onClick={async () => {
-                try {
-                  onReplace(await approveVendorInvoice(order.id));
-                  toast.success("支払い確定しました。帳票データの対象になります");
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "支払い確定に失敗しました");
-                }
-              }}
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => void openProcurementFile(order.vendor_invoice_pdf_path!)}
             >
-              支払い確定
+              業者PDF
             </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onReturn}>
-              差し戻し
-            </Button>
-          </>
-        ) : (
+          )}
+          {order.vendor_invoice_amount != null && Number(order.vendor_invoice_amount) !== Number(order.amount) && (
+            <Badge className="bg-amber-100 text-amber-900">金額差</Badge>
+          )}
           <Button
             size="sm"
-            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
+            className="h-7 text-xs bg-violet-600 hover:bg-violet-700"
+            disabled={busy}
             onClick={async () => {
+              setBusy(true);
               try {
-                onReplace(await confirmVendorInvoice(order.id));
-                toast.success("請求書を確認済みにしました");
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "更新に失敗しました");
+                const res = await confirmVendorInvoice(order.id);
+                if (!res.ok) {
+                  toast.error(res.error);
+                  return;
+                }
+                onReplace(res.order);
+                toast.success("確認済みにしました。まだ帳票対象ではありません");
+              } finally {
+                setBusy(false);
               }
             }}
           >
-            請求書を確認
+            確認済みにする
           </Button>
-        )}
-        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onDetail}>
-          内容を見る
-        </Button>
+          {canAccount && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onReturn}>
+              差し戻し
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onDetail}>
+            内容を見る
+          </Button>
+        </div>
+        <p className="max-w-[16rem] text-right text-[10px] leading-snug text-muted-foreground">
+          まだ帳票対象ではない。経理承認より先に確認が必要
+        </p>
       </div>
     );
   }
@@ -640,12 +645,19 @@ function RowActions({
             <Button
               size="sm"
               className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800"
+              disabled={busy}
               onClick={async () => {
+                setBusy(true);
                 try {
-                  onReplace(await approveVendorInvoice(order.id));
+                  const res = await approveVendorInvoice(order.id);
+                  if (!res.ok) {
+                    toast.error(res.error);
+                    return;
+                  }
+                  onReplace(res.order);
                   toast.success("支払い確定しました。帳票データの対象になります");
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "支払い確定に失敗しました");
+                } finally {
+                  setBusy(false);
                 }
               }}
             >
@@ -656,7 +668,7 @@ function RowActions({
             </Button>
           </>
         ) : (
-          <span className="text-[11px] text-muted-foreground">総務の支払い確定待ち</span>
+          <span className="text-[11px] text-muted-foreground">経理の支払い確定待ち</span>
         )}
         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onDetail}>
           内容を見る

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   Dialog,
@@ -46,7 +46,8 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  const renderW = 560;
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+  const [renderW, setRenderW] = useState(520);
 
   const valueFor = (f: PdfFormField): string => values[f.id] ?? resolveFieldValue(f, ctx);
 
@@ -76,6 +77,17 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
     })();
     return () => { cancelled = true; };
   }, [template, ctx]);
+
+  useEffect(() => {
+    const el = previewWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setRenderW(Math.max(240, Math.floor(w)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [doc, loading]);
 
   const autoFields = useMemo(
     () => template.fields.filter((f) => f.binding !== "manual" && f.type !== "fixed"),
@@ -193,8 +205,8 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
   const aspect = template.pageSizes[0] ? template.pageSizes[0].height / template.pageSizes[0].width : 1.414;
 
   return (
-    <div className={cn("rounded-xl border border-border bg-card overflow-hidden flex flex-col", className)}>
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3 bg-muted/20">
+    <div className={cn("rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[min(72vh,620px)]", className)}>
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3 bg-muted/20 shrink-0">
         <p className="text-sm font-semibold truncate">{template.name}</p>
         {onClose && (
           <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0" onClick={onClose}>
@@ -204,9 +216,9 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
         )}
       </div>
 
-      <div className="flex flex-col lg:flex-row min-h-[min(72vh,620px)] max-h-[min(80vh,720px)]">
+      <div className="flex flex-1 min-h-0 flex-col md:flex-row">
         {/* 左：入力項目 */}
-        <div className="w-full lg:w-80 shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r bg-background p-4 space-y-4">
+        <div className="w-full md:w-80 shrink-0 overflow-y-auto max-h-[38vh] md:max-h-none border-b md:border-b-0 md:border-r bg-background p-4 space-y-4">
           <div className="text-xs font-semibold text-muted-foreground">入力項目</div>
 
           {autoFields.length === 0 && manualFields.length === 0 && (
@@ -252,14 +264,17 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
           </Button>
         </div>
 
-        {/* 右：プレビュー */}
-        <div className="flex-1 overflow-auto bg-muted/30 p-5 min-h-[320px]">
+        {/* 右：プレビュー（幅に合わせて縮小し、右端が切れないようにする） */}
+        <div
+          ref={previewWrapRef}
+          className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-muted/30 p-4 sm:p-5 min-h-[320px]"
+        >
           {loading || !doc ? (
             <div className="flex h-40 items-center justify-center text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           ) : (
-            <div className="mx-auto space-y-4" style={{ maxWidth: renderW }}>
+            <div className="mx-auto space-y-4" style={{ width: renderW }}>
               {Array.from({ length: template.pageCount }).map((_, p) => {
                 const h = renderW * (template.pageSizes[p]
                   ? template.pageSizes[p].height / template.pageSizes[p].width
@@ -267,7 +282,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
                 return (
                   <div
                     key={p}
-                    className="relative mx-auto bg-white shadow"
+                    className="relative mx-auto bg-white shadow overflow-hidden"
                     style={{ width: renderW, height: h }}
                   >
                     <PdfPageCanvas
@@ -317,7 +332,10 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: DialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[960px] max-w-[95vw] max-h-[90vh] overflow-hidden p-0 flex flex-col gap-0">
+      <DialogContent
+        showCloseButton={false}
+        className="flex flex-col gap-0 overflow-hidden p-0 w-[min(96vw,1100px)] max-w-[min(96vw,1100px)] sm:max-w-[min(96vw,1100px)] max-h-[90vh]"
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>{template.name}</DialogTitle>
         </DialogHeader>
@@ -325,7 +343,7 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: DialogProps
           template={template}
           ctx={ctx}
           onClose={() => onOpenChange(false)}
-          className="border-0 rounded-none min-h-0 max-h-[85vh]"
+          className="border-0 rounded-none min-h-0 flex-1 h-full max-h-[85vh]"
         />
       </DialogContent>
     </Dialog>

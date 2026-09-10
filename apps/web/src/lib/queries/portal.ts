@@ -155,12 +155,13 @@ export async function fetchAnnouncements() {
 
 export async function fetchAnnouncement(id: string) {
   const { supabase, user, profile } = await authContext();
-  const [announcementRes, commentsRes, readsRes] = await Promise.all([
+  const selectWithAuthor = "*, author:profiles!announcements_author_id_fkey(id, display_name)";
+  const [announcementRes0, commentsRes, readsRes] = await Promise.all([
     supabase
       .from("announcements")
-      .select("*, author:profiles!announcements_author_id_fkey(id, display_name)")
+      .select(selectWithAuthor)
       .eq("id", id)
-      .single(),
+      .maybeSingle(),
     supabase
       .from("announcement_comments")
       .select("*, user:profiles!announcement_comments_user_id_fkey(id, display_name)")
@@ -172,7 +173,17 @@ export async function fetchAnnouncement(id: string) {
       .eq("announcement_id", id)
       .order("read_at", { ascending: false }),
   ]);
+  let announcementRes = announcementRes0;
+  if (announcementRes.error || !announcementRes.data) {
+    const fallback = await supabase
+      .from("announcements")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (!fallback.error && fallback.data) announcementRes = fallback;
+  }
   if (announcementRes.error) throw new Error(announcementRes.error.message);
+  if (!announcementRes.data) throw new Error("お知らせが見つかりません");
   if (user && announcementRes.data && !canUserViewAnnouncement(announcementRes.data, user.id, profile?.role ?? null)) {
     throw new Error("このお知らせを閲覧する権限がありません");
   }

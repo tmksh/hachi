@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { selectAnnouncementsForNotifications } from "@/lib/announcement-select";
 import { canUserViewAnnouncement } from "@/lib/announcement-visibility";
+import { announcementActionHref, extractDetailHref } from "@/lib/notification-href";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -92,7 +93,7 @@ export async function fetchNotifications(): Promise<Notification[]> {
       type: "announcement" as const,
       title: a.title,
       body: a.body ?? undefined,
-      href: `/circulation/${a.id}`,
+      href: announcementActionHref(a),
       created_at: a.published_at,
       is_urgent: a.is_urgent ?? undefined,
     }));
@@ -179,8 +180,7 @@ export async function fetchNotifications(): Promise<Notification[]> {
     });
 
   const salesFlowNotifs: Notification[] = (urgentSalesTodos ?? []).map((t) => {
-    const hrefMatch = t.description?.match(/詳細:\s*(\/\S+)/);
-    const href = hrefMatch?.[1]
+    const href = extractDetailHref(t.description)
       ?? (t.customer_id ? `/crm/${t.customer_id}` : "/dashboard");
     return {
       id: `sf_${t.id}`,

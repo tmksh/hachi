@@ -58,6 +58,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { getCustomerAvatarColor } from "@/lib/customer-avatar-color";
 import { computeBrandFromHex } from "@/lib/brand-color";
 import { cn } from "@/lib/utils";
+import { announcementActionHref } from "@/lib/notification-href";
 import { BombAlert } from "@/components/layout/bomb-alert";
 
 import { ResponsiveTrendChart } from "@/components/dashboard/responsive-trend-chart";
@@ -431,7 +432,7 @@ export function DashboardClient({
             )}
           >
             {(ann) => (
-              <Link key={ann.id} href={`/circulation/${ann.id}`}
+              <Link key={ann.id} href={announcementActionHref(ann)}
                 className="group flex gap-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-[#D8EDE4]/50 -mx-1 px-1 rounded-lg transition-colors shrink-0">
                 <div className={`w-0.5 rounded-full shrink-0 self-stretch ${ann.is_urgent ? "bg-rose-400" : "bg-slate-200"}`} />
                 <div className="flex-1 min-w-0">

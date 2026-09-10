@@ -31,6 +31,7 @@ import {
 import { fetchAnnouncement } from "@/lib/queries/portal";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { extractDetailHref } from "@/lib/notification-href";
 
 type Detail = Awaited<ReturnType<typeof fetchAnnouncement>>;
 type AnnouncementReadRow = { user_id: string; read_at: string; display_name: string };
@@ -45,6 +46,23 @@ const ROLE_ORDER_LIST: Role[] = [
 type CirculationDetailClientProps = {
   initialData: Detail | null;
 };
+
+function AnnouncementBody({ body }: { body: string }) {
+  const href = extractDetailHref(body);
+  if (!href) {
+    return <div className="prose prose-sm max-w-none whitespace-pre-wrap">{body}</div>;
+  }
+  const idx = body.indexOf(href);
+  const before = idx >= 0 ? body.slice(0, idx) : body;
+  const after = idx >= 0 ? body.slice(idx + href.length) : "";
+  return (
+    <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+      {before}
+      <Link href={href} className="text-primary underline underline-offset-2 break-all">{href}</Link>
+      {after}
+    </div>
+  );
+}
 
 function CirculationDetailContent({ initialData }: CirculationDetailClientProps) {
   const { id } = useParams();
@@ -207,7 +225,7 @@ function CirculationDetailContent({ initialData }: CirculationDetailClientProps)
 
       <Card>
         <CardContent className="p-5">
-          <div className="prose prose-sm max-w-none whitespace-pre-wrap">{data.body}</div>
+          <AnnouncementBody body={data.body ?? ""} />
         </CardContent>
       </Card>
 

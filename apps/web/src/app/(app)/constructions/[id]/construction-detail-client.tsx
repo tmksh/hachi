@@ -622,6 +622,7 @@ function ConstructionDetailPageContent({
               assigneeName: (data.assignee as { display_name?: string } | null)?.display_name ?? null,
             }}
             onRefresh={reload}
+            focusOrderId={searchParams.get("changeOrderId")}
           />
         </TabsContent>
 

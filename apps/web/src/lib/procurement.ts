@@ -58,13 +58,13 @@ export const LEDGER_STATUS_META: Record<
     label: "請求書受領",
     cls: "bg-sky-100 text-sky-800",
     bar: "bg-sky-50 text-sky-800 border-sky-200",
-    nextActor: "ディレクター確認／総務が支払い確定",
+    nextActor: "ディレクターが確認済みにする（まだ帳票対象ではない）",
   },
   confirmed: {
     label: "確認済み",
     cls: "bg-violet-100 text-violet-800",
     bar: "bg-violet-50 text-violet-800 border-violet-200",
-    nextActor: "総務が支払い確定",
+    nextActor: "経理が支払い確定すると帳票対象になる",
   },
   payment_approved: {
     label: "支払い確定",

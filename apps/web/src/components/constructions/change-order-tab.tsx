@@ -102,9 +102,10 @@ interface Props {
   estimateList?: EstimateListItem[];
   constructionInfo?: ConstructionInfo;
   onRefresh: () => void;
+  focusOrderId?: string | null;
 }
 
-export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, estimateList = [], constructionInfo, onRefresh }: Props) {
+export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, estimateList = [], constructionInfo, onRefresh, focusOrderId }: Props) {
   const [orders, setOrders] = useState(initialOrders);
   const [dialog, setDialog] = useState(false);
   const [preview, setPreview] = useState<ChangeOrderRow | null>(null);
@@ -121,10 +122,20 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
 
   useEffect(() => {
+    setOrders(initialOrders);
+  }, [initialOrders]);
+
+  useEffect(() => {
     fetchProfiles()
       .then(p => setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name }))))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!focusOrderId) return;
+    const el = document.getElementById(`change-order-${focusOrderId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusOrderId, orders]);
 
   // フォーム状態
   const [title, setTitle] = useState("");
@@ -342,7 +353,13 @@ export function ChangeOrderTab({ constructionId, initialOrders, baseAmount, esti
             const diffCount = hasEstMeta && meta!.diff_count != null ? meta!.diff_count : null;
 
             return (
-              <div key={co.id} className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm">
+              <div
+                key={co.id}
+                id={`change-order-${co.id}`}
+                className={`flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm ${
+                  focusOrderId === co.id ? "ring-2 ring-amber-400 border-amber-300" : ""
+                }`}
+              >
                 {/* タイトル + サブ情報 */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

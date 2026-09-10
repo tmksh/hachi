@@ -16,6 +16,7 @@ import { ROLE_LABELS, type Role } from "@/lib/constants";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchAnnouncements, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 import { prefetchAnnouncementDetail } from "@/lib/nav-prefetch";
+import { announcementActionHref } from "@/lib/notification-href";
 
 type Ann = Awaited<ReturnType<typeof fetchAnnouncements>>[number];
 
@@ -158,12 +159,17 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(a => (
+          {filtered.map(a => {
+            const href = announcementActionHref(a);
+            return (
             <Link
               key={a.id}
-              href={`/circulation/${a.id}`}
+              href={href}
               className="block"
-              onMouseEnter={() => prefetchAnnouncementDetail(queryClient, a.id)}
+              onMouseEnter={() => {
+                if (!href.startsWith("/circulation/")) return;
+                prefetchAnnouncementDetail(queryClient, a.id);
+              }}
             >
               <Card className="hover:shadow-md transition-shadow cursor-pointer">
                 <CardContent className="px-6 py-4">
@@ -196,7 +202,8 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
                 </CardContent>
               </Card>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -156,7 +156,7 @@ export async function submitChangeOrderApproval(input: {
     await notifySalesFlowUser(supabase, profile.company_id, input.approverId, {
       title: `追加変更工事の承認依頼: ${co.title}`,
       description: `${profile.display_name ?? "担当者"}から承認申請が届いています。差額 ${co.diff_amount >= 0 ? "+" : ""}¥${Number(co.diff_amount).toLocaleString()}\n申請コメント: ${input.comment}`,
-      href: `/constructions/${co.construction_id}?tab=change`,
+      href: `/constructions/${co.construction_id}?tab=change&changeOrderId=${co.id}`,
       urgent: true,
     }, user.id);
   } catch (e) {
@@ -191,7 +191,7 @@ export async function rejectChangeOrder(id: string, reason?: string) {
       await notifySalesFlowUser(supabase, co.company_id, co.created_by, {
         title: `追加変更工事が差戻されました: ${co.title}`,
         description: reason ? `差戻し理由: ${reason}` : "内容を修正して再申請してください",
-        href: `/constructions/${co.construction_id}?tab=change`,
+        href: `/constructions/${co.construction_id}?tab=change&changeOrderId=${co.id}`,
         urgent: true,
       }, user.id);
     } catch (e) {
@@ -252,7 +252,7 @@ export async function approveChangeOrder(id: string) {
       await notifySalesFlowUser(supabase, co.company_id, co.created_by, {
         title: `追加変更工事が承認されました: ${co.title}`,
         description: `契約金額を ¥${Number(co.after_amount).toLocaleString()} に更新しました`,
-        href: `/constructions/${co.construction_id}?tab=change`,
+        href: `/constructions/${co.construction_id}?tab=change&changeOrderId=${co.id}`,
       }, user.id);
     } catch (e) {
       console.error("[approveChangeOrder] notify failed", e);
