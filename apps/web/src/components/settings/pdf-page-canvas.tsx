@@ -36,10 +36,22 @@ type Props = {
   width: number;
   onRendered?: (size: { width: number; height: number }) => void;
   className?: string;
+  /**
+   * PDF 注釈（AcroForm の見た目など）を描画するか。
+   * 差し込みプレビューでは HTML オーバーレイと二重になるため false にする。
+   */
+  renderAnnotations?: boolean;
 };
 
 /** PDF の1ページを canvas に描画する */
-export function PdfPageCanvas({ doc, pageNumber, width, onRendered, className }: Props) {
+export function PdfPageCanvas({
+  doc,
+  pageNumber,
+  width,
+  onRendered,
+  className,
+  renderAnnotations = true,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +64,7 @@ export function PdfPageCanvas({ doc, pageNumber, width, onRendered, className }:
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
         const baseViewport = page.getViewport({ scale: 1 });
-        const scale = width / baseViewport.width;
+        const scale = width / Math.max(baseViewport.width, 1);
         const viewport = page.getViewport({ scale });
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -61,10 +73,17 @@ export function PdfPageCanvas({ doc, pageNumber, width, onRendered, className }:
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.floor(viewport.width * dpr);
         canvas.height = Math.floor(viewport.height * dpr);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        // 親要素のボックスにフィットさせ、inset-0 との寸法衝突で PDF がずれるのを防ぐ
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        canvas.style.display = "block";
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        renderTask = page.render({ canvas, canvasContext: ctx, viewport } as Parameters<typeof page.render>[0]);
+        renderTask = page.render({
+          canvas,
+          canvasContext: ctx,
+          viewport,
+          annotationMode: renderAnnotations ? 1 : 0,
+        } as Parameters<typeof page.render>[0]);
         await (renderTask as unknown as { promise: Promise<void> }).promise;
         if (!cancelled) {
           onRendered?.({ width: viewport.width, height: viewport.height });
@@ -80,7 +99,7 @@ export function PdfPageCanvas({ doc, pageNumber, width, onRendered, className }:
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [doc, pageNumber, width, onRendered]);
+  }, [doc, pageNumber, width, onRendered, renderAnnotations]);
 
   if (error) {
     return <div className="text-xs text-destructive p-4">{error}</div>;

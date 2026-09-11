@@ -59,17 +59,17 @@ async function nextSortOrder(
 ): Promise<number> {
   const viaAdmin = canUseAdminClient() ? await listViaAdmin(table, company_id) : null;
   if (viaAdmin && viaAdmin.length > 0) {
-    return Math.max(...viaAdmin.map((row) => row.sort_order)) + 1;
+    return Math.min(...viaAdmin.map((row) => row.sort_order)) - 1;
   }
 
-  const { data: last } = await supabase
+  const { data: first } = await supabase
     .from(table)
     .select("sort_order")
     .eq("company_id", company_id)
-    .order("sort_order", { ascending: false })
+    .order("sort_order", { ascending: true })
     .limit(1)
     .maybeSingle();
-  return (last?.sort_order ?? -1) + 1;
+  return (first?.sort_order ?? 0) - 1;
 }
 
 async function adminClientInsert(

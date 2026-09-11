@@ -58,6 +58,14 @@ function toManYen(v: number) {
   return Math.round(v / 10000);
 }
 
+/** 進行中商談の金額。0円・未設定は「金額なし」とみなし、顧客の予算上限へフォールバックする */
+function prospectBaseYen(dealSumYen: number | undefined, budgetMax: number | null | undefined): number {
+  const deal = Number(dealSumYen ?? 0);
+  if (Number.isFinite(deal) && deal > 0) return deal;
+  const budget = Number(budgetMax ?? 0);
+  return Number.isFinite(budget) && budget > 0 ? budget : 0;
+}
+
 const DEFAULT_LOCATION_NAMES = ["本社", "東京支店", "大阪支店", "名古屋支店"] as const;
 
 /** 拠点マスタ一覧。未登録ならデフォルト4拠点をseed（No.80） */
@@ -1342,7 +1350,9 @@ async function loadBiProspectSummary(): Promise<BiProspectSummary> {
 
   const dealSumByCustomer = new Map<string, number>();
   for (const d of deals ?? []) {
-    dealSumByCustomer.set(d.customer_id, (dealSumByCustomer.get(d.customer_id) ?? 0) + Number(d.value ?? 0));
+    const yen = Number(d.value ?? 0);
+    if (!Number.isFinite(yen) || yen <= 0) continue;
+    dealSumByCustomer.set(d.customer_id, (dealSumByCustomer.get(d.customer_id) ?? 0) + yen);
   }
 
   const byGrade = new Map<"A" | "B" | "C", { count: number; base: number }>();
@@ -1351,7 +1361,7 @@ async function loadBiProspectSummary(): Promise<BiProspectSummary> {
   let specialWeighted = 0;
 
   for (const c of customers) {
-    const baseYen = dealSumByCustomer.get(c.id) ?? Number(c.budget_max ?? 0);
+    const baseYen = prospectBaseYen(dealSumByCustomer.get(c.id), c.budget_max);
     if (c.is_special_demand) {
       // 案件独自%があれば優先。未設定時はBI機種設定の会社デフォルト契約率を使用
       const raw = c.special_probability;

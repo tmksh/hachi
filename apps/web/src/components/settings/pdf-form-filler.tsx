@@ -20,6 +20,9 @@ import { getPdfFormTemplateUrl } from "@/lib/actions/pdf-form-templates";
 import {
   resolveFieldValue,
   BINDING_LABELS,
+  fieldOverlayBox,
+  overlayFontSizePx,
+  overlayJustify,
   type FillContext,
   type PdfFormField,
   type PdfFormTemplate,
@@ -46,14 +49,16 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  const previewWrapRef = useRef<HTMLDivElement>(null);
-  const [renderW, setRenderW] = useState(520);
+  const previewColRef = useRef<HTMLDivElement>(null);
+  const [renderW, setRenderW] = useState(0);
+  const [pageViewports, setPageViewports] = useState<{ width: number; height: number }[]>([]);
 
   const valueFor = (f: PdfFormField): string => values[f.id] ?? resolveFieldValue(f, ctx);
 
   useEffect(() => {
     setLoading(true);
     setDoc(null);
+    setPageViewports([]);
     let cancelled = false;
     (async () => {
       try {
@@ -61,12 +66,15 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
         if (!url) throw new Error("PDFを取得できませんでした");
         const d = await loadPdfDocument(url);
         if (cancelled) return;
+        const sizes: { width: number; height: number }[] = [];
+        for (let i = 1; i <= d.numPages; i++) {
+          const page = await d.getPage(i);
+          const vp = page.getViewport({ scale: 1 });
+          sizes.push({ width: vp.width, height: vp.height });
+        }
+        if (cancelled) return;
+        setPageViewports(sizes);
         setDoc(d);
-        const init: Record<string, string> = {};
-        template.fields.forEach((f) => {
-          init[f.id] = resolveFieldValue(f, ctx);
-        });
-        setValues(init);
       } catch (e: unknown) {
         if (!cancelled) {
           toast.error(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -76,16 +84,28 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
       }
     })();
     return () => { cancelled = true; };
-  }, [template, ctx]);
+  }, [template.storagePath]);
 
   useEffect(() => {
-    const el = previewWrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setRenderW(Math.max(240, Math.floor(w)));
+    const init: Record<string, string> = {};
+    template.fields.forEach((f) => {
+      init[f.id] = resolveFieldValue(f, ctx);
     });
+    setValues(init);
+    // テンプレートを開いた時点の差し込み値で初期化する。ctx の参照変化で PDF を再読込しない。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template.id]);
+
+  useEffect(() => {
+    const el = previewColRef.current;
+    if (!el) return;
+    const apply = () => {
+      const w = el.clientWidth;
+      if (w) setRenderW(Math.max(1, Math.floor(w)));
+    };
+    const ro = new ResizeObserver(apply);
     ro.observe(el);
+    apply();
     return () => ro.disconnect();
   }, [doc, loading]);
 
@@ -134,44 +154,34 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
     setPrinting(true);
     try {
       const pagesHtml: string[] = [];
-      for (let p = 0; p < template.pageCount; p++) {
-        const size = template.pageSizes[p];
+      for (let p = 0; p < doc.numPages; p++) {
         const page = await doc.getPage(p + 1);
-        const scale = 2;
-        const vp = page.getViewport({ scale });
+        const baseVp = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
         canvas.width = Math.floor(vp.width);
         canvas.height = Math.floor(vp.height);
         const c = canvas.getContext("2d");
         if (!c) continue;
         await (
-          page.render({ canvas, canvasContext: c, viewport: vp } as Parameters<typeof page.render>[0]) as unknown as {
+          page.render({
+            canvas,
+            canvasContext: c,
+            viewport: vp,
+            annotationMode: 0,
+          } as Parameters<typeof page.render>[0]) as unknown as {
             promise: Promise<void>;
           }
         ).promise;
         const img = canvas.toDataURL("image/jpeg", 0.92);
 
-        const overlays = template.fields
-          .filter((f) => f.page === p)
-          .map((f) => {
-            const v = valueFor(f);
-            if (!v && f.type !== "checkbox") return "";
-            const left = (f.xPct * 100).toFixed(3);
-            const top = (f.yPct * 100).toFixed(3);
-            const width = (f.wPct * 100).toFixed(3);
-            const height = (f.hPct * 100).toFixed(3);
-            const justify = f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start";
-            const content =
-              f.type === "checkbox"
-                ? v ? "✓" : ""
-                : escapeHtml(v).replace(/\n/g, "<br/>");
-            return `<div style="position:absolute;left:${left}%;top:${top}%;width:${width}%;height:${height}%;display:flex;align-items:center;justify-content:${justify};color:${f.color};font-size:${f.fontSize}px;line-height:1.2;white-space:pre-wrap;overflow:hidden;">${content}</div>`;
-          })
+        const overlays = fieldsPaintOrder(template.fields, p)
+          .map((f) => overlayHtml(f, valueFor(f), baseVp.width, baseVp.width, baseVp.height))
           .join("");
 
         pagesHtml.push(
-          `<div class="page" style="width:${size.width}px;height:${size.height}px;">
-             <img src="${img}" style="position:absolute;inset:0;width:100%;height:100%;" />
+          `<div class="page" style="width:${baseVp.width}px;height:${baseVp.height}px;">
+             <img src="${img}" style="position:absolute;inset:0;width:100%;height:100%;display:block;" />
              ${overlays}
            </div>`,
         );
@@ -201,8 +211,6 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
       setPrinting(false);
     }
   };
-
-  const aspect = template.pageSizes[0] ? template.pageSizes[0].height / template.pageSizes[0].width : 1.414;
 
   return (
     <div className={cn("rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[min(72vh,620px)]", className)}>
@@ -264,57 +272,44 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
           </Button>
         </div>
 
-        {/* 右：プレビュー（幅に合わせて縮小し、右端が切れないようにする） */}
-        <div
-          ref={previewWrapRef}
-          className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-muted/30 p-4 sm:p-5 min-h-[320px]"
-        >
+        {/* 右：プレビュー（コンテナ幅いっぱいに収め、欄内でクリップする） */}
+        <div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-muted/30 p-4 sm:p-5 min-h-[320px]">
           {loading || !doc ? (
             <div className="flex h-40 items-center justify-center text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           ) : (
-            <div className="mx-auto space-y-4" style={{ width: renderW }}>
-              {Array.from({ length: template.pageCount }).map((_, p) => {
-                const h = renderW * (template.pageSizes[p]
-                  ? template.pageSizes[p].height / template.pageSizes[p].width
-                  : aspect);
+            <div ref={previewColRef} className="mx-auto w-full min-w-0 space-y-4">
+              {Array.from({ length: doc.numPages }).map((_, p) => {
+                const stored = template.pageSizes[p];
+                const live = pageViewports[p];
+                const pw = live?.width ?? stored?.width ?? 595;
+                const ph = live?.height ?? stored?.height ?? pw * 1.414;
                 return (
                   <div
                     key={p}
-                    className="relative mx-auto bg-white shadow overflow-hidden"
-                    style={{ width: renderW, height: h }}
+                    className="relative mx-auto w-full bg-white shadow overflow-hidden"
+                    style={{ aspectRatio: `${pw} / ${ph}` }}
                   >
-                    <PdfPageCanvas
-                      doc={doc}
-                      pageNumber={p + 1}
-                      width={renderW}
-                      className="absolute inset-0"
-                    />
-                    {template.fields
-                      .filter((f) => f.page === p)
-                      .map((f) => {
-                        const v = valueFor(f);
-                        const justify =
-                          f.align === "center" ? "center" : f.align === "right" ? "flex-end" : "flex-start";
-                        return (
-                          <div
-                            key={f.id}
-                            className="absolute flex items-center overflow-hidden whitespace-pre-wrap leading-tight"
-                            style={{
-                              left: `${f.xPct * 100}%`,
-                              top: `${f.yPct * 100}%`,
-                              width: `${f.wPct * 100}%`,
-                              height: `${f.hPct * 100}%`,
-                              color: f.color,
-                              fontSize: f.fontSize * (renderW / (template.pageSizes[p]?.width ?? renderW)),
-                              justifyContent: justify,
-                            }}
-                          >
-                            {f.type === "checkbox" ? (v ? "✓" : "") : v}
-                          </div>
-                        );
-                      })}
+                    {renderW > 0 && (
+                      <PdfPageCanvas
+                        doc={doc}
+                        pageNumber={p + 1}
+                        width={renderW}
+                        renderAnnotations={false}
+                        className="pointer-events-none absolute inset-0 h-full w-full"
+                      />
+                    )}
+                    {fieldsPaintOrder(template.fields, p).map((f) => (
+                        <FieldOverlay
+                          key={f.id}
+                          field={f}
+                          value={valueFor(f)}
+                          pageWidth={pw}
+                          renderW={renderW || pw}
+                          pageHeight={(renderW || pw) * (ph / pw)}
+                        />
+                      ))}
                   </div>
                 );
               })}
@@ -348,6 +343,87 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: DialogProps
       </DialogContent>
     </Dialog>
   );
+}
+
+function fieldsPaintOrder(fields: PdfFormField[], page: number): PdfFormField[] {
+  return fields
+    .filter((f) => f.page === page)
+    .slice()
+    .sort((a, b) => b.wPct * b.hPct - a.wPct * a.hPct);
+}
+
+function FieldOverlay({
+  field,
+  value,
+  pageWidth,
+  renderW,
+  pageHeight,
+}: {
+  field: PdfFormField;
+  value: string;
+  pageWidth: number;
+  renderW: number;
+  pageHeight: number;
+}) {
+  const box = fieldOverlayBox(field);
+  const hasValue = field.type === "checkbox" ? !!value : value.trim().length > 0;
+  if (!hasValue) return null;
+
+  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, box.h * pageHeight);
+  const multiline = field.type === "textarea";
+
+  return (
+    <div
+      className="absolute box-border flex min-h-0 min-w-0 overflow-hidden"
+      style={{
+        left: `${box.x * 100}%`,
+        top: `${box.y * 100}%`,
+        width: `${box.w * 100}%`,
+        height: `${box.h * 100}%`,
+        color: field.color,
+        fontSize: fontPx,
+        lineHeight: 1.15,
+        justifyContent: overlayJustify(field.align),
+        alignItems: multiline ? "flex-start" : "center",
+        backgroundColor: "#fff",
+        padding: "0 2px",
+        fontFamily: '"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif',
+        fontWeight: 400,
+        zIndex: 1,
+      }}
+    >
+      <span
+        className="min-w-0 max-w-full overflow-hidden"
+        style={{
+          whiteSpace: multiline ? "pre-wrap" : "nowrap",
+          wordBreak: multiline ? "break-word" : "normal",
+        }}
+      >
+        {field.type === "checkbox" ? "✓" : value}
+      </span>
+    </div>
+  );
+}
+
+function overlayHtml(
+  field: PdfFormField,
+  value: string,
+  pageWidth: number,
+  renderW: number,
+  pageHeight: number,
+): string {
+  const hasValue = field.type === "checkbox" ? !!value : value.trim().length > 0;
+  if (!hasValue) return "";
+  const box = fieldOverlayBox(field);
+  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, box.h * pageHeight);
+  const justify = overlayJustify(field.align);
+  const alignItems = field.type === "textarea" ? "flex-start" : "center";
+  const whiteSpace = field.type === "textarea" ? "pre-wrap" : "nowrap";
+  const content =
+    field.type === "checkbox"
+      ? "✓"
+      : escapeHtml(value).replace(/\n/g, "<br/>");
+  return `<div style="position:absolute;left:${(box.x * 100).toFixed(3)}%;top:${(box.y * 100).toFixed(3)}%;width:${(box.w * 100).toFixed(3)}%;height:${(box.h * 100).toFixed(3)}%;display:flex;align-items:${alignItems};justify-content:${justify};color:${field.color};font-size:${fontPx}px;line-height:1.15;white-space:${whiteSpace};overflow:hidden;box-sizing:border-box;background:#fff;padding:0 2px;font-weight:400;">${content}</div>`;
 }
 
 function escapeHtml(s: string): string {

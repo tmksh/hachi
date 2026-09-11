@@ -28,6 +28,7 @@ import {
   type InternalMessage,
 } from "@/lib/queries/internal-messages";
 import { useAuth } from "@/hooks/use-auth";
+import { useImeComposition } from "@/hooks/use-ime-composition";
 import { useInternalChat, type InternalChatSeed } from "@/contexts/chat-panel-context";
 
 type Contact = Awaited<ReturnType<typeof fetchChatContacts>>[number];
@@ -77,6 +78,7 @@ export function InternalChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasContactsRef = useRef(false);
   const seedGen = useRef(0);
+  const ime = useImeComposition();
 
   const refreshContacts = useCallback(async () => {
     try {
@@ -353,12 +355,24 @@ export function InternalChatPanel({
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 placeholder="メッセージを入力..."
-                onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+                onCompositionStart={ime.onCompositionStart}
+                onCompositionEnd={ime.onCompositionEnd}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || e.shiftKey) return;
+                  if (ime.shouldBlockSubmit(e)) return;
+                  e.preventDefault();
+                  void handleSend();
+                }}
                 className="flex-1 text-sm"
               />
               <Button
+                type="button"
                 size="icon"
-                onClick={handleSend}
+                onPointerDown={ime.armSend}
+                onClick={() => {
+                  if (ime.shouldIgnoreSendClick()) return;
+                  void handleSend();
+                }}
                 disabled={sending || !input.trim()}
                 className="shrink-0"
               >

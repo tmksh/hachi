@@ -201,7 +201,7 @@ export function newFieldDefaults(type: PdfFieldType, page: number): Omit<PdfForm
     xPct: 0.1,
     yPct: 0.1,
     wPct: type === "textarea" ? 0.4 : 0.25,
-    hPct: type === "textarea" ? 0.08 : 0.03,
+    hPct: type === "textarea" ? 0.036 : 0.028,
     fontSize: 12,
     color: "#111111",
     align: "left",
@@ -361,4 +361,35 @@ export function resolveFieldValue(field: PdfFormField, ctx: FillContext): string
     case "manual":             return field.text ?? "";
     default:                   return field.text ?? "";
   }
+}
+
+/** 配置比率を正規化する（欠落・NaN をはじく） */
+export function fieldOverlayBox(field: PdfFormField): { x: number; y: number; w: number; h: number } {
+  return {
+    x: Number.isFinite(field.xPct) ? field.xPct : 0,
+    y: Number.isFinite(field.yPct) ? field.yPct : 0,
+    w: Number.isFinite(field.wPct) ? Math.max(0.001, field.wPct) : 0.2,
+    h: Number.isFinite(field.hPct) ? Math.max(0.001, field.hPct) : 0.03,
+  };
+}
+
+/**
+ * プレビュー／印刷共通の文字サイズ。
+ * ページ実寸基準の fontSize を描画幅へスケールし、欄の高さを超えないようにする。
+ */
+export function overlayFontSizePx(
+  fontSize: number,
+  pageWidth: number,
+  renderWidth: number,
+  boxHeightPx: number,
+): number {
+  const scaled = fontSize * (renderWidth / Math.max(pageWidth, 1));
+  const cap = boxHeightPx > 1 ? boxHeightPx * 0.82 : scaled;
+  return Math.max(5, Math.min(scaled, cap));
+}
+
+export function overlayJustify(align: PdfFormField["align"]): "flex-start" | "center" | "flex-end" {
+  if (align === "center") return "center";
+  if (align === "right") return "flex-end";
+  return "flex-start";
 }

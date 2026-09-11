@@ -9,6 +9,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QK } from "@/lib/queries/portal";
 import { fetchCraftsmenMasterLists, type CraftsmanMasterItem } from "@/lib/queries/craftsmen-master";
+import { cn } from "@/lib/utils";
 
 type Item = CraftsmanMasterItem;
 type MasterKind = "specialties" | "qualifications";
@@ -38,23 +39,48 @@ async function deleteMasterItem(kind: MasterKind, id: string): Promise<void> {
   }
 }
 
+function sortItems(items: Item[]): Item[] {
+  return [...items].sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label, "ja"));
+}
+
 function upsertItem(prev: Item[], item: Item): Item[] {
-  return [...prev.filter((x) => x.id !== item.id), item].sort((a, b) => a.sort_order - b.sort_order);
+  return sortItems([...prev.filter((x) => x.id !== item.id), item]);
+}
+
+function mergeItems(remote: Item[], local: Item[]): Item[] {
+  const byId = new Map(remote.map((x) => [x.id, x]));
+  for (const x of local) {
+    if (!byId.has(x.id)) byId.set(x.id, x);
+  }
+  return sortItems([...byId.values()]);
 }
 
 function MasterList({
-  title, description, items, onCreate, onDelete, placeholder,
+  title,
+  description,
+  items,
+  flashId,
+  onCreate,
+  onDelete,
+  placeholder,
 }: {
   title: string;
   description?: string;
   items: Item[];
-  onCreate: (label: string) => Promise<void>;
+  flashId: string | null;
+  onCreate: (label: string) => Promise<string>;
   onDelete: (id: string) => Promise<void>;
   placeholder: string;
 }) {
   const [input, setInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!flashId) return;
+    itemRefs.current[flashId]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [flashId, items]);
 
   async function handleAdd() {
     if (!input.trim()) return;
@@ -83,23 +109,40 @@ function MasterList({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold flex items-baseline justify-between gap-2">
+          <span>{title}</span>
+          <span className="text-[11px] font-normal text-muted-foreground">{items.length}件</span>
+        </CardTitle>
         {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex gap-2">
-          <Input value={input} onChange={e => setInput(e.target.value)} placeholder={placeholder}
-            onKeyDown={e => e.key === "Enter" && handleAdd()} className="h-8 text-sm" />
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={placeholder}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            className="h-8 text-sm"
+          />
           <Button size="sm" className="h-8 px-3" onClick={handleAdd} disabled={saving || !input.trim()}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <div className="space-y-1 max-h-64 overflow-y-auto">
+        <div className="space-y-1 max-h-[min(70vh,36rem)] overflow-y-auto rounded-md border border-border/60 p-1">
           {items.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-3">まだ登録がありません</p>
           )}
-          {items.map(item => (
-            <div key={item.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/50 group">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              ref={(el) => {
+                itemRefs.current[item.id] = el;
+              }}
+              className={cn(
+                "flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-accent/50 group",
+                flashId === item.id && "bg-emerald-50 ring-1 ring-emerald-200",
+              )}
+            >
               <span className="text-sm flex-1">{item.label}</span>
               <button
                 onClick={() => handleDelete(item.id)}
@@ -123,8 +166,10 @@ export type CraftsmenMasterInitialData = {
 
 export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMasterInitialData }) {
   const queryClient = useQueryClient();
-  const [specialties, setSpecialties] = useState<Item[]>(initialData?.specialties ?? []);
-  const [qualifications, setQualifications] = useState<Item[]>(initialData?.qualifications ?? []);
+  const [specialties, setSpecialties] = useState<Item[]>(() => sortItems(initialData?.specialties ?? []));
+  const [qualifications, setQualifications] = useState<Item[]>(() => sortItems(initialData?.qualifications ?? []));
+  const [flashSpecialtyId, setFlashSpecialtyId] = useState<string | null>(null);
+  const [flashQualificationId, setFlashQualificationId] = useState<string | null>(null);
   const reloadGen = useRef(0);
 
   const reload = useCallback(async () => {
@@ -132,8 +177,12 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
     try {
       const { specialties: s, qualifications: q } = await fetchCraftsmenMasterLists();
       if (gen !== reloadGen.current) return;
-      setSpecialties(s);
-      setQualifications(q);
+      setSpecialties((prev) => mergeItems(s, prev));
+      setQualifications((prev) => mergeItems(q, prev));
+      queryClient.setQueryData(QK.craftsmenMaster, (old: { specialties?: Item[]; qualifications?: Item[] } | undefined) => ({
+        specialties: mergeItems(s, old?.specialties ?? []),
+        qualifications: mergeItems(q, old?.qualifications ?? []),
+      }));
       void queryClient.invalidateQueries({ queryKey: QK.craftsmenMaster });
     } catch (e) {
       if (gen !== reloadGen.current) return;
@@ -155,19 +204,24 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           title="職種区分"
           description="協力職人の職種カテゴリ"
           items={specialties}
+          flashId={flashSpecialtyId}
           onCreate={async (label) => {
-            reloadGen.current += 1;
             const item = await createMasterItem("specialties", label);
             setSpecialties((prev) => upsertItem(prev, item));
-            toast.success("追加しました");
-            await reload();
+            queryClient.setQueryData(QK.craftsmenMaster, (old: { specialties?: Item[]; qualifications?: Item[] } | undefined) => ({
+              specialties: upsertItem(old?.specialties ?? [], item),
+              qualifications: old?.qualifications ?? qualifications,
+            }));
+            setFlashSpecialtyId(item.id);
+            toast.success(`「${item.label}」を追加しました`);
+            void reload();
+            return item.id;
           }}
           onDelete={async (id) => {
-            reloadGen.current += 1;
             await deleteMasterItem("specialties", id);
             setSpecialties((prev) => prev.filter((x) => x.id !== id));
             toast.success("削除しました");
-            await reload();
+            void reload();
           }}
           placeholder="例: 大工"
         />
@@ -175,19 +229,24 @@ export function CraftsmenMasterTab({ initialData }: { initialData?: CraftsmenMas
           title="資格・保有免許"
           description="職人が保有できる資格の選択肢"
           items={qualifications}
+          flashId={flashQualificationId}
           onCreate={async (label) => {
-            reloadGen.current += 1;
             const item = await createMasterItem("qualifications", label);
             setQualifications((prev) => upsertItem(prev, item));
-            toast.success("追加しました");
-            await reload();
+            queryClient.setQueryData(QK.craftsmenMaster, (old: { specialties?: Item[]; qualifications?: Item[] } | undefined) => ({
+              specialties: old?.specialties ?? specialties,
+              qualifications: upsertItem(old?.qualifications ?? [], item),
+            }));
+            setFlashQualificationId(item.id);
+            toast.success(`「${item.label}」を追加しました`);
+            void reload();
+            return item.id;
           }}
           onDelete={async (id) => {
-            reloadGen.current += 1;
             await deleteMasterItem("qualifications", id);
             setQualifications((prev) => prev.filter((x) => x.id !== id));
             toast.success("削除しました");
-            await reload();
+            void reload();
           }}
           placeholder="例: 施工管理技士"
         />

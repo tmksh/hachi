@@ -4,7 +4,7 @@ export async function fetchCraftsmenMasterLists(): Promise<{
   specialties: CraftsmanMasterItem[];
   qualifications: CraftsmanMasterItem[];
 }> {
-  const res = await fetch("/api/settings/craftsmen-master", {
+  const res = await fetch(`/api/settings/craftsmen-master?_=${Date.now()}`, {
     cache: "no-store",
     credentials: "same-origin",
   });

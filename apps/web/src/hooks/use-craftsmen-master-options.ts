@@ -7,6 +7,7 @@ export function useCraftsmenMasterOptions() {
     queryKey: QK.craftsmenMaster,
     queryFn: fetchCraftsmenMasterLists,
     staleTime: 0,
+    refetchOnMount: "always",
   });
   return {
     specialties: data?.specialties ?? [],

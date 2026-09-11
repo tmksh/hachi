@@ -171,6 +171,7 @@ export function PdfBuilderEditClient({
   const pageWrapRef = useRef<HTMLDivElement>(null);
   const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
   const [containerWidth, setContainerWidth] = useState(680);
+  const [pdfAspect, setPdfAspect] = useState<number | null>(null);
 
   // ─── サーバーから受け取った PDF をクライアントで描画 ───
   useEffect(() => {
@@ -370,9 +371,24 @@ export function PdfBuilderEditClient({
     }
   };
 
+  useEffect(() => {
+    if (!doc) {
+      setPdfAspect(null);
+      return;
+    }
+    let cancelled = false;
+    doc.getPage(activePage + 1).then((page) => {
+      const vp = page.getViewport({ scale: 1 });
+      if (!cancelled) setPdfAspect(vp.height / vp.width);
+    }).catch(() => {
+      if (!cancelled) setPdfAspect(null);
+    });
+    return () => { cancelled = true; };
+  }, [doc, activePage]);
+
   const selectedField = useMemo(() => fields.find((f) => f.id === selectedId) ?? null, [fields, selectedId]);
   const pageFields = useMemo(() => fields.filter((f) => f.page === activePage), [fields, activePage]);
-  const aspect = pageSizes[activePage] ? pageSizes[activePage].height / pageSizes[activePage].width : 1.414;
+  const aspect = pdfAspect ?? (pageSizes[activePage] ? pageSizes[activePage].height / pageSizes[activePage].width : 1.414);
   const renderW = containerWidth;
   const renderH = renderW * aspect;
 
@@ -546,7 +562,7 @@ export function PdfBuilderEditClient({
                     pageNumber={activePage + 1}
                     width={renderW}
                     onRendered={setRenderSize}
-                    className="pointer-events-none absolute inset-0"
+                    className="pointer-events-none absolute inset-0 h-full w-full"
                   />
                   {/* 配置済み項目 */}
                   {pageFields.map((f) => (

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -254,23 +255,24 @@ export function SettingsClient({
     setMainTab(nextMain);
     setSubTab(nextSub);
     markVisited(nextMain);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", nextSub);
-    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+    router.replace(`/settings?tab=${encodeURIComponent(nextSub)}`, { scroll: false });
   };
 
   const handleMainTabChange = (next: string) => {
-    goToSubTab(MAIN_DEFAULT_SUB[next] ?? "profile");
+    const nextSub = MAIN_DEFAULT_SUB[next];
+    if (!nextSub) return;
+    goToSubTab(nextSub);
   };
 
+  // URL → state のみ。subTab を deps に入れると、クリック直後に古い ?tab= で巻き戻る
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (!tab || !SUB_TO_MAIN[tab] || tab === subTab) return;
+    if (!tab || !SUB_TO_MAIN[tab]) return;
     const nextMain = SUB_TO_MAIN[tab];
     setMainTab(nextMain);
     setSubTab(tab);
     markVisited(nextMain);
-  }, [searchParams, subTab]);
+  }, [searchParams]);
   const formDefaults = companyFormState(initialCompany);
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(initialCompany);
@@ -831,13 +833,21 @@ export function SettingsClient({
               ].map((item) => (
                 <Button
                   key={item.value}
-                  type="button"
                   size="sm"
                   variant={subTab === item.value ? "default" : "ghost"}
                   className="h-8"
-                  onClick={() => goToSubTab(item.value)}
+                  asChild
                 >
-                  {item.label}
+                  <Link
+                    href={`/settings?tab=${item.value}`}
+                    scroll={false}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      goToSubTab(item.value);
+                    }}
+                  >
+                    {item.label}
+                  </Link>
                 </Button>
               ))}
             </div>

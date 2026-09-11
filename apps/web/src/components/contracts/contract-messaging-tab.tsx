@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useImeComposition } from "@/hooks/use-ime-composition";
 import { format, parseISO, isSameDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ export function ContractMessagingTab({
   const [linkContext, setLinkContext] = useState<ContractMessagingContext | null>(null);
   const [postSign, setPostSign] = useState<{ label: string; value: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const ime = useImeComposition();
 
   const load = () => {
     setLoading(true);
@@ -358,6 +360,7 @@ export function ContractMessagingTab({
                   className="flex items-center gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (ime.shouldBlockSubmit()) return;
                     void handleSend();
                   }}
                 >
@@ -366,13 +369,25 @@ export function ContractMessagingTab({
                     onChange={(e) => setBody(e.target.value)}
                     placeholder="メッセージを入力..."
                     disabled={sending}
+                    onCompositionStart={ime.onCompositionStart}
+                    onCompositionEnd={ime.onCompositionEnd}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" || e.shiftKey) return;
+                      if (ime.shouldBlockSubmit(e)) {
+                        e.preventDefault();
+                      }
+                    }}
                     className="flex-1 h-10 rounded-full bg-muted/40 border-transparent focus-visible:bg-background px-4"
                   />
                   <Button
                     type="submit"
                     size="icon"
+                    onPointerDown={ime.armSend}
                     disabled={sending || !body.trim()}
                     className="size-10 rounded-full shrink-0"
+                    onClick={(e) => {
+                      if (ime.shouldIgnoreSendClick()) e.preventDefault();
+                    }}
                   >
                     {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>

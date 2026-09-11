@@ -7,6 +7,7 @@ import {
 } from "@/lib/craftsmen-master";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 export const runtime = "nodejs";
 
 function noStoreJson(body: unknown, init?: { status?: number }) {

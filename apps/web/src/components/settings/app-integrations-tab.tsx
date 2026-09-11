@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -262,7 +263,11 @@ export function AppIntegrationsTab({ initialData }: { initialData?: AppIntegrati
           <CardTitle className="text-base">アプリ連携</CardTitle>
           <CardDescription>
             使っているツールを選んで連携するだけ。顧客・商談の更新を自動通知できます。
-            カスタム開発向けの REST API / Webhook は「API/Webhook」タブをご利用ください。
+            カスタム開発向けの REST API / Webhook は
+            <Link href="/settings?tab=integrations" scroll={false} className="font-medium text-primary underline-offset-2 hover:underline">
+              API/Webhook
+            </Link>
+            タブをご利用ください。
           </CardDescription>
         </CardHeader>
       </Card>

@@ -18,6 +18,7 @@ import { sendChatMessage } from "@/lib/actions/internal-messages";
 import { fetchChatContacts } from "@/lib/queries/internal-messages";
 import type { BridgeSeed } from "@/contexts/chat-panel-context";
 import { useInternalChat } from "@/contexts/chat-panel-context";
+import { useImeComposition } from "@/hooks/use-ime-composition";
 import { BrandMark } from "@/components/layout/brand-logo";
 import { cn } from "@/lib/utils";
 
@@ -96,6 +97,7 @@ export function BridgeAiChat({
   const [estimateDraftMode, setEstimateDraftMode] = useState<BridgeSeed["estimateDraft"]>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
   const seedGen = useRef(0);
+  const ime = useImeComposition();
 
   const applyEstimateDraft = async (estimateId: string, prompt: string) => {
     const res = await fetch(`/api/estimates/${estimateId}/linq-draft`, {
@@ -401,18 +403,27 @@ export function BridgeAiChat({
             placeholder="メッセージを入力"
             rows={2}
             className="min-h-[40px] max-h-32 resize-none [field-sizing:fixed]"
+            onCompositionStart={ime.onCompositionStart}
+            onCompositionEnd={ime.onCompositionEnd}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
-              // 日本語IME変換中の Enter は送信しない（確定後の Enter で送信）
-              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-              // Shift+Enter は改行
+              if (ime.shouldBlockSubmit(e)) return;
               if (e.shiftKey) return;
               e.preventDefault();
               void send();
             }}
             disabled={sending}
           />
-          <Button size="icon" onClick={() => void send()} disabled={sending || !input.trim()}>
+          <Button
+            type="button"
+            size="icon"
+            onPointerDown={ime.armSend}
+            onClick={() => {
+              if (ime.shouldIgnoreSendClick()) return;
+              void send();
+            }}
+            disabled={sending || !input.trim()}
+          >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
