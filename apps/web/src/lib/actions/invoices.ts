@@ -213,7 +213,7 @@ export async function updateInvoice(
     }
 
     await invalidateMyCompanyCache();
-    return actionOk({});
+    return actionOk({} as Record<string, never>);
   } catch (e) {
     return actionFail(e, "請求書の更新に失敗しました");
   }

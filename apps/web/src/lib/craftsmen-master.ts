@@ -30,12 +30,19 @@ function errMessage(e: unknown, fallback: string): string {
   return fallback;
 }
 
-async function getMasterContext(requireAdmin: boolean) {
+type MasterOk = {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  company_id: string;
+  role: string;
+};
+type MasterErr = { error: string };
+
+async function getMasterContext(requireAdmin: boolean): Promise<MasterOk | MasterErr> {
   const auth = await getAuthContext();
-  if (!auth.user) return { error: "ログインが必要です" as const };
-  if (!auth.companyId) return { error: "会社情報が設定されていません" as const };
+  if (!auth.user) return { error: "ログインが必要です" };
+  if (!auth.companyId) return { error: "会社情報が設定されていません" };
   if (requireAdmin && !MASTER_ADMIN_ROLES.has(auth.role ?? "")) {
-    return { error: "マスタの編集は本部管理者のみ可能です" as const };
+    return { error: "マスタの編集は本部管理者のみ可能です" };
   }
 
   const supabase = await createClient();

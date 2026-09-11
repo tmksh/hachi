@@ -28,9 +28,17 @@ function failStatus(error: string): number {
   return /ログイン|プロフィール|権限|管理者/.test(error) ? 403 : 400;
 }
 
+function hasError(result: object): result is { error: string } {
+  return "error" in result && typeof (result as { error?: unknown }).error === "string";
+}
+
+function failJson(error: string) {
+  return noStoreJson({ ok: false, error }, { status: failStatus(error) });
+}
+
 async function listOrFail(kind: CraftsmanMasterKind) {
   const result = await listCraftsmanMasterItems(kind);
-  if ("error" in result) return { error: result.error };
+  if (hasError(result)) return { error: result.error };
   return { items: result.items };
 }
 
@@ -42,19 +50,13 @@ export async function GET(request: NextRequest) {
       listOrFail("specialties"),
       listOrFail("qualifications"),
     ]);
-    if ("error" in specialties) {
-      return noStoreJson({ ok: false, error: specialties.error }, { status: failStatus(specialties.error) });
-    }
-    if ("error" in qualifications) {
-      return noStoreJson({ ok: false, error: qualifications.error }, { status: failStatus(qualifications.error) });
-    }
+    if (hasError(specialties)) return failJson(specialties.error);
+    if (hasError(qualifications)) return failJson(qualifications.error);
     return noStoreJson({ ok: true, specialties: specialties.items, qualifications: qualifications.items });
   }
 
   const result = await listOrFail(kind);
-  if ("error" in result) {
-    return noStoreJson({ ok: false, error: result.error }, { status: failStatus(result.error) });
-  }
+  if (hasError(result)) return failJson(result.error);
   return noStoreJson({ ok: true, items: result.items });
 }
 
@@ -76,9 +78,7 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await createCraftsmanMasterItem(kind, label);
-  if ("error" in result) {
-    return noStoreJson({ ok: false, error: result.error }, { status: failStatus(result.error) });
-  }
+  if (hasError(result)) return failJson(result.error);
 
   return noStoreJson({ ok: true, item: result.item });
 }
@@ -94,9 +94,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   const result = await deleteCraftsmanMasterItem(kind, id);
-  if ("error" in result) {
-    return noStoreJson({ ok: false, error: result.error }, { status: failStatus(result.error) });
-  }
+  if (hasError(result)) return failJson(result.error);
 
   return noStoreJson({ ok: true });
 }
