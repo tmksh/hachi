@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -250,11 +250,19 @@ export function SettingsClient({
     });
   };
 
-  const goToSubTab = (nextSub: string) => {
+  const pendingTabRef = useRef<string | null>(null);
+
+  const applySubTab = (nextSub: string) => {
     const nextMain = SUB_TO_MAIN[nextSub] ?? "personal";
+    pendingTabRef.current = nextSub;
     setMainTab(nextMain);
     setSubTab(nextSub);
     markVisited(nextMain);
+    return nextMain;
+  };
+
+  const goToSubTab = (nextSub: string) => {
+    applySubTab(nextSub);
     router.replace(`/settings?tab=${encodeURIComponent(nextSub)}`, { scroll: false });
   };
 
@@ -268,11 +276,16 @@ export function SettingsClient({
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (!tab || !SUB_TO_MAIN[tab]) return;
+    if (pendingTabRef.current && tab !== pendingTabRef.current) {
+      router.replace(`/settings?tab=${encodeURIComponent(pendingTabRef.current)}`, { scroll: false });
+      return;
+    }
+    pendingTabRef.current = null;
     const nextMain = SUB_TO_MAIN[tab];
     setMainTab(nextMain);
     setSubTab(tab);
     markVisited(nextMain);
-  }, [searchParams]);
+  }, [searchParams, router]);
   const formDefaults = companyFormState(initialCompany);
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState<Company | null>(initialCompany);
@@ -843,7 +856,7 @@ export function SettingsClient({
                     scroll={false}
                     onClick={(e) => {
                       e.stopPropagation();
-                      goToSubTab(item.value);
+                      applySubTab(item.value);
                     }}
                   >
                     {item.label}

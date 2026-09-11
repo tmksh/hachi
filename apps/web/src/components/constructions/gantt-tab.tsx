@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +21,12 @@ import {
   updateConstructionTask,
   deleteConstructionTask,
 } from "@/lib/actions/constructions";
+import { getConstructionReports } from "@/lib/actions/construction-reports";
+import {
+  computeScheduleProgress,
+  progressForStatus,
+  taskProgressValue,
+} from "@/lib/construction/schedule-progress";
 
 type Task = {
   id: string;
@@ -49,6 +56,7 @@ const STATUS_OPTIONS = [
 interface Props {
   constructionId: string;
   initialTasks: Task[];
+  onScheduleChange?: (tasks: Task[], progress: number) => void;
 }
 
 /* ── 日付ユーティリティ ── */
@@ -96,7 +104,7 @@ const BAR_MID_Y = BAR_TOP + BAR_H / 2;
 
 const EMPTY_FORM = {
   name: "", start_date: "", end_date: "", status: "not_started", description: "",
-  contractor_name: "", depends_on_task_id: "none",
+  contractor_name: "", depends_on_task_id: "none", progress: "0",
 };
 
 /* ステータス色 */
@@ -122,8 +130,19 @@ function buildDependencyPath(fromX: number, fromY: number, toX: number, toY: num
   return `M ${fromX} ${fromY} L ${elbowX} ${fromY} L ${elbowX} ${toY} L ${endX} ${toY}`;
 }
 
-export function GanttTab({ constructionId, initialTasks }: Props) {
+export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Props) {
   const [tasks, setTasks]       = useState<Task[]>(initialTasks);
+  const { data: reports = [] } = useQuery({
+    queryKey: ["construction-reports", constructionId],
+    queryFn: () => getConstructionReports(constructionId),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  function commitTasks(next: Task[]) {
+    setTasks(next);
+    onScheduleChange?.(next, computeScheduleProgress(next));
+  }
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [dialog, setDialog]     = useState<"add" | "edit" | null>(null);
   const [editTarget, setEditTarget] = useState<Task | null>(null);
@@ -252,7 +271,8 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
     }
     const nsStr = fmtISO(ns), neStr = fmtISO(ne);
     if (nsStr === task.start_date && neStr === task.end_date) return;
-    setTasks(p => p.map(t => t.id === task.id ? { ...t, start_date: nsStr, end_date: neStr } : t));
+    const next = prev.map(t => t.id === task.id ? { ...t, start_date: nsStr, end_date: neStr } : t);
+    commitTasks(next);
     try {
       await updateConstructionTask(task.id, { start_date: nsStr, end_date: neStr });
     } catch (err) {
@@ -272,7 +292,7 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
     const next = [...prev];
     const [moved] = next.splice(from, 1);
     next.splice(targetIdx, 0, moved);
-    setTasks(next);
+    commitTasks(next);
     try {
       await Promise.all(next.map((t, i) => updateConstructionTask(t.id, { sort_order: i })));
     } catch (err) {
@@ -300,6 +320,7 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
       status: task.status, description: "",
       contractor_name: task.contractor_name ?? "",
       depends_on_task_id: task.depends_on_task_id ?? "none",
+      progress: String(taskProgressValue(task)),
     });
     setEditTarget(task); setDialog("edit");
   }
@@ -308,6 +329,8 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
     setSaving(true);
     const contractorName = form.contractor_name.trim() || null;
     const dependsOn = form.depends_on_task_id === "none" ? null : form.depends_on_task_id;
+    const progress = Math.min(100, Math.max(0, Number(form.progress) || 0));
+    const status = progress >= 100 ? "completed" : form.status === "completed" && progress < 100 ? "in_progress" : form.status;
     try {
       if (dialog === "add") {
         const created = await createConstructionTask(constructionId, {
@@ -316,17 +339,21 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
           contractor_name: contractorName ?? undefined,
           depends_on_task_id: dependsOn ?? undefined,
         });
-        setTasks(p => [...p, { ...created, progress: created.progress ?? 0, status: created.status ?? "not_started" }]);
+        const nextTask: Task = {
+          ...created,
+          progress: created.progress ?? 0,
+          status: created.status ?? "not_started",
+        };
+        commitTasks([...tasksRef.current, nextTask]);
       } else if (dialog === "edit" && editTarget) {
         await updateConstructionTask(editTarget.id, {
           name: form.name, start_date: form.start_date || undefined,
-          end_date: form.end_date || undefined, status: form.status,
-          // 変更があった場合のみ送信（カラム未適用環境で既存編集を壊さない）
+          end_date: form.end_date || undefined, status, progress,
           ...(contractorName !== (editTarget.contractor_name ?? null) ? { contractor_name: contractorName } : {}),
           ...(dependsOn !== (editTarget.depends_on_task_id ?? null) ? { depends_on_task_id: dependsOn } : {}),
         });
-        setTasks(p => p.map(t => t.id === editTarget.id
-          ? { ...t, name: form.name, start_date: form.start_date || null, end_date: form.end_date || null, status: form.status, contractor_name: contractorName, depends_on_task_id: dependsOn }
+        commitTasks(tasksRef.current.map(t => t.id === editTarget.id
+          ? { ...t, name: form.name, start_date: form.start_date || null, end_date: form.end_date || null, status, progress, contractor_name: contractorName, depends_on_task_id: dependsOn }
           : t));
       }
       setDialog(null);
@@ -337,13 +364,18 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
   }
   async function handleDelete(id: string) {
     setDeletingId(id);
-    try { await deleteConstructionTask(id); setTasks(p => p.filter(t => t.id !== id)); }
+    try {
+      await deleteConstructionTask(id);
+      commitTasks(tasksRef.current.filter(t => t.id !== id));
+    }
     catch (e) { console.error(e); } finally { setDeletingId(null); }
   }
   async function handleToggle(task: Task) {
-    const next = task.status === "completed" ? "in_progress" : "completed";
-    setTasks(p => p.map(t => t.id === task.id ? { ...t, status: next } : t));
-    await updateConstructionTask(task.id, { status: next }).catch(console.error);
+    const nextStatus = task.status === "completed" ? "in_progress" : "completed";
+    const nextProgress = nextStatus === "completed" ? 100 : 0;
+    const next = tasksRef.current.map(t => t.id === task.id ? { ...t, status: nextStatus, progress: nextProgress } : t);
+    commitTasks(next);
+    await updateConstructionTask(task.id, { status: nextStatus, progress: nextProgress }).catch(console.error);
   }
 
   /* 依存関係の接続線（先行工程バー終端 → 後続工程バー始端） */
@@ -548,6 +580,9 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                           <span className={cn("text-xs font-medium truncate", done && "line-through text-slate-400")}>
                             {task.name}
                           </span>
+                          <span className="text-[10px] text-slate-400 tabular-nums leading-tight">
+                            {taskProgressValue(task)}%
+                          </span>
                           {task.contractor_name && (
                             <span className="text-[10px] text-slate-400 truncate leading-tight">
                               {task.contractor_name}
@@ -618,9 +653,13 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
                             top: 10,
                             height: ROW_H - 20,
                           }}
-                          title={`${task.name}  ${task.start_date ?? ""} → ${task.end_date ?? ""}${depName ? `\n先行: ${depName}` : ""}`}
+                          title={`${task.name}  ${task.start_date ?? ""} → ${task.end_date ?? ""}  ${taskProgressValue(task)}%${depName ? `\n先行: ${depName}` : ""}`}
                           onPointerDown={e => startBarDrag(e, task, "move")}
                         >
+                          <div
+                            className="absolute inset-y-0 left-0 bg-emerald-600/55 pointer-events-none"
+                            style={{ width: `${taskProgressValue(task)}%` }}
+                          />
                           {/* 左リサイズハンドル */}
                           <div
                             className="absolute left-0 top-0 bottom-0 z-10 hover:bg-black/10"
@@ -696,6 +735,42 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
         </div>
       </div>
 
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="text-sm font-semibold flex items-center gap-1.5">
+            <ClipboardList className="h-4 w-4" />
+            日報
+          </h3>
+          <Link href={`/constructions/${constructionId}/reports/new`}>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+              <Plus className="h-3.5 w-3.5" />日報を追加
+            </Button>
+          </Link>
+        </div>
+        {reports.length === 0 ? (
+          <p className="text-sm text-muted-foreground px-4 py-6 text-center">まだ日報がありません</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {reports.map((report) => (
+              <li key={report.id}>
+                <Link
+                  href={`/constructions/${constructionId}/reports/${report.id}`}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors"
+                >
+                  <span className="text-xs tabular-nums text-muted-foreground w-24 shrink-0">
+                    {report.report_date}
+                  </span>
+                  <span className="text-sm font-medium truncate">{report.title}</span>
+                  {report.weather && (
+                    <span className="ml-auto text-[11px] text-muted-foreground shrink-0">{report.weather}</span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* ── ダイアログ ── */}
       <Dialog open={dialog !== null} onOpenChange={o => !o && setDialog(null)}>
         <DialogContent className="sm:max-w-md">
@@ -737,15 +812,43 @@ export function GanttTab({ constructionId, initialTasks }: Props) {
               </Select>
             </div>
             {dialog === "edit" && (
+              <>
               <div className="space-y-1.5">
                 <Label>ステータス</Label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                <Select
+                  value={form.status}
+                  onValueChange={v => setForm(f => ({
+                    ...f,
+                    status: v,
+                    progress: String(progressForStatus(v, Number(f.progress) || 0)),
+                  }))}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="g-progress">進捗 (%)</Label>
+                <Input
+                  id="g-progress"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={form.progress}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    const n = Math.min(100, Math.max(0, Number(raw) || 0));
+                    setForm(f => ({
+                      ...f,
+                      progress: raw,
+                      status: n >= 100 ? "completed" : f.status === "completed" ? "in_progress" : f.status,
+                    }));
+                  }}
+                />
+              </div>
+              </>
             )}
             {dialog === "add" && (
               <div className="space-y-1.5">

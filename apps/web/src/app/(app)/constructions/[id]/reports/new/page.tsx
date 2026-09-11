@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const WEATHER_OPTIONS = ["晴れ", "曇り", "雨", "雪", "晴れ時々曇り",
 export default function ConstructionReportNewPage() {
   const { id } = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [reportDate, setReportDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [title, setTitle] = useState("");
@@ -45,8 +47,15 @@ export default function ConstructionReportNewPage() {
         progress_note: progressNote.trim() || null,
         issues: issues.trim() || null,
       });
+      if (!report?.id) throw new Error("日報の保存に失敗しました");
       toast.success("日報を保存しました");
-      router.push(`/constructions/${id}/reports/${report.id}`);
+      const constructionId = id as string;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["construction-reports", constructionId] }),
+        queryClient.invalidateQueries({ queryKey: ["construction", constructionId] }),
+      ]);
+      router.refresh();
+      router.push(`/constructions/${constructionId}?tab=schedule`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -57,7 +66,7 @@ export default function ConstructionReportNewPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-3">
-        <Link href={`/constructions/${id}`}>
+        <Link href={`/constructions/${id}?tab=schedule`}>
           <Button variant="ghost" size="icon" className="size-8">
             <ArrowLeft className="size-4" />
           </Button>
@@ -142,7 +151,7 @@ export default function ConstructionReportNewPage() {
       </Card>
 
       <div className="flex justify-end gap-3">
-        <Link href={`/constructions/${id}`}>
+        <Link href={`/constructions/${id}?tab=schedule`}>
           <Button variant="outline">キャンセル</Button>
         </Link>
         <Button onClick={handleSave} disabled={saving}>

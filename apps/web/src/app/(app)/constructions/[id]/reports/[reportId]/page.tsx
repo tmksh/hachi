@@ -33,7 +33,7 @@ export default function ConstructionReportDetailPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center gap-3">
-        <Link href={`/constructions/${id}`}>
+        <Link href={`/constructions/${id}?tab=schedule`}>
           <Button variant="ghost" size="icon" className="size-8">
             <ArrowLeft className="size-4" />
           </Button>
@@ -100,7 +100,7 @@ export default function ConstructionReportDetailPage() {
       )}
 
       <div className="flex justify-end">
-        <Link href={`/constructions/${id}`}>
+        <Link href={`/constructions/${id}?tab=schedule`}>
           <Button variant="outline" size="sm">工事詳細に戻る</Button>
         </Link>
       </div>

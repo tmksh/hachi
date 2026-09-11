@@ -5,6 +5,7 @@ import { dispatchWebhook } from "@/lib/webhooks";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import type { Construction, ConstructionTask, ContractorOrder, EstimateCategory, EstimateItem } from "@/lib/database.types";
 import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
+import { computeScheduleProgress } from "@/lib/construction/schedule-progress";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -444,6 +445,25 @@ export async function deleteConstruction(id: string) {
   await invalidateMyCompanyCache();
 }
 
+async function syncConstructionScheduleProgress(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  constructionId: string,
+): Promise<number> {
+  const { data: tasks, error } = await supabase
+    .from("construction_tasks")
+    .select("progress, status")
+    .eq("construction_id", constructionId);
+  if (error) throw error;
+  const progress = computeScheduleProgress(tasks ?? []);
+  const { error: updateError } = await supabase
+    .from("constructions")
+    .update({ progress })
+    .eq("id", constructionId);
+  if (updateError) throw updateError;
+  await invalidateMyCompanyCache();
+  return progress;
+}
+
 export async function createConstructionTask(constructionId: string, input: { name: string; start_date?: string; end_date?: string; assigned_to?: string; description?: string; contractor_name?: string; depends_on_task_id?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -469,20 +489,41 @@ export async function createConstructionTask(constructionId: string, input: { na
     .select()
     .single();
   if (error) throw error;
+  await syncConstructionScheduleProgress(supabase, constructionId);
   return data as ConstructionTask;
 }
 
 export async function updateConstructionTask(id: string, input: Partial<Pick<ConstructionTask, "name" | "start_date" | "end_date" | "progress" | "status" | "assigned_to" | "sort_order" | "contractor_name" | "depends_on_task_id">>) {
   const supabase = await createClient();
-  const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
-  const { error } = await supabase.from("construction_tasks").update(patch).eq("id", id);
+  const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) as Record<string, unknown>;
+  if (patch.status === "completed" && patch.progress === undefined) patch.progress = 100;
+  if (typeof patch.progress === "number" && patch.progress >= 100 && patch.status === undefined) {
+    patch.status = "completed";
+  }
+  const { data: row, error } = await supabase
+    .from("construction_tasks")
+    .update(patch)
+    .eq("id", id)
+    .select("construction_id")
+    .single();
   if (error) throw error;
+  if (row?.construction_id && (patch.progress !== undefined || patch.status !== undefined)) {
+    await syncConstructionScheduleProgress(supabase, row.construction_id);
+  }
 }
 
 export async function deleteConstructionTask(id: string) {
   const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("construction_tasks")
+    .select("construction_id")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase.from("construction_tasks").delete().eq("id", id);
   if (error) throw error;
+  if (row?.construction_id) {
+    await syncConstructionScheduleProgress(supabase, row.construction_id);
+  }
 }
 
 export async function completeConstruction(

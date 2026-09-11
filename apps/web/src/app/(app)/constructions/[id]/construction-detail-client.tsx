@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { fetchConstruction, fetchChangeOrders, fetchInvoicesForConstruction, fetchConstructionContractDocs, fetchEstimate } from "@/lib/queries/details";
+import { computeScheduleProgress } from "@/lib/construction/schedule-progress";
 import { CompletionDialog } from "@/components/constructions/completion-dialog";
 import { CustomerInfoPanel } from "@/components/crm/customer-info-panel";
 import { useSeedCustomerEntryMasters } from "@/hooks/use-customer-entry-masters";
@@ -365,6 +366,7 @@ function ConstructionDetailPageContent({
     queryKey: ["construction", constructionId],
     queryFn: () => fetchConstruction(constructionId),
     staleTime: 60_000,
+    refetchOnMount: "always",
     initialData: initialData ?? undefined,
     initialDataUpdatedAt: initialData ? querySeedAt : undefined,
     enabled: !!constructionId,
@@ -446,6 +448,9 @@ function ConstructionDetailPageContent({
     end_date?: string | null; notes?: string | null; status?: string; estimate_id?: string | null;
   }) | null;
   const estimate = (data as Detail & { estimate?: { id?: string } | null }).estimate;
+  const scheduleProgress = Array.isArray(data.tasks) && data.tasks.length > 0
+    ? computeScheduleProgress(data.tasks as Array<{ progress?: number | null; status?: string | null }>)
+    : Number(data.progress ?? 0);
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -526,16 +531,16 @@ function ConstructionDetailPageContent({
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">進捗</span>
           <div className="flex-1">
-            <Progress value={data.progress ?? 0} className="h-2.5 rounded-full bg-slate-200/80" />
+            <Progress value={scheduleProgress} className="h-2.5 rounded-full bg-slate-200/80" />
           </div>
           <span className={cn(
             "text-sm font-semibold tabular-nums w-10 text-right",
-            (data.progress ?? 0) === 0 ? "text-muted-foreground/60" :
-            (data.progress ?? 0) >= 100 ? "text-emerald-600" :
-            (data.progress ?? 0) >= 50  ? "text-blue-600" :
+            scheduleProgress === 0 ? "text-muted-foreground/60" :
+            scheduleProgress >= 100 ? "text-emerald-600" :
+            scheduleProgress >= 50  ? "text-blue-600" :
             "text-amber-600"
           )}>
-            {data.progress ?? 0}%
+            {scheduleProgress}%
           </span>
         </div>
       </div>
@@ -570,6 +575,10 @@ function ConstructionDetailPageContent({
           <GanttTab
             constructionId={id as string}
             initialTasks={(data.tasks ?? []) as { id: string; name: string; start_date: string | null; end_date: string | null; progress: number; status: string }[]}
+            onScheduleChange={(tasks, progress) => {
+              setData((prev: Detail | null) => prev ? { ...prev, tasks, progress } : prev);
+              void queryClient.invalidateQueries({ queryKey: ["constructions"] });
+            }}
           />
         </TabsContent>
 
