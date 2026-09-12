@@ -6,6 +6,7 @@ import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import type { Construction, ConstructionTask, ContractorOrder, EstimateCategory, EstimateItem } from "@/lib/database.types";
 import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 import { computeScheduleProgress } from "@/lib/construction/schedule-progress";
+import { allocateUniqueEstimateNo } from "@/lib/next-estimate-no";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -36,32 +37,8 @@ function buildAuthorNotes(createdByName?: string, existingNotes?: string | null)
   return `${authorLine}\n${stripped}`;
 }
 
-function parseEstimateSequence(estimateNo: string): number {
-  const match = estimateNo.match(/^EST-(?:\d{4}-)?(\d+)$/i);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
 function throwIfSupabaseError(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
-}
-
-async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string) {
-  // DB側カウンター（原子的・同時採番でも重複しない）。migration 未適用環境では従来ロジックへフォールバック
-  const { data: seq, error: rpcError } = await supabase.rpc("next_document_number", { p_kind: "estimate" });
-  if (!rpcError && typeof seq === "number" && seq > 0) {
-    return `EST-${String(seq).padStart(4, "0")}`;
-  }
-
-  const { data, error } = await supabase
-    .from("estimates")
-    .select("estimate_no")
-    .eq("company_id", companyId);
-  throwIfSupabaseError(error);
-
-  const max = (data ?? []).reduce((current, row) => {
-    return Math.max(current, parseEstimateSequence(row.estimate_no));
-  }, 0);
-  return `EST-${String(max + 1).padStart(4, "0")}`;
 }
 
 export async function getConstructions() {
@@ -923,15 +900,6 @@ export async function seedConstructionEstimates(constructionId: string) {
     .single();
   if (!construction) throw new Error("Construction not found");
 
-  const { data: existingNumbers, error: numbersError } = await supabase
-    .from("estimates")
-    .select("estimate_no")
-    .eq("company_id", profile.company_id);
-  throwIfSupabaseError(numbersError);
-  const startNo = (existingNumbers ?? []).reduce((current, row) => {
-    return Math.max(current, parseEstimateSequence(row.estimate_no));
-  }, 0) + 1;
-
   // 5バージョンの見積データ
   const versions: Array<{
     title: string;
@@ -1031,29 +999,29 @@ export async function seedConstructionEstimates(constructionId: string) {
     const total = subtotal + tax;
     const grossProfit = subtotal - costTotal;
     const grossProfitRate = subtotal > 0 ? (grossProfit / subtotal) * 100 : 0;
-    const estimateNo = `EST-${String(startNo + i).padStart(4, "0")}`;
 
-    const { data: estimate, error: estErr } = await supabase
-      .from("estimates")
-      .insert({
-        company_id: profile.company_id,
-        customer_id: construction.customer_id,
-        construction_id: constructionId,
-        estimate_no: estimateNo,
-        title: v.title,
-        status: v.status,
-        subtotal,
-        tax,
-        total,
-        cost_total: costTotal,
-        gross_profit: grossProfit,
-        gross_profit_rate: grossProfitRate,
-        version: i + 1,
-        notes: null,
-      })
-      .select()
-      .single();
-    if (estErr) throw estErr;
+    const estimate = await allocateUniqueEstimateNo(supabase, profile.company_id, (estimateNo) =>
+      supabase
+        .from("estimates")
+        .insert({
+          company_id: profile.company_id,
+          customer_id: construction.customer_id,
+          construction_id: constructionId,
+          estimate_no: estimateNo,
+          title: v.title,
+          status: v.status,
+          subtotal,
+          tax,
+          total,
+          cost_total: costTotal,
+          gross_profit: grossProfit,
+          gross_profit_rate: grossProfitRate,
+          version: i + 1,
+          notes: null,
+        })
+        .select()
+        .single(),
+    );
 
     for (let ci = 0; ci < v.categories.length; ci++) {
       const cat = v.categories[ci];
@@ -1116,8 +1084,6 @@ export async function createEmptyEstimateForConstruction(constructionId: string,
     .single();
   if (!construction) throw new Error("Construction not found");
 
-  const estimateNo = await nextEstimateNo(supabase, profile.company_id);
-
   const { data: existingVersions } = await supabase
     .from("estimates")
     .select("version")
@@ -1126,29 +1092,29 @@ export async function createEmptyEstimateForConstruction(constructionId: string,
     .limit(1);
   const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
 
-  const { data: estimate, error } = await supabase
-    .from("estimates")
-    .insert({
-      company_id: profile.company_id,
-      customer_id: construction.customer_id,
-      construction_id: constructionId,
-      estimate_no: estimateNo,
-      title,
-      status: "draft",
-      version: nextVersion,
-      subtotal: 0,
-      tax: 0,
-      total: 0,
-      cost_total: 0,
-      gross_profit: 0,
-      gross_profit_rate: 0,
-      assigned_to: user.id,
-      notes: buildAuthorNotes(createdByName),
-    })
-    .select()
-    .single();
-  throwIfSupabaseError(error);
-  return estimate;
+  return allocateUniqueEstimateNo(supabase, profile.company_id, (estimateNo) =>
+    supabase
+      .from("estimates")
+      .insert({
+        company_id: profile.company_id,
+        customer_id: construction.customer_id,
+        construction_id: constructionId,
+        estimate_no: estimateNo,
+        title,
+        status: "draft",
+        version: nextVersion,
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        cost_total: 0,
+        gross_profit: 0,
+        gross_profit_rate: 0,
+        assigned_to: user.id,
+        notes: buildAuthorNotes(createdByName),
+      })
+      .select()
+      .single(),
+  );
 }
 
 export async function copyEstimateForConstruction(constructionId: string, sourceEstimateId: string, title: string, createdByName?: string) {
@@ -1173,8 +1139,6 @@ export async function copyEstimateForConstruction(constructionId: string, source
     .single();
   if (!construction) throw new Error("Construction not found");
 
-  const estimateNo = await nextEstimateNo(supabase, profile.company_id);
-
   const { data: existingVersions } = await supabase
     .from("estimates")
     .select("version")
@@ -1183,28 +1147,29 @@ export async function copyEstimateForConstruction(constructionId: string, source
     .limit(1);
   const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
 
-  const { data: newEstimate, error } = await supabase
-    .from("estimates")
-    .insert({
-      company_id: profile.company_id,
-      customer_id: construction.customer_id,
-      construction_id: constructionId,
-      estimate_no: estimateNo,
-      title,
-      status: "draft",
-      version: nextVersion,
-      subtotal: source.subtotal,
-      tax: source.tax,
-      total: source.total,
-      cost_total: source.cost_total,
-      gross_profit: source.gross_profit,
-      gross_profit_rate: source.gross_profit_rate,
-      notes: buildAuthorNotes(createdByName, source.notes),
-      assigned_to: user.id,
-    })
-    .select()
-    .single();
-  throwIfSupabaseError(error);
+  const newEstimate = await allocateUniqueEstimateNo(supabase, profile.company_id, (estimateNo) =>
+    supabase
+      .from("estimates")
+      .insert({
+        company_id: profile.company_id,
+        customer_id: construction.customer_id,
+        construction_id: constructionId,
+        estimate_no: estimateNo,
+        title,
+        status: "draft",
+        version: nextVersion,
+        subtotal: source.subtotal,
+        tax: source.tax,
+        total: source.total,
+        cost_total: source.cost_total,
+        gross_profit: source.gross_profit,
+        gross_profit_rate: source.gross_profit_rate,
+        notes: buildAuthorNotes(createdByName, source.notes),
+        assigned_to: user.id,
+      })
+      .select()
+      .single(),
+  );
 
   const categoryMap = new Map<string, string>();
   for (const cat of source.categories ?? []) {

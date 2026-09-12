@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { scopedSupabase } from "@/lib/queries/scoped";
 import { canUserViewAnnouncement } from "@/lib/announcement-visibility";
 import { EMPTY_TRANSFER_SENDER, PROCUREMENT_ACCOUNT_ITEMS, parseTransferSender, type InvoiceClosingDay, type TransferSender } from "@/lib/procurement";
 import { PDF_FORM_TEMPLATES_KEY, resolvePdfFormTemplates } from "@/lib/pdf-form-template";
@@ -38,6 +39,7 @@ export const QK = {
   craftsman: (id: string) => ["craftsman", id] as const,
   craftsmenMaster: ["craftsmen-master"] as const,
   workflowRequest: (id: string) => ["workflow-request", id] as const,
+  workflowRequests: ["workflow-requests"] as const,
   workflowTypes: ["workflow-types"] as const,
   pdfTemplates: ["pdf-form-templates"] as const,
   financials: ["financials"] as const,
@@ -389,13 +391,16 @@ export async function fetchCraftsman(id: string) {
 }
 
 export async function fetchWorkflowRequest(id: string) {
-  const supabase = createClient();
-  const [requestRes, stepsRes, commentsRes] = await Promise.all([
+  const { supabase, companyId } = await scopedSupabase();
+  const selectWithJoins =
+    "*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name, fields_schema)";
+  const [requestRes0, stepsRes, commentsRes] = await Promise.all([
     supabase
       .from("workflow_requests")
-      .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+      .select(selectWithJoins)
       .eq("id", id)
-      .single(),
+      .eq("company_id", companyId)
+      .maybeSingle(),
     supabase
       .from("workflow_steps")
       .select("*, approver:profiles!workflow_steps_approver_id_fkey(id, display_name, role)")
@@ -407,9 +412,30 @@ export async function fetchWorkflowRequest(id: string) {
       .eq("request_id", id)
       .order("created_at"),
   ]);
+  let requestRes = requestRes0;
+  if (requestRes.error || !requestRes.data) {
+    const fallback = await supabase
+      .from("workflow_requests")
+      .select("*")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!fallback.error && fallback.data) requestRes = fallback;
+  }
   if (requestRes.error) throw new Error(requestRes.error.message || "ワークフロー詳細の取得に失敗しました");
+  if (!requestRes.data) throw new Error("申請が見つかりません");
+  const row = requestRes.data as typeof requestRes.data & { workflow_type?: { id: string; key: string; name: string; fields_schema?: unknown } | null };
+  if (!row.workflow_type && (row as { type_id?: string }).type_id) {
+    const { data: wfType } = await supabase
+      .from("workflow_types")
+      .select("id, key, name, fields_schema")
+      .eq("id", (row as { type_id: string }).type_id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (wfType) row.workflow_type = wfType;
+  }
   return {
-    ...requestRes.data,
+    ...row,
     steps: stepsRes.data || [],
     comments: (commentsRes.data || []).map((c) => ({
       ...c,

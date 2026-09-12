@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { Estimate, EstimateCategory, EstimateItem } from "@/lib/database.types";
 import { CACHE_TTL, cachedByCompany, invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
+import { allocateUniqueEstimateNo } from "@/lib/next-estimate-no";
 
 export type EstimateListRow = {
   id: string;
@@ -146,44 +147,38 @@ export async function createEstimate(
     }
   }
 
-  // Generate estimate number
-  const { count } = await supabase
-    .from("estimates")
-    .select("*", { count: "exact", head: true });
-  const estimateNo = `EST-${String((count || 0) + 1).padStart(4, "0")}`;
-
-  // Calculate totals
   const subtotal = flatItems.reduce((sum, item) => sum + (item.selling_amount || 0), 0);
   const tax = Math.floor(subtotal * 0.1);
   const costTotal = flatItems.reduce((sum, item) => sum + (item.cost_amount || 0), 0);
 
-  const { data: estimate, error } = await supabase
-    .from("estimates")
-    .insert({
-      company_id: profile.company_id,
-      estimate_no: estimateNo,
-      title: input.title,
-      customer_id: input.customer_id || null,
-      notes: input.notes || null,
-      validity_date: input.validity_date || null,
-      assigned_to: input.assigned_to || null,
-      department_name: input.department_name?.trim() || null,
-      status: "draft",
-      // 新規見積: 料率は残置（BI連動用）。金額は明細行（発注業者=システム予約）で計上（No.106）
-      reserve_fee_1_rate: 0.02,
-      reserve_fee_2_rate: 0.03,
-      reserve_fee_1_amount: 0,
-      reserve_fee_2_amount: 0,
-      subtotal,
-      tax,
-      total: subtotal + tax,
-      cost_total: costTotal,
-      gross_profit: subtotal - costTotal,
-      gross_profit_rate: subtotal > 0 ? ((subtotal - costTotal) / subtotal) * 100 : 0,
-    })
-    .select()
-    .single();
-  if (error) throw error;
+  const estimate = await allocateUniqueEstimateNo(supabase, profile.company_id, (estimateNo) =>
+    supabase
+      .from("estimates")
+      .insert({
+        company_id: profile.company_id,
+        estimate_no: estimateNo,
+        title: input.title,
+        customer_id: input.customer_id || null,
+        notes: input.notes || null,
+        validity_date: input.validity_date || null,
+        assigned_to: input.assigned_to || null,
+        department_name: input.department_name?.trim() || null,
+        status: "draft",
+        // 新規見積: 料率は残置（BI連動用）。金額は明細行（発注業者=システム予約）で計上（No.106）
+        reserve_fee_1_rate: 0.02,
+        reserve_fee_2_rate: 0.03,
+        reserve_fee_1_amount: 0,
+        reserve_fee_2_amount: 0,
+        subtotal,
+        tax,
+        total: subtotal + tax,
+        cost_total: costTotal,
+        gross_profit: subtotal - costTotal,
+        gross_profit_rate: subtotal > 0 ? ((subtotal - costTotal) / subtotal) * 100 : 0,
+      })
+      .select()
+      .single(),
+  );
 
   const catMap = new Map<number, string>();
   for (const [idx, category] of normalizedCategories.entries()) {
@@ -197,7 +192,7 @@ export async function createEstimate(
       })
       .select()
       .single();
-    if (catError) throw catError;
+    if (catError) throw new Error(catError.message);
     if (newCat) catMap.set(idx, newCat.id);
   }
 
@@ -235,7 +230,7 @@ export async function createEstimate(
     });
 
     const { error: itemsError } = await supabase.from("estimate_items").insert(itemsToInsert);
-    if (itemsError) throw itemsError;
+    if (itemsError) throw new Error(itemsError.message);
   }
 
   void dispatchWebhook(profile.company_id, "estimate.created", {
@@ -363,24 +358,23 @@ export async function copyEstimate(sourceId: string) {
   if (!profile) throw new Error("Profile not found");
 
   const source = await getEstimate(sourceId);
-  const { count } = await supabase.from("estimates").select("*", { count: "exact", head: true });
-  const estimateNo = `EST-${String((count || 0) + 1).padStart(4, "0")}`;
 
-  const { data: estimate, error } = await supabase.from("estimates").insert({
-    company_id: profile.company_id,
-    customer_id: source.customer_id,
-    estimate_no: estimateNo,
-    title: source.title ? `${source.title}（コピー）` : "見積（コピー）",
-    status: "draft",
-    subtotal: source.subtotal,
-    tax: source.tax,
-    total: source.total,
-    cost_total: source.cost_total,
-    gross_profit: source.gross_profit,
-    gross_profit_rate: source.gross_profit_rate,
-    notes: source.notes,
-  }).select().single();
-  if (error) throw error;
+  const estimate = await allocateUniqueEstimateNo(supabase, profile.company_id, (estimateNo) =>
+    supabase.from("estimates").insert({
+      company_id: profile.company_id,
+      customer_id: source.customer_id,
+      estimate_no: estimateNo,
+      title: source.title ? `${source.title}（コピー）` : "見積（コピー）",
+      status: "draft",
+      subtotal: source.subtotal,
+      tax: source.tax,
+      total: source.total,
+      cost_total: source.cost_total,
+      gross_profit: source.gross_profit,
+      gross_profit_rate: source.gross_profit_rate,
+      notes: source.notes,
+    }).select().single(),
+  ) as Estimate;
 
   const catMap = new Map<string, string>();
   for (const cat of source.categories ?? []) {
@@ -439,8 +433,6 @@ export async function createEstimateRevision(parentEstimateId: string, construct
 
   const parent = await getEstimate(parentEstimateId);
   const nextVersion = (parent.version ?? 1) + 1;
-
-  const { count } = await supabase.from("estimates").select("*", { count: "exact", head: true });
   const estimateNo = `${parent.estimate_no}-R${nextVersion}`;
 
   const { data: estimate, error } = await supabase

@@ -1,7 +1,15 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { authCookieDomain } from "@/lib/tenant-host";
 
 let browserClient: SupabaseClient | null = null;
+
+function cookieOptions() {
+  if (typeof window === "undefined") return undefined;
+  const domain = authCookieDomain(window.location.hostname, process.env.NEXT_PUBLIC_APP_DOMAIN);
+  if (!domain) return undefined;
+  return { domain, path: "/", sameSite: "lax" as const };
+}
 
 export function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -21,7 +29,10 @@ export function createClient() {
   }
 
   if (!browserClient) {
-    browserClient = createBrowserClient(url, key);
+    const options = cookieOptions();
+    browserClient = options
+      ? createBrowserClient(url, key, { cookieOptions: options })
+      : createBrowserClient(url, key);
   }
   return browserClient;
 }

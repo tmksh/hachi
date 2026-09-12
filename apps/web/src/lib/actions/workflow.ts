@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
+import { STANDALONE_WORKFLOW_KEYS } from "@/lib/tenant-host";
 
 /** PostgrestError を素のまま throw すると本番で Server Components render エラーに化ける */
 function actionError(
@@ -39,7 +40,7 @@ export async function getWorkflowRequest(id: string) {
   const [requestRes, stepsRes, commentsRes] = await Promise.all([
     supabase
       .from("workflow_requests")
-      .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+      .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name, department), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name, fields_schema)")
       .eq("id", id)
       .single(),
     supabase
@@ -533,8 +534,8 @@ async function rejectWorkflowStepUnsafe(stepId: string, comment?: string) {
 export async function remandWorkflowStep(stepId: string, comment?: string) {
   const { actionOk, actionFail } = await import("@/lib/action-result");
   try {
-    await remandWorkflowStepUnsafe(stepId, comment);
-    return actionOk({});
+    const updated = await remandWorkflowStepUnsafe(stepId, comment);
+    return actionOk(updated);
   } catch (e) {
     console.error("[remandWorkflowStep]", e);
     return actionFail(e, "差戻し処理に失敗しました");
@@ -669,6 +670,12 @@ async function remandWorkflowStepUnsafe(stepId: string, comment?: string) {
       console.error("[remandWorkflowStep] notify failed", e);
     }
   }
+
+  return {
+    id: requestId,
+    status: "rejected" as const,
+    payload: (updatedReq.payload ?? payload) as Record<string, unknown>,
+  };
 }
 
 export async function updateWorkflowRequestStatus(
@@ -698,6 +705,311 @@ export async function updateWorkflowRequestStatus(
 
   const { error } = await supabase.from("workflow_requests").update(patch).eq("id", id);
   if (error) throw actionError(error, "申請ステータスの更新に失敗しました");
+}
+
+const LINKED_PAYLOAD_KEYS = ["estimate_id", "contract_id"] as const;
+
+function isLinkedWorkflowPayload(payload: Record<string, unknown> | null | undefined) {
+  if (!payload) return false;
+  return LINKED_PAYLOAD_KEYS.some((k) => {
+    const v = payload[k];
+    return typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.trim());
+  });
+}
+
+function isWorkflowPrivilegedRole(role: string | null | undefined) {
+  return role === "hq_admin" || role === "admin";
+}
+
+/** 申請者本人、または同一テナントの管理者（見積 No.69 と同様に再申請・取消を可能にする） */
+function canActOnOwnWorkflowRequest(
+  userId: string,
+  request: { requester_id: string | null; company_id: string | null },
+  actor: { role?: string | null; company_id?: string | null } | null,
+) {
+  if (request.requester_id === userId) return true;
+  if (!actor || !isWorkflowPrivilegedRole(actor.role)) return false;
+  return Boolean(actor.company_id && request.company_id && actor.company_id === request.company_id);
+}
+
+async function updateWorkflowRequestRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  id: string,
+  companyId: string,
+  patch: Record<string, unknown>,
+) {
+  const selectCols = "id, status, payload, requester_id, title, amount, due_date, decided_at, submitted_at";
+  let { data, error } = await supabase
+    .from("workflow_requests")
+    .update(patch)
+    .eq("id", id)
+    .eq("company_id", companyId)
+    .select(selectCols)
+    .maybeSingle();
+  if (error || !data) {
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const retry = await createAdminClient()
+        .from("workflow_requests")
+        .update(patch)
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .select(selectCols)
+        .maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    } catch (adminErr) {
+      console.error("[updateWorkflowRequestRow] admin fallback unavailable", adminErr);
+    }
+  }
+  return { data, error };
+}
+
+/**
+ * 差戻し / 却下された経費・休暇などの申請を再提出する（見積 No.69 相当）。
+ * 見積・契約に紐づく申請はそれぞれの画面から再申請する。
+ */
+export async function resubmitWorkflowRequest(input: {
+  id: string;
+  title?: string;
+  amount?: number | null;
+  due_date?: string | null;
+  payload?: Record<string, unknown>;
+  comment?: string;
+}): Promise<
+  | { ok: true; id: string; status: "submitted"; payload: Record<string, unknown> }
+  | { ok: false; error: string }
+> {
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+
+    const { data: request, error: reqErr } = await supabase
+      .from("workflow_requests")
+      .select("id, status, payload, requester_id, company_id, title, type_id")
+      .eq("id", input.id)
+      .single();
+    if (reqErr || !request) return actionFail(reqErr, "申請が見つかりません");
+    const { data: actorProfile } = await supabase
+      .from("profiles")
+      .select("company_id, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!canActOnOwnWorkflowRequest(user.id, request, actorProfile)) {
+      return actionFail("申請者本人のみ再申請できます", "申請者本人のみ再申請できます");
+    }
+    if (actorProfile?.company_id && request.company_id && actorProfile.company_id !== request.company_id) {
+      return actionFail("申請が見つかりません", "申請が見つかりません");
+    }
+    if (request.status !== "rejected") {
+      return actionFail("差戻しまたは却下された申請のみ再申請できます", "再申請できない状態です");
+    }
+    const { data: wfType } = await supabase
+      .from("workflow_types")
+      .select("key")
+      .eq("id", request.type_id)
+      .maybeSingle();
+    const prev = (request.payload ?? {}) as Record<string, unknown>;
+    if (isLinkedWorkflowPayload(prev) && !STANDALONE_WORKFLOW_KEYS.has(String(wfType?.key ?? ""))) {
+      return actionFail(
+        "見積・契約の申請は、それぞれの詳細画面から再申請してください",
+        "見積・契約の申請は、それぞれの詳細画面から再申請してください",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const nextPayload = {
+      ...prev,
+      ...(input.payload ?? {}),
+      remand: false,
+      resubmitted_at: now,
+    };
+
+    const patch: Record<string, unknown> = {
+      status: "submitted",
+      title: input.title?.trim() || request.title,
+      payload: nextPayload,
+      submitted_at: now,
+      decided_at: null,
+      updated_at: now,
+    };
+    if (input.amount !== undefined) patch.amount = input.amount;
+    if (input.due_date !== undefined) patch.due_date = input.due_date;
+
+    const companyId = actorProfile?.company_id ?? request.company_id;
+    if (!companyId) return actionFail("申請が見つかりません", "申請が見つかりません");
+    const { data: updated, error: updErr } = await updateWorkflowRequestRow(supabase, input.id, companyId, patch);
+    if (updErr || !updated || updated.status !== "submitted") {
+      return actionFail(updErr, "再申請に失敗しました");
+    }
+
+    const { error: stepsErr } = await supabase
+      .from("workflow_steps")
+      .update({ status: "pending", comment: null, decided_at: null })
+      .eq("request_id", input.id);
+    if (stepsErr) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/admin");
+        await createAdminClient()
+          .from("workflow_steps")
+          .update({ status: "pending", comment: null, decided_at: null })
+          .eq("request_id", input.id)
+          .eq("company_id", companyId);
+      } catch (e) {
+        console.error("[resubmitWorkflowRequest] steps reset failed", e);
+        return actionFail(stepsErr, "承認ステップの初期化に失敗しました");
+      }
+    }
+
+    const note = input.comment?.trim() || "再申請しました";
+    await supabase.from("workflow_comments").insert({
+      company_id: companyId,
+      request_id: input.id,
+      user_id: user.id,
+      message: note,
+    });
+
+    const { data: firstStep } = await supabase
+      .from("workflow_steps")
+      .select("approver_id, step_order")
+      .eq("request_id", input.id)
+      .eq("status", "pending")
+      .order("step_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (firstStep?.approver_id && request.company_id) {
+      try {
+        const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+        await notifySalesFlowUser(supabase, request.company_id, firstStep.approver_id, {
+          title: `再申請: ${updated.title ?? request.title}`,
+          description: note,
+          href: `/workflow/${input.id}`,
+          urgent: true,
+        }, user.id);
+      } catch (e) {
+        console.error("[resubmitWorkflowRequest] notify failed", e);
+      }
+    }
+
+    return actionOk({
+      id: input.id,
+      status: "submitted" as const,
+      payload: (updated.payload ?? nextPayload) as Record<string, unknown>,
+    });
+  } catch (e) {
+    console.error("[resubmitWorkflowRequest]", e);
+    return actionFail(e, "再申請に失敗しました");
+  }
+}
+
+/**
+ * 申請中・差戻し・却下の申請を申請者本人が取り消す。
+ * 承認済みは取り消せない。履歴として cancelled を残し、物理削除はしない。
+ */
+export async function cancelWorkflowRequest(
+  id: string,
+  comment?: string,
+): Promise<
+  | { ok: true; id: string; status: "cancelled"; payload: Record<string, unknown> }
+  | { ok: false; error: string }
+> {
+  const { actionOk, actionFail } = await import("@/lib/action-result");
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+
+    const { data: request, error: reqErr } = await supabase
+      .from("workflow_requests")
+      .select("id, status, payload, requester_id, company_id, title, type_id")
+      .eq("id", id)
+      .single();
+    if (reqErr || !request) return actionFail(reqErr, "申請が見つかりません");
+    const { data: actorProfile } = await supabase
+      .from("profiles")
+      .select("company_id, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!canActOnOwnWorkflowRequest(user.id, request, actorProfile)) {
+      return actionFail("申請者本人のみ取り消せます", "申請者本人のみ取り消せます");
+    }
+    if (request.status !== "submitted" && request.status !== "rejected") {
+      return actionFail("申請中・差戻し・却下の申請のみ取り消せます", "取り消せない状態です");
+    }
+    const { data: wfType } = await supabase
+      .from("workflow_types")
+      .select("key")
+      .eq("id", request.type_id)
+      .maybeSingle();
+    const prev = (request.payload ?? {}) as Record<string, unknown>;
+    if (isLinkedWorkflowPayload(prev) && !STANDALONE_WORKFLOW_KEYS.has(String(wfType?.key ?? ""))) {
+      return actionFail(
+        "見積・契約の申請は、それぞれの詳細画面から操作してください",
+        "見積・契約の申請は、それぞれの詳細画面から操作してください",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const companyId = actorProfile?.company_id ?? request.company_id;
+    if (!companyId) return actionFail("申請が見つかりません", "申請が見つかりません");
+    const { data: updated, error: updErr } = await updateWorkflowRequestRow(supabase, id, companyId, {
+      status: "cancelled",
+      decided_at: now,
+      updated_at: now,
+      payload: { ...prev, cancelled_at: now, cancel_comment: comment?.trim() || null },
+    });
+    if (updErr || !updated || updated.status !== "cancelled") {
+      return actionFail(updErr, "取り消しに失敗しました");
+    }
+
+    await supabase
+      .from("workflow_steps")
+      .update({ status: "skipped", decided_at: now })
+      .eq("request_id", id)
+      .in("status", ["pending", "rejected"]);
+
+    const note = comment?.trim() || "申請を取り消しました";
+    await supabase.from("workflow_comments").insert({
+      company_id: companyId,
+      request_id: id,
+      user_id: user.id,
+      message: note,
+    });
+
+    const { data: steps } = await supabase
+      .from("workflow_steps")
+      .select("approver_id")
+      .eq("request_id", id);
+    const notifyIds = new Set(
+      (steps ?? []).map((s) => s.approver_id).filter((uid): uid is string => !!uid && uid !== user.id),
+    );
+    if (request.company_id) {
+      const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
+      for (const uid of notifyIds) {
+        try {
+          await notifySalesFlowUser(supabase, request.company_id, uid, {
+            title: `申請が取り消されました: ${request.title}`,
+            description: note,
+            href: `/workflow/${id}`,
+            urgent: false,
+          }, user.id);
+        } catch (e) {
+          console.error("[cancelWorkflowRequest] notify failed", e);
+        }
+      }
+    }
+
+    return actionOk({
+      id,
+      status: "cancelled" as const,
+      payload: (updated.payload ?? { ...prev, cancelled_at: now, cancel_comment: comment?.trim() || null }) as Record<string, unknown>,
+    });
+  } catch (e) {
+    console.error("[cancelWorkflowRequest]", e);
+    return actionFail(e, "取り消しに失敗しました");
+  }
 }
 
 export async function addWorkflowComment(requestId: string, body: string) {

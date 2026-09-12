@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import {
   type FieldDef,
   type ApprovalStep,
 } from "@/lib/actions/workflow";
+import { QK } from "@/lib/queries/portal";
 import type { fetchWorkflowTypes } from "@/lib/queries/portal";
 
 type WfType = Awaited<ReturnType<typeof fetchWorkflowTypes>>[number];
@@ -33,6 +35,7 @@ type WorkflowNewClientProps = {
 
 export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNewClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<WfType[]>(initialTypes);
   const [profiles, setProfiles] = useState(initialProfiles);
@@ -83,6 +86,7 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
         return;
       }
       toast.success("申請しました");
+      await queryClient.invalidateQueries({ queryKey: QK.workflowRequests });
       router.push("/workflow");
     } catch { toast.error("申請に失敗"); } finally { setSaving(false); }
   };

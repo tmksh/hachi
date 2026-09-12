@@ -27,6 +27,7 @@ import {
   type PdfFormField,
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
+import { snapFieldsToSlots, leftoverSlotOverlays, slotsFromPdfPage, type FormSlot } from "@/lib/pdf-form-snap";
 import { cn } from "@/lib/utils";
 
 type PanelProps = {
@@ -52,6 +53,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
   const previewColRef = useRef<HTMLDivElement>(null);
   const [renderW, setRenderW] = useState(0);
   const [pageViewports, setPageViewports] = useState<{ width: number; height: number }[]>([]);
+  const [pageSlots, setPageSlots] = useState<FormSlot[][]>([]);
 
   const valueFor = (f: PdfFormField): string => values[f.id] ?? resolveFieldValue(f, ctx);
 
@@ -59,6 +61,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
     setLoading(true);
     setDoc(null);
     setPageViewports([]);
+    setPageSlots([]);
     let cancelled = false;
     (async () => {
       try {
@@ -67,13 +70,16 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
         const d = await loadPdfDocument(url);
         if (cancelled) return;
         const sizes: { width: number; height: number }[] = [];
+        const slots: FormSlot[][] = [];
         for (let i = 1; i <= d.numPages; i++) {
           const page = await d.getPage(i);
           const vp = page.getViewport({ scale: 1 });
           sizes.push({ width: vp.width, height: vp.height });
+          slots.push(await slotsFromPdfPage(page));
         }
         if (cancelled) return;
         setPageViewports(sizes);
+        setPageSlots(slots);
         setDoc(d);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -175,7 +181,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
         ).promise;
         const img = canvas.toDataURL("image/jpeg", 0.92);
 
-        const overlays = fieldsPaintOrder(template.fields, p)
+        const overlays = fieldsPaintOrder(snappedPageFields(template.fields, p, pageSlots[p] ?? [], ctx, valueFor), p)
           .map((f) => overlayHtml(f, valueFor(f), baseVp.width, baseVp.width, baseVp.height))
           .join("");
 
@@ -300,7 +306,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
                         className="pointer-events-none absolute inset-0 h-full w-full"
                       />
                     )}
-                    {fieldsPaintOrder(template.fields, p).map((f) => (
+                    {fieldsPaintOrder(snappedPageFields(template.fields, p, pageSlots[p] ?? [], ctx, valueFor), p).map((f) => (
                         <FieldOverlay
                           key={f.id}
                           field={f}
@@ -345,11 +351,40 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: DialogProps
   );
 }
 
+function snappedPageFields(
+  fields: PdfFormField[],
+  page: number,
+  slots: FormSlot[],
+  ctx: FillContext,
+  valueOf?: (field: PdfFormField) => string,
+): PdfFormField[] {
+  const placed = snapFieldsToSlots(fields.filter((f) => f.page === page), slots);
+  const occupied = placed.filter((f) => {
+    const v = valueOf?.(f) ?? f.text ?? "";
+    return f.type === "checkbox" ? !!v : v.trim().length > 0;
+  });
+  return [...placed, ...leftoverSlotOverlays(slots, occupied, page, {
+    orderAmount: ctx.orderAmount,
+    constructionTitle: ctx.constructionTitle,
+    constructionNo: ctx.constructionNo,
+    startDate: ctx.startDate,
+    endDate: ctx.endDate,
+    customerName: ctx.customerName,
+    customerAddress: ctx.customerAddress,
+    customerCompanyName: ctx.customer?.company_name,
+  })];
+}
+
 function fieldsPaintOrder(fields: PdfFormField[], page: number): PdfFormField[] {
   return fields
     .filter((f) => f.page === page)
     .slice()
-    .sort((a, b) => b.wPct * b.hPct - a.wPct * a.hPct);
+    .sort((a, b) => {
+      const ac = a.id.startsWith("__cover_") ? 0 : 1;
+      const bc = b.id.startsWith("__cover_") ? 0 : 1;
+      if (ac !== bc) return ac - bc;
+      return b.wPct * b.hPct - a.wPct * a.hPct;
+    });
 }
 
 function FieldOverlay({
@@ -366,10 +401,13 @@ function FieldOverlay({
   pageHeight: number;
 }) {
   const box = fieldOverlayBox(field);
+  const coverBlank = field.id.startsWith("__cover_");
   const hasValue = field.type === "checkbox" ? !!value : value.trim().length > 0;
-  if (!hasValue) return null;
+  if (!hasValue && !coverBlank) return null;
 
-  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, box.h * pageHeight);
+  const boxH = box.h * pageHeight;
+  const boxW = box.w * (renderW || pageWidth);
+  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, boxH, boxW, value);
   const multiline = field.type === "textarea";
 
   return (
@@ -413,9 +451,12 @@ function overlayHtml(
   pageHeight: number,
 ): string {
   const hasValue = field.type === "checkbox" ? !!value : value.trim().length > 0;
-  if (!hasValue) return "";
+  const coverBlank = field.id.startsWith("__cover_");
+  if (!hasValue && !coverBlank) return "";
   const box = fieldOverlayBox(field);
-  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, box.h * pageHeight);
+  const boxH = box.h * pageHeight;
+  const boxW = box.w * (renderW || pageWidth);
+  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, boxH, boxW, value);
   const justify = overlayJustify(field.align);
   const alignItems = field.type === "textarea" ? "flex-start" : "center";
   const whiteSpace = field.type === "textarea" ? "pre-wrap" : "nowrap";

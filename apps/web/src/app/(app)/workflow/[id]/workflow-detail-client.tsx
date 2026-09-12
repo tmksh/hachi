@@ -1,15 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
-import { ArrowLeft, Check, X, CornerUpLeft, MessageSquare, Send, Sparkles, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, X, CornerUpLeft, MessageSquare, Send, Sparkles, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -27,11 +28,15 @@ import {
   remandWorkflowStep,
   addWorkflowComment,
   getWorkflowApprovalSupport,
+  resubmitWorkflowRequest,
+  cancelWorkflowRequest,
+  type FieldDef,
 } from "@/lib/actions/workflow";
-import { fetchWorkflowRequest } from "@/lib/queries/portal";
+import { fetchWorkflowRequest, QK } from "@/lib/queries/portal";
 import { saveContractAdminSupplement } from "@/lib/actions/contract-features";
 import type { ApprovalSupportResult } from "@/lib/integrations/linq-ai/types";
 import { useAuth } from "@/hooks/use-auth";
+import { isUuid, STANDALONE_WORKFLOW_KEYS } from "@/lib/tenant-host";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -51,7 +56,18 @@ type Comment = {
   user: { id: string; display_name: string } | null;
 };
 
-type ActionType = "reject" | "remand" | "conditional";
+type ActionType = "reject" | "remand" | "conditional" | "cancel";
+
+const SYSTEM_PAYLOAD_KEYS = new Set([
+  "contract_id",
+  "template_id",
+  "contract_draft",
+  "remand",
+  "admin_supplemented_by",
+  "estimate_id",
+  "resubmitted_at",
+  "cancelled_at",
+]);
 
 type WorkflowDetailClientProps = {
   initialData: Detail | null;
@@ -63,7 +79,9 @@ export function WorkflowDetailClient({
   initialApprovalSupport,
 }: WorkflowDetailClientProps) {
   const { id } = useParams();
-  const { user, hasRole } = useAuth();
+  const router = useRouter();
+  const { user, profile, hasRole } = useAuth();
+  const queryClient = useQueryClient();
   const [data, setData] = useState<Detail | null>(initialData);
   const [approvalSupport, setApprovalSupport] = useState<ApprovalSupportResult | null>(initialApprovalSupport);
 
@@ -79,29 +97,87 @@ export function WorkflowDetailClient({
   const [bankAccount, setBankAccount] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
   const [savingAdmin, setSavingAdmin] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editPayload, setEditPayload] = useState<Record<string, string>>({});
+  const [resubmitting, setResubmitting] = useState(false);
+
+  const applyLocal = (detail: Detail | null) => {
+    setData(detail);
+    const payload = (detail as Detail & { payload?: Record<string, unknown> } | null)?.payload ?? {};
+    setPaymentTerms(String(payload.payment_terms ?? ""));
+    setBankAccount(String(payload.bank_account ?? ""));
+    setAdminNotes(String(payload.admin_notes ?? ""));
+    if (detail) {
+      setEditTitle(detail.title ?? "");
+      setEditAmount(detail.amount != null ? String(detail.amount) : "");
+      setEditDueDate(detail.due_date ? String(detail.due_date).slice(0, 10) : "");
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(payload)) {
+        if (SYSTEM_PAYLOAD_KEYS.has(k)) continue;
+        if (v == null) continue;
+        next[k] = String(v);
+      }
+      setEditPayload(next);
+    }
+  };
+
+  const patchListRow = (row: {
+    id: string;
+    status?: string;
+    payload?: Record<string, unknown>;
+    title?: string | null;
+    amount?: number | null;
+    due_date?: string | null;
+    decided_at?: string | null;
+  }) => {
+    queryClient.setQueryData(QK.workflowRequests, (prev: unknown) => {
+      if (!Array.isArray(prev)) return prev;
+      return prev.map((r: { id: string }) => (r.id === row.id ? { ...r, ...row } : r));
+    });
+  };
+
+  const syncCaches = async (detail: Detail | null) => {
+    if (!id) return;
+    await queryClient.cancelQueries({ queryKey: QK.workflowRequests });
+    await queryClient.cancelQueries({ queryKey: QK.workflowRequest(id as string) });
+    queryClient.setQueryData(QK.workflowRequest(id as string), (prev: unknown) => {
+      if (prev && typeof prev === "object" && prev !== null && "detail" in (prev as object)) {
+        return { ...(prev as { detail: Detail | null; support: unknown }), detail };
+      }
+      return { detail, support: null };
+    });
+    if (detail) {
+      patchListRow({
+        id: detail.id,
+        status: detail.status,
+        payload: (detail as Detail & { payload?: Record<string, unknown> }).payload,
+        title: detail.title,
+        amount: detail.amount,
+        due_date: detail.due_date,
+        decided_at: detail.decided_at,
+      });
+    }
+    await queryClient.refetchQueries({ queryKey: QK.workflowRequests });
+    await queryClient.refetchQueries({ queryKey: QK.workflowRequest(id as string) });
+    router.refresh();
+  };
 
   useEffect(() => {
-    setData(initialData);
     setApprovalSupport(initialApprovalSupport);
-    const payload = (initialData as Detail & { payload?: Record<string, unknown> } | null)?.payload;
-    if (payload) {
-      setPaymentTerms(String(payload.payment_terms ?? ""));
-      setBankAccount(String(payload.bank_account ?? ""));
-      setAdminNotes(String(payload.admin_notes ?? ""));
-    }
+    applyLocal(initialData);
+    // 初回 hydrate では一覧を invalidate しない（古い in-flight 取得で差戻し結果を上書きするのを防ぐ）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData, initialApprovalSupport]);
 
   const reload = () => {
     if (!id) return;
     fetchWorkflowRequest(id as string)
-      .then((detail) => {
-        setData(detail);
+      .then(async (detail) => {
+        applyLocal(detail);
+        await syncCaches(detail);
         const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;
-        if (payload) {
-          setPaymentTerms(String(payload.payment_terms ?? ""));
-          setBankAccount(String(payload.bank_account ?? ""));
-          setAdminNotes(String(payload.admin_notes ?? ""));
-        }
         if (payload?.estimate_id) {
           getWorkflowApprovalSupport(id as string)
             .then(setApprovalSupport)
@@ -138,7 +214,20 @@ export function WorkflowDetailClient({
     if (!actionDialog) return;
     setActioning(true);
     try {
-      if (actionDialog.type === "reject") {
+      if (actionDialog.type === "cancel") {
+        if (!id) return;
+        const result = await cancelWorkflowRequest(id as string, actionComment.trim() || undefined);
+        if (!result.ok) { toast.error(result.error); return; }
+        toast.success("申請を取り消しました");
+        if (result.ok && "id" in result && result.id) {
+          patchListRow({
+            id: result.id,
+            status: result.status,
+            payload: result.payload,
+            decided_at: new Date().toISOString(),
+          });
+        }
+      } else if (actionDialog.type === "reject") {
         const result = await rejectWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
         if (!result.ok) { toast.error(result.error); return; }
         toast.success("却下しました");
@@ -150,27 +239,73 @@ export function WorkflowDetailClient({
         const result = await remandWorkflowStep(actionDialog.stepId, actionComment.trim() || undefined);
         if (!result.ok) { toast.error(result.error); return; }
         toast.success("差戻しました。申請者へ通知しました");
+        if (result.ok && "id" in result && result.id) {
+          patchListRow({
+            id: result.id,
+            status: result.status,
+            payload: result.payload,
+            decided_at: new Date().toISOString(),
+          });
+        }
       }
       setActionDialog(null);
-      await new Promise<void>((resolve) => {
-        if (!id) { resolve(); return; }
-        fetchWorkflowRequest(id as string)
-          .then((detail) => {
-            setData(detail);
-            const payload = (detail as Detail & { payload?: Record<string, unknown> }).payload;
-            if (payload) {
-              setPaymentTerms(String(payload.payment_terms ?? ""));
-              setBankAccount(String(payload.bank_account ?? ""));
-              setAdminNotes(String(payload.admin_notes ?? ""));
-            }
-          })
-          .catch(() => {})
-          .finally(() => resolve());
-      });
+      if (id) {
+        await queryClient.cancelQueries({ queryKey: QK.workflowRequests });
+        await queryClient.cancelQueries({ queryKey: QK.workflowRequest(id as string) });
+        try {
+          const detail = await fetchWorkflowRequest(id as string);
+          applyLocal(detail);
+          await syncCaches(detail);
+        } catch {
+          toast.error("最新状態の取得に失敗しました。画面を再読み込みしてください");
+        }
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "失敗しました");
     } finally {
       setActioning(false);
+    }
+  };
+
+  const handleResubmit = async () => {
+    if (!id) return;
+    setResubmitting(true);
+    try {
+      const payloadPatch: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(editPayload)) {
+        if (SYSTEM_PAYLOAD_KEYS.has(k)) continue;
+        payloadPatch[k] = v;
+      }
+      const amountNum = editAmount.trim() ? Number(editAmount) : null;
+      if (amountNum != null && !Number.isFinite(amountNum)) {
+        toast.error("金額の形式が正しくありません");
+        return;
+      }
+      const result = await resubmitWorkflowRequest({
+        id: id as string,
+        title: editTitle.trim(),
+        amount: amountNum,
+        due_date: editDueDate || null,
+        payload: payloadPatch,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("再申請しました");
+      if (result.ok && "id" in result && result.id) {
+        patchListRow({
+          id: result.id,
+          status: result.status,
+          payload: result.payload,
+          decided_at: null,
+        });
+      }
+      reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "再申請に失敗しました");
+    } finally {
+      setResubmitting(false);
     }
   };
 
@@ -203,7 +338,21 @@ export function WorkflowDetailClient({
   const comments = (data.comments ?? []) as Comment[];
   const fields = (data as Detail & { payload?: Record<string, unknown> }).payload ?? {};
   const requestRemanded = isWorkflowRemanded(data.status, fields);
-  const contractId = fields.contract_id as string | undefined;
+  const contractId = isUuid(fields.contract_id) ? String(fields.contract_id).trim() : undefined;
+  const estimateId = isUuid(fields.estimate_id) ? String(fields.estimate_id).trim() : undefined;
+  const typeKey = String((data as Detail & { workflow_type?: { key?: string } }).workflow_type?.key ?? "");
+  const isStandaloneType = STANDALONE_WORKFLOW_KEYS.has(typeKey);
+  const isLinkedFlow = Boolean(contractId || estimateId) && !isStandaloneType;
+  const requesterId =
+    (data as Detail & { requester_id?: string | null }).requester_id
+    ?? (data as Detail & { requester?: { id?: string | null } }).requester?.id
+    ?? null;
+  const actorId = user?.id ?? profile?.id ?? null;
+  const isRequester = Boolean(actorId && requesterId && actorId === requesterId);
+  const canActAsRequester = Boolean(isRequester || hasRole("hq_admin", "admin"));
+  const canReapply = Boolean(canActAsRequester && data.status === "rejected" && !isLinkedFlow);
+  const canCancel = Boolean(canActAsRequester && (data.status === "submitted" || data.status === "rejected") && !isLinkedFlow);
+  const fieldDefs = ((data as Detail & { workflow_type?: { fields_schema?: FieldDef[] } }).workflow_type?.fields_schema ?? []) as FieldDef[];
   const activeStepOrder = Math.min(
     ...steps.filter((s) => s.status === "pending").map((s) => s.step_order),
     Number.POSITIVE_INFINITY,
@@ -248,9 +397,14 @@ export function WorkflowDetailClient({
     admin_supplemented_at: "総務追記日時",
     admin_supplemented_by: "総務追記者",
   };
-  const displayFields = Object.entries(fields).filter(([k]) =>
-    !["contract_id", "template_id", "contract_draft", "remand", "admin_supplemented_by"].includes(k),
-  );
+  const displayFields = Object.entries(fields).filter(([k]) => {
+    if (["contract_id", "template_id", "contract_draft", "remand", "admin_supplemented_by", "resubmitted_at", "cancelled_at", "cancel_comment"].includes(k)) {
+      return false;
+    }
+    if (!requestRemanded && ["remanded_at", "remand_comment"].includes(k)) return false;
+    if (data.status !== "rejected" && ["rejected_at", "reject_comment"].includes(k)) return false;
+    return true;
+  });
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -267,7 +421,73 @@ export function WorkflowDetailClient({
         {(data as Detail & { is_urgent?: boolean }).is_urgent && (
           <Badge variant="destructive">緊急</Badge>
         )}
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {canReapply && (
+            <Button size="sm" onClick={() => void handleResubmit()} disabled={resubmitting} className="gap-1.5">
+              <RotateCcw className="h-3.5 w-3.5" />
+              {resubmitting ? "再申請中..." : "再申請"}
+            </Button>
+          )}
+          {canActAsRequester && requestRemanded && estimateId && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/quotes/${estimateId}`}>見積で再申請</Link>
+            </Button>
+          )}
+          {canActAsRequester && requestRemanded && contractId && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/contracts/${contractId}?tab=documents`}>契約で再申請</Link>
+            </Button>
+          )}
+          {canCancel && (
+            <Button size="sm" variant="outline" onClick={() => openActionDialog("cancel", "")} className="gap-1.5">
+              <X className="h-3.5 w-3.5" />申請を取り消す
+            </Button>
+          )}
+        </div>
       </div>
+
+      {(requestRemanded || (data.status === "rejected" && !requestRemanded)) && (
+        <div className={requestRemanded
+          ? "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          : "rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"}
+        >
+          <p className="font-medium">
+            {requestRemanded ? "差戻しされています。内容を修正して再申請してください。" : "却下されています。内容を見直して再申請できます。"}
+          </p>
+          {(fields.remand_comment || fields.reject_comment) && (
+            <p className="mt-1 text-xs whitespace-pre-wrap">
+              {String(fields.remand_comment || fields.reject_comment)}
+            </p>
+          )}
+          {canReapply && (
+            <div className="mt-3">
+              <Button
+                size="sm"
+                onClick={() => void handleResubmit()}
+                disabled={resubmitting}
+                className="gap-1.5"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {resubmitting ? "再申請中..." : "再申請"}
+              </Button>
+            </div>
+          )}
+          {!canReapply && isLinkedFlow && canActAsRequester && requestRemanded && (estimateId || contractId) && (
+            <div className="mt-3">
+              {estimateId && (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/quotes/${estimateId}`}>見積で再申請</Link>
+                </Button>
+              )}
+              {contractId && (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/contracts/${contractId}?tab=documents`}>契約で再申請</Link>
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -281,19 +501,39 @@ export function WorkflowDetailClient({
               <span className="text-muted-foreground">種別</span>
               <span>{(data as Detail & { workflow_type?: { name: string } }).workflow_type?.name ?? "-"}</span>
             </div>
-            {(data as Detail & { amount?: number }).amount && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">金額</span>
-                <span className="font-medium tabular-nums">
-                  ¥{((data as Detail & { amount: number }).amount).toLocaleString()}
-                </span>
+            {canReapply && (
+              <div className="space-y-1">
+                <span className="text-muted-foreground text-xs">件名</span>
+                <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
               </div>
             )}
-            {(data as Detail & { due_date?: string }).due_date && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">期限</span>
-                <span>{(data as Detail & { due_date: string }).due_date}</span>
+            {canReapply ? (
+              <div className="space-y-1">
+                <span className="text-muted-foreground text-xs">金額</span>
+                <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
               </div>
+            ) : (
+              (data as Detail & { amount?: number }).amount != null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">金額</span>
+                  <span className="font-medium tabular-nums">
+                    ¥{((data as Detail & { amount: number }).amount).toLocaleString()}
+                  </span>
+                </div>
+              )
+            )}
+            {canReapply ? (
+              <div className="space-y-1">
+                <span className="text-muted-foreground text-xs">期限</span>
+                <Input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+              </div>
+            ) : (
+              (data as Detail & { due_date?: string }).due_date && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">期限</span>
+                  <span>{(data as Detail & { due_date: string }).due_date}</span>
+                </div>
+              )
             )}
             {contractId && (
               <div className="flex justify-between gap-4">
@@ -303,16 +543,41 @@ export function WorkflowDetailClient({
                 </Link>
               </div>
             )}
-            {displayFields.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-4">
-                <span className="text-muted-foreground shrink-0">{PAYLOAD_LABELS[k] ?? k}</span>
-                <span className="text-right break-all">
-                  {k === "gross_profit_rate" && typeof v === "number"
-                    ? `${v.toFixed(1)}%`
-                    : String(v)}
-                </span>
-              </div>
-            ))}
+            {displayFields.map(([k, v]) => {
+              const def = fieldDefs.find((f) => f.key === k);
+              const label = def?.label ?? PAYLOAD_LABELS[k] ?? k;
+              const readOnly = !canReapply || ["remanded_at", "remand_comment", "rejected_at", "reject_comment", "resubmitted_at", "cancelled_at", "cancel_comment", "admin_supplemented_at", "gross_profit_rate"].includes(k);
+              if (!readOnly) {
+                return (
+                  <div key={k} className="space-y-1">
+                    <span className="text-muted-foreground text-xs">{label}</span>
+                    {def?.type === "textarea" ? (
+                      <Textarea
+                        rows={2}
+                        value={editPayload[k] ?? ""}
+                        onChange={(e) => setEditPayload((p) => ({ ...p, [k]: e.target.value }))}
+                      />
+                    ) : (
+                      <Input
+                        type={def?.type === "number" || def?.type === "date" ? def.type : "text"}
+                        value={editPayload[k] ?? ""}
+                        onChange={(e) => setEditPayload((p) => ({ ...p, [k]: e.target.value }))}
+                      />
+                    )}
+                  </div>
+                );
+              }
+              return (
+                <div key={k} className="flex justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">{label}</span>
+                  <span className="text-right break-all">
+                    {k === "gross_profit_rate" && typeof v === "number"
+                      ? `${v.toFixed(1)}%`
+                      : String(v)}
+                  </span>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -563,7 +828,8 @@ export function WorkflowDetailClient({
             <DialogTitle>
               {actionDialog?.type === "reject" ? "却下する"
                 : actionDialog?.type === "conditional" ? "条件付きで承認する"
-                  : "差戻しする"}
+                  : actionDialog?.type === "cancel" ? "申請を取り消す"
+                    : "差戻しする"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -572,14 +838,17 @@ export function WorkflowDetailClient({
                 ? "この申請を却下します。理由があればコメントを入力してください。"
                 : actionDialog?.type === "conditional"
                   ? "条件をコメントに記載して承認します。"
-                  : "この申請を申請者に差戻します。修正を依頼する内容を入力してください。"}
+                  : actionDialog?.type === "cancel"
+                    ? "この申請を取り消します。承認者へ通知され、履歴は残ります（削除はしません）。"
+                    : "この申請を申請者に差戻します。修正を依頼する内容を入力してください。"}
             </p>
             <Textarea
               rows={3}
               placeholder={
                 actionDialog?.type === "reject" ? "却下理由（任意）"
                   : actionDialog?.type === "conditional" ? "承認条件（必須）"
-                    : "差戻し理由・修正依頼内容（任意）"
+                    : actionDialog?.type === "cancel" ? "取り消し理由（任意）"
+                      : "差戻し理由・修正依頼内容（任意）"
               }
               value={actionComment}
               onChange={(e) => setActionComment(e.target.value)}
@@ -588,17 +857,18 @@ export function WorkflowDetailClient({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionDialog(null)} disabled={actioning}>
-              キャンセル
+              閉じる
             </Button>
             <Button
-              variant={actionDialog?.type === "reject" ? "destructive" : "default"}
+              variant={actionDialog?.type === "reject" || actionDialog?.type === "cancel" ? "destructive" : "default"}
               onClick={handleAction}
               disabled={actioning || (actionDialog?.type === "conditional" && !actionComment.trim())}
             >
               {actioning ? "処理中..."
                 : actionDialog?.type === "reject" ? "却下する"
                   : actionDialog?.type === "conditional" ? "条件付き承認する"
-                    : "差戻しする"}
+                    : actionDialog?.type === "cancel" ? "取り消す"
+                      : "差戻しする"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -61,6 +61,7 @@ import {
   type PdfFormField,
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
+import { slotPlacementForPalette, snapFieldsToSlots, slotsFromPdfPage, type FormSlot } from "@/lib/pdf-form-snap";
 
 
 type PaletteItem = {
@@ -172,6 +173,7 @@ export function PdfBuilderEditClient({
   const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
   const [containerWidth, setContainerWidth] = useState(680);
   const [pdfAspect, setPdfAspect] = useState<number | null>(null);
+  const [pageSlots, setPageSlots] = useState<FormSlot[]>([]);
 
   // ─── サーバーから受け取った PDF をクライアントで描画 ───
   useEffect(() => {
@@ -240,12 +242,17 @@ export function PdfBuilderEditClient({
 
   // ─── 項目の追加 ───
   const addField = (item: PaletteItem) => {
+    const taken = fields.filter((f) => f.page === activePage).map((f) => ({
+      x: f.xPct, y: f.yPct, w: f.wPct, h: f.hPct,
+    }));
+    const slot = slotPlacementForPalette(item.binding, item.type, item.label, pageSlots, taken);
     const f: PdfFormField = {
       id: uid(),
       ...newFieldDefaults(item.type, activePage),
       label: item.label,
       binding: item.binding,
       bindingKey: item.bindingKey,
+      ...(slot ? { xPct: slot.x, yPct: slot.y, wPct: slot.w, hPct: slot.h } : {}),
     };
     setFields((prev) => [...prev, f]);
     setSelectedId(f.id);
@@ -374,17 +381,42 @@ export function PdfBuilderEditClient({
   useEffect(() => {
     if (!doc) {
       setPdfAspect(null);
+      setPageSlots([]);
       return;
     }
     let cancelled = false;
-    doc.getPage(activePage + 1).then((page) => {
+    doc.getPage(activePage + 1).then(async (page) => {
       const vp = page.getViewport({ scale: 1 });
-      if (!cancelled) setPdfAspect(vp.height / vp.width);
+      const slots = await slotsFromPdfPage(page);
+      if (!cancelled) {
+        setPdfAspect(vp.height / vp.width);
+        setPageSlots(slots);
+      }
     }).catch(() => {
-      if (!cancelled) setPdfAspect(null);
+      if (!cancelled) {
+        setPdfAspect(null);
+        setPageSlots([]);
+      }
     });
     return () => { cancelled = true; };
   }, [doc, activePage]);
+
+  const snappedSigRef = useRef<string>("");
+  useEffect(() => {
+    if (pageSlots.length === 0) return;
+    const sig = `${activePage}:${pageSlots.map((s) => s.kind).sort().join(",")}`;
+    if (snappedSigRef.current === sig) return;
+    snappedSigRef.current = sig;
+    setFields((prev) => {
+      const current = prev.filter((f) => f.page === activePage);
+      const others = prev.filter((f) => f.page !== activePage);
+      const snapped = snapFieldsToSlots(current, pageSlots);
+      const changed = snapped.some((f, i) =>
+        f.xPct !== current[i]?.xPct || f.yPct !== current[i]?.yPct || f.wPct !== current[i]?.wPct || f.hPct !== current[i]?.hPct,
+      );
+      return changed ? [...others, ...snapped].sort((a, b) => a.page - b.page || a.yPct - b.yPct) : prev;
+    });
+  }, [pageSlots, activePage]);
 
   const selectedField = useMemo(() => fields.find((f) => f.id === selectedId) ?? null, [fields, selectedId]);
   const pageFields = useMemo(() => fields.filter((f) => f.page === activePage), [fields, activePage]);

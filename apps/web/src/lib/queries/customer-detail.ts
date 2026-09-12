@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { scopedSupabase } from "@/lib/queries/scoped";
 import type { Customer } from "@/lib/database.types";
 
 export const CUSTOMER_QK = {
@@ -13,13 +14,15 @@ export type CustomerDetail = Customer & {
 };
 
 export async function fetchCustomer(id: string): Promise<CustomerDetail> {
-  const supabase = createClient();
+  const { supabase, companyId } = await scopedSupabase();
   const { data, error } = await supabase
     .from("customers")
     .select("*, assigned_to_profile:profiles!customers_assigned_to_fkey(id, display_name)")
     .eq("id", id)
-    .single();
+    .eq("company_id", companyId)
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error("顧客が見つかりません");
   return data as CustomerDetail;
 }
 

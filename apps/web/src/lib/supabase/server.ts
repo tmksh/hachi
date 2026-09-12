@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { authCookieDomain } from "@/lib/tenant-host";
 
 export const createClient = cache(async function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,6 +23,9 @@ export const createClient = cache(async function createClient() {
     );
   }
 
+  const host = (await headers()).get("host") ?? "";
+  const cookieDomain = authCookieDomain(host, process.env.NEXT_PUBLIC_APP_DOMAIN);
+
   return createServerClient(url, key, {
     cookies: {
       getAll() {
@@ -30,7 +34,10 @@ export const createClient = cache(async function createClient() {
       setAll(cookiesToSet) {
         try {
           cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
+            cookieStore.set(name, value, {
+              ...options,
+              ...(cookieDomain ? { domain: cookieDomain } : {}),
+            }),
           );
         } catch {
           // The `setAll` method was called from a Server Component.

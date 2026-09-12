@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { scopedSupabase } from "@/lib/queries/scoped";
 import type { Craftsman, InboundLead, Profile } from "@/lib/database.types";
 
 import { DEAL_QK } from "./deals";
@@ -144,10 +145,11 @@ export async function fetchProfiles(): Promise<Profile[]> {
 }
 
 export async function fetchWorkflowRequests(status?: string) {
-  const supabase = createClient();
+  const { supabase, companyId } = await scopedSupabase();
   let query = supabase
     .from("workflow_requests")
     .select("*, requester:profiles!workflow_requests_requester_id_fkey(id, display_name), workflow_type:workflow_types!workflow_requests_type_id_fkey(id, key, name)")
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(300);
   if (status && status !== "all") {

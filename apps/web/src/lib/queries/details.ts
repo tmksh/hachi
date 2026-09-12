@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { scopedSupabase } from "@/lib/queries/scoped";
 import type { Estimate, EstimateCategory, EstimateItem } from "@/lib/database.types";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
@@ -22,17 +23,19 @@ function resolveEstimateAuthor(est: {
 }
 
 export async function fetchEstimate(id: string) {
-  const supabase = createClient();
+  const { supabase, companyId } = await scopedSupabase();
   const [{ data, error }, { data: categories }, { data: items }] = await Promise.all([
     supabase
       .from("estimates")
       .select("*, customer:customers(id, name, company_name, customer_type, notes)")
       .eq("id", id)
-      .single(),
+      .eq("company_id", companyId)
+      .maybeSingle(),
     supabase.from("estimate_categories").select("*").eq("estimate_id", id).order("sort_order"),
     supabase.from("estimate_items").select("*").eq("estimate_id", id).order("sort_order"),
   ]);
   if (error) throw error;
+  if (!data) throw new Error("見積が見つかりません");
   return { ...data, categories: categories || [], items: items || [] } as Estimate & {
     categories: EstimateCategory[];
     items: EstimateItem[];
@@ -47,13 +50,15 @@ export async function fetchEstimate(id: string) {
 }
 
 export async function fetchContract(id: string) {
-  const supabase = createClient();
+  const { supabase, companyId } = await scopedSupabase();
   const { data, error } = await supabase
     .from("contracts")
     .select("*, customer:customers(*), estimate:estimates(id, estimate_no, title, total)")
     .eq("id", id)
-    .single();
+    .eq("company_id", companyId)
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error("契約が見つかりません");
 
   const { data: linked } = await supabase
     .from("constructions")
@@ -97,7 +102,7 @@ export async function fetchContract(id: string) {
 }
 
 export async function fetchConstruction(id: string) {
-  const supabase = createClient();
+  const { supabase, companyId } = await scopedSupabase();
   const [
     { data, error },
     { data: tasks },
@@ -109,7 +114,8 @@ export async function fetchConstruction(id: string) {
       .from("constructions")
       .select("*, customer:customers(*), contract:contracts(id, contract_no, title, amount, contract_date, start_date, end_date, notes, status, estimate_id), assignee:profiles!constructions_assigned_to_fkey(id, display_name)")
       .eq("id", id)
-      .single(),
+      .eq("company_id", companyId)
+      .maybeSingle(),
     supabase.from("construction_tasks").select("*").eq("construction_id", id).order("sort_order"),
     supabase
       .from("contractor_orders")
@@ -128,6 +134,7 @@ export async function fetchConstruction(id: string) {
       .order("invoice_date", { ascending: false }),
   ]);
   if (error) throw error;
+  if (!data) throw new Error("工事が見つかりません");
 
   let estimates: Array<{
     id: string;

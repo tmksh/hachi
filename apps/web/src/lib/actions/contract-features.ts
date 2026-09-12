@@ -15,6 +15,7 @@ import {
 import { getContract } from "@/lib/actions/contracts";
 import { resolvePdfTemplates } from "@/lib/pdf-template";
 import { buildContractPrintHtml } from "@/lib/contract-pdf";
+import { allocateUniqueEstimateNo } from "@/lib/next-estimate-no";
 
 const AUTHOR_NOTE_PREFIX = "作成者:";
 
@@ -45,32 +46,8 @@ function resolveEstimateAuthor(est: {
   return pickAssignee(est.assignee)?.display_name ?? null;
 }
 
-function parseEstimateSequence(estimateNo: string): number {
-  const match = estimateNo.match(/^EST-(?:\d{4}-)?(\d+)$/i);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
 function throwIfSupabaseError(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
-}
-
-async function nextEstimateNo(supabase: Awaited<ReturnType<typeof createClient>>, companyId: string) {
-  // DB側カウンター（原子的・同時採番でも重複しない）。migration 未適用環境では従来ロジックへフォールバック
-  const { data: seq, error: rpcError } = await supabase.rpc("next_document_number", { p_kind: "estimate" });
-  if (!rpcError && typeof seq === "number" && seq > 0) {
-    return `EST-${String(seq).padStart(4, "0")}`;
-  }
-
-  const { data, error } = await supabase
-    .from("estimates")
-    .select("estimate_no")
-    .eq("company_id", companyId);
-  throwIfSupabaseError(error);
-
-  const max = (data ?? []).reduce((current, row) => {
-    return Math.max(current, parseEstimateSequence(row.estimate_no));
-  }, 0);
-  return `EST-${String(max + 1).padStart(4, "0")}`;
 }
 
 async function getCompanyContext() {
@@ -638,8 +615,6 @@ export async function createEmptyEstimateForContract(contractId: string, title: 
     .single();
   if (!contract?.customer_id) throw new Error("Contract not found");
 
-  const estimateNo = await nextEstimateNo(supabase, company_id);
-
   const { data: existingVersions } = await supabase
     .from("estimates")
     .select("version")
@@ -649,29 +624,29 @@ export async function createEmptyEstimateForContract(contractId: string, title: 
     .limit(1);
   const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
 
-  const { data: estimate, error } = await supabase
-    .from("estimates")
-    .insert({
-      company_id,
-      customer_id: contract.customer_id,
-      construction_id: null,
-      estimate_no: estimateNo,
-      title,
-      status: "draft",
-      version: nextVersion,
-      subtotal: 0,
-      tax: 0,
-      total: 0,
-      cost_total: 0,
-      gross_profit: 0,
-      gross_profit_rate: 0,
-      assigned_to: user.id,
-      notes: buildAuthorNotes(createdByName),
-    })
-    .select()
-    .single();
-  throwIfSupabaseError(error);
-  return estimate;
+  return allocateUniqueEstimateNo(supabase, company_id, (estimateNo) =>
+    supabase
+      .from("estimates")
+      .insert({
+        company_id,
+        customer_id: contract.customer_id,
+        construction_id: null,
+        estimate_no: estimateNo,
+        title,
+        status: "draft",
+        version: nextVersion,
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        cost_total: 0,
+        gross_profit: 0,
+        gross_profit_rate: 0,
+        assigned_to: user.id,
+        notes: buildAuthorNotes(createdByName),
+      })
+      .select()
+      .single(),
+  );
 }
 
 export async function copyEstimateForContract(
@@ -699,8 +674,6 @@ export async function copyEstimateForContract(
   throwIfSupabaseError(sourceError);
   if (!source) throw new Error("Source estimate not found");
 
-  const estimateNo = await nextEstimateNo(supabase, company_id);
-
   const { data: existingVersions } = await supabase
     .from("estimates")
     .select("version")
@@ -710,9 +683,10 @@ export async function copyEstimateForContract(
     .limit(1);
   const nextVersion = (existingVersions?.[0]?.version ?? 0) + 1;
 
-  const { data: newEstimate, error } = await supabase
-    .from("estimates")
-    .insert({
+  const newEstimate = await allocateUniqueEstimateNo(supabase, company_id, (estimateNo) =>
+    supabase
+      .from("estimates")
+      .insert({
       company_id,
       customer_id: contract.customer_id,
       construction_id: null,
@@ -730,8 +704,8 @@ export async function copyEstimateForContract(
       assigned_to: user.id,
     })
     .select()
-    .single();
-  throwIfSupabaseError(error);
+    .single(),
+  );
 
   const categoryMap = new Map<string, string>();
   for (const cat of source.categories ?? []) {

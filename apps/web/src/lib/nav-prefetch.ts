@@ -81,7 +81,7 @@ export function prefetchRouteData(queryClient: QueryClient, href: string) {
       void queryClient.prefetchQuery({
         queryKey: ["workflow-requests"],
         queryFn: () => import("@/lib/queries/lists").then((m) => m.fetchWorkflowRequests()),
-        staleTime: LIST,
+        staleTime: 0,
       });
       break;
     case "/leads":
@@ -266,7 +266,7 @@ export function prefetchWorkflowDetail(queryClient: QueryClient, id: string) {
       const support = payload?.estimate_id ? await fetchWorkflowApprovalSupport(id) : null;
       return { detail, support };
     },
-    staleTime: DETAIL,
+    staleTime: 0,
   });
 }
 

@@ -382,10 +382,21 @@ export function overlayFontSizePx(
   pageWidth: number,
   renderWidth: number,
   boxHeightPx: number,
+  boxWidthPx?: number,
+  text?: string,
 ): number {
   const scaled = fontSize * (renderWidth / Math.max(pageWidth, 1));
-  const cap = boxHeightPx > 1 ? boxHeightPx * 0.82 : scaled;
-  return Math.max(5, Math.min(scaled, cap));
+  const capH = boxHeightPx > 1 ? boxHeightPx * 0.82 : scaled;
+  let capW = scaled;
+  const compact = text?.replace(/\s/g, "") ?? "";
+  if (boxWidthPx && boxWidthPx > 6 && compact.length > 0) {
+    let units = 0;
+    for (const ch of compact) {
+      units += /[\u0000-\u00ff]/.test(ch) ? 0.78 : 1.05;
+    }
+    capW = (boxWidthPx - 6) / Math.max(units, 0.5);
+  }
+  return Math.max(5, Math.min(scaled, capH, capW));
 }
 
 export function overlayJustify(align: PdfFormField["align"]): "flex-start" | "center" | "flex-end" {

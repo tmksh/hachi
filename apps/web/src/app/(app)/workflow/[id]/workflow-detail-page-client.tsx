@@ -4,7 +4,6 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import {
-  DETAIL_STALE_MS,
   fetchWorkflowApprovalSupport,
   fetchWorkflowRequest,
   QK,
@@ -22,7 +21,8 @@ export function WorkflowDetailPageClient() {
       const support = payload?.estimate_id ? await fetchWorkflowApprovalSupport(id) : null;
       return { detail, support };
     },
-    staleTime: DETAIL_STALE_MS,
+    staleTime: 0,
+    refetchOnMount: "always",
     enabled: !!id,
   });
 

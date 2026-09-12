@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,15 +16,26 @@ import { toast } from "sonner";
 import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { decideLoginHost, isSuperAdminEmail } from "@/lib/tenant-host";
 interface LoginFormProps {
   companyName?: string | null;
+  tenantId?: string | null;
 }
 
-export function LoginForm({ companyName }: LoginFormProps) {
+export function LoginForm({ companyName, tenantId }: LoginFormProps) {
   useBrandColor();
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const supabase = createClient();
+
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get("error");
+    if (err === "wrong_tenant") {
+      toast.error("この会社のアカウントではありません", {
+        description: "自社のURLからログインしてください",
+      });
+    }
+  }, []);
 
   const {
     register,
@@ -43,6 +54,73 @@ export function LoginForm({ companyName }: LoginFormProps) {
     if (error) {
       toast.error("ログインに失敗しました", {
         description: "メールアドレスまたはパスワードが正しくありません",
+      });
+      return;
+    }
+
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth.user;
+    if (!user) {
+      await supabase.auth.signOut();
+      toast.error("この会社のアカウントではありません");
+      return;
+    }
+
+    if (isSuperAdminEmail(user.email)) {
+      const gate = decideLoginHost(
+        window.location.hostname,
+        null,
+        process.env.NEXT_PUBLIC_APP_DOMAIN,
+        true,
+      );
+      if (!gate.ok) {
+        await supabase.auth.signOut();
+        toast.error("この会社のアカウントではありません", {
+          description: "運営ログインは本体URLの /admin から行ってください",
+        });
+        return;
+      }
+      window.location.href = "/admin";
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!profile?.company_id) {
+      await supabase.auth.signOut();
+      toast.error("会社情報が見つかりません");
+      return;
+    }
+
+    const { data: company } = await supabase
+      .from("companies")
+      .select("slug")
+      .eq("id", profile.company_id)
+      .maybeSingle();
+
+    if (tenantId && profile.company_id !== tenantId) {
+      await supabase.auth.signOut();
+      toast.error("この会社のアカウントではありません", {
+        description: "自社のURLからログインしてください",
+      });
+      return;
+    }
+
+    const gate = decideLoginHost(
+      window.location.hostname,
+      company?.slug,
+      process.env.NEXT_PUBLIC_APP_DOMAIN,
+      false,
+    );
+    if (!gate.ok) {
+      await supabase.auth.signOut();
+      toast.error("この会社のアカウントではありません", {
+        description: gate.ownUrl
+          ? `自社のURL（${gate.ownUrl}）からログインしてください`
+          : "自社のURLからログインしてください",
       });
       return;
     }

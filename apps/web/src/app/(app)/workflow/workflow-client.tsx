@@ -18,6 +18,7 @@ import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { updateWorkflowRequestStatus } from "@/lib/actions/workflow";
 import { fetchWorkflowRequests } from "@/lib/queries/lists";
+import { QK } from "@/lib/queries/portal";
 import { getStatusOption, getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { prefetchWorkflowDetail } from "@/lib/nav-prefetch";
@@ -34,9 +35,11 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: rows = [], isPending } = useQuery({
-    queryKey: ["workflow-requests"],
+    queryKey: QK.workflowRequests,
     queryFn: () => fetchWorkflowRequests(),
-    staleTime: 120_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     initialData: initialRows,
     initialDataUpdatedAt: initialRows ? querySeedAt : undefined,
   });
@@ -45,7 +48,7 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
   const [updating, setUpdating] = useState<string | null>(null);
 
   const setRows = (updater: Row[] | ((prev: Row[]) => Row[])) => {
-    queryClient.setQueryData<Row[]>(["workflow-requests"], (prev = []) =>
+    queryClient.setQueryData<Row[]>(QK.workflowRequests, (prev = []) =>
       typeof updater === "function" ? updater(prev) : updater,
     );
   };
@@ -73,7 +76,11 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
       r.title.toLowerCase().includes(q) ||
       (r.requester?.display_name ?? "").toLowerCase().includes(q) ||
       typeLabel.toLowerCase().includes(q);
-    const matchTab = tab === "all" || r.status === tab;
+    const matchTab =
+      tab === "all"
+      || (tab === "returned" && isWorkflowRemanded(r.status, (r.payload ?? null) as Record<string, unknown> | null))
+      || (tab === "rejected" && r.status === "rejected" && !isWorkflowRemanded(r.status, (r.payload ?? null) as Record<string, unknown> | null))
+      || (tab !== "returned" && tab !== "rejected" && r.status === tab);
     return match && matchTab;
   });
 
@@ -96,8 +103,10 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
           <SelectContent>
             <SelectItem value="all">すべて</SelectItem>
             <SelectItem value="submitted">申請中</SelectItem>
+            <SelectItem value="returned">差戻し</SelectItem>
             <SelectItem value="approved">承認済</SelectItem>
             <SelectItem value="rejected">却下</SelectItem>
+            <SelectItem value="cancelled">取消</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -110,9 +119,9 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
                   <TableCell>{r.requester?.display_name ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.amount ? `¥${r.amount.toLocaleString()}` : "-"}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    {isWorkflowRemanded(r.status, (r.payload ?? null) as Record<string, unknown> | null) ? (
+                    {isWorkflowRemanded(r.status, (r.payload ?? null) as Record<string, unknown> | null) || r.status === "cancelled" || r.status === "approved" ? (
                       <StatusBadge
-                        status="returned"
+                        status={isWorkflowRemanded(r.status, (r.payload ?? null) as Record<string, unknown> | null) ? "returned" : r.status}
                         label={getWorkflowStatusLabel(
                           r.status,
                           (r.payload ?? null) as Record<string, unknown> | null,

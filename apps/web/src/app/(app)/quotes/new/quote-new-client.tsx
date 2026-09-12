@@ -347,8 +347,16 @@ export function QuoteNewClient({
       );
       toast.success(copyFromId ? "見積をコピーして作成しました" : "見積を作成しました");
       router.push(`/quotes/${created.id}`);
-    } catch {
-      toast.error("作成に失敗しました");
+    } catch (e) {
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : typeof e === "string" && e
+            ? e
+            : e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
+              ? (e as { message: string }).message
+              : "作成に失敗しました";
+      toast.error(message);
     } finally {
       setSaving(false);
     }

@@ -548,6 +548,11 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
                               <DropdownMenuItem onClick={e => { e.stopPropagation(); router.push(`/crm/${deal.customer_id}`); }}>
                                 <Pencil className="h-3.5 w-3.5 mr-2" />顧客詳細
                               </DropdownMenuItem>
+                              {!stage.is_lost && deal.customer_id && (
+                                <DropdownMenuItem onClick={e => { e.stopPropagation(); router.push(`/quotes/new?${quoteParams.toString()}`); }}>
+                                  <FileText className="h-3.5 w-3.5 mr-2" />見積を作成
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
@@ -583,7 +588,7 @@ export function DealsPipelineView({ addOpen: addOpenProp, onAddOpenChange }: Dea
                           )}
                         </div>
 
-                        {stage.is_won && (
+                        {!stage.is_lost && deal.customer_id && (
                           <button
                             onClick={e => { e.stopPropagation(); router.push(`/quotes/new?${quoteParams.toString()}`); }}
                             className="w-full flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary hover:bg-primary/5 border border-dashed border-primary/30 rounded-lg py-1.5 transition-colors"

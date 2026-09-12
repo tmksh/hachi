@@ -17,18 +17,22 @@ import {
   type AuthzCache,
 } from "@/lib/authz-cookie";
 import { hasSupabaseAuthCookie, jwtIsFresh, jwtUserAsUser, readSupabaseJwtUser } from "@/lib/supabase/session-jwt";
+import {
+  PRODUCTION_APP_DOMAIN,
+  authCookieDomain,
+  companyAppUrl,
+  isApexExemptPath,
+  isApexHost,
+  isSuperAdminEmail,
+  parseTenantSlug,
+  resolveAppDomain,
+} from "@/lib/tenant-host";
 
 /** 権限チェック対象のルート（マトリクス未設定時のフォールバック用ハードコード） */
 const LEGACY_ROUTE_PREFIXES = [
   "/bi", "/bi2", "/crm", "/deals", "/quotes", "/craftsmen",
   "/contracts", "/constructions", "/fulfillment", "/ledger", "/account-items", "/invoices", "/budget", "/marketing",
 ];
-
-// ── サブドメイン予約語（これらは会社 slug として使えない） ───────────────────────
-const RESERVED_SUBDOMAINS = new Set([
-  "www", "app", "admin", "api", "mail", "ftp", "smtp", "pop",
-  "cdn", "static", "assets", "status", "help", "support", "docs",
-]);
 
 /**
  * リクエストホストからサブドメイン（会社 slug）を抽出する。
@@ -40,15 +44,15 @@ const RESERVED_SUBDOMAINS = new Set([
  */
 /** Netlify デフォルト URL (*.netlify.app) → 本番ドメインへ統一 */
 function redirectToCanonicalDomain(request: NextRequest): NextResponse | null {
-  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
-  if (!appDomain) return null;
-
   const hostname = (request.headers.get("host") ?? "").split(":")[0];
   if (!hostname.endsWith(".netlify.app")) return null;
 
   // ブランチデプロイ / Deploy Preview（例: staging--site.netlify.app）は
   // ステージング環境として使うためリダイレクトしない
   if (hostname.includes("--")) return null;
+
+  const appDomain =
+    resolveAppDomain(hostname, process.env.NEXT_PUBLIC_APP_DOMAIN) ?? PRODUCTION_APP_DOMAIN;
 
   const url = request.nextUrl.clone();
   url.protocol = "https:";
@@ -57,35 +61,26 @@ function redirectToCanonicalDomain(request: NextRequest): NextResponse | null {
 }
 
 function extractSubdomain(request: NextRequest): string | null {
-  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN; // 例: "bridge-linq.com"
-  if (!appDomain) return null;
+  const host = requestHostname(request);
+  return parseTenantSlug(host, requestAppDomain(request));
+}
 
-  const host = request.headers.get("host") ?? "";
-  // ポート番号を除去
-  const hostname = host.split(":")[0];
+function requestHostname(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwarded || request.headers.get("host") || "";
+  return host.split(":")[0] ?? "";
+}
 
-  // 素の localhost や IP はスキップ
-  if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return null;
+function requestAppDomain(request: NextRequest): string | null {
+  return resolveAppDomain(requestHostname(request), process.env.NEXT_PUBLIC_APP_DOMAIN);
+}
 
-  // 開発環境: {slug}.localhost → slug を返す
-  if (hostname.endsWith(".localhost")) {
-    const slug = hostname.slice(0, -".localhost".length);
-    if (!slug.includes(".") && !RESERVED_SUBDOMAINS.has(slug)) return slug;
-    return null;
-  }
-
-  // apex ドメインまたは www はスキップ
-  if (hostname === appDomain || hostname === `www.${appDomain}`) return null;
-
-  // {slug}.{appDomain} の形式かチェック
-  const suffix = `.${appDomain}`;
-  if (!hostname.endsWith(suffix)) return null;
-
-  const slug = hostname.slice(0, -suffix.length);
-  // ネストしたサブドメイン（a.b.bridge-linq.com）や予約語はスキップ
-  if (slug.includes(".") || RESERVED_SUBDOMAINS.has(slug)) return null;
-
-  return slug;
+function redirectToTenantHost(request: NextRequest, slug: string, appDomain: string): NextResponse {
+  const dest = new URL(companyAppUrl(slug, appDomain, request.nextUrl.pathname));
+  dest.search = request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/"
+    ? ""
+    : request.nextUrl.search;
+  return NextResponse.redirect(dest);
 }
 
 function rescueGoogleOAuthFromLogin(request: NextRequest): NextResponse | null {
@@ -164,7 +159,7 @@ function applyAuthGate(request: NextRequest, user: GateUser | null): NextRespons
   if (
     pathname.startsWith("/admin")
     && pathname !== "/admin/login"
-    && (!user || user.email !== "super-admin@example.com")
+    && (!user || !isSuperAdminEmail(user.email))
   ) {
     return redirectTo(request, "/admin/login");
   }
@@ -177,7 +172,7 @@ function applyAuthGate(request: NextRequest, user: GateUser | null): NextRespons
     return redirectTo(request, "/dashboard");
   }
 
-  if (user && pathname === "/admin/login" && user.email === "super-admin@example.com") {
+  if (user && pathname === "/admin/login" && isSuperAdminEmail(user.email)) {
     return redirectTo(request, "/admin");
   }
 
@@ -218,16 +213,18 @@ function withTenantHeaders(response: NextResponse, slug: string, companyId: stri
   return response;
 }
 
-function setAuthzCookie(response: NextResponse, data: AuthzCache) {
+function setAuthzCookie(response: NextResponse, data: AuthzCache, hostname: string) {
   try {
     const encoded = encodeAuthz(data);
     if (encoded.length < 3500) {
+      const domain = authCookieDomain(hostname, process.env.NEXT_PUBLIC_APP_DOMAIN);
       response.cookies.set(AUTHZ_COOKIE, encoded, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: AUTHZ_MAX_AGE_SEC,
+        ...(domain ? { domain } : {}),
       });
     }
   } catch {
@@ -261,22 +258,31 @@ export async function updateSession(request: NextRequest) {
   const slug = extractSubdomain(request);
   const cached = decodeAuthz(request.cookies.get(AUTHZ_COOKIE)?.value ?? "");
   const authzOk = Boolean(freshUser && cached && cached.u === freshUser.id && cached.o);
+  const appDomain = requestAppDomain(request);
+  const apex = isApexHost(requestHostname(request), appDomain);
+  const apexNeedsCompanySlug = Boolean(
+    apex && freshUser && !isSuperAdminEmail(freshUser.email) && !cached?.s,
+  );
 
   // JWT が新しく権限 cookie もある → Supabase クライアントも DB も不要
-  if (freshUser && cached && authzOk) {
+  if (freshUser && cached && authzOk && !apexNeedsCompanySlug) {
     if (slug) {
-      const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN!;
       if (cached.s && cached.s !== slug) {
-        const url = request.nextUrl.clone();
-        url.host = `${cached.s}.${appDomain}`;
-        url.pathname = "/dashboard";
-        return NextResponse.redirect(url);
+        return redirectToTenantHost(request, cached.s, appDomain!);
       }
       if (cached.s === slug && cached.o) {
         if (pathname === "/login") return redirectTo(request, "/dashboard");
         return withTenantHeaders(pass(request), slug, cached.o);
       }
     } else {
+      if (
+        apex
+        && cached.s
+        && !isSuperAdminEmail(freshUser.email)
+        && !isApexExemptPath(pathname)
+      ) {
+        return redirectToTenantHost(request, cached.s, appDomain!);
+      }
       const gated = applyAuthGate(request, freshUser);
       if (gated) return gated;
       const denied = applyRoleCheck(request, cached.r, cached.p ?? null, cached.c ?? undefined);
@@ -300,12 +306,16 @@ export async function updateSession(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
+        const cookieDomain = authCookieDomain(requestHostname(request), appDomain);
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value),
         );
         supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options),
+          supabaseResponse.cookies.set(name, value, {
+            ...options,
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
+          }),
         );
       },
     },
@@ -317,7 +327,10 @@ export async function updateSession(request: NextRequest) {
 
   // ── サブドメイン解決（NEXT_PUBLIC_APP_DOMAIN 設定後に有効） ─────────────────
   if (slug) {
-    const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN!;
+    const tenantDomain = requestAppDomain(request);
+    if (!tenantDomain) {
+      return pass(request);
+    }
 
     const { data: companyId } = await supabase.rpc("resolve_company_id_by_slug", {
       p_slug: slug,
@@ -325,8 +338,9 @@ export async function updateSession(request: NextRequest) {
 
     if (!companyId) {
       const url = request.nextUrl.clone();
-      url.host = appDomain;
-      url.pathname = "/";
+      url.host = tenantDomain;
+      url.pathname = "/login";
+      url.search = "";
       return NextResponse.redirect(url);
     }
 
@@ -338,10 +352,6 @@ export async function updateSession(request: NextRequest) {
       && !isGoogleOAuthCallbackPath(pathname)
     ) {
       return redirectTo(request, "/login");
-    }
-
-    if (user && pathname === "/login") {
-      return redirectTo(request, "/dashboard");
     }
 
     if (user) {
@@ -359,18 +369,21 @@ export async function updateSession(request: NextRequest) {
           .single();
 
         const url = request.nextUrl.clone();
-        if (myCompany?.slug) {
-          url.host = `${myCompany.slug}.${appDomain}`;
-        } else {
-          url.host = appDomain;
+        if (myCompany?.slug && tenantDomain) {
+          return redirectToTenantHost(request, myCompany.slug, tenantDomain);
         }
-        url.pathname = "/dashboard";
+        url.pathname = "/login";
+        url.search = "error=wrong_tenant";
         return NextResponse.redirect(url);
+      }
+
+      if (pathname === "/login") {
+        return redirectTo(request, "/dashboard");
       }
 
       if (profile && profile.company_id === companyId) {
         if (cached && cached.u === user.id && cached.o) {
-          setAuthzCookie(supabaseResponse, { ...cached, s: slug });
+          setAuthzCookie(supabaseResponse, { ...cached, s: slug }, requestHostname(request));
         } else {
           const { data: company } = await supabase
             .from("companies")
@@ -392,7 +405,7 @@ export async function updateSession(request: NextRequest) {
               o: profile.company_id,
               s: slug,
               p: permissions,
-            });
+            }, requestHostname(request));
           }
         }
       }
@@ -400,9 +413,6 @@ export async function updateSession(request: NextRequest) {
 
     return withTenantHeaders(supabaseResponse, slug, companyId);
   }
-
-  const gated = applyAuthGate(request, user);
-  if (gated) return gated;
 
   if (user) {
     let role: string | undefined;
@@ -446,14 +456,44 @@ export async function updateSession(request: NextRequest) {
           o: profile?.company_id ?? null,
           s: companySlug,
           p: permissions,
-        });
+        }, requestHostname(request));
       }
     }
+
+    if (apex && !companySlug && !isSuperAdminEmail(user.email)) {
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profileRow?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("slug")
+          .eq("id", profileRow.company_id)
+          .maybeSingle();
+        companySlug = (company?.slug as string | null) ?? null;
+      }
+    }
+
+    if (
+      apex
+      && companySlug
+      && !isSuperAdminEmail(user.email)
+      && !isApexExemptPath(pathname)
+    ) {
+      return redirectToTenantHost(request, companySlug, appDomain!);
+    }
+
+    const gated = applyAuthGate(request, user);
+    if (gated) return gated;
 
     const denied = applyRoleCheck(request, role, permissions, customRoleId);
     if (denied) return denied;
     return withLegacyCookieCleared(supabaseResponse, request);
   }
 
+  const gated = applyAuthGate(request, user);
+  if (gated) return gated;
   return supabaseResponse;
 }
