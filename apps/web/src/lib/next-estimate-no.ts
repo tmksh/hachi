@@ -41,19 +41,24 @@ export async function nextEstimateNo(supabase: Supabase, companyId: string): Pro
   return formatEstimateNo(Math.max(rpcSeq, max + 1));
 }
 
-export async function allocateUniqueEstimateNo<T>(
+type InsertOnceResult = {
+  data: { id: string } | null;
+  error: DbError;
+};
+
+export async function allocateUniqueEstimateNo(
   supabase: Supabase,
   companyId: string,
-  insert: (estimateNo: string) => Promise<{ data: T | null; error: DbError }>,
-): Promise<T> {
+  insert: (estimateNo: string) => unknown,
+): Promise<{ id: string }> {
   let lastError: DbError = null;
   let lastSeq = 0;
   for (let attempt = 0; attempt < 8; attempt++) {
     const estimateNo =
       attempt === 0 ? await nextEstimateNo(supabase, companyId) : formatEstimateNo(lastSeq + 1);
     lastSeq = parseEstimateSequence(estimateNo);
-    const { data, error } = await insert(estimateNo);
-    if (!error && data) return data;
+    const { data, error } = (await Promise.resolve(insert(estimateNo))) as InsertOnceResult;
+    if (!error && data?.id) return data;
     lastError = error;
     if (!isUniqueViolation(error)) break;
   }

@@ -423,9 +423,9 @@ export function buildFormSlots(
           && r.yTop < lineBottom,
       )
       .sort((a, b) => a.yTop - b.yTop);
-    const rows = yens.length > 0 ? yens : [{ yTop: amountLabel.yTop + 16 }];
+    const rows: Array<{ x: number; yTop: number }> = yens.length > 0 ? yens : [{ x: colLeft + 8, yTop: amountLabel.yTop + 16 }];
     rows.forEach((row, i) => {
-      const x = Math.min(colLeft, "x" in row ? row.x - 8 : colLeft);
+      const x = Math.min(colLeft, row.x - 8);
       const { y, h } = around(row.yTop);
       slots.push(box(`amount_${i}`, "amount", x, y, Math.max(36, colRight - x), h));
     });
@@ -560,7 +560,7 @@ export function snapFieldsToSlots(fields: PdfFormField[], slots: FormSlot[]): Pd
 }
 
 export async function slotsFromPdfPage(
-  page: { getTextContent: () => Promise<PdfJsTextContent>; getViewport: (o: { scale: number }) => { width: number; height: number } },
+  page: { getTextContent: () => PromiseLike<unknown>; getViewport: (o: { scale: number }) => { width: number; height: number } },
 ): Promise<FormSlot[]> {
   const vp = page.getViewport({ scale: 1 });
   const text = await page.getTextContent();

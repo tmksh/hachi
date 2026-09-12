@@ -603,7 +603,7 @@ export async function getContractEstimates(contractId: string) {
   return rows;
 }
 
-export async function createEmptyEstimateForContract(contractId: string, title: string, createdByName?: string) {
+export async function createEmptyEstimateForContract(contractId: string, title: string, createdByName?: string): Promise<{ id: string }> {
   const { supabase, company_id } = await getCompanyContext();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
@@ -654,7 +654,7 @@ export async function copyEstimateForContract(
   sourceEstimateId: string,
   title: string,
   createdByName?: string,
-) {
+): Promise<{ id: string }> {
   const { supabase, company_id } = await getCompanyContext();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");

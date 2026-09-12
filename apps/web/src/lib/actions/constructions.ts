@@ -1070,7 +1070,7 @@ export async function seedConstructionEstimates(constructionId: string) {
   return created;
 }
 
-export async function createEmptyEstimateForConstruction(constructionId: string, title: string, createdByName?: string) {
+export async function createEmptyEstimateForConstruction(constructionId: string, title: string, createdByName?: string): Promise<{ id: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
@@ -1117,7 +1117,7 @@ export async function createEmptyEstimateForConstruction(constructionId: string,
   );
 }
 
-export async function copyEstimateForConstruction(constructionId: string, sourceEstimateId: string, title: string, createdByName?: string) {
+export async function copyEstimateForConstruction(constructionId: string, sourceEstimateId: string, title: string, createdByName?: string): Promise<{ id: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");

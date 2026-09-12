@@ -178,7 +178,7 @@ export async function createEstimate(
       })
       .select()
       .single(),
-  );
+  ) as Estimate;
 
   const catMap = new Map<number, string>();
   for (const [idx, category] of normalizedCategories.entries()) {
