@@ -7,8 +7,11 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchBrowserProfile, invalidateBrowserAuthReads } from "@/lib/queries/browser-auth";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { type Role } from "@/lib/constants";
@@ -51,6 +54,10 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const authUserId = useRef<string | null | undefined>(undefined);
+  const profileGeneration = useRef(0);
+  const loadedUserId = useRef<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -59,7 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = useCallback(
     async (authUser: User | null) => {
+      const generation = ++profileGeneration.current;
       if (!authUser) {
+        loadedUserId.current = null;
         setProfile(null);
         setRolePermissions(null);
         return;
@@ -67,11 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const fontMeta = authUser.user_metadata?.font_size;
       if (isFontSize(fontMeta)) applyFontSize(fontMeta);
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, company_id, display_name, email, role, avatar_url, department, position, phone")
-        .eq("id", authUser.id)
-        .single();
+      const data = await fetchBrowserProfile(authUser.id);
+      if (generation !== profileGeneration.current) return;
 
       if (!data?.company_id) {
         setProfile((data as Profile | null) ?? null);
@@ -84,6 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select("settings")
         .eq("id", data.company_id)
         .maybeSingle();
+      if (generation !== profileGeneration.current) return;
+      loadedUserId.current = authUser.id;
       const settings = (company?.settings ?? null) as Record<string, unknown> | null;
       const customRoleId = readMemberCustomRoles(settings)[authUser.id] ?? null;
 
@@ -126,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const invalidatePendingProfile = () => { profileGeneration.current++; };
 
     const init = async () => {
       const {
@@ -133,10 +142,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } = await supabase.auth.getSession();
       const authUser = session?.user ?? null;
       if (!mounted) return;
+      if (authUserId.current !== undefined && authUserId.current !== (authUser?.id ?? null)) return;
+      authUserId.current = authUser?.id ?? null;
       setUser(authUser);
       // セッション確定時点でシェル描画を解放し、profile は裏で読む
       setLoading(false);
-      if (authUser) await loadProfile(authUser);
+      if (authUser) await loadProfile(authUser).catch(() => {});
     };
 
     void init();
@@ -148,23 +159,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") return;
 
       const nextUser = session?.user ?? null;
-      setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser));
+      const changed = authUserId.current !== undefined && authUserId.current !== (nextUser?.id ?? null);
+      authUserId.current = nextUser?.id ?? null;
+      if (changed || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+        invalidateBrowserAuthReads();
+        profileGeneration.current++;
+        loadedUserId.current = null;
+        if (event === "USER_UPDATED" && !changed) void queryClient.invalidateQueries();
+        else {
+          void queryClient.cancelQueries();
+          queryClient.clear();
+        }
+      }
+      if (changed) {
+        setProfile(null);
+        setRolePermissions(null);
+      }
+      setUser((prev) => (event !== "USER_UPDATED" && prev?.id === nextUser?.id ? prev : nextUser));
       if (!nextUser) {
         setProfile(null);
         setRolePermissions(null);
         setLoading(false);
         return;
       }
-      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
-        void loadProfile(nextUser);
+      if ((event === "SIGNED_IN" && loadedUserId.current !== nextUser.id) || event === "USER_UPDATED") {
+        void loadProfile(nextUser).catch(() => {});
       }
     });
 
     return () => {
       mounted = false;
+      invalidatePendingProfile();
       subscription.unsubscribe();
     };
-  }, [supabase, loadProfile]);
+  }, [supabase, loadProfile, queryClient]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();

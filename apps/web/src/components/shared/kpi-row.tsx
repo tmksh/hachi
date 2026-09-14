@@ -68,6 +68,7 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
 function useResponsiveColumns(requested: 2 | 3 | 4 | 5 | 6) {
   const ref = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(requested);
+  const [compact, setCompact] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -85,6 +86,11 @@ function useResponsiveColumns(requested: 2 | 3 | 4 | 5 | 6) {
 
     const update = () => {
       const w = el.clientWidth;
+      setCompact(w < 480);
+      if (w < 480) {
+        setCols(2);
+        return;
+      }
       if (requested === 2) {
         setCols(2);
         return;
@@ -110,7 +116,7 @@ function useResponsiveColumns(requested: 2 | 3 | 4 | 5 | 6) {
     return () => ro.disconnect();
   }, [requested]);
 
-  return { ref, cols };
+  return { ref, cols, compact };
 }
 
 export function KpiRow({
@@ -121,7 +127,8 @@ export function KpiRow({
   stacked = false,
 }: KpiRowProps) {
   // CSS 変数のみ参照（useBrandColor は呼ばない＝KPI毎の再レンダーを避ける）
-  const { ref, cols } = useResponsiveColumns(columns);
+  const { ref, cols, compact } = useResponsiveColumns(columns);
+  const useStacked = stacked || compact;
   const iconStyle = { background: "var(--brand-gradient)" } as const;
 
   return (
@@ -132,7 +139,7 @@ export function KpiRow({
     >
       {loading
         ? Array.from({ length: items.length || cols }).map((_, i) => (
-            <div key={i} className={cn(TEAL_CARD_SM, "px-3 py-2.5 min-w-0", stacked && "h-[104px]")}>
+            <div key={i} className={cn(TEAL_CARD_SM, "px-3 py-2.5 min-w-0", useStacked && "h-[104px]")}>
               <Skeleton className="h-6 w-full" />
             </div>
           ))
@@ -147,7 +154,7 @@ export function KpiRow({
               />
             ) : null;
 
-            if (stacked) {
+            if (useStacked) {
               return (
                 <div
                   key={i}
@@ -157,7 +164,7 @@ export function KpiRow({
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-xs font-semibold text-slate-600 leading-tight min-w-0 pr-14">
+                    <span className={cn("text-xs font-semibold text-slate-600 leading-tight min-w-0", illust && "pr-14")}>
                       {item.label}
                     </span>
                     {illust ? (
@@ -172,7 +179,8 @@ export function KpiRow({
                   </div>
                   <p
                     className={cn(
-                      "font-bold tabular-nums tracking-tight leading-tight text-slate-900 min-w-0 pr-10 break-all",
+                      "font-bold tabular-nums tracking-tight leading-tight text-slate-900 min-w-0 break-all",
+                      illust && "pr-10",
                       valueSizeClass(item.value, true),
                       item.valueClassName,
                     )}

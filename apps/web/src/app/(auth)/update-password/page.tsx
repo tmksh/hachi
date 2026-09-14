@@ -89,6 +89,8 @@ function UpdatePasswordForm() {
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "パスワードを隠す" : "パスワードを表示"}
+                  aria-pressed={showPassword}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >

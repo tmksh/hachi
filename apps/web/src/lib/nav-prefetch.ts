@@ -22,7 +22,7 @@ function pathOnly(href: string) {
   return href.split("?")[0];
 }
 
-/** サイドバー hover / グループ展開時に React Query へ先読みする */
+/** サイドバーの継続 hover / キーボード focus 時に React Query へ先読みする */
 export function prefetchRouteData(queryClient: QueryClient, href: string) {
   const path = pathOnly(href);
   switch (path) {
@@ -78,11 +78,7 @@ export function prefetchRouteData(queryClient: QueryClient, href: string) {
       break;
     }
     case "/workflow":
-      void queryClient.prefetchQuery({
-        queryKey: ["workflow-requests"],
-        queryFn: () => import("@/lib/queries/lists").then((m) => m.fetchWorkflowRequests()),
-        staleTime: 0,
-      });
+      // 承認一覧は表示時に必ず最新取得するため、直前に同じデータを先読みしない。
       break;
     case "/leads":
       void queryClient.prefetchQuery({
@@ -251,29 +247,6 @@ export function prefetchCraftsmanDetail(queryClient: QueryClient, id: string) {
   void queryClient.prefetchQuery({
     queryKey: ["craftsman", id],
     queryFn: () => import("@/lib/queries/portal").then((m) => m.fetchCraftsman(id)),
-    staleTime: DETAIL,
-  });
-}
-
-export function prefetchWorkflowDetail(queryClient: QueryClient, id: string) {
-  void queryClient.prefetchQuery({
-    queryKey: ["workflow-request", id],
-    queryFn: async () => {
-      const { fetchWorkflowRequest, fetchWorkflowApprovalSupport } = await import("@/lib/queries/portal");
-      const detail = await fetchWorkflowRequest(id).catch(() => null);
-      if (!detail) return { detail: null, support: null };
-      const payload = (detail as { payload?: Record<string, unknown> }).payload;
-      const support = payload?.estimate_id ? await fetchWorkflowApprovalSupport(id) : null;
-      return { detail, support };
-    },
-    staleTime: 0,
-  });
-}
-
-export function prefetchAnnouncementDetail(queryClient: QueryClient, id: string) {
-  void queryClient.prefetchQuery({
-    queryKey: ["announcement", id],
-    queryFn: () => import("@/lib/queries/portal").then((m) => m.fetchAnnouncement(id)),
     staleTime: DETAIL,
   });
 }

@@ -3,7 +3,7 @@
 import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,6 @@ import { Plus, Pin, AlertTriangle, Users, Search, X, SlidersHorizontal } from "l
 import { ROLE_LABELS, type Role } from "@/lib/constants";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchAnnouncements, LIST_STALE_MS, QK } from "@/lib/queries/portal";
-import { prefetchAnnouncementDetail } from "@/lib/nav-prefetch";
 import { announcementActionHref } from "@/lib/notification-href";
 
 type Ann = Awaited<ReturnType<typeof fetchAnnouncements>>[number];
@@ -26,7 +25,6 @@ type CirculationClientProps = {
 
 export function CirculationClient({ initialItems }: CirculationClientProps) {
   const querySeedAt = useQuerySeedAt();
-  const queryClient = useQueryClient();
   const { data: items = [], isPending } = useQuery({
     queryKey: QK.announcements,
     queryFn: fetchAnnouncements,
@@ -168,7 +166,6 @@ export function CirculationClient({ initialItems }: CirculationClientProps) {
               className="block"
               onMouseEnter={() => {
                 if (!href.startsWith("/circulation/")) return;
-                prefetchAnnouncementDetail(queryClient, a.id);
               }}
             >
               <Card className="hover:shadow-md transition-shadow cursor-pointer">

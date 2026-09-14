@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, addMonths, subMonths, differenceInMinutes } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import { LogIn, LogOut, Check, X, ChevronLeft, ChevronRight, Clock, Sun, Coffee 
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType, recordLeaveDay } from "@/lib/actions/attendance";
-import { fetchAttendanceEntries } from "@/lib/queries/portal";
+import { fetchAttendanceEntries, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 import type { Company } from "@/lib/database.types";
 import { AnalogClock } from "@/components/shared/analog-clock";
 
@@ -97,17 +98,23 @@ export function AttendanceClient({
   initialUserId: string | null;
 }) {
   const { user, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const initialClock = todayClockState(initialEntries, initialUserId ?? user?.id);
-  const [entries, setEntries] = useState<Entry[]>(initialEntries);
-  const [loading, setLoading] = useState(false);
-  const [clockedIn, setClockedIn] = useState(initialClock.clockedIn);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [now, setNow] = useState(new Date());
-  const [attSettings, setAttSettings] = useState<AttSettings>(attSettingsFromCompany(initialCompany));
+  const attSettings = attSettingsFromCompany(initialCompany);
   const [selectedLeaveType, setSelectedLeaveType] = useState(initialClock.leaveType);
 
   const month = format(currentDate, "yyyy-MM");
   const isCurrentMonth = format(new Date(), "yyyy-MM") === month;
+  const { data: entries = [], isPending: loading } = useQuery({
+    queryKey: QK.attendance(month),
+    queryFn: () => fetchAttendanceEntries(month),
+    staleTime: LIST_STALE_MS,
+    initialData: isCurrentMonth ? initialEntries : undefined,
+    enabled: !!user?.id,
+  });
+  const clockedIn = todayClockState(entries, user?.id).clockedIn;
   const scheduledMins = calcScheduledMins(
     attSettings.start_time ?? "09:00",
     attSettings.end_time ?? "18:00",
@@ -119,37 +126,14 @@ export function AttendanceClient({
     return () => clearInterval(timer);
   }, []);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    fetchAttendanceEntries(month).then(data => {
-      setEntries(data as Entry[]);
-      if (isCurrentMonth) {
-        const todayJST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/\//g, "-");
-        const todayEntry = data.find((e: Entry) => e.work_date === todayJST && e.user_id === user?.id);
-        if (todayEntry?.clock_in_at && !todayEntry?.clock_out_at) {
-          setClockedIn(true);
-          setSelectedLeaveType(todayEntry.leave_type ?? "none");
-        } else {
-          setClockedIn(false);
-        }
-      }
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, [month, user?.id, isCurrentMonth]);
-
-  const skippedInitialLoad = useRef(true);
-  useEffect(() => {
-    if (!user) return;
-    if (skippedInitialLoad.current && month === format(new Date(), "yyyy-MM")) {
-      skippedInitialLoad.current = false;
-      return;
-    }
-    load();
-  }, [user, load, month]);
+  const load = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["attendance"] }),
+    queryClient.invalidateQueries({ queryKey: ["today-attendance"] }),
+  ]);
 
   const handleClockIn = async () => {
     try {
       await clockIn();
-      setClockedIn(true);
       toast.success("出勤しました");
       load();
     } catch (e) {
@@ -166,7 +150,6 @@ export function AttendanceClient({
         if (todayEntry) await updateLeaveType(todayEntry.id, selectedLeaveType);
       }
       await clockOut();
-      setClockedIn(false);
       toast.success("退勤しました");
       load();
     } catch (e) {
@@ -193,6 +176,7 @@ export function AttendanceClient({
 
   const todayJST = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/\//g, "-");
   const todayEntry = entries.find(e => e.work_date === todayJST && e.user_id === user?.id);
+  const clockedOut = !!todayEntry?.clock_out_at;
   const isOnLeaveToday = !!todayEntry?.leave_type && isFullDayLeave(todayEntry.leave_type);
   const isLeaveModeSelected = isFullDayLeave(selectedLeaveType);
 
@@ -230,7 +214,7 @@ export function AttendanceClient({
                   <div className="flex items-center gap-1.5">
                     <span className={`h-2 w-2 rounded-full shrink-0 transition-colors ${clockedIn ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/40"}`} />
                     <span className={`text-sm font-medium ${clockedIn ? "text-emerald-600" : "text-muted-foreground"}`}>
-                      {clockedIn ? "勤務中" : "未出勤"}
+                      {clockedOut ? "退勤済" : clockedIn ? "勤務中" : "未出勤"}
                     </span>
                   </div>
                   <p className="text-3xl font-bold tabular-nums tracking-tight leading-none">{format(now, "HH:mm")}</p>
@@ -249,7 +233,7 @@ export function AttendanceClient({
                 {/* 勤務区分セレクト */}
                 <div className="space-y-1">
                   <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">勤務区分</p>
-                  <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType} disabled={isOnLeaveToday}>
+                  <Select value={selectedLeaveType} onValueChange={setSelectedLeaveType} disabled={isOnLeaveToday || clockedOut}>
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue />
                     </SelectTrigger>
@@ -300,7 +284,7 @@ export function AttendanceClient({
                   <div className="flex gap-2">
                     <Button
                       onClick={handleClockIn}
-                      disabled={clockedIn}
+                      disabled={clockedIn || clockedOut}
                       size="sm"
                       variant={clockedIn ? "outline" : "default"}
                       className="gap-1.5 flex-1"

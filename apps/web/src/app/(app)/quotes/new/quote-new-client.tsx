@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -17,6 +18,7 @@ import type { PdfCustomerRef } from "@/lib/customer-pdf";
 import { fetchCustomers } from "@/lib/queries/customers";
 import { fetchCustomer } from "@/lib/queries/customer-detail";
 import { fetchEstimate } from "@/lib/queries/details";
+import { ESTIMATE_QK } from "@/lib/queries/estimates";
 import { SelectCustomerDialog } from "@/components/quotes/select-customer-dialog";
 import { EstimatePdfPreviewDialog, toEstimatePdfPreviewData } from "@/components/estimate/estimate-pdf-preview-dialog";
 import {
@@ -90,6 +92,7 @@ export function QuoteNewClient({
   initialCustomers?: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { openBridgeChat } = useBridgeChat();
   const preCustomerId = searchParams.get("customer_id") ?? "";
@@ -345,6 +348,7 @@ export function QuoteNewClient({
         },
         payload,
       );
+      await queryClient.invalidateQueries({ queryKey: ESTIMATE_QK.all });
       toast.success(copyFromId ? "見積をコピーして作成しました" : "見積を作成しました");
       router.push(`/quotes/${created.id}`);
     } catch (e) {

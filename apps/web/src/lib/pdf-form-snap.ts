@@ -265,8 +265,12 @@ export function buildFormSlots(
   }
 
   const kokiLabel = findLabel(items, "工期");
-  const titleMax = kokiLabel ? kokiLabel.x - 6 : pageW * 0.55;
   const titleLabel = findLabel(items, "工事名称") ?? findLabel(items, "工事名");
+  // 別の行の「工期開始」を右隣の欄と誤認すると、名称欄の幅が潰れる。
+  const periodOnTitleRow = kokiLabel && titleLabel
+    && kokiLabel.x > titleLabel.x + titleLabel.w
+    && Math.abs(kokiLabel.yTop - titleLabel.yTop) < 16;
+  const titleMax = periodOnTitleRow ? kokiLabel.x - 6 : pageW * 0.55;
   if (titleLabel) valueSlot("construction_title", "construction_title", titleLabel, titleMax, 160, 80);
 
   const placeLabel = findLabel(items, "工事場所");

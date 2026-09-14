@@ -83,13 +83,14 @@ export function ContractTab({ constructionId, customerId, constructionNo, fillCu
   }, []);
 
   const fillCtx = useMemo(() => buildFillContext({
+    recordId: constructionId,
     constructionTitle: ctx.construction?.title ?? null,
     constructionNo: constructionNo ?? null,
     orderAmount: ctx.construction?.order_amount ?? null,
     startDate: ctx.construction?.start_date ?? null,
     endDate: ctx.construction?.end_date ?? null,
     customer: fillCustomer ?? ctx.customer ?? null,
-  }), [ctx, constructionNo, fillCustomer]);
+  }), [constructionId, ctx, constructionNo, fillCustomer]);
 
   function handleSelectTemplate(tpl: ContractTemplate) {
     setPicker(false);

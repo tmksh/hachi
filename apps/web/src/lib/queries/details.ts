@@ -51,22 +51,18 @@ export async function fetchEstimate(id: string) {
 
 export async function fetchContract(id: string) {
   const { supabase, companyId } = await scopedSupabase();
-  const { data, error } = await supabase
-    .from("contracts")
-    .select("*, customer:customers(*), estimate:estimates(id, estimate_no, title, total)")
-    .eq("id", id)
-    .eq("company_id", companyId)
-    .maybeSingle();
+  const [{ data, error }, { data: linked, error: linkedError }] = await Promise.all([
+    supabase.from("contracts")
+      .select("*, customer:customers(*), estimate:estimates(id, estimate_no, title, total)")
+      .eq("id", id).eq("company_id", companyId).maybeSingle(),
+    supabase.from("constructions")
+      .select("id, title, construction_no, start_date, end_date, order_amount")
+      .eq("contract_id", id).eq("company_id", companyId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
   if (error) throw error;
+  if (linkedError) throw linkedError;
   if (!data) throw new Error("契約が見つかりません");
-
-  const { data: linked } = await supabase
-    .from("constructions")
-    .select("id, title, construction_no, start_date, end_date, order_amount")
-    .eq("contract_id", id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   let start = data.start_date ?? linked?.start_date ?? null;
   let end = data.end_date ?? linked?.end_date ?? null;

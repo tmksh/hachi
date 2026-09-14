@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, CheckCircle2, TrendingUp, Wallet, Percent } from "lucide-react";
 import { toast } from "sonner";
+import { budgetPlanTotals } from "@/lib/budget-totals";
 import { deleteBudget, updateBudget } from "@/lib/actions/budgets";
 import { fetchBudgets } from "@/lib/queries/portal";
 import { BudgetEditDialog } from "@/components/budget/budget-edit-dialog";
@@ -75,9 +76,7 @@ export function BudgetClient({ initialBudgets }: BudgetClientProps) {
         <div className="space-y-8">
           {budgets.map(b => {
             const act = b.actuals;
-            const planRevenue = (b.items ?? []).filter((i: { category: string | null; amount: number }) => i.category === "revenue").reduce((s: number, i: { amount: number }) => s + i.amount, 0);
-            const planCost    = (b.items ?? []).filter((i: { category: string | null; amount: number }) => i.category === "direct_cost").reduce((s: number, i: { amount: number }) => s + i.amount, 0);
-            const planGross   = planRevenue - planCost;
+            const { revenue: planRevenue, cost: planCost, grossProfit: planGross } = budgetPlanTotals(b.items ?? []);
             const achieveRate = planRevenue > 0 ? Math.min((act.revenue / planRevenue) * 100, 100) : 0;
 
             return (

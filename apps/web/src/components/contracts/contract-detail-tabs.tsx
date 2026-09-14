@@ -457,14 +457,15 @@ function DocumentsTab({
   const selectedWfType = wfTypes.find((t) => t.id === selectedTypeId) ?? wfTypes[0] ?? null;
 
   const fillCtx = useMemo(() => buildFillContext({
+    recordId: contractId,
     constructionTitle: linked?.title || data.title || null,
     constructionNo: linked?.construction_no ?? null,
-    orderAmount: data.amount || linked?.order_amount || null,
+    orderAmount: data.amount ?? linked?.order_amount ?? null,
     startDate: data.start_date ?? linked?.start_date ?? null,
     endDate: data.end_date ?? linked?.end_date ?? null,
     customer: data.customer ?? null,
     customerAssigneeName: data.customer_assignee_name ?? null,
-  }), [data, linked]);
+  }), [contractId, data, linked]);
 
   const persistDraft = useCallback(async (nextForm: FormValues, nextTemplateId = templateId) => {
     setSaving(true);

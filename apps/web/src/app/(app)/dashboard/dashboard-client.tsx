@@ -27,7 +27,6 @@ import {
   MessageSquare,
   Clock,
   ClipboardCheck,
-  AlertCircle,
   Send,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -75,25 +74,6 @@ function formatYen(n: number) {
   return `¥${n.toLocaleString()}`;
 }
 
-/** デザイン確認用モック（万円）— 全7ヶ月に棒を表示 */
-const MOCK_TREND_VALUES = [
-  { 受注額: 2800, パイプライン: 1800 },
-  { 受注額: 3400, パイプライン: 2600 },
-  { 受注額: 2200, パイプライン: 3100 },
-  { 受注額: 4100, パイプライン: 2900 },
-  { 受注額: 3600, パイプライン: 3800 },
-  { 受注額: 4800, パイプライン: 3200 },
-  { 受注額: 5200, パイプライン: 4100 },
-];
-
-function getTrendChartData(trend: DashboardData["monthlyTrend"] | undefined) {
-  return (trend ?? []).map((row, i) => ({
-    month: row.month,
-    ...(MOCK_TREND_VALUES[i] ?? { 受注額: 3000, パイプライン: 2500 }),
-  }));
-}
-
-
 type DashboardClientProps = {
   initialData?: DashboardData;
   initialAttendance?: AttendanceEntry | null;
@@ -122,7 +102,7 @@ export function DashboardClient({
   const pendingFocusScroll = useRef(false);
   const now = new Date();
 
-  const { widgets, hydrated, reorder, resizeWidget, toggleVisible, reset } = useWidgets();
+  const { widgets, hydrated, reorder, resizeWidget, toggleVisible } = useWidgets();
   const { gradientHex, solidHex, mode: brandMode, setGradientColor, setSolidColor, switchMode, reset: resetColor } = useBrandColor();
   const { openInternalChat, refreshInternalChat } = useInternalChat();
   const brandHex = brandMode === "solid" ? solidHex : gradientHex;
@@ -149,6 +129,7 @@ export function DashboardClient({
       setClockInTime(now);
       setClockOutTime(null);
       await queryClient.invalidateQueries({ queryKey: ["today-attendance"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
       toast.success("出勤しました", { description: format(now, "HH:mm", { locale: ja }) });
     } catch { toast.error("出勤打刻に失敗しました"); }
   };
@@ -159,6 +140,7 @@ export function DashboardClient({
       setClockedIn(false);
       setClockOutTime(now);
       await queryClient.invalidateQueries({ queryKey: ["today-attendance"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
       toast.success("退勤しました", { description: format(now, "HH:mm", { locale: ja }) });
     } catch { toast.error("退勤打刻に失敗しました"); }
   };
@@ -187,8 +169,8 @@ export function DashboardClient({
     }
   };
 
-  const isVisible = (id: string) =>
-    !hydrated || (widgets.find((w) => w.id === id)?.visible ?? true);
+  const isVisible = useCallback((id: string) =>
+    !hydrated || (widgets.find((w) => w.id === id)?.visible ?? true), [hydrated, widgets]);
 
   const todos = data?.todos ?? [];
   const visibleTodos = todos.slice(0, 5);
@@ -511,7 +493,7 @@ export function DashboardClient({
             {loading ? (
               <Skeleton className="flex-1 min-h-[180px] w-full" />
             ) : (
-              <ResponsiveTrendChart data={getTrendChartData(data?.monthlyTrend)} brandColors={brandColors} />
+              <ResponsiveTrendChart data={data?.monthlyTrend ?? []} brandColors={brandColors} />
             )}
           </div>
         );

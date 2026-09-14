@@ -1,3 +1,4 @@
+import { fetchBrowserUser } from "./browser-auth";
 import { createClient } from "@/lib/supabase/client";
 import type { Customer } from "@/lib/database.types";
 import { DEFAULT_DEPARTMENTS, getCurrentFiscalYear } from "@/lib/bi-utils";
@@ -170,9 +171,7 @@ export async function fetchCustomerDealSummaries(customerIds: string[]) {
 
 export async function fetchCustomerEntryMasters(): Promise<CustomerEntryMasters> {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   const fallback = [...DEFAULT_DEPARTMENTS];
   if (!user) {
     return { profiles: [], tagMasters: [], leadSources: [], departments: fallback };

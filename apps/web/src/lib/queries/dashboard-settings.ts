@@ -1,8 +1,9 @@
+import { fetchBrowserUser } from "./browser-auth";
 import { createClient } from "@/lib/supabase/client";
 
 export async function fetchDashboardSettings(): Promise<unknown[] | null> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   if (!user) return null;
 
   const { data, error } = await supabase

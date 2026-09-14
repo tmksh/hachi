@@ -1,3 +1,4 @@
+import { fetchBrowserUser } from "./browser-auth";
 import { createClient } from "@/lib/supabase/client";
 
 export const CHAT_STALE_MS = 30_000;
@@ -30,7 +31,7 @@ const MESSAGE_SELECT =
 
 export async function fetchChatContacts() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   if (!user) return [];
 
   const { data: me } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
@@ -48,7 +49,7 @@ export async function fetchChatContacts() {
 
 export async function fetchConversation(otherUserId: string): Promise<InternalMessage[]> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   if (!user) return [];
 
   const { data, error } = await supabase
@@ -64,7 +65,7 @@ export async function fetchConversation(otherUserId: string): Promise<InternalMe
 
 export async function fetchUnreadMessageCount(): Promise<number> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   if (!user) return 0;
 
   const { count, error } = await supabase
@@ -78,7 +79,7 @@ export async function fetchUnreadMessageCount(): Promise<number> {
 
 export async function fetchLatestConversations(): Promise<InternalMessage[]> {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   if (!user) return [];
 
   const { data, error } = await supabase

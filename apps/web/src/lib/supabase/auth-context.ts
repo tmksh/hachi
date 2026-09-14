@@ -43,7 +43,7 @@ export async function cachedByCompany<T>(
   part: string,
   ttlMs: number,
   fn: () => Promise<T>,
-  userScoped = false,
+  userScoped = true,
 ): Promise<T> {
   const ctx = await getAuthContext();
   if (!ctx.companyId) return fn();

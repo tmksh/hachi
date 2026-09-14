@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
+import { budgetPlanTotals } from "@/lib/budget-totals";
 import { createBudget, updateBudget } from "@/lib/actions/budgets";
 import type { Budget, BudgetItem } from "@/lib/database.types";
 
@@ -75,9 +76,7 @@ export function BudgetEditDialog({ open, onOpenChange, existing, onSaved }: Prop
   const addItem = () => setItems(prev => [...prev, { category: "direct_cost", name: "", amount: 0 }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, j) => j !== i));
 
-  const totalRevenue = items.filter(i => i.category === "revenue").reduce((s, i) => s + i.amount, 0);
-  const totalCost    = items.filter(i => i.category === "direct_cost" || i.category === "indirect_cost").reduce((s, i) => s + i.amount, 0);
-  const gross        = totalRevenue - totalCost;
+  const { revenue: totalRevenue, cost: totalCost, grossProfit: gross } = budgetPlanTotals(items);
 
   const handleSave = async () => {
     if (!fiscalYear) { toast.error("年度を入力してください"); return; }

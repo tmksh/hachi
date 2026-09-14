@@ -5,6 +5,7 @@ import { getSignedStorageUrl } from "@/lib/storage-server";
 import {
   PDF_FORM_TEMPLATES_KEY,
   resolvePdfFormTemplates,
+  validatePdfTemplate,
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
 
@@ -37,6 +38,8 @@ export async function getPdfFormTemplates(): Promise<PdfFormTemplate[]> {
 export async function savePdfFormTemplate(template: PdfFormTemplate): Promise<PdfFormTemplate> {
   const { supabase, companyId, role } = await getCompanyContext();
   if (role !== "hq_admin") throw new Error("権限がありません");
+  const issues = validatePdfTemplate(template);
+  if (issues.length > 0) throw new Error(issues[0].message);
 
   const { data: current } = await supabase
     .from("companies")

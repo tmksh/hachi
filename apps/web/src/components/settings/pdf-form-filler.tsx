@@ -18,8 +18,14 @@ import { toast } from "sonner";
 import { loadPdfDocument, PdfPageCanvas } from "@/components/settings/pdf-page-canvas";
 import { getPdfFormTemplateUrl } from "@/lib/actions/pdf-form-templates";
 import {
-  resolveFieldValue,
-  BINDING_LABELS,
+  bindingDisplayLabel,
+  pdfFieldInputValue,
+  formatPdfFieldValue,
+  pdfDateInputValue,
+  pdfNumberValue,
+  validatePdfFieldInputs,
+  validatePdfTemplate,
+  pdfFieldsForPage,
   fieldOverlayBox,
   overlayFontSizePx,
   overlayJustify,
@@ -27,7 +33,9 @@ import {
   type PdfFormField,
   type PdfFormTemplate,
 } from "@/lib/pdf-form-template";
-import { snapFieldsToSlots, leftoverSlotOverlays, slotsFromPdfPage, type FormSlot } from "@/lib/pdf-form-snap";
+import { slotsFromPdfPage, type FormSlot } from "@/lib/pdf-form-snap";
+import { pdfMappingIssues } from "@/lib/pdf-form-mapping";
+import { pdfFieldOverlayHtml, pdfPrintDocumentHtml, type PdfPrintPage } from "@/lib/pdf-form-print";
 import { cn } from "@/lib/utils";
 
 type PanelProps = {
@@ -35,6 +43,7 @@ type PanelProps = {
   ctx: FillContext;
   onClose?: () => void;
   className?: string;
+  pdfSource?: string;
 };
 
 type DialogProps = {
@@ -45,7 +54,11 @@ type DialogProps = {
 };
 
 /** タブ内インライン表示：左に入力項目、右に PDF プレビュー */
-export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelProps) {
+export function PdfFormFillerPanel(props: PanelProps) {
+  return <PdfFormFillerContent key={`${props.template.id}:${props.template.updatedAt}:${props.ctx.recordId ?? ""}`} {...props} />;
+}
+
+function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: PanelProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -55,7 +68,12 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
   const [pageViewports, setPageViewports] = useState<{ width: number; height: number }[]>([]);
   const [pageSlots, setPageSlots] = useState<FormSlot[][]>([]);
 
-  const valueFor = (f: PdfFormField): string => values[f.id] ?? resolveFieldValue(f, ctx);
+  const valueFor = (f: PdfFormField): string => pdfFieldInputValue(f, ctx, values);
+  const displayValueFor = (f: PdfFormField): string => formatPdfFieldValue(f, valueFor(f));
+  const inputIssues = validatePdfFieldInputs(template.fields, valueFor);
+  const mappingIssues = pdfMappingIssues(template.fields, pageSlots);
+  const templateIssues = validatePdfTemplate(template);
+  const invalid = inputIssues.length > 0 || mappingIssues.length > 0 || templateIssues.length > 0;
 
   useEffect(() => {
     setLoading(true);
@@ -65,7 +83,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
     let cancelled = false;
     (async () => {
       try {
-        const url = await getPdfFormTemplateUrl(template.storagePath);
+        const url = pdfSource ?? await getPdfFormTemplateUrl(template.storagePath);
         if (!url) throw new Error("PDFを取得できませんでした");
         const d = await loadPdfDocument(url);
         if (cancelled) return;
@@ -90,17 +108,7 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
       }
     })();
     return () => { cancelled = true; };
-  }, [template.storagePath]);
-
-  useEffect(() => {
-    const init: Record<string, string> = {};
-    template.fields.forEach((f) => {
-      init[f.id] = resolveFieldValue(f, ctx);
-    });
-    setValues(init);
-    // テンプレートを開いた時点の差し込み値で初期化する。ctx の参照変化で PDF を再読込しない。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template.id]);
+  }, [template.storagePath, pdfSource]);
 
   useEffect(() => {
     const el = previewColRef.current;
@@ -128,10 +136,10 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
 
   const renderFieldInput = (f: PdfFormField) => {
     if (f.type === "checkbox") {
-      const checked = !!values[f.id];
+      const checked = !!valueFor(f);
       return (
         <div className="flex items-center gap-2">
-          <Switch checked={checked} onCheckedChange={(c) => setValue(f.id, c ? "1" : "")} />
+          <Switch aria-label={f.label} disabled={f.editable === false} checked={checked} onCheckedChange={(c) => setValue(f.id, c ? "1" : "")} />
           <span className="text-xs text-muted-foreground">{checked ? "あり" : "なし"}</span>
         </div>
       );
@@ -139,27 +147,43 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
     if (f.type === "textarea") {
       return (
         <Textarea
-          value={values[f.id] ?? ""}
+          value={valueFor(f)}
           onChange={(e) => setValue(f.id, e.target.value)}
           rows={2}
+          aria-label={f.label}
+          aria-invalid={inputIssues.some((issue) => issue.fieldId === f.id)}
+          readOnly={f.editable === false}
+          required={f.required}
+          placeholder={f.placeholder}
           className="text-sm"
         />
       );
     }
     return (
       <Input
-        value={values[f.id] ?? ""}
+        type={f.type === "date" ? "date" : "text"}
+        inputMode={f.type === "number" ? "decimal" : undefined}
+        value={f.type === "date" ? pdfDateInputValue(valueFor(f)) : f.type === "number" ? (f.editable !== false ? values[f.id] : undefined) ?? (pdfNumberValue(valueFor(f))?.toString() ?? valueFor(f)) : valueFor(f)}
+        aria-label={f.label}
+        aria-invalid={inputIssues.some((issue) => issue.fieldId === f.id)}
+        readOnly={f.editable === false}
+        required={f.required}
+        placeholder={f.placeholder}
         onChange={(e) => setValue(f.id, e.target.value)}
-        className="h-8 text-sm"
+        className="h-8 text-sm read-only:bg-muted"
       />
     );
   };
 
   const handlePrint = async () => {
     if (!doc) return;
+    if (invalid) {
+      toast.error("入力項目とテンプレートの設定を確認してください");
+      return;
+    }
     setPrinting(true);
     try {
-      const pagesHtml: string[] = [];
+      const printPages: PdfPrintPage[] = [];
       for (let p = 0; p < doc.numPages; p++) {
         const page = await doc.getPage(p + 1);
         const baseVp = page.getViewport({ scale: 1 });
@@ -181,36 +205,36 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
         ).promise;
         const img = canvas.toDataURL("image/jpeg", 0.92);
 
-        const overlays = fieldsPaintOrder(snappedPageFields(template.fields, p, pageSlots[p] ?? [], ctx, valueFor), p)
-          .map((f) => overlayHtml(f, valueFor(f), baseVp.width, baseVp.width, baseVp.height))
+        const overlays = pdfFieldsForPage(template.fields, p)
+          .map((f) => pdfFieldOverlayHtml(f, displayValueFor(f), baseVp.width, baseVp.width, baseVp.height))
           .join("");
 
-        pagesHtml.push(
-          `<div class="page" style="width:${baseVp.width}px;height:${baseVp.height}px;">
-             <img src="${img}" style="position:absolute;inset:0;width:100%;height:100%;display:block;" />
-             ${overlays}
-           </div>`,
-        );
+        printPages.push({ width: baseVp.width, height: baseVp.height, image: img, overlays });
       }
 
-      const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(template.name)}</title>
-        <style>
-          @page { size: auto; margin: 0; }
-          * { box-sizing: border-box; }
-          body { margin:0; font-family: "Hiragino Sans","Yu Gothic",sans-serif; }
-          .page { position:relative; page-break-after: always; overflow:hidden; }
-          @media print { .page { box-shadow:none; } }
-        </style></head>
-        <body>${pagesHtml.join("")}</body></html>`;
+      const html = pdfPrintDocumentHtml(template.name, printPages);
 
-      const win = window.open("", "_blank", "width=900,height=1200");
-      if (!win) {
-        toast.error("ポップアップがブロックされました");
-        return;
+      // 同じ画面内で印刷文書を準備し、ポップアップ制限の影響を受けないようにする。
+      const frame = document.createElement("iframe");
+      frame.title = "PDF印刷用ページ";
+      frame.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;";
+      document.body.appendChild(frame);
+      const win = frame.contentWindow;
+      if (!win) { frame.remove(); throw new Error("印刷画面を開けませんでした"); }
+      try {
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        await Promise.all(Array.from(win.document.images).map((img) => img.decode()));
+        await win.document.fonts.ready;
+        win.addEventListener("afterprint", () => frame.remove(), { once: true });
+        win.print();
+        // 印刷ダイアログを開かないブラウザでも、不要な文書を残し続けない。
+        setTimeout(() => frame.remove(), 60_000);
+      } catch (error) {
+        frame.remove();
+        throw error;
       }
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => win.print(), 400);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "出力に失敗しました");
     } finally {
@@ -247,12 +271,14 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
               {autoFields.map((f) => (
                 <div key={f.id} className="space-y-1">
                   <Label className="text-xs flex items-center gap-1.5">
-                    {f.label}
+                    {f.label}{f.required && <span className="text-destructive">必須</span>}
+                    {f.editable === false && <span className="text-muted-foreground">編集不可</span>}
                     <span className="rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-normal text-emerald-600">
-                      {BINDING_LABELS[f.binding]}
+                      {bindingDisplayLabel(f)}
                     </span>
                   </Label>
                   {renderFieldInput(f)}
+                  {inputIssues.filter((issue) => issue.fieldId === f.id).map((issue) => <p key={issue.message} className="text-xs text-destructive">{issue.message}</p>)}
                 </div>
               ))}
             </div>
@@ -265,14 +291,21 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
               </div>
               {manualFields.map((f) => (
                 <div key={f.id} className="space-y-1">
-                  <Label className="text-xs">{f.label}</Label>
+                  <Label className="text-xs">{f.label}{f.required && <span className="ml-1 text-destructive">必須</span>}{f.editable === false && <span className="ml-1 text-muted-foreground">編集不可</span>}</Label>
                   {renderFieldInput(f)}
+                  {inputIssues.filter((issue) => issue.fieldId === f.id).map((issue) => <p key={issue.message} className="text-xs text-destructive">{issue.message}</p>)}
                 </div>
               ))}
             </div>
           )}
 
-          <Button onClick={handlePrint} disabled={printing || loading || !doc} className="w-full mt-2">
+          {(mappingIssues.length > 0 || templateIssues.length > 0) && (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive space-y-2">
+              <p className="font-semibold">管理者によるテンプレートの修正が必要です</p>
+              {[...mappingIssues, ...templateIssues].map((issue) => <p key={`${issue.fieldId}:${issue.message}`}>{template.fields.find((f) => f.id === issue.fieldId)?.label}：{issue.message}</p>)}
+            </div>
+          )}
+          <Button onClick={handlePrint} disabled={printing || loading || !doc || invalid} className="w-full mt-2">
             {printing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Printer className="h-4 w-4 mr-1" />}
             印刷 / PDF出力
           </Button>
@@ -306,11 +339,11 @@ export function PdfFormFillerPanel({ template, ctx, onClose, className }: PanelP
                         className="pointer-events-none absolute inset-0 h-full w-full"
                       />
                     )}
-                    {fieldsPaintOrder(snappedPageFields(template.fields, p, pageSlots[p] ?? [], ctx, valueFor), p).map((f) => (
+                    {pdfFieldsForPage(template.fields, p).map((f) => (
                         <FieldOverlay
                           key={f.id}
                           field={f}
-                          value={valueFor(f)}
+                          value={displayValueFor(f)}
                           pageWidth={pw}
                           renderW={renderW || pw}
                           pageHeight={(renderW || pw) * (ph / pw)}
@@ -351,42 +384,6 @@ export function PdfFormFiller({ open, onOpenChange, template, ctx }: DialogProps
   );
 }
 
-function snappedPageFields(
-  fields: PdfFormField[],
-  page: number,
-  slots: FormSlot[],
-  ctx: FillContext,
-  valueOf?: (field: PdfFormField) => string,
-): PdfFormField[] {
-  const placed = snapFieldsToSlots(fields.filter((f) => f.page === page), slots);
-  const occupied = placed.filter((f) => {
-    const v = valueOf?.(f) ?? f.text ?? "";
-    return f.type === "checkbox" ? !!v : v.trim().length > 0;
-  });
-  return [...placed, ...leftoverSlotOverlays(slots, occupied, page, {
-    orderAmount: ctx.orderAmount,
-    constructionTitle: ctx.constructionTitle,
-    constructionNo: ctx.constructionNo,
-    startDate: ctx.startDate,
-    endDate: ctx.endDate,
-    customerName: ctx.customerName,
-    customerAddress: ctx.customerAddress,
-    customerCompanyName: ctx.customer?.company_name,
-  })];
-}
-
-function fieldsPaintOrder(fields: PdfFormField[], page: number): PdfFormField[] {
-  return fields
-    .filter((f) => f.page === page)
-    .slice()
-    .sort((a, b) => {
-      const ac = a.id.startsWith("__cover_") ? 0 : 1;
-      const bc = b.id.startsWith("__cover_") ? 0 : 1;
-      if (ac !== bc) return ac - bc;
-      return b.wPct * b.hPct - a.wPct * a.hPct;
-    });
-}
-
 function FieldOverlay({
   field,
   value,
@@ -401,18 +398,16 @@ function FieldOverlay({
   pageHeight: number;
 }) {
   const box = fieldOverlayBox(field);
-  const coverBlank = field.id.startsWith("__cover_");
-  const hasValue = field.type === "checkbox" ? !!value : value.trim().length > 0;
-  if (!hasValue && !coverBlank) return null;
 
   const boxH = box.h * pageHeight;
   const boxW = box.w * (renderW || pageWidth);
-  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, boxH, boxW, value);
+  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, boxH, boxW, value, field.type === "textarea");
   const multiline = field.type === "textarea";
 
   return (
     <div
       className="absolute box-border flex min-h-0 min-w-0 overflow-hidden"
+      data-pdf-field={field.id}
       style={{
         left: `${box.x * 100}%`,
         top: `${box.y * 100}%`,
@@ -437,40 +432,8 @@ function FieldOverlay({
           wordBreak: multiline ? "break-word" : "normal",
         }}
       >
-        {field.type === "checkbox" ? "✓" : value}
+        {value}
       </span>
     </div>
   );
-}
-
-function overlayHtml(
-  field: PdfFormField,
-  value: string,
-  pageWidth: number,
-  renderW: number,
-  pageHeight: number,
-): string {
-  const hasValue = field.type === "checkbox" ? !!value : value.trim().length > 0;
-  const coverBlank = field.id.startsWith("__cover_");
-  if (!hasValue && !coverBlank) return "";
-  const box = fieldOverlayBox(field);
-  const boxH = box.h * pageHeight;
-  const boxW = box.w * (renderW || pageWidth);
-  const fontPx = overlayFontSizePx(field.fontSize, pageWidth, renderW, boxH, boxW, value);
-  const justify = overlayJustify(field.align);
-  const alignItems = field.type === "textarea" ? "flex-start" : "center";
-  const whiteSpace = field.type === "textarea" ? "pre-wrap" : "nowrap";
-  const content =
-    field.type === "checkbox"
-      ? "✓"
-      : escapeHtml(value).replace(/\n/g, "<br/>");
-  return `<div style="position:absolute;left:${(box.x * 100).toFixed(3)}%;top:${(box.y * 100).toFixed(3)}%;width:${(box.w * 100).toFixed(3)}%;height:${(box.h * 100).toFixed(3)}%;display:flex;align-items:${alignItems};justify-content:${justify};color:${field.color};font-size:${fontPx}px;line-height:1.15;white-space:${whiteSpace};overflow:hidden;box-sizing:border-box;background:#fff;padding:0 2px;font-weight:400;">${content}</div>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

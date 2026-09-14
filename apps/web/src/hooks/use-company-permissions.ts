@@ -33,14 +33,15 @@ let inflightSettings: Promise<{
 function fetchCompanySettingsOnce(force = false) {
   if (force) inflightSettings = null;
   if (!inflightSettings) {
-    inflightSettings = fetchCompanySettings()
+    const request = fetchCompanySettings()
       .then((s) => s)
       .finally(() => {
         // 短いクールダウン後に再取得可能にする
         setTimeout(() => {
-          inflightSettings = null;
+          if (inflightSettings === request) inflightSettings = null;
         }, 2_000);
       });
+    inflightSettings = request;
   }
   return inflightSettings;
 }
@@ -103,7 +104,7 @@ export function useCompanyPermissions() {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const start = () => {
-      void refresh(true);
+      void refresh();
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {

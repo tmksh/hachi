@@ -1,15 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
+import { browserAuthContext as authContext } from "./browser-auth";
 import { scopedSupabase } from "@/lib/queries/scoped";
 import { canUserViewAnnouncement } from "@/lib/announcement-visibility";
 import { EMPTY_TRANSFER_SENDER, PROCUREMENT_ACCOUNT_ITEMS, parseTransferSender, type InvoiceClosingDay, type TransferSender } from "@/lib/procurement";
 import { PDF_FORM_TEMPLATES_KEY, resolvePdfFormTemplates } from "@/lib/pdf-form-template";
-import { PROVIDER_DEFINITIONS } from "@/lib/app-integrations/providers/registry";
 import { DEFAULT_DEPARTMENTS, buildFiscalMonthLabels, getCurrentFiscalYear } from "@/lib/bi-utils";
 import { getFinancialAccountItems } from "@/lib/actions/financial-statements";
-import { listTeamMembers } from "@/lib/actions/team";
-import { getDepartmentMarginRates } from "@/lib/actions/deals";
-import { getCompanyLocations } from "@/lib/actions/bi";
-import { getAppIntegrations } from "@/lib/actions/app-integrations";
 import { getWorkflowApprovalSupport } from "@/lib/actions/workflow";
 import type { Company, Craftsman, FinancialStatement } from "@/lib/database.types";
 import type { AccountItemHistory } from "@/lib/actions/procurement";
@@ -58,18 +54,6 @@ const ORDER_SELECT = `
   construction:constructions(id, title, construction_no, assigned_to, assignee:profiles!constructions_assigned_to_fkey(id, display_name))
 `;
 const ORDER_SELECT_FALLBACK = `*, craftsman:craftsmen(id, name, company_name, email, kind, invoice_channel), construction:constructions(id, title, construction_no, assigned_to, assignee:profiles!constructions_assigned_to_fkey(id, display_name))`;
-
-async function authContext() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { supabase, user: null, profile: null as { company_id: string; role: string | null; display_name: string | null } | null };
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("company_id, role, display_name")
-    .eq("id", user.id)
-    .maybeSingle();
-  return { supabase, user, profile };
-}
 
 export async function fetchProcurementOrders() {
   const supabase = createClient();
@@ -620,73 +604,22 @@ export async function fetchCompanyLocations() {
   return data ?? [];
 }
 
+/** 初期表示に必要な会社・署名のみ。マスタ・外部連携・メンバーはタブを開いた時に読む。 */
 export async function fetchSettingsBundle() {
-  const supabase = createClient();
-  const { user } = await authContext();
-
-  const [
-    company,
-    members,
-    { data: stages },
-    { data: lostReasons },
-    { data: leadSources },
-    { data: tags },
-    departmentMargins,
-    locations,
-    { data: specialties },
-    { data: qualifications },
-    appIntegrations,
-  ] = await Promise.all([
-    fetchCompany(),
-    listTeamMembers().catch(() => []),
-    supabase.from("deal_stages").select("*").order("sort_order"),
-    supabase.from("lost_reasons").select("*").order("sort_order"),
-    supabase.from("lead_sources").select("*").order("sort_order"),
-    supabase.from("customer_tag_masters").select("*").order("sort_order"),
-    getDepartmentMarginRates().catch(() => []),
-    getCompanyLocations().catch(() => []),
-    supabase.from("craftsmen_specialties").select("id, label, sort_order").order("sort_order"),
-    supabase.from("craftsmen_qualifications").select("id, label, sort_order").order("sort_order"),
-    getAppIntegrations().catch(() => []),
-  ]);
-  const catalog = PROVIDER_DEFINITIONS.map(({ provider, name, description, color, connectHint, fields, settingsFields }) => ({
-    provider,
-    name,
-    description,
-    color,
-    connectHint,
-    fields,
-    settingsFields: settingsFields ?? [],
-  }));
-
+  const { supabase, user, profile } = await authContext();
+  let company: Company | null = null;
+  if (profile?.company_id) {
+    const { data, error } = await supabase.from("companies").select("*").eq("id", profile.company_id).single();
+    if (error) throw error;
+    company = data as Company;
+  }
   return {
     initialCompany: company,
     initialSignature: (user?.user_metadata?.mail_signature as string) ?? "",
-    initialMembers: members,
-    initialCrmMaster: {
-      stages: (stages ?? []) as Array<{
-        id: string;
-        key: string;
-        label: string;
-        color: string;
-        sort_order: number;
-        is_won: boolean;
-        is_lost: boolean;
-      }>,
-      lostReasons: (lostReasons ?? []) as Array<{ id: string; label: string; sort_order: number }>,
-      leadSources: (leadSources ?? []) as Array<{ id: string; label: string; sort_order: number }>,
-      tags: (tags ?? []) as Array<{ id: string; label: string; sort_order: number }>,
-      departmentMargins,
-      locations,
-    },
-    initialCraftsmenMaster: {
-      specialties: (specialties ?? []) as Array<{ id: string; label: string; sort_order: number }>,
-      qualifications: (qualifications ?? []) as Array<{ id: string; label: string; sort_order: number }>,
-    },
-    initialAppIntegrations: {
-      integrations: appIntegrations,
-      catalog,
-    },
+    initialMembers: undefined,
+    initialCrmMaster: undefined,
+    initialCraftsmenMaster: undefined,
+    initialAppIntegrations: undefined,
   };
 }
 
@@ -734,12 +667,19 @@ export async function fetchAccountItemHistory(): Promise<AccountItemHistory[]> {
   const { supabase, profile } = await authContext();
   if (!profile) return [];
   const past: AccountItemHistory[] = [];
-  const { data: orders } = await supabase
+  const [{ data: orders }, { data: budgets }] = await Promise.all([
+    supabase
     .from("contractor_orders")
     .select("account_item, account_item_source, craftsman:craftsmen(name, company_name)")
     .eq("company_id", profile.company_id)
     .not("account_item", "is", null)
-    .limit(400);
+    .limit(400),
+    supabase
+    .from("construction_cost_budgets")
+    .select("rows")
+    .eq("company_id", profile.company_id)
+    .limit(80),
+  ]);
   for (const o of orders ?? []) {
     if (o.account_item_source === "ai" || o.account_item_source === "learned") continue;
     const craftsman = Array.isArray(o.craftsman) ? o.craftsman[0] : o.craftsman;
@@ -750,11 +690,6 @@ export async function fetchAccountItemHistory(): Promise<AccountItemHistory[]> {
       accountItemSource: o.account_item_source,
     });
   }
-  const { data: budgets } = await supabase
-    .from("construction_cost_budgets")
-    .select("rows")
-    .eq("company_id", profile.company_id)
-    .limit(80);
   for (const budget of budgets ?? []) {
     const rows = Array.isArray(budget.rows) ? budget.rows : [];
     for (const raw of rows) {

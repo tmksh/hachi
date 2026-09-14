@@ -96,9 +96,10 @@ export default function AdminLoginPage() {
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? "パスワードを隠す" : "パスワードを表示"}
+                    aria-pressed={showPassword}
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

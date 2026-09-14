@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -224,12 +225,13 @@ export function SettingsClient({
 }: {
   initialCompany: Company | null;
   initialSignature: string;
-  initialMembers: Profile[];
+  initialMembers?: Profile[];
   initialCrmMaster?: CrmMasterInitialData;
   initialCraftsmenMaster?: CraftsmenMasterInitialData;
   initialAppIntegrations?: AppIntegrationsInitialData;
 }) {
-  const { profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initInnerTab = searchParams.get("tab") ?? "profile";
@@ -352,8 +354,15 @@ export function SettingsClient({
   const canManageMembers = profile?.role === "hq_admin";
 
   // メンバー管理
-  const [members, setMembers] = useState<Profile[]>(initialMembers);
-  const [membersLoading, setMembersLoading] = useState(false);
+  const membersEnabled = canManageMembers && mainTab === "organization" && subTab === "members";
+  const membersQuery = useQuery({
+    queryKey: ["settings-team-members"], queryFn: listTeamMembers,
+    initialData: initialMembers, enabled: membersEnabled, staleTime: 60_000,
+  });
+  const members = membersQuery.data ?? [];
+  const setMembers = useCallback((next: Profile[] | ((prev: Profile[]) => Profile[])) => queryClient.setQueryData<Profile[]>(["settings-team-members"], (prev = []) => typeof next === "function" ? next(prev) : next), [queryClient]);
+  const [refreshingMembers, setMembersLoading] = useState(false);
+  const membersLoading = refreshingMembers || (membersEnabled && membersQuery.isPending);
   const [addOpen, setAddOpen] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
   const [newName, setNewName] = useState("");
@@ -379,16 +388,11 @@ export function SettingsClient({
     } finally {
       setMembersLoading(false);
     }
-  }, [canManageMembers]);
+  }, [canManageMembers, setMembers]);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.user_metadata?.notif_settings) {
-        setNotifSettings(user.user_metadata.notif_settings);
-      }
-    }).catch(() => {});
-  }, []);
+    if (user?.user_metadata?.notif_settings) setNotifSettings(user.user_metadata.notif_settings);
+  }, [user]);
 
   useEffect(() => {
     if (profile) {
@@ -400,9 +404,9 @@ export function SettingsClient({
   }, [profile]);
 
   useEffect(() => {
-    if (!canEditCompany) return;
-    getBiCompanyConfig().then(setBiConfig).catch(() => {});
-  }, [canEditCompany]);
+    if (!canEditCompany || mainTab !== "personal" || subTab !== "profile") return;
+    void queryClient.fetchQuery({ queryKey: ["bi-company-config"], queryFn: getBiCompanyConfig, staleTime: 120_000 }).then(setBiConfig).catch(() => {});
+  }, [canEditCompany, mainTab, subTab, queryClient]);
 
   // 組織タブの権限表はメインスレッドを塞ぐため、表示後に遅延マウント
   useEffect(() => {
@@ -465,6 +469,9 @@ export function SettingsClient({
       });
       if (biConfig) await saveBiCompanyConfig(biConfig);
       setCompany(updated);
+      void queryClient.invalidateQueries({ queryKey: ["settings-bundle"] });
+      void queryClient.invalidateQueries({ queryKey: ["company"] });
+      void queryClient.invalidateQueries({ queryKey: ["bi-company-config"] });
       toast.success("会社情報を更新しました");
     } catch {
       toast.error("更新に失敗しました（本部管理者権限が必要です）");
@@ -1386,6 +1393,10 @@ export function SettingsClient({
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
+                  </div>
+                ) : membersQuery.isError && members.length === 0 ? (
+                  <div role="alert" className="text-sm text-destructive text-center py-8">
+                    メンバーを取得できませんでした。更新ボタンで再試行してください。
                   </div>
                 ) : members.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-8 border border-dashed rounded-lg">

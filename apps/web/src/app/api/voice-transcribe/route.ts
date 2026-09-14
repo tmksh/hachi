@@ -158,7 +158,7 @@ async function transcribeAudio(blob: Blob, apiKey: string, model: string): Promi
   return text;
 }
 
-export async function generateMeetingResult(transcript: string, apiKey: string, model: string) {
+async function generateMeetingResult(transcript: string, apiKey: string, model: string) {
   const chatModel = model.includes("gpt-4o") ? model : "gpt-4o-mini";
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",

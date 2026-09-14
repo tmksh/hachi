@@ -1,3 +1,4 @@
+import { fetchBrowserUser } from "./browser-auth";
 import { createClient } from "@/lib/supabase/client";
 
 export const DEAL_STALE_MS = 120_000;
@@ -101,9 +102,7 @@ export type StageProposal = {
 
 export async function fetchPendingStageProposals(): Promise<StageProposal[]> {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await fetchBrowserUser();
   if (!user) return [];
 
   const [{ data, error }, dealsRes] = await Promise.all([

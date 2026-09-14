@@ -146,6 +146,12 @@ export type PdfFormField = {
   binding: PdfFieldBinding;
   /** customer_custom の項目名 */
   bindingKey?: string;
+  /** 入力フォームの設定。未指定の既存項目は任意・編集可。 */
+  required?: boolean;
+  editable?: boolean;
+  placeholder?: string;
+  numberFormat?: "plain" | "grouped" | "currency";
+  dateFormat?: "slash" | "iso" | "japanese";
   /** fixed / 既定値 用のテキスト */
   text?: string;
   /** 位置・サイズ（ページ幅・高さに対する比率 0-1） */
@@ -198,6 +204,9 @@ export function newFieldDefaults(type: PdfFieldType, page: number): Omit<PdfForm
     label: FIELD_TYPE_LABELS[type],
     binding: "manual",
     text: type === "fixed" ? "テキスト" : "",
+    required: false,
+    editable: type !== "fixed",
+    placeholder: "",
     xPct: 0.1,
     yPct: 0.1,
     wPct: type === "textarea" ? 0.4 : 0.25,
@@ -229,6 +238,7 @@ export function resolvePdfFormTemplates(raw: unknown): PdfFormTemplate[] {
 
 /** 差し込みコンテキスト */
 export type FillContext = {
+  recordId?: string;
   constructionTitle?: string | null;
   constructionNo?: string | null;
   orderAmount?: number | null;
@@ -267,6 +277,7 @@ export type FillContext = {
 };
 
 export function buildFillContext(input: {
+  recordId?: string;
   constructionTitle?: string | null;
   constructionNo?: string | null;
   orderAmount?: number | null;
@@ -276,6 +287,7 @@ export function buildFillContext(input: {
   customerAssigneeName?: string | null;
 }): FillContext {
   return {
+    recordId: input.recordId,
     constructionTitle: input.constructionTitle ?? null,
     constructionNo: input.constructionNo ?? null,
     orderAmount: input.orderAmount ?? null,
@@ -319,6 +331,7 @@ function prospectLabel(v: string | null | undefined) {
 
 /** binding に応じて自動流し込み値を解決する。manual / 未解決は空文字 */
 export function resolveFieldValue(field: PdfFormField, ctx: FillContext): string {
+  if (field.type === "fixed") return field.text ?? "";
   const c = ctx.customer;
   switch (field.binding) {
     case "construction_title": return ctx.constructionTitle ?? "";
@@ -384,8 +397,16 @@ export function overlayFontSizePx(
   boxHeightPx: number,
   boxWidthPx?: number,
   text?: string,
+  multiline = false,
 ): number {
   const scaled = fontSize * (renderWidth / Math.max(pageWidth, 1));
+  if (multiline && text && boxWidthPx && boxWidthPx > 6) {
+    const lineUnits = text.split("\n").map((line) => Array.from(line).reduce((n, ch) => n + (/[\u0000-\u00ff]/.test(ch) ? 0.78 : 1.05), 0));
+    const fits = (size: number) => lineUnits.reduce((lines, units) => lines + Math.max(1, Math.ceil(units * size / (boxWidthPx - 6))), 0) * size * 1.15 <= boxHeightPx;
+    let low = 0, high = scaled;
+    for (let i = 0; i < 16; i++) { const mid = (low + high) / 2; if (fits(mid)) low = mid; else high = mid; }
+    return low;
+  }
   const capH = boxHeightPx > 1 ? boxHeightPx * 0.82 : scaled;
   let capW = scaled;
   const compact = text?.replace(/\s/g, "") ?? "";
@@ -403,4 +424,110 @@ export function overlayJustify(align: PdfFormField["align"]): "flex-start" | "ce
   if (align === "center") return "center";
   if (align === "right") return "flex-end";
   return "flex-start";
+}
+
+
+/** 設定済みの連携元を変更する。位置・ID は維持し、別の項目の既定値は引き継がない。 */
+export function changeFieldBinding(field: PdfFormField, binding: PdfFieldBinding): PdfFormField {
+  const type = BINDINGS_FOR_TYPE[field.type].includes(binding)
+    ? field.type
+    : (Object.keys(BINDINGS_FOR_TYPE) as PdfFieldType[]).find((t) => BINDINGS_FOR_TYPE[t].includes(binding)) ?? "text";
+  return {
+    ...field, type, binding,
+    label: binding === "manual" ? field.label : BINDING_LABELS[binding],
+    bindingKey: binding === "customer_custom" ? field.bindingKey : undefined,
+    text: binding === field.binding ? field.text : "",
+  };
+}
+
+export function changeFieldType(field: PdfFormField, type: PdfFieldType): PdfFormField {
+  const binding = BINDINGS_FOR_TYPE[type].includes(field.binding) ? field.binding : "manual";
+  return {
+    ...field, type, binding,
+    bindingKey: binding === "customer_custom" ? field.bindingKey : undefined,
+    text: type === field.type ? field.text : "",
+    required: type === "fixed" ? false : field.required,
+    editable: type === "fixed" ? false : field.type === "fixed" ? true : field.editable,
+  };
+}
+
+/** 入力値は項目IDごとに独立させ、編集不可の項目は常に連携元から取得する。 */
+export function pdfFieldInputValue(field: PdfFormField, ctx: FillContext, edits: Record<string, string>): string {
+  if (field.type === "fixed" || field.editable === false) return resolveFieldValue(field, ctx);
+  return edits[field.id] ?? resolveFieldValue(field, ctx);
+}
+
+export function pdfNumberValue(value: string): number | null {
+  const normalized = value.normalize("NFKC").trim().replace(/^[¥￥]/, "").replace(/%$/, "").replace(/,/g, "");
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function pdfDateInputValue(value: string): string {
+  const match = value.trim().match(/^(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?$/);
+  if (!match) return "";
+  const [, y, m, d] = match;
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (date.getFullYear() !== Number(y) || date.getMonth() !== Number(m) - 1 || date.getDate() !== Number(d)) return "";
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
+/** プレビューと印刷で共通の表示形式。 */
+export function formatPdfFieldValue(field: PdfFormField, value: string): string {
+  if (!value.trim()) return "";
+  if (field.type === "checkbox") return "✓";
+  if (field.type === "number") {
+    const n = pdfNumberValue(value);
+    if (n === null) return value;
+    const money = ["order_amount", "order_amount_tax", "customer_budget_min", "customer_budget_max"].includes(field.binding);
+    const format = field.numberFormat ?? (money ? "currency" : "plain");
+    if (format === "currency") return `¥${n.toLocaleString("ja-JP", { maximumFractionDigits: 20 })}`;
+    if (format === "grouped") return n.toLocaleString("ja-JP", { maximumFractionDigits: 20 });
+    return `${n}${field.binding === "customer_special_probability" && !field.numberFormat ? "%" : ""}`;
+  }
+  if (field.type === "date") {
+    const iso = pdfDateInputValue(value);
+    if (!iso) return value;
+    if (field.dateFormat === "iso") return iso;
+    const [y, m, d] = iso.split("-");
+    return field.dateFormat === "japanese" ? `${y}年${Number(m)}月${Number(d)}日` : iso.replaceAll("-", "/");
+  }
+  return value;
+}
+
+export type PdfFieldIssue = { fieldId: string; message: string };
+
+export function validatePdfFieldInputs(fields: PdfFormField[], valueOf: (field: PdfFormField) => string): PdfFieldIssue[] {
+  return fields.flatMap((field) => {
+    if (field.type === "fixed") return [];
+    const value = valueOf(field).trim();
+    let message = "";
+    if (field.required && !value) message = "必須項目です";
+    else if (value && field.type === "number" && pdfNumberValue(value) === null) message = "数値を入力してください";
+    else if (value && field.type === "date" && !pdfDateInputValue(value)) message = "有効な日付を入力してください";
+    return message ? [{ fieldId: field.id, message }] : [];
+  });
+}
+
+export function validatePdfTemplate(template: PdfFormTemplate): PdfFieldIssue[] {
+  const issues: PdfFieldIssue[] = [];
+  const ids = new Set<string>();
+  for (const f of template.fields) {
+    const add = (message: string) => issues.push({ fieldId: f.id, message });
+    if (!f.id || ids.has(f.id)) add("項目IDが重複しています。項目を作り直してください");
+    ids.add(f.id);
+    if (!f.label?.trim()) add("項目名を入力してください");
+    if (!BINDINGS_FOR_TYPE[f.type]?.includes(f.binding)) add("項目の種類と連携元が一致していません");
+    if (f.binding === "customer_custom" && !f.bindingKey?.trim()) add("連携する顧客のその他項目を指定してください");
+    if (!Number.isInteger(f.page) || f.page < 0 || f.page >= template.pageCount) add("配置先のページがありません");
+    if (![f.xPct, f.yPct, f.wPct, f.hPct].every(Number.isFinite) || f.xPct < 0 || f.yPct < 0 || f.wPct <= 0 || f.hPct <= 0 || f.xPct + f.wPct > 1.001 || f.yPct + f.hPct > 1.001) add("項目をページ内に配置してください");
+    if (f.required && f.editable === false && f.binding === "manual" && !f.text?.trim()) add("必須の手入力項目は編集可にするか、既定値を設定してください");
+  }
+  return issues;
+}
+
+/** 設定したページと位置をそのまま使用する。推定ラベルによる再配置や未設定項目の差し込みは行わない。 */
+export function pdfFieldsForPage(fields: PdfFormField[], page: number): PdfFormField[] {
+  return fields.filter((f) => f.page === page);
 }

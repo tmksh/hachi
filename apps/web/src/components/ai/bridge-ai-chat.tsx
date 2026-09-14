@@ -278,7 +278,7 @@ export function BridgeAiChat({
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="fixed bottom-6 right-6 z-50 size-14 rounded-full shadow-lg flex items-center justify-center bg-background border border-border hover:scale-105 transition-transform"
+          className="fixed bottom-24 right-6 z-30 md:bottom-6 md:z-50 size-14 rounded-full shadow-lg flex items-center justify-center bg-background border border-border hover:scale-105 transition-transform"
           aria-label="BRIDGE AI"
         >
           <BrandMark className="h-9 w-auto" />

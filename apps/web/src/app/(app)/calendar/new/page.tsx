@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ async function getGoogleToken(): Promise<string | null> {
 
 function CalendarNewPageContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const initialDate = searchParams.get("date") ?? "";
   const initialTime = searchParams.get("time") ?? "";
@@ -83,6 +85,8 @@ function CalendarNewPageContent() {
         location: location || undefined,
         shared_with: sharedWith,
       });
+      // 週・月など、保存前に開いた全期間の一覧を再取得対象にする。
+      await queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
 
       // Google Calendar にも保存（連携済みの場合）
       const token = await getGoogleToken();

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
 import { STANDALONE_WORKFLOW_KEYS } from "@/lib/tenant-host";
@@ -157,6 +158,7 @@ export async function createWorkflowRequest(input: {
       }
     }
 
+    await invalidateMyCompanyCache();
     return actionOk({ id: requestId });
   } catch (e) {
     console.error("[createWorkflowRequest] unexpected", e);
@@ -227,6 +229,7 @@ export async function approveWorkflowStep(stepId: string, comment?: string) {
   const { actionOk, actionFail } = await import("@/lib/action-result");
   try {
     await approveWorkflowStepInternal(stepId, "approved", comment);
+    await invalidateMyCompanyCache();
     return actionOk({});
   } catch (e) {
     console.error("[approveWorkflowStep]", e);
@@ -240,6 +243,7 @@ export async function approveWorkflowStepConditional(stepId: string, condition: 
     const trimmed = condition.trim();
     if (!trimmed) return actionFail("条件付き承認には条件コメントが必要です", "条件コメントが必要です");
     await approveWorkflowStepInternal(stepId, "approved", `【条件付き承認】${trimmed}`, true);
+    await invalidateMyCompanyCache();
     return actionOk({});
   } catch (e) {
     console.error("[approveWorkflowStepConditional]", e);
@@ -448,6 +452,7 @@ export async function rejectWorkflowStep(stepId: string, comment?: string) {
   const { actionOk, actionFail } = await import("@/lib/action-result");
   try {
     await rejectWorkflowStepUnsafe(stepId, comment);
+    await invalidateMyCompanyCache();
     return actionOk({});
   } catch (e) {
     console.error("[rejectWorkflowStep]", e);
@@ -535,6 +540,7 @@ export async function remandWorkflowStep(stepId: string, comment?: string) {
   const { actionOk, actionFail } = await import("@/lib/action-result");
   try {
     const updated = await remandWorkflowStepUnsafe(stepId, comment);
+    await invalidateMyCompanyCache();
     return actionOk(updated);
   } catch (e) {
     console.error("[remandWorkflowStep]", e);
@@ -705,6 +711,7 @@ export async function updateWorkflowRequestStatus(
 
   const { error } = await supabase.from("workflow_requests").update(patch).eq("id", id);
   if (error) throw actionError(error, "申請ステータスの更新に失敗しました");
+  await invalidateMyCompanyCache();
 }
 
 const LINKED_PAYLOAD_KEYS = ["estimate_id", "contract_id"] as const;
@@ -893,6 +900,7 @@ export async function resubmitWorkflowRequest(input: {
       }
     }
 
+    await invalidateMyCompanyCache();
     return actionOk({
       id: input.id,
       status: "submitted" as const,
@@ -1001,6 +1009,7 @@ export async function cancelWorkflowRequest(
       }
     }
 
+    await invalidateMyCompanyCache();
     return actionOk({
       id,
       status: "cancelled" as const,

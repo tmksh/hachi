@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BrandLogo, BrandMark } from "@/components/layout/brand-logo";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { createNavigationIntent } from "@/lib/navigation-intent";
 import { prefetchRouteData } from "@/lib/nav-prefetch";
 import { TEAL_TITLE } from "@/lib/teal-theme";
 import { cn } from "@/lib/utils";
@@ -135,18 +136,24 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const prefetchNav = (href: string) => {
+  const navIntent = useMemo(() => createNavigationIntent((href) => {
     router.prefetch(href);
     prefetchRouteData(queryClient, href);
-  };
+  }), [router, queryClient]);
+  useEffect(() => () => navIntent.cancel(), [navIntent]);
+  const prefetchNav = (href: string) => navIntent.schedule(href);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   /** 折りたたみ時: 選択中グループの詳細メニュー */
   const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  useEffect(() => {
+  const [previousPathname, setPreviousPathname] = useState(pathname);
+  if (previousPathname !== pathname) {
+    setPreviousPathname(pathname);
     setFlyoutGroup(null);
-  }, [pathname]);
+  }
+
+  const [notifOpen, setNotifOpen] = useState(false);
 
   // 他画面から通知パネルを開く（互換イベント）
   useEffect(() => {
@@ -154,10 +161,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     window.addEventListener("bridge:open-notifications", open);
     return () => window.removeEventListener("bridge:open-notifications", open);
   }, []);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResult, setSearchResult] = useState<{ query: string; items: SearchResult[] }>({ query: "", items: [] });
+  const searchResults = searchResult.query === searchQuery && searchQuery.trim() ? searchResult.items : [];
+  const searchLoading = !!searchQuery.trim() && searchResult.query !== searchQuery;
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [showBombAlert, setShowBombAlert] = useState(false);
@@ -272,15 +279,14 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
   // デバウンスグローバル検索
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults([]); return; }
+    if (!searchQuery.trim()) return;
+    let active = true;
     const timer = setTimeout(() => {
-      setSearchLoading(true);
       fetchGlobalSearch(searchQuery)
-        .then(setSearchResults)
-        .catch(() => setSearchResults([]))
-        .finally(() => setSearchLoading(false));
+        .then((items) => { if (active) setSearchResult({ query: searchQuery, items }); })
+        .catch(() => { if (active) setSearchResult({ query: searchQuery, items: [] }); });
     }, 300);
-    return () => clearTimeout(timer);
+    return () => { active = false; clearTimeout(timer); };
   }, [searchQuery]);
 
   const unreadCount = notifications.length;
@@ -337,14 +343,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   );
 
   const toggleGroup = (key: string) => {
-    setOpenGroup((prev) => {
-      const next = prev === key ? null : key;
-      if (next) {
-        const group = visibleGroups.find((g) => g.key === next);
-        group?.items.forEach((item) => prefetchNav(item.href));
-      }
-      return next;
-    });
+    setOpenGroup((prev) => prev === key ? null : key);
   };
 
   const sidebarActiveItem = "text-white font-medium shadow-sm";
@@ -442,9 +441,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                               <Link
                                 key={item.key}
                                 href={item.href}
-                                prefetch
+                                prefetch={false}
                                 onMouseEnter={() => prefetchNav(item.href)}
-                                onFocus={() => prefetchNav(item.href)}
+                                onMouseLeave={navIntent.cancel}
+                                onFocus={() => navIntent.now(item.href)}
                                 className={cn(
                                   "flex items-center px-3 py-1.5 rounded-lg text-sm whitespace-nowrap overflow-hidden text-ellipsis sidebar-nav-hover",
                                   isActive(item.href)
@@ -494,9 +494,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                           <Link
                             key={item.key}
                             href={item.href}
-                            prefetch
+                            prefetch={false}
                             onMouseEnter={() => prefetchNav(item.href)}
-                            onFocus={() => prefetchNav(item.href)}
+                            onMouseLeave={navIntent.cancel}
+                            onFocus={() => navIntent.now(item.href)}
                             onClick={() => setFlyoutGroup(null)}
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block sidebar-nav-hover",
@@ -514,8 +515,10 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   /* 折りたたみ＋未選択: 先頭ページへ遷移のみ */
                   <Link
                     href={group.items[0]?.href ?? "#"}
-                    prefetch
+                    prefetch={false}
                     onMouseEnter={() => group.items[0] && prefetchNav(group.items[0].href)}
+                    onMouseLeave={navIntent.cancel}
+                    onFocus={() => group.items[0] && navIntent.now(group.items[0].href)}
                     aria-label={group.label}
                     className="relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover text-muted-foreground"
                   >
@@ -578,19 +581,19 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
+                    <Link href="/settings" className="gap-2" prefetch={false} onMouseEnter={() => prefetchNav("/settings")} onMouseLeave={navIntent.cancel} onFocus={() => navIntent.now("/settings")}>
                       <User className="h-4 w-4" />
                       プロフィール
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
+                    <Link href="/settings" className="gap-2" prefetch={false} onMouseEnter={() => prefetchNav("/settings")} onMouseLeave={navIntent.cancel} onFocus={() => navIntent.now("/settings")}>
                       <Settings className="h-4 w-4" />
                       設定
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/settings?tab=external_integrations" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
+                    <Link href="/settings?tab=external_integrations" className="gap-2" prefetch={false} onMouseEnter={() => prefetchNav("/settings")} onMouseLeave={navIntent.cancel} onFocus={() => navIntent.now("/settings")}>
                       <Link2 className="h-4 w-4" />
                       外部連携
                     </Link>
@@ -655,19 +658,19 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                       </div>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
-                        <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
+                        <Link href="/settings" className="gap-2" prefetch={false} onMouseEnter={() => prefetchNav("/settings")} onMouseLeave={navIntent.cancel} onFocus={() => navIntent.now("/settings")}>
                           <User className="h-4 w-4" />
                           プロフィール
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href="/settings" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
+                        <Link href="/settings" className="gap-2" prefetch={false} onMouseEnter={() => prefetchNav("/settings")} onMouseLeave={navIntent.cancel} onFocus={() => navIntent.now("/settings")}>
                           <Settings className="h-4 w-4" />
                           設定
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href="/settings?tab=external_integrations" className="gap-2" onMouseEnter={() => prefetchNav("/settings")}>
+                        <Link href="/settings?tab=external_integrations" className="gap-2" prefetch={false} onMouseEnter={() => prefetchNav("/settings")} onMouseLeave={navIntent.cancel} onFocus={() => navIntent.now("/settings")}>
                           <Link2 className="h-4 w-4" />
                           外部連携
                         </Link>
@@ -689,7 +692,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
 
       {/* 検索ダイアログ — 開いたときだけマウント */}
       {searchOpen && (
-      <Dialog open={searchOpen} onOpenChange={(v) => { setSearchOpen(v); if (!v) { setSearchQuery(""); setSearchResults([]); } }}>
+      <Dialog open={searchOpen} onOpenChange={(v) => { setSearchOpen(v); if (!v) { setSearchQuery(""); setSearchResult({ query: "", items: [] }); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>検索</DialogTitle>
@@ -725,7 +728,7 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                             <Link
                               key={r.id}
                               href={r.href}
-                              onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }}
+                              onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResult({ query: "", items: [] }); }}
                               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-accent transition-colors"
                             >
                               <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${colors[type]}`}>{labels[type]}</span>

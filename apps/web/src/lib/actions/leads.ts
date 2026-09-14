@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createCustomer } from "@/lib/actions/customers";
+import { tokyoDateString } from "@/lib/tokyo-date";
 import type { InboundLead } from "@/lib/database.types";
 
 async function getCompanyContext() {
@@ -150,7 +151,7 @@ export async function convertInboundLeadToCustomer(id: string): Promise<{
     department: null,
     age: null,
     inquiry_category: lead.inquiry_category,
-    inquiry_date: new Date().toISOString().slice(0, 10),
+    inquiry_date: tokyoDateString(new Date(lead.created_at)),
     inquiry_content: lead.inquiry_content,
     custom_fields: {},
     line_user_id: null,

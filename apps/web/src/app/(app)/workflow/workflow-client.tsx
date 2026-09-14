@@ -21,7 +21,6 @@ import { fetchWorkflowRequests } from "@/lib/queries/lists";
 import { QK } from "@/lib/queries/portal";
 import { getStatusOption, getWorkflowStatusLabel, isWorkflowRemanded } from "@/lib/status-config";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
-import { prefetchWorkflowDetail } from "@/lib/nav-prefetch";
 
 type Row = Awaited<ReturnType<typeof fetchWorkflowRequests>>[number];
 const TYPE_LABELS: Record<string, string> = { expense: "経費", leave: "休暇", purchase: "購入", custom: "その他" };
@@ -113,7 +112,7 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
       <Card variant="inset"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>タイプ</TableHead><TableHead>件名</TableHead><TableHead>申請者</TableHead><TableHead className="text-right">金額</TableHead><TableHead>ステータス</TableHead></TableRow></TableHeader>
             <TableBody>
               {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
-                <TableRow key={r.id} className="cursor-pointer glass-row" onMouseEnter={() => prefetchWorkflowDetail(queryClient, r.id)} onClick={() => router.push(`/workflow/${r.id}`)}>
+                <TableRow key={r.id} className="cursor-pointer glass-row" onMouseEnter={() => router.prefetch(`/workflow/${r.id}`)} onClick={() => router.push(`/workflow/${r.id}`)}>
                   <TableCell><Badge variant="outline">{TYPE_LABELS[r.workflow_type?.key ?? ""] || "その他"}</Badge></TableCell>
                   <TableCell className="font-medium">{r.title}</TableCell>
                   <TableCell>{r.requester?.display_name ?? "-"}</TableCell>

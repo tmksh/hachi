@@ -248,10 +248,8 @@ export function CustomerTodoTab({ customerId }: { customerId: string }) {
               <p className="text-xs text-muted-foreground mt-1">「新規」から追加できます</p>
             </div>
           ) : filtered.map((t) => (
-            <button
+            <div
               key={t.id}
-              type="button"
-              onClick={() => selectTodo(t.id)}
               className={cn(
                 "w-full text-left px-4 py-3 transition-colors",
                 selectedId === t.id && !isCreating ? "bg-[#D8EDE4]/40" : "hover:bg-white/45 dark:hover:bg-white/5",
@@ -268,7 +266,7 @@ export function CustomerTodoTab({ customerId }: { customerId: string }) {
                     ? <CheckCircle2 className="h-4 w-4 text-[#0F5132]" />
                     : <Circle className="h-4 w-4" />}
                 </button>
-                <div className="min-w-0 flex-1">
+                <button type="button" onClick={() => selectTodo(t.id)} className="min-w-0 flex-1 text-left" aria-pressed={selectedId === t.id && !isCreating}>
                   <p className={cn(
                     "text-sm font-medium truncate",
                     t.status === "completed" && "line-through text-muted-foreground",
@@ -298,9 +296,9 @@ export function CustomerTodoTab({ customerId }: { customerId: string }) {
                       <Badge variant="secondary" className="text-[9px] h-4 px-1.5">録音</Badge>
                     )}
                   </div>
-                </div>
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </Card>

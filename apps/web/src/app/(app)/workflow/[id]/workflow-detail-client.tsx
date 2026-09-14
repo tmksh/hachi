@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateWorkflowRelatedQueries } from "@/lib/workflow-cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -159,8 +160,11 @@ export function WorkflowDetailClient({
         decided_at: detail.decided_at,
       });
     }
-    await queryClient.refetchQueries({ queryKey: QK.workflowRequests });
-    await queryClient.refetchQueries({ queryKey: QK.workflowRequest(id as string) });
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: QK.workflowRequests }),
+      queryClient.refetchQueries({ queryKey: QK.workflowRequest(id as string) }),
+      invalidateWorkflowRelatedQueries(queryClient, (detail?.payload ?? null) as Record<string, unknown> | null),
+    ]);
     router.refresh();
   };
 

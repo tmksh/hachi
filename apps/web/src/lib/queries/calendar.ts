@@ -1,4 +1,5 @@
 import { addDays, endOfDay, startOfDay, startOfWeek } from "date-fns";
+import { browserAuthContext } from "./browser-auth";
 import { createClient } from "@/lib/supabase/client";
 
 export const CALENDAR_STALE_MS = 60_000;
@@ -24,14 +25,8 @@ export async function fetchCalendarEvents(start: string, end: string) {
 }
 
 export async function fetchCompanyMembersWithCalendar(): Promise<CalendarMember[]> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user, profile: myProfile } = await browserAuthContext();
   if (!user) return [];
-  const { data: myProfile } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .single();
   if (!myProfile?.company_id) return [];
   const { data } = await supabase
     .from("profiles")
@@ -43,14 +38,8 @@ export async function fetchCompanyMembersWithCalendar(): Promise<CalendarMember[
 }
 
 export async function fetchCompanyMembers(): Promise<CalendarMember[]> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user, profile: myProfile } = await browserAuthContext();
   if (!user) return [];
-  const { data: myProfile } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .single();
   if (!myProfile?.company_id) return [];
   const { data } = await supabase
     .from("profiles")
