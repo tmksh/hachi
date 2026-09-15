@@ -26,8 +26,9 @@ export function pdfMappingIssues(fields: PdfFormField[], pageSlots: FormSlot[][]
       fieldId: field.id,
       message: `${title ? "工事名称" : "会社名"}欄に数値項目があります。連携元を確認するか、数値項目を正しい欄へ移動してください。`,
       // 明確な連携元がある金額項目を、名称項目に置き換えない。
-      suggestedBinding: field.binding === "manual" ? (title ? "construction_title" : "customer_company_name") as PdfFieldBinding : undefined,
-      suggestedSlot: expected ? slots.find((slot) => slot.kind === expected) : undefined,
+      suggestedBinding: field.binding === "manual" && title ? "construction_title" : undefined,
+      suggestedSlot: expected && slots.filter((slot) => slot.kind === expected).length === 1
+        ? slots.find((slot) => slot.kind === expected) : undefined,
     }];
   });
 }

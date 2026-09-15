@@ -1,7 +1,6 @@
 /**
  * PDF 上のラベル（会社名 / 工事名称 / 金額 など）から値欄を推定し、
- * 差し込み項目をその欄へ載せる。ドラッグ位置が隣のセルにずれていても、
- * binding / ラベルから正しい欄へマッピングする。
+ * 新規項目の配置候補を作る。保存済みの配置や連携元は変更しない。
  */
 
 import { type PdfFormField } from "@/lib/pdf-form-template";
@@ -39,7 +38,7 @@ export type SlotFillData = {
   customerCompanyName?: string | null;
 };
 
-export type FormSlot = OverlayBox & { id: string; kind: FormSlotKind };
+export type FormSlot = OverlayBox & { id: string; kind: FormSlotKind; autoPlace?: boolean };
 
 type TextRun = PdfTextItem & { h: number };
 
@@ -56,6 +55,8 @@ export function textItemsFromPdfContent(
     if (typeof it.str !== "string" || !it.str.trim()) continue;
     const t = it.transform;
     if (!Array.isArray(t) || t.length < 6) continue;
+    // 縦書き・回転文字を水平方向のラベルとして誤認しない。
+    if (Math.abs(t[1]) > 0.01 || Math.abs(t[2]) > 0.01 || t[0] <= 0) continue;
     const x = Number(t[4]);
     const yBottom = Number(t[5]);
     if (!Number.isFinite(x) || !Number.isFinite(yBottom)) continue;
@@ -144,6 +145,8 @@ function findLabels(
       const used = pieces.filter((p) => p.end > idx && p.start < end);
       from = end;
       if (used.length === 0) continue;
+      // 「工事名」が「工事名称」の一部分に一致したり、本文中に一致するのを防ぐ。
+      if (used[0].start !== idx || used[used.length - 1].end !== end) continue;
       const x0 = Math.min(...used.map((p) => p.it.x));
       const x1 = Math.max(...used.map((p) => p.it.x + p.it.w));
       const y0 = used.reduce((s, p) => s + p.it.yTop, 0) / used.length;
@@ -220,6 +223,8 @@ export function buildFormSlots(
   ) => {
     const hits = valuesRightOf(items, label, maxX);
     const x = (hits[0]?.x ?? label.x + label.w + 10) - 2;
+    const available = Math.min(pageW - 4, maxX - 2) - x;
+    if (available < 16) return;
     const x1 = hits.length > 0
       ? Math.max(...hits.map((h) => h.x + Math.max(h.w, 6)))
       : x + fallbackW;
@@ -227,7 +232,9 @@ export function buildFormSlots(
       ? hits.reduce((s, h) => s + h.yTop, 0) / hits.length
       : label.yTop;
     const { y, h } = around(yTop, 22);
-    slots.push(box(id, kind, x, y, Math.max(minW, Math.min(maxX - x - 2, Math.max(x1 - x + 8, fallbackW))), h));
+    slots.push({ ...box(`${id}_${slots.length}`, kind, x, y, Math.min(available, Math.max(minW, Math.max(x1 - x + 8, fallbackW))), h),
+      autoPlace: hits.length === 0 && !["company_orderer", "company_contractor", "address_orderer", "address_contractor"].includes(kind),
+    });
   };
 
   const postalMark = findLabel(items, "〒", { xMax: pageW * 0.45 }) ?? findLabel(items, "郵便番号", { xMax: pageW * 0.45 });
@@ -265,13 +272,20 @@ export function buildFormSlots(
   }
 
   const kokiLabel = findLabel(items, "工期");
-  const titleLabel = findLabel(items, "工事名称") ?? findLabel(items, "工事名");
+  const titleLabels = [...findLabels(items, "工事名称"), ...findLabels(items, "工事名"), ...findLabels(items, "案件名")];
+  const titleLabel = titleLabels[0];
   // 別の行の「工期開始」を右隣の欄と誤認すると、名称欄の幅が潰れる。
   const periodOnTitleRow = kokiLabel && titleLabel
     && kokiLabel.x > titleLabel.x + titleLabel.w
     && Math.abs(kokiLabel.yTop - titleLabel.yTop) < 16;
-  const titleMax = periodOnTitleRow ? kokiLabel.x - 6 : pageW * 0.55;
-  if (titleLabel) valueSlot("construction_title", "construction_title", titleLabel, titleMax, 160, 80);
+  const titleMax = periodOnTitleRow ? kokiLabel.x - 6 : pageW * 0.98;
+  for (const label of titleLabels) {
+    const nextLabel = items.filter((item) => item.x > label.x + label.w
+      && Math.abs(item.yTop - label.yTop) < 8
+      && /^(工期|工期開始|工期終了|会社名|数量|金額|小計|合計|消費税|工事番号|工事名称|工事名|案件名)$/.test(normalize(item.str)))
+      .sort((a, b) => a.x - b.x)[0];
+    valueSlot("construction_title", "construction_title", label, nextLabel ? nextLabel.x - 6 : pageW * 0.98, 160, 80);
+  }
 
   const placeLabel = findLabel(items, "工事場所");
   if (placeLabel) valueSlot("construction_place", "construction_place", placeLabel, titleMax, 160, 80);
@@ -378,7 +392,8 @@ export function buildFormSlots(
     const x = (yen?.x ?? Math.max(label.x + label.w + 8, pageW * 0.48)) - 8;
     const w = Math.max(64, tableRight - x);
     const { y, h } = around(yen?.yTop ?? label.yTop);
-    slots.push(box(id, kind, x, y, w, h));
+    // 表の罫線を解析していないため、金額欄の推測位置は確認用途に限定する。
+    slots.push({ ...box(id, kind, x, y, w, h), autoPlace: false });
   };
 
   const qtyLabel = findLabel(items, "数量");
@@ -486,7 +501,8 @@ export function buildFormSlots(
     slots.push(box(`sample_aiue_${i}`, "printed", run.x - 2, y, Math.max(run.w + 16, 48), h));
   });
 
-  return slots;
+  return slots.filter((slot) => [slot.x, slot.y, slot.w, slot.h].every(Number.isFinite)
+    && slot.x + slot.w <= 1 && slot.y + slot.h <= 1);
 }
 
 function overlap(a: OverlayBox, b: OverlayBox) {
@@ -504,17 +520,19 @@ function overlap(a: OverlayBox, b: OverlayBox) {
 function kindsForField(field: PdfFormField): FormSlotKind[] {
   switch (field.binding) {
     case "customer_address":
-      return ["address_orderer"];
+      return [];
     case "customer_company_name":
     case "customer_name":
-      return ["company_orderer"];
+      // 帳票の左右だけで顧客・自社・協力会社を決めない。
+      return [];
     case "construction_title":
       return ["construction_title"];
     case "construction_no":
       return ["construction_no"];
     case "start_date":
     case "end_date":
-      return ["period"];
+      // 開始日と終了日を同じ工期欄に重ねない。
+      return [];
     case "today":
       return ["issue_date"];
     case "order_amount":
@@ -564,9 +582,11 @@ export function snapFieldsToSlots(fields: PdfFormField[], slots: FormSlot[]): Pd
 }
 
 export async function slotsFromPdfPage(
-  page: { getTextContent: () => PromiseLike<unknown>; getViewport: (o: { scale: number }) => { width: number; height: number } },
+  page: { getTextContent: () => PromiseLike<unknown>; getViewport: (o: { scale: number }) => { width: number; height: number; rotation?: number; viewBox?: number[] } },
 ): Promise<FormSlot[]> {
   const vp = page.getViewport({ scale: 1 });
+  // 座標原点や向きが違うPDFでは推定を使わず、表示上の明示配置を使う。
+  if ((vp.rotation ?? 0) % 360 !== 0 || (vp.viewBox && (vp.viewBox[0] !== 0 || vp.viewBox[1] !== 0))) return [];
   const text = await page.getTextContent();
   return buildFormSlots(textItemsFromPdfContent(textContentSafe(text), vp.height), vp.width, vp.height);
 }
@@ -600,8 +620,12 @@ export function slotPlacementForPalette(
     align: "left",
   };
   const kinds = kindsForField(fake);
-  const free = slots.filter((s) => kinds.includes(s.kind) && !taken.some((t) => overlap(t, s) >= 0.4));
-  return free[0] ?? null;
+  const candidates = slots.filter((s) => kinds.includes(s.kind));
+  if (candidates.length !== 1 || candidates[0].autoPlace === false) return null;
+  const slot = candidates[0];
+  if (taken.some((t) => Math.min(t.x + t.w, slot.x + slot.w) > Math.max(t.x, slot.x)
+    && Math.min(t.y + t.h, slot.y + slot.h) > Math.max(t.y, slot.y))) return null;
+  return slot;
 }
 
 const COVER_SLOT_KINDS: FormSlotKind[] = [

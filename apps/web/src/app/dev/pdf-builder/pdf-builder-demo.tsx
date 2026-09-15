@@ -33,7 +33,8 @@ export function PdfBuilderDemo({ pdfSource, patterns = [] }: { pdfSource: string
   const pattern = patterns.find((p) => p.key === patternKey);
   const [template, setTemplate] = useState(example);
   const [revision, setRevision] = useState(0);
-  const load = (next: PdfFormTemplate) => { setTemplate(next); setRevision((v) => v + 1); };
+  const [importMode, setImportMode] = useState(false);
+  const load = (next: PdfFormTemplate) => { setImportMode(false); setTemplate(next); setRevision((v) => v + 1); };
   return <main className="min-h-screen bg-background">
     <div className="flex flex-wrap items-center gap-3 border-b bg-muted/30 px-4 py-2 text-xs">
       <span>ローカル確認用 · 保存先はこのブラウザです</span>
@@ -46,7 +47,8 @@ export function PdfBuilderDemo({ pdfSource, patterns = [] }: { pdfSource: string
       }}>保存内容を開き直す</Button>
       <Button size="sm" variant="outline" onClick={() => { setPatternKey(""); load({ ...example, fields: example.fields.map((f) => f.id === "title" ? { ...f, type: "number", binding: "manual", label: "数値", text: "111111", editable: true } : f) }); }}>No.106を再現</Button>
       <Button size="sm" variant="ghost" onClick={() => load(pattern?.template ?? example)}>サンプルを初期化</Button>
+      <Button size="sm" variant="outline" onClick={() => { setImportMode(true); setRevision(v => v + 1); }}>PDFを新規アップロードして検証</Button>
     </div>
-    <PdfBuilderEditClient key={revision} id={template.id} initDocType={template.docType} initialTemplate={template} initialPdfUrl={pattern?.pdfSource ?? pdfSource} previewContext={pattern?.context} customFieldKeys={["管理コード"]} onSaveTemplate={async (next) => { localStorage.setItem(`pdf-builder-demo:${patternKey}`, JSON.stringify(next)); }} />
+    <PdfBuilderEditClient key={revision} id={importMode ? "new" : template.id} initDocType={template.docType} initialTemplate={importMode ? null : template} initialPdfUrl={importMode ? null : pattern?.pdfSource ?? pdfSource} previewContext={pattern?.context} customFieldKeys={["管理コード"]} onSaveTemplate={async (next) => { localStorage.setItem(`pdf-builder-demo:${importMode ? "uploaded" : patternKey}`, JSON.stringify(next)); }} />
   </main>;
 }

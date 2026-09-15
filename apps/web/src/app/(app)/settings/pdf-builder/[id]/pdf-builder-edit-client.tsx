@@ -203,6 +203,8 @@ export function PdfBuilderEditClient({
   const [renderSize, setRenderSize] = useState<{ width: number; height: number } | null>(null);
   const [containerWidth, setContainerWidth] = useState(680);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
+  const [pendingField, setPendingField] = useState<Omit<PaletteItem, "icon"> | null>(null);
   const [allPageSlots, setAllPageSlots] = useState<FormSlot[][]>([]);
   const pageSlots = allPageSlots[activePage] ?? [];
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -297,6 +299,12 @@ export function PdfBuilderEditClient({
       x: f.xPct, y: f.yPct, w: f.wPct, h: f.hPct,
     }));
     const slot = slotPlacementForPalette(item.binding, item.type, item.label, pageSlots, taken);
+    if (!slot && !point) {
+      setPendingField(item);
+      setSelectedId(null);
+      return;
+    }
+    setPendingField(null);
     const defaults = newFieldDefaults(item.type, activePage);
     const f: PdfFormField = {
       id: uid(),
@@ -443,6 +451,7 @@ export function PdfBuilderEditClient({
     if (!doc) return;
     let cancelled = false;
     setAnalyzing(true);
+    setAnalysisFailed(false);
     setAllPageSlots([]);
     Promise.all(Array.from({ length: doc.numPages }, async (_, p) => {
       const page = await doc.getPage(p + 1);
@@ -454,7 +463,7 @@ export function PdfBuilderEditClient({
         setAllPageSlots(pages.map((page) => page.slots));
       }
     }).catch(() => {
-      if (!cancelled) toast.error("PDFの項目確認に失敗しました。PDFを開き直してください。");
+      if (!cancelled) { setAnalysisFailed(true); toast.error("PDFの項目確認に失敗しました。PDFを開き直してください。"); }
     }).finally(() => { if (!cancelled) setAnalyzing(false); });
     return () => { cancelled = true; };
   }, [doc]);
@@ -497,13 +506,22 @@ export function PdfBuilderEditClient({
             ))}</select>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-        <Button size="sm" variant="outline" disabled={!doc || analyzing} onClick={() => setPreviewOpen(true)}><Eye className="mr-1 h-4 w-4" />入力プレビュー</Button>
-        <Button size="sm" onClick={handleSave} disabled={saving || loading || analyzing || !doc || !storagePath}>
+        <Button size="sm" variant="outline" disabled={!doc || analyzing || analysisFailed || !!pendingField} onClick={() => setPreviewOpen(true)}><Eye className="mr-1 h-4 w-4" />入力プレビュー</Button>
+        <Button size="sm" onClick={handleSave} disabled={saving || loading || analyzing || analysisFailed || !!pendingField || !doc || !storagePath}>
           {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
           保存
         </Button>
         </div>
       </div>
+      {pendingField && <div role="status" className="flex items-center gap-3 border-b bg-primary/10 px-4 py-2 text-sm">
+        <span>「{pendingField.label}」を置く入力欄の左上をPDF上でクリックしてください。</span>
+        <Button size="sm" variant="ghost" onClick={() => setPendingField(null)}>配置をキャンセル</Button>
+      </div>}
+      {doc && !analyzing && <p role="status" className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+        {analysisFailed ? "PDFを解析できませんでした。開き直してから保存してください。"
+          : pageSlots.length === 0 ? "このページには自動判定できる欄がありません。項目を入力欄へドラッグして、連携元を指定してください。"
+          : "自動配置は候補です。各項目の位置と連携元を確認し、入力プレビューで出力を確認してください。"}
+      </p>}
       {issues.length > 0 && <div role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
         {issues.map((issue) => <div key={issue.fieldId} className="flex flex-wrap items-center gap-2"><span>{issue.message}</span>{(issue.suggestedBinding || issue.suggestedSlot) && <Button size="sm" variant="outline" onClick={() => {
           const f = fields.find((f) => f.id === issue.fieldId);
@@ -615,7 +633,7 @@ export function PdfBuilderEditClient({
             </div>
 
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              項目をPDF上へドラッグして配置します。クリックで追加した項目も移動できます。
+              項目をPDF上へドラッグして配置します。配置先を判定できない場合は、項目を選んで入力欄をクリックしてください。
             </p>
             <div className="mt-4 border-t pt-3">
               <p className="mb-2 text-xs font-semibold">配置済み項目（{fields.length}）</p>
@@ -656,9 +674,15 @@ export function PdfBuilderEditClient({
             <div className="flex-1 overflow-auto p-6">
               <div ref={pageWrapRef} className="mx-auto" style={{ maxWidth: 820 }}>
                 <div
-                  className="relative mx-auto bg-white shadow"
+                  className={`relative mx-auto bg-white shadow ${pendingField ? "cursor-crosshair" : ""}`}
                   style={{ width: renderW, height: renderH }}
-                  onPointerDown={() => setSelectedId(null)}
+                  onPointerDown={(e) => {
+                    setSelectedId(null);
+                    if (pendingField) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      addField(pendingField, { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height });
+                    }
+                  }}
                   data-testid="pdf-builder-page"
                   onDragOver={(e) => { if (e.dataTransfer.types.includes(PALETTE_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
                   onDrop={(e) => {

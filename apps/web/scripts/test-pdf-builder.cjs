@@ -16,6 +16,49 @@ const { pdfMappingIssues } = load('src/lib/pdf-form-mapping.ts');
 const field = (id, binding, options = {}) => ({ id, ...api.newFieldDefaults('text', 0), label: id, binding, ...options });
 const ctx = { constructionTitle: '山田邸 改修工事', orderAmount: 12000000, startDate: '2026-09-25', customer: { company_name: 'サンプル株式会社' } };
 const slot = { id: 'construction_title', kind: 'construction_title', x: .2, y: .3, w: .25, h: .03 };
+const snap = load('src/lib/pdf-form-snap.ts');
+test('repeated titles require explicit placement even if one candidate is occupied', () => {
+  const slots = [slot, {...slot, id:'second', y:.7}];
+  assert.equal(snap.slotPlacementForPalette('construction_title','text','工事名称',slots,[]), null);
+  assert.equal(snap.slotPlacementForPalette('construction_title','text','工事名称',slots,[slot]), null);
+});
+test('company roles and start/end dates are never chosen from left/right or a shared period box', () => {
+  const slots = [{...slot,kind:'company_orderer'}, {...slot,id:'period',kind:'period'}];
+  for (const binding of ['customer_name','customer_company_name','customer_address','start_date','end_date']) {
+    assert.equal(snap.slotPlacementForPalette(binding,'text',binding,slots,[]), null);
+  }
+});
+test('a right-column construction title fits within the page and repeated labels survive detection', () => {
+  const slots = snap.buildFormSlots([
+    {str:'工事名称',x:340,yTop:200,w:48},
+    {str:'工事名称',x:340,yTop:500,w:48},
+  ],595,842).filter(s=>s.kind==='construction_title');
+  assert.equal(slots.length,2);
+  assert.equal(new Set(slots.map(s=>s.id)).size,2);
+  for(const s of slots) { assert.ok(s.x > .6); assert.ok(s.w > .15); assert.ok(s.x+s.w<=1); }
+});
+test('an adjacent quantity label is not covered by a title and occupied slots are not reused', () => {
+  const slots = snap.buildFormSlots([{str:'工事名称',x:30,yTop:200,w:48},{str:'数量',x:280,yTop:200,w:24}],595,842);
+  const title=slots.find(s=>s.kind==='construction_title');
+  assert.ok(title.x+title.w<280/595);
+  assert.equal(snap.slotPlacementForPalette('construction_title','text','工事名称',[title],[{x:title.x+.01,y:title.y,w:.01,h:.01}]),null);
+});
+test('a printed sample is not automatically covered, and body text is not a field label', () => {
+  const slots=snap.buildFormSlots([{str:'工事名称',x:30,yTop:200,w:48},{str:'元の工事名',x:120,yTop:200,w:80}],595,842);
+  assert.equal(snap.slotPlacementForPalette('construction_title','text','工事名称',slots,[]),null);
+  assert.equal(snap.buildFormSlots([{str:'工事名称についての説明です',x:30,yTop:200,w:180}],595,842).length,0);
+});
+test('rotated, cropped and image-only pages require explicit placement without guessing coordinates', async () => {
+  for(const viewport of [{width:842,height:595,rotation:90},{width:500,height:700,viewBox:[20,30,520,730]}]) {
+    assert.deepEqual(await snap.slotsFromPdfPage({getViewport:()=>viewport,getTextContent:()=>{throw new Error('must not guess')}}),[]);
+  }
+  assert.deepEqual(await snap.slotsFromPdfPage({getViewport:()=>({width:595,height:842}),getTextContent:async()=>({items:[]})}),[]);
+});
+test('ambiguous company mapping never offers to replace its value with a customer company', () => {
+  const companySlot={...slot,kind:'company_contractor'};
+  const number=field('n','manual',{type:'number',xPct:.2,yPct:.3,wPct:.25,hPct:.03});
+  assert.equal(pdfMappingIssues([number],[[companySlot]])[0].suggestedBinding,undefined);
+});
 test('No.106: legacy numeric title is diagnosed and explicitly repaired without moving the field', () => {
   const legacy = field('legacy', 'manual', { type: 'number', label: '数値', text: '111111', xPct: .2, yPct: .3, wPct: .25, hPct: .03 });
   assert.equal(pdfMappingIssues([legacy], [[slot]])[0].suggestedBinding, 'construction_title');
