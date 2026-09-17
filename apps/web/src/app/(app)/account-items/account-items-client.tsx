@@ -20,6 +20,7 @@ import { fetchProcurementMasters, fetchProcurementOrders, LIST_STALE_MS, MASTER_
 type Props = {
   initialOrders?: ProcurementOrder[];
   accountItems?: string[];
+  embedded?: boolean;
 };
 
 type VendorGroup = {
@@ -51,7 +52,7 @@ function basisFor(vendorName: string, all: ProcurementOrder[]) {
   return { label: `過去${past.length}件中${n}件`, cls: "bg-orange-100 text-orange-800", item: top };
 }
 
-export function AccountItemsClient({ initialOrders, accountItems: initialAccountItems }: Props) {
+export function AccountItemsClient({ initialOrders, accountItems: initialAccountItems, embedded = false }: Props) {
   const querySeedAt = useQuerySeedAt();
   const queryClient = useQueryClient();
   const { data: orders = [], isPending: ordersPending } = useQuery({
@@ -144,20 +145,32 @@ export function AccountItemsClient({ initialOrders, accountItems: initialAccount
   };
 
   if ((ordersPending && orders.length === 0) || (mastersPending && !masters && !initialAccountItems)) {
-    return <PageLoadingFallback />;
+    return embedded ? null : <PageLoadingFallback />;
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <PageHeader
-        title="勘定科目の確定"
-        description="担当者が入れられなかったもの、AIが自信のないものをまとめて確定します。"
-      >
-        <div className="flex items-center gap-2">
-          <Badge className="bg-amber-100 text-amber-800">総務・経理ロール</Badge>
-          <Badge className="bg-teal-100 text-teal-800">No.137</Badge>
+    <div className={embedded ? "space-y-3" : "p-4 md:p-6 space-y-4"}>
+      {embedded ? (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">勘定科目の確定</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              未設定は経理だけがここで確定できます。同じ業者はまとめて選べます。
+            </p>
+          </div>
+          <Badge className="bg-amber-100 text-amber-800">経理のみ編集</Badge>
         </div>
-      </PageHeader>
+      ) : (
+        <PageHeader
+          title="勘定科目の確定"
+          description="担当者が入れられなかったもの、AIが自信のないものをまとめて確定します。"
+        >
+          <div className="flex items-center gap-2">
+            <Badge className="bg-amber-100 text-amber-800">総務・経理ロール</Badge>
+            <Badge className="bg-teal-100 text-teal-800">No.137</Badge>
+          </div>
+        </PageHeader>
+      )}
 
       <div className="grid sm:grid-cols-4 gap-3">
         <Summary color="bg-rose-50" title="科目が未確定" value={`${unset.length}件`} />
@@ -217,8 +230,8 @@ export function AccountItemsClient({ initialOrders, accountItems: initialAccount
         確定内容は次回の候補に使います。同じ業者は次回から自動で入りやすくなります。
       </p>
 
-      <div className="flex justify-end gap-2 pb-6">
-        <Button variant="outline" asChild><Link href="/ledger">あとで</Link></Button>
+      <div className={`flex justify-end gap-2 ${embedded ? "" : "pb-6"}`}>
+        {!embedded && <Button variant="outline" asChild><Link href="/ledger">あとで</Link></Button>}
         <Button className="bg-emerald-700 hover:bg-emerald-800" disabled={saving || selectedCount === 0} onClick={confirm}>
           選択した{selectedCount}件を確定する
         </Button>

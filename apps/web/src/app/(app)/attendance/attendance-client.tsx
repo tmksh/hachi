@@ -1,32 +1,60 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { format, parseISO, addMonths, subMonths, differenceInMinutes } from "date-fns";
+import { format, parseISO, differenceInMinutes } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
-import { LogIn, LogOut, Check, X, ChevronLeft, ChevronRight, Clock, Sun, Coffee } from "lucide-react";
+import { LogIn, LogOut, Check, X, ChevronLeft, ChevronRight, Clock, Sun, Coffee, Pencil, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType, recordLeaveDay } from "@/lib/actions/attendance";
-import { fetchAttendanceEntries, LIST_STALE_MS, QK } from "@/lib/queries/portal";
+import { clockIn, clockOut, approveAttendance, rejectAttendance, updateLeaveType, recordLeaveDay, upsertAttendanceEntry } from "@/lib/actions/attendance";
+import { fetchAttendanceEntriesRange, LIST_STALE_MS, QK } from "@/lib/queries/portal";
+import { createClient } from "@/lib/supabase/client";
 import type { Company } from "@/lib/database.types";
 import { AnalogClock } from "@/components/shared/analog-clock";
+import {
+  parseDateKey,
+  periodContaining,
+  periodDates,
+  periodLabel,
+  shiftPeriod,
+  type AttendancePeriod,
+} from "@/lib/attendance-period";
 
-type Entry = Awaited<ReturnType<typeof fetchAttendanceEntries>>[number];
+type Entry = Awaited<ReturnType<typeof fetchAttendanceEntriesRange>>[number];
 
 type AttSettings = {
   start_time?: string;
   end_time?: string;
   break_minutes?: number;
   leave_types?: string[];
+  closing_day?: number;
 };
+
+type MemberOption = { id: string; display_name: string | null; department?: string | null };
+
+const WEEKDAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
+
+export function closingDayFromCompany(c: Company | null): number {
+  const att = (c?.settings as Record<string, AttSettings> | undefined)?.attendance_settings;
+  const v = Number(att?.closing_day ?? 0);
+  return Number.isFinite(v) ? Math.min(28, Math.max(0, Math.floor(v))) : 0;
+}
+
+function isoToHM(iso: string | null | undefined): string {
+  return iso ? format(parseISO(iso), "HH:mm") : "";
+}
 
 function calcWorkMinutes(clockIn: string, clockOut: string, breakMins: number): number {
   const rawMins = differenceInMinutes(parseISO(clockOut), parseISO(clockIn));
@@ -71,6 +99,7 @@ function attSettingsFromCompany(c: Company | null): AttSettings {
     end_time: att.end_time ?? "18:00",
     break_minutes: att.break_minutes ?? 60,
     leave_types: att.leave_types?.length ? att.leave_types : DEFAULT_LEAVE_TYPES,
+    closing_day: att.closing_day ?? 0,
   };
 }
 
@@ -100,21 +129,78 @@ export function AttendanceClient({
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const initialClock = todayClockState(initialEntries, initialUserId ?? user?.id);
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [now, setNow] = useState(new Date());
   const attSettings = attSettingsFromCompany(initialCompany);
+  const closingDay = closingDayFromCompany(initialCompany);
   const [selectedLeaveType, setSelectedLeaveType] = useState(initialClock.leaveType);
 
-  const month = format(currentDate, "yyyy-MM");
-  const isCurrentMonth = format(new Date(), "yyyy-MM") === month;
+  // 締め期間（会社設定の締め日で区切る）
+  const todayPeriod = useMemo(() => periodContaining(new Date(), closingDay), [closingDay]);
+  const [period, setPeriod] = useState<AttendancePeriod>(todayPeriod);
+  const isCurrentMonth = period.start === todayPeriod.start;
+
+  // 表示対象メンバー（管理者のみ切替可。既定は自分）
+  const [targetUserId, setTargetUserId] = useState<string>(initialUserId ?? user?.id ?? "");
+  const effectiveTargetId = targetUserId || user?.id || "";
+  const { data: members = [] } = useQuery({
+    queryKey: ["attendance", "members"],
+    queryFn: async () => {
+      const { data } = await createClient()
+        .from("profiles")
+        .select("id, display_name, department")
+        .order("display_name");
+      return (data ?? []) as MemberOption[];
+    },
+    staleTime: 5 * 60_000,
+    enabled: !!user?.id && isAdmin,
+  });
+
   const { data: entries = [], isPending: loading } = useQuery({
-    queryKey: QK.attendance(month),
-    queryFn: () => fetchAttendanceEntries(month),
+    queryKey: QK.attendanceRange(period.start, period.end, "all"),
+    queryFn: () => fetchAttendanceEntriesRange(period.start, period.end),
     staleTime: LIST_STALE_MS,
     initialData: isCurrentMonth ? initialEntries : undefined,
     enabled: !!user?.id,
   });
   const clockedIn = todayClockState(entries, user?.id).clockedIn;
+
+  // 修正入力ダイアログ
+  const [editing, setEditing] = useState<{ date: string; entry: Entry | null } | null>(null);
+  const [editIn, setEditIn] = useState("");
+  const [editOut, setEditOut] = useState("");
+  const [editLeave, setEditLeave] = useState("none");
+  const [editReason, setEditReason] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openEdit = (date: string, entry: Entry | null) => {
+    setEditing({ date, entry });
+    setEditIn(isoToHM(entry?.clock_in_at));
+    setEditOut(isoToHM(entry?.clock_out_at));
+    setEditLeave(entry?.leave_type && entry.leave_type !== "none" ? entry.leave_type : "none");
+    setEditReason("");
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    setEditSaving(true);
+    try {
+      await upsertAttendanceEntry({
+        work_date: editing.date,
+        user_id: effectiveTargetId,
+        clock_in: editIn || null,
+        clock_out: editOut || null,
+        leave_type: editLeave,
+        reason: editReason,
+      });
+      toast.success(`${editing.date} の勤怠を保存しました`);
+      setEditing(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "保存に失敗しました");
+    } finally {
+      setEditSaving(false);
+    }
+  };
   const scheduledMins = calcScheduledMins(
     attSettings.start_time ?? "09:00",
     attSettings.end_time ?? "18:00",
@@ -180,8 +266,8 @@ export function AttendanceClient({
   const isOnLeaveToday = !!todayEntry?.leave_type && isFullDayLeave(todayEntry.leave_type);
   const isLeaveModeSelected = isFullDayLeave(selectedLeaveType);
 
-  const myEntries = entries.filter(e => e.user_id === user?.id);
-  const totalDays = myEntries.length;
+  const myEntries = entries.filter(e => e.user_id === effectiveTargetId);
+  const totalDays = myEntries.filter(e => e.clock_in_at || (e.leave_type && e.leave_type !== "none")).length;
   const approvedDays = myEntries.filter(e => e.status === "approved").length;
   const totalWorkMins = myEntries.reduce((sum, e) => {
     if (!e.clock_in_at || !e.clock_out_at) return sum;
@@ -329,20 +415,40 @@ export function AttendanceClient({
 
       {/* 勤怠記録 */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">勤怠記録</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold flex items-center gap-1.5">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            勤怠記録
+          </h2>
+          {closingDay > 0 && (
+            <span className="text-[11px] text-muted-foreground">{closingDay}日締め</span>
+          )}
+          {isAdmin && members.length > 0 && (
+            <Select value={effectiveTargetId} onValueChange={setTargetUserId}>
+              <SelectTrigger className="h-7 w-44 text-xs">
+                <SelectValue placeholder="社員を選択" />
+              </SelectTrigger>
+              <SelectContent>
+                {members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.display_name ?? "（名称未設定）"}{m.id === user?.id ? "（自分）" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <div className="flex items-center gap-0.5 ml-auto">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => subMonths(d, 1))}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPeriod(p => shiftPeriod(p, -1, closingDay))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm font-medium tabular-nums shrink-0 whitespace-nowrap text-center min-w-[6.5rem] px-1">
-              {format(currentDate, "yyyy年M月", { locale: ja })}
+              {periodLabel(period, closingDay)}
             </span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => addMonths(d, 1))} disabled={isCurrentMonth}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPeriod(p => shiftPeriod(p, 1, closingDay))} disabled={isCurrentMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             {!isCurrentMonth && (
-              <Button variant="outline" size="sm" className="h-7 text-xs ml-1" onClick={() => setCurrentDate(new Date())}>
+              <Button variant="outline" size="sm" className="h-7 text-xs ml-1" onClick={() => setPeriod(todayPeriod)}>
                 今月
               </Button>
             )}
@@ -354,56 +460,68 @@ export function AttendanceClient({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>日付</TableHead>
-                  {isAdmin && <TableHead>社員</TableHead>}
+                  <TableHead className="w-[7.5rem]">日付</TableHead>
                   <TableHead>出勤</TableHead>
                   <TableHead>退勤</TableHead>
                   <TableHead>実労働</TableHead>
                   <TableHead>残業</TableHead>
                   <TableHead>区分</TableHead>
                   <TableHead>ステータス</TableHead>
-                  {isAdmin && <TableHead>操作</TableHead>}
+                  <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
-                  ? Array.from({ length: 5 }).map((_, i) => (
+                  ? Array.from({ length: 8 }).map((_, i) => (
                       <TableRow key={i}>
                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                        {isAdmin && <TableCell><Skeleton className="h-4 w-24" /></TableCell>}
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                        <TableCell />
                       </TableRow>
                     ))
-                  : entries.length === 0
-                  ? (
-                      <TableRow>
-                        <TableCell colSpan={isAdmin ? 9 : 7} className="text-center py-10 text-muted-foreground">
-                          {format(currentDate, "yyyy年M月", { locale: ja })}の記録はありません
-                        </TableCell>
-                      </TableRow>
-                    )
-                  : entries.map((e) => {
-                      const isLeave = !!e.leave_type && isFullDayLeave(e.leave_type);
-                      const worked = e.clock_in_at && e.clock_out_at
+                  : periodDates(period).map((dateKey) => {
+                      const d = parseDateKey(dateKey);
+                      const dow = d.getDay();
+                      const isFuture = dateKey > todayJST;
+                      const isToday = dateKey === todayJST;
+                      const e = myEntries.find((x) => x.work_date === dateKey) ?? null;
+                      const isLeave = !!e?.leave_type && isFullDayLeave(e.leave_type);
+                      const worked = e?.clock_in_at && e?.clock_out_at
                         ? calcWorkMinutes(e.clock_in_at, e.clock_out_at, attSettings.break_minutes ?? 60)
                         : null;
                       const overtime = worked !== null ? Math.max(0, worked - scheduledMins) : null;
+                      const missing = !isFuture && !e && dow !== 0 && dow !== 6;
+                      const incomplete = !!e && !isLeave && !!e.clock_in_at && !e.clock_out_at && !isToday;
+                      const rowTone = isLeave
+                        ? "bg-amber-50/40 dark:bg-amber-950/10"
+                        : dow === 0
+                        ? "bg-rose-50/40 dark:bg-rose-950/10"
+                        : dow === 6
+                        ? "bg-sky-50/40 dark:bg-sky-950/10"
+                        : "";
+                      const dateTone = dow === 0 ? "text-rose-600" : dow === 6 ? "text-sky-600" : "";
                       return (
-                        <TableRow key={e.id} className={`glass-row ${isLeave ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
-                          <TableCell className="text-sm tabular-nums">{e.work_date}</TableCell>
-                          {isAdmin && <TableCell className="text-sm">{(e as Entry & { user?: { display_name: string } }).user?.display_name ?? "-"}</TableCell>}
-                          <TableCell className="text-sm tabular-nums">
-                            {isLeave ? <span className="text-amber-600 text-xs">休暇</span> : e.clock_in_at ? format(parseISO(e.clock_in_at), "HH:mm") : "-"}
+                        <TableRow
+                          key={dateKey}
+                          className={`glass-row ${rowTone} ${isFuture ? "opacity-50" : ""} ${isToday ? "ring-1 ring-inset ring-primary/30" : ""}`}
+                        >
+                          <TableCell className={`text-sm tabular-nums whitespace-nowrap ${dateTone}`}>
+                            {format(d, "M/d")}
+                            <span className="ml-1 text-xs">({WEEKDAY_JA[dow]})</span>
+                            {isToday && <Badge variant="outline" className="ml-1.5 h-4 px-1 text-[10px]">今日</Badge>}
                           </TableCell>
                           <TableCell className="text-sm tabular-nums">
-                            {isLeave ? <span className="text-amber-600 text-xs">休暇</span> : e.clock_out_at ? format(parseISO(e.clock_out_at), "HH:mm") : "-"}
+                            {isLeave ? <span className="text-amber-600 text-xs">休暇</span> : e?.clock_in_at ? format(parseISO(e.clock_in_at), "HH:mm") : <span className="text-muted-foreground">-</span>}
                           </TableCell>
-                          <TableCell className="text-sm tabular-nums">{isLeave ? <span className="text-muted-foreground">-</span> : worked !== null ? minutesToHM(worked) : "-"}</TableCell>
+                          <TableCell className="text-sm tabular-nums">
+                            {isLeave ? <span className="text-amber-600 text-xs">休暇</span> : e?.clock_out_at ? format(parseISO(e.clock_out_at), "HH:mm") : incomplete ? <span className="text-rose-600 text-xs font-medium">退勤未打刻</span> : <span className="text-muted-foreground">-</span>}
+                          </TableCell>
+                          <TableCell className="text-sm tabular-nums">{isLeave ? <span className="text-muted-foreground">-</span> : worked !== null ? minutesToHM(worked) : <span className="text-muted-foreground">-</span>}</TableCell>
                           <TableCell className="text-sm tabular-nums">
                             {isLeave ? <span className="text-muted-foreground">-</span> : overtime !== null && overtime > 0
                               ? <span className="text-amber-600 font-medium">{minutesToHM(overtime)}</span>
@@ -413,39 +531,54 @@ export function AttendanceClient({
                           <TableCell>
                             {isLeave ? (
                               <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 border-0 hover:bg-amber-100">
-                                {e.leave_type}
+                                {e?.leave_type}
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">
-                                {e.leave_type && e.leave_type !== "none" ? e.leave_type : "-"}
+                                {e?.leave_type && e.leave_type !== "none" ? e.leave_type : "-"}
                               </span>
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge className={
-                              e.status === "approved"
-                                ? "text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
-                                : e.status === "rejected"
-                                ? "text-xs bg-red-100 text-red-600 hover:bg-red-100"
-                                : "text-xs bg-amber-100 text-amber-700 hover:bg-amber-100"
-                            }>
-                              {e.status === "approved" ? "承認" : e.status === "rejected" ? "却下" : "保留"}
-                            </Badge>
+                            {e ? (
+                              <Badge className={
+                                e.status === "approved"
+                                  ? "text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                                  : e.status === "rejected"
+                                  ? "text-xs bg-red-100 text-red-600 hover:bg-red-100"
+                                  : "text-xs bg-amber-100 text-amber-700 hover:bg-amber-100"
+                              }>
+                                {e.status === "approved" ? "承認" : e.status === "rejected" ? "却下" : "保留"}
+                              </Badge>
+                            ) : missing ? (
+                              <span className="text-[11px] text-rose-600">未打刻</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
                           </TableCell>
-                          {isAdmin && (
-                            <TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
                               {/* 自己承認禁止: 自分のレコードは操作不可 */}
-                              {e.status === "pending" && e.user_id !== user?.id && (
-                                <div className="flex gap-1">
-                                  <Button size="sm" variant="outline" onClick={() => handleApprove(e.id)} className="h-7 px-2"><Check className="h-3 w-3" /></Button>
-                                  <Button size="sm" variant="outline" onClick={() => handleReject(e.id)} className="h-7 px-2"><X className="h-3 w-3" /></Button>
-                                </div>
+                              {isAdmin && e && e.status === "pending" && e.user_id !== user?.id && (
+                                <>
+                                  <Button size="sm" variant="outline" onClick={() => handleApprove(e.id)} className="h-7 px-2" title="承認"><Check className="h-3 w-3" /></Button>
+                                  <Button size="sm" variant="outline" onClick={() => handleReject(e.id)} className="h-7 px-2" title="却下"><X className="h-3 w-3" /></Button>
+                                </>
                               )}
-                              {e.user_id === user?.id && e.status === "pending" && (
-                                <span className="text-[10px] text-muted-foreground">自己承認不可</span>
+                              {!isFuture && (effectiveTargetId === user?.id || isAdmin) && e?.status !== "approved" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className={`h-7 px-2 ${missing || incomplete ? "text-rose-600 hover:text-rose-700" : "text-muted-foreground"}`}
+                                  onClick={() => openEdit(dateKey, e)}
+                                  title={e ? "修正" : "入力"}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  <span className="ml-1 text-[11px]">{e ? "修正" : "入力"}</span>
+                                </Button>
                               )}
-                            </TableCell>
-                          )}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -453,7 +586,64 @@ export function AttendanceClient({
             </Table>
           </div>
         </Card>
+        <p className="text-[11px] text-muted-foreground">
+          打刻し忘れ・押し間違いは「入力 / 修正」から時刻を直接入力できます。修正した記録は再度承認待ちになります。
+        </p>
       </div>
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>勤怠の{editing?.entry ? "修正" : "入力"}</DialogTitle>
+            <DialogDescription>
+              {editing ? format(parseDateKey(editing.date), "yyyy年M月d日（EEE）", { locale: ja }) : ""}
+              {effectiveTargetId !== user?.id && (
+                <> ・ {members.find((m) => m.id === effectiveTargetId)?.display_name ?? "メンバー"}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>勤務区分</Label>
+              <Select value={editLeave} onValueChange={setEditLeave}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {leaveOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!isFullDayLeave(editLeave) && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>出勤</Label>
+                  <Input type="time" value={editIn} onChange={(e) => setEditIn(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>退勤</Label>
+                  <Input type="time" value={editOut} onChange={(e) => setEditOut(e.target.value)} />
+                </div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>理由（任意）</Label>
+              <Textarea
+                rows={2}
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                placeholder="例）退勤の打刻を忘れたため"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={editSaving}>キャンセル</Button>
+            <Button onClick={saveEdit} disabled={editSaving || (!isFullDayLeave(editLeave) && !editIn && !editOut)}>
+              {editSaving ? "保存中..." : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -198,6 +198,95 @@ export async function updateLeaveType(id: string, leaveType: string) {
   if (error) throw error;
 }
 
+/**
+ * 押し忘れ・修正用: 日付を指定して出勤/退勤/区分を上書き（無ければ作成）。
+ * 本人は自分の記録のみ、管理者（owner/hq_admin/admin/executive）は他メンバーの記録も編集可。
+ * 編集した記録は再承認が必要になるため status は pending に戻す。
+ */
+export async function upsertAttendanceEntry(input: {
+  work_date: string;
+  user_id?: string;
+  clock_in?: string | null;   // "HH:mm" / null=クリア / undefined=変更なし
+  clock_out?: string | null;
+  leave_type?: string;
+  reason?: string;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data: profile } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
+  if (!profile) throw new Error("Profile not found");
+
+  const targetUserId = input.user_id ?? user.id;
+  const isAdminRole = ["owner", "hq_admin", "admin", "executive"].includes(String(profile.role));
+  if (targetUserId !== user.id && !isAdminRole) {
+    throw new Error("他のメンバーの勤怠を編集する権限がありません");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.work_date)) throw new Error("日付の形式が不正です");
+  if (input.work_date > getTodayJST()) throw new Error("未来の日付は編集できません");
+
+  const toIso = (hm: string | null | undefined): string | null | undefined => {
+    if (hm === undefined) return undefined;
+    if (hm === null || hm === "") return null;
+    if (!/^\d{2}:\d{2}$/.test(hm)) throw new Error("時刻は HH:mm 形式で入力してください");
+    // JST の日付＋時刻を UTC ISO へ
+    return new Date(`${input.work_date}T${hm}:00+09:00`).toISOString();
+  };
+  const clockInIso = toIso(input.clock_in);
+  const clockOutIso = toIso(input.clock_out);
+  if (clockInIso && clockOutIso && clockOutIso < clockInIso) {
+    throw new Error("退勤時刻は出勤時刻より後にしてください");
+  }
+
+  const { data: existing } = await supabase
+    .from("attendance_entries")
+    .select("id")
+    .eq("user_id", targetUserId)
+    .eq("work_date", input.work_date)
+    .maybeSingle();
+
+  const patch: Record<string, unknown> = {
+    status: "pending",
+    modified_by: user.id,
+    modified_reason: input.reason?.trim() || (targetUserId === user.id ? "本人による修正入力" : "管理者による修正入力"),
+    updated_at: new Date().toISOString(),
+  };
+  if (clockInIso !== undefined) patch.clock_in_at = clockInIso;
+  if (clockOutIso !== undefined) patch.clock_out_at = clockOutIso;
+  if (input.leave_type !== undefined) patch.leave_type = input.leave_type || "none";
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("attendance_entries")
+      .update(patch)
+      .eq("id", existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+    await invalidateMyCompanyCache();
+    return data as AttendanceEntry;
+  }
+
+  const { data, error } = await supabase
+    .from("attendance_entries")
+    .insert({
+      company_id: profile.company_id,
+      user_id: targetUserId,
+      work_date: input.work_date,
+      clock_in_at: clockInIso ?? null,
+      clock_out_at: clockOutIso ?? null,
+      leave_type: input.leave_type || "none",
+      status: "pending",
+      modified_by: user.id,
+      modified_reason: patch.modified_reason,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  await invalidateMyCompanyCache();
+  return data as AttendanceEntry;
+}
+
 export async function getTodayAttendance() {
   return cachedByCompany("today-attendance", CACHE_TTL.dashboard, loadTodayAttendance, true);
 }

@@ -21,8 +21,8 @@ import { ArrowLeft, Save } from "lucide-react";
 import {
   createWorkflowRequest,
   type FieldDef,
-  type ApprovalStep,
 } from "@/lib/actions/workflow";
+import { describeStep, resolveApprovalRoute, type ResolvedRoute } from "@/lib/workflow-route";
 import { QK } from "@/lib/queries/portal";
 import type { fetchWorkflowTypes } from "@/lib/queries/portal";
 
@@ -30,10 +30,11 @@ type WfType = Awaited<ReturnType<typeof fetchWorkflowTypes>>[number];
 
 type WorkflowNewClientProps = {
   initialTypes: WfType[];
-  initialProfiles: { id: string; display_name: string }[];
+  initialProfiles: { id: string; display_name: string; role?: string | null; department?: string | null }[];
+  currentUserId?: string | null;
 };
 
-export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNewClientProps) {
+export function WorkflowNewClient({ initialTypes, initialProfiles, currentUserId = null }: WorkflowNewClientProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -45,7 +46,7 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [route, setRoute] = useState<ResolvedRoute>({ approverIds: [], unresolved: [], steps: [] });
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -58,10 +59,17 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
     const t = types.find(x => x.id === id) ?? null;
     setSelectedType(t);
     setDynamicValues({});
-    const ar = ((t as WfType & { approval_route?: ApprovalStep[] })?.approval_route ?? []) as ApprovalStep[];
-    setApproverIds(ar.map(s => s.approver_id));
+    // 属性指名（営業トップ等）のステップは、この時点のメンバー情報で担当者へ解決する
+    setRoute(
+      resolveApprovalRoute(
+        (t as WfType & { approval_route?: unknown })?.approval_route,
+        profiles,
+        { excludeUserId: currentUserId },
+      ),
+    );
     if (t && !title) setTitle(t.name);
   };
+  const approverIds = route.approverIds;
 
   const handleSave = async () => {
     if (!title.trim() || !typeId) { toast.error("種別と件名を入力してください"); return; }
@@ -69,6 +77,10 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
     const required = fields.filter(f => f.required);
     const missing = required.find(f => !dynamicValues[f.key]?.trim());
     if (missing) { toast.error(`「${missing.label}」を入力してください`); return; }
+    if (route.unresolved.length > 0) {
+      toast.error(`承認ルートの「${route.unresolved.map((s) => describeStep(s, profiles)).join("、")}」に該当するメンバーがいません`);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -190,15 +202,23 @@ export function WorkflowNewClient({ initialTypes, initialProfiles }: WorkflowNew
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-base">承認ルート</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                {approverIds.length === 0 && (
+                {route.steps.length === 0 && (
                   <p className="text-sm text-muted-foreground">承認者が設定されていません</p>
                 )}
-                {approverIds.map((id, i) => {
-                  const p = profiles.find(x => x.id === id);
+                {route.steps.map((s, i) => {
+                  const attr = !s.step.approver_id;
                   return (
-                    <div key={id} className="flex items-center gap-3 p-2.5 border rounded-lg bg-muted/30">
+                    <div
+                      key={`${i}-${s.approverId ?? "none"}`}
+                      className={`flex items-center gap-3 p-2.5 border rounded-lg ${s.approverId ? "bg-muted/30" : "bg-amber-50 border-amber-200"}`}
+                    >
                       <span className="text-xs text-muted-foreground w-14 shrink-0">Step {i + 1}</span>
-                      <span className="text-sm">{p?.display_name ?? "不明"}</span>
+                      <span className="text-sm flex-1 min-w-0 truncate">{s.displayName}</span>
+                      {attr && (
+                        <span className="text-[11px] text-muted-foreground shrink-0">
+                          {describeStep(s.step, profiles)}
+                        </span>
+                      )}
                     </div>
                   );
                 })}

@@ -29,6 +29,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { BudgetApprovalActions } from "@/components/constructions/budget-approval-actions";
 
 /* ─────────────────── types ─────────────────── */
@@ -386,6 +393,8 @@ function CommentableCell({
 
 interface Props {
   constructionId: string;
+  constructionNo?: string | null;
+  constructionTitle?: string | null;
   contractAmount?: number;
   periodStart?: string | null;
   initialOrders?: Array<{
@@ -503,13 +512,10 @@ function mapOrdersToRows(orders: Props["initialOrders"]): ContractorRow[] {
   }));
 }
 
-export function CostBudgetTab({ constructionId, contractAmount: propAmount, periodStart, initialOrders, estimates = [], changeOrders = [], authorName = "ユーザー", onNavigateToOrders, onOrdersCreated }: Props) {
-  const mappedRows = useMemo(() => mapOrdersToRows(initialOrders), [initialOrders]);
-  const initialRows = mappedRows.length > 0 ? mappedRows : [];
-
-  const [rows, setRows] = useState<ContractorRow[]>(() =>
-    initialRows.map(r => padRow(r, 2, 3))
-  );
+export function CostBudgetTab({ constructionId, constructionNo, constructionTitle, contractAmount: propAmount, periodStart, initialOrders, estimates = [], changeOrders = [], authorName = "ユーザー", onNavigateToOrders, onOrdersCreated }: Props) {
+  const hasOrderNo = Boolean((constructionNo ?? "").trim());
+  const [rows, setRows] = useState<ContractorRow[]>([]);
+  const [detailRow, setDetailRow] = useState<ContractorRow | null>(null);
   const [contractColCount, setContractColCount] = useState(2);
   const [orderColCount, setOrderColCount] = useState(3);
   const [comments, setComments] = useState<CellComment[]>([]);
@@ -533,7 +539,10 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoaded(false);
     fetchCostBudget(constructionId).then((data) => {
+      if (cancelled) return;
       if (data?.rows?.length) {
         const normalized = data.rows.map((r) => normalizeRow(r as unknown as Record<string, unknown>));
         const cc = Math.max(2, ...normalized.map((r) => r.add_contracts.length));
@@ -542,13 +551,30 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
         setOrderColCount(oc);
         setRows(normalized.map((r) => padRow(r, cc, oc)));
         setComments((data.comments ?? []) as CellComment[]);
+      } else {
+        const mapped = mapOrdersToRows(initialOrders).map((r) => padRow(r, 2, 3));
+        setRows(mapped);
       }
       if (data && Number(data.contract_amount) > 0) {
         setLedgerContractAmount(Number(data.contract_amount));
       }
       setLoaded(true);
-    }).catch(() => setLoaded(true));
+    }).catch(() => {
+      if (cancelled) return;
+      setRows(mapOrdersToRows(initialOrders).map((r) => padRow(r, 2, 3)));
+      setLoaded(true);
+    });
+    return () => { cancelled = true; };
   }, [constructionId]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setRows((prev) => {
+      if (prev.length > 0) return prev;
+      const mapped = mapOrdersToRows(initialOrders);
+      return mapped.length ? mapped.map((r) => padRow(r, contractColCount, orderColCount)) : prev;
+    });
+  }, [loaded, initialOrders, contractColCount, orderColCount]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -685,6 +711,10 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
   const handleBulkOrder = useCallback(async () => {
     const targets = rows.filter(r => selectedIds.has(r.id));
     if (targets.length === 0) return;
+    if (!hasOrderNo) {
+      toast.error("受注番号が未設定のため発注できません。工事情報で受注番号を登録してください");
+      return;
+    }
     const unnamed = targets.filter(r => !r.name.trim());
     if (unnamed.length > 0) {
       toast.error("業者名が未入力の行が選択されています");
@@ -717,7 +747,21 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
     } finally {
       setBulkOrdering(false);
     }
-  }, [rows, selectedIds, constructionId, onNavigateToOrders, onOrdersCreated]);
+  }, [rows, selectedIds, constructionId, onNavigateToOrders, onOrdersCreated, hasOrderNo]);
+
+  const goToOrder = useCallback((row: ContractorRow) => {
+    if (!hasOrderNo) {
+      toast.error("受注番号が未設定です。工事情報で受注番号を登録してください");
+      return;
+    }
+    onNavigateToOrders?.({
+      name: row.name,
+      work_type: row.work_type,
+      budget: row.budget,
+      account_item: row.account_item,
+    });
+    setDetailRow(null);
+  }, [hasOrderNo, onNavigateToOrders]);
 
   const [openPopover, setOpenPopover] = useState<{ cellKey: string; rect: DOMRect } | null>(null);
   const [commentMode, setCommentMode] = useState(false);
@@ -889,7 +933,11 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
         <div>
           <p className="text-sm font-semibold text-gray-800">工事原価管理表</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            緑色のセルは自動計算 — 白いセルをクリックして入力できます
+            緑色のセルは自動計算 — 白いセルをクリックして入力できます。未発注行をクリックすると詳細が開きます。
+          </p>
+          <p className={cn("text-xs mt-1", hasOrderNo ? "text-muted-foreground" : "text-amber-700 font-medium")}>
+            受注番号: {hasOrderNo ? constructionNo : "未設定（発注前に工事情報へ登録）"}
+            {constructionTitle ? `　${constructionTitle}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1113,7 +1161,14 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           </thead>
 
           <tbody>
-            {rows.length === 0 && (
+            {!loaded && (
+              <tr>
+                <td colSpan={totalColSpan} className="py-12 text-center text-sm text-muted-foreground">
+                  工事台帳を読み込み中...
+                </td>
+              </tr>
+            )}
+            {loaded && rows.length === 0 && (
               <tr>
                 <td colSpan={totalColSpan} className="py-12 text-center text-sm text-muted-foreground">
                   データがありません。<br />
@@ -1121,11 +1176,23 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                 </td>
               </tr>
             )}
-            {rows.map((row, idx) => {
+            {loaded && rows.map((row, idx) => {
               const c = compute(row);
               return (
-                <tr key={row.id} className={cn("hover:bg-gray-50/40 transition-colors group/row", commentMode && "hover:bg-blue-50/30", selectedIds.has(row.id) && "bg-blue-50/50")}
-                  onClick={commentMode ? undefined : undefined}
+                <tr
+                  key={row.id}
+                  className={cn(
+                    "hover:bg-gray-50/40 transition-colors group/row",
+                    commentMode && "hover:bg-blue-50/30",
+                    selectedIds.has(row.id) && "bg-blue-50/50",
+                    row.status === "未発注" && !commentMode && "cursor-pointer",
+                  )}
+                  onClick={(e) => {
+                    if (commentMode || row.status !== "未発注") return;
+                    const target = e.target as HTMLElement;
+                    if (target.closest("input, select, textarea, button, a, label")) return;
+                    setDetailRow(row);
+                  }}
                 >
                   {/* 一括発注の選択チェックボックス */}
                   <td className={cn(tcc, "bg-gray-50")}>
@@ -1143,9 +1210,9 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
                   <td className={cn(tcc)}>
                     {row.status === "未発注" && onNavigateToOrders ? (
                       <button
-                        onClick={() => onNavigateToOrders({ name: row.name, work_type: row.work_type, budget: row.budget, account_item: row.account_item })}
+                        onClick={() => goToOrder(row)}
                         className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold leading-tight cursor-pointer transition-colors bg-blue-500 text-white hover:bg-blue-600"
-                        title="発注書・請書タブへ移動"
+                        title={hasOrderNo ? "発注書・請書タブへ移動" : "受注番号が未設定です"}
                       >
                         発注
                       </button>
@@ -1345,6 +1412,72 @@ export function CostBudgetTab({ constructionId, contractAmount: propAmount, peri
           </tfoot>
         </table>
       </div>
+
+      <Dialog open={!!detailRow} onOpenChange={(open) => { if (!open) setDetailRow(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>未発注の詳細</DialogTitle>
+          </DialogHeader>
+          {detailRow && (
+            <div className="space-y-3 text-sm">
+              <div className={cn(
+                "rounded-lg border px-3 py-2",
+                hasOrderNo ? "bg-slate-50" : "border-amber-200 bg-amber-50",
+              )}>
+                <p className="text-[11px] text-muted-foreground">受注番号</p>
+                <p className={cn("mt-0.5 font-semibold font-mono", !hasOrderNo && "text-amber-800")}>
+                  {hasOrderNo ? constructionNo : "未設定（必須）"}
+                </p>
+                {!hasOrderNo && (
+                  <p className="mt-1 text-xs text-amber-800">
+                    工事情報で受注番号を登録してから発注してください。
+                  </p>
+                )}
+              </div>
+              {constructionTitle && (
+                <div>
+                  <p className="text-[11px] text-muted-foreground">工事名</p>
+                  <p className="mt-0.5">{constructionTitle}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] text-muted-foreground">業者名</p>
+                  <p className="mt-0.5 font-medium">{detailRow.name || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">工種</p>
+                  <p className="mt-0.5">{detailRow.work_type || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">勘定科目</p>
+                  <p className="mt-0.5">{detailRow.account_item || "未設定"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">実行予算</p>
+                  <p className="mt-0.5 tabular-nums">{fmtAlways(detailRow.budget)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">発注額</p>
+                  <p className="mt-0.5 tabular-nums">{fmtAlways(detailRow.order_amount)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">確定額</p>
+                  <p className="mt-0.5 tabular-nums">{fmtAlways(compute(detailRow).confirmed)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailRow(null)}>閉じる</Button>
+            {onNavigateToOrders && detailRow && (
+              <Button onClick={() => goToOrder(detailRow)} disabled={!hasOrderNo}>
+                発注する
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

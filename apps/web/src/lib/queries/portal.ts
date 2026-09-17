@@ -28,6 +28,7 @@ export const QK = {
   mailThreads: ["mail-threads"] as const,
   mailSignature: ["mail-signature"] as const,
   attendance: (month: string) => ["attendance", month] as const,
+  attendanceRange: (start: string, end: string, userId: string) => ["attendance", "range", start, end, userId] as const,
   company: ["company"] as const,
   budgets: ["budgets"] as const,
   settingsBundle: ["settings-bundle"] as const,
@@ -283,6 +284,21 @@ export async function fetchAttendanceEntries(month: string, userId?: string) {
     const end = `${month}-${String(endDate.getDate()).padStart(2, "0")}`;
     query = query.gte("work_date", start).lte("work_date", end);
   }
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+/** 締め期間（任意の日付範囲）で勤怠を取得。userId 指定でそのユーザーのみ */
+export async function fetchAttendanceEntriesRange(start: string, end: string, userId?: string) {
+  const supabase = createClient();
+  let query = supabase
+    .from("attendance_entries")
+    .select("*, user:profiles!attendance_entries_user_id_fkey(id, display_name, department)")
+    .gte("work_date", start)
+    .lte("work_date", end)
+    .order("work_date", { ascending: true });
+  if (userId) query = query.eq("user_id", userId);
   const { data, error } = await query;
   if (error) throw error;
   return data;

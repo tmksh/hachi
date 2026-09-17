@@ -120,6 +120,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           expanded={expanded}
           onExpandedChange={setExpanded}
           onInternalChatOpen={openInternalChat}
+          onBridgeChatOpen={openBridgeChat}
         />
         <MobileNav profile={profile} />
         <main className="w-full min-w-0 pb-32 md:pb-0 md:pl-[var(--main-pl)] md:pr-[var(--main-pr)] transition-[padding] duration-300 ease-out">

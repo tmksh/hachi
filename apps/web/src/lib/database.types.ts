@@ -572,6 +572,10 @@ export type EmailThread = {
   snippet: string | null;
   is_read: boolean;
   is_starred: boolean;
+  /** フラグ（No.143）。マイグレーション未適用環境では undefined */
+  is_flagged?: boolean;
+  /** 利用者フォルダ（email_folders.id）。未分類は null */
+  folder_id?: string | null;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;

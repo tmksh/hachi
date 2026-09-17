@@ -204,6 +204,8 @@ function companyFormState(c: Company | null) {
     attStartTime: (att?.start_time as string) ?? "09:00",
     attEndTime: (att?.end_time as string) ?? "18:00",
     attBreakMinutes: String(att?.break_minutes ?? "60"),
+    // 勤怠の締め日（1〜28、0=月末）。エイトは 21日〜翌20日締め → 20
+    attClosingDay: String(typeof att?.closing_day === "number" ? att.closing_day : 0),
     attLeaveTypes: Array.isArray(att?.leave_types)
       ? (att.leave_types as string[])
       : ["有給休暇", "夏季休暇", "慶弔休暇", "特別休暇", "産前産後休暇", "育児休暇", "介護休暇", "病気休暇", "代休", "振替休日", "半日休暇（午前）", "半日休暇（午後）"],
@@ -322,6 +324,7 @@ export function SettingsClient({
   const [attStartTime, setAttStartTime] = useState(formDefaults.attStartTime);
   const [attEndTime, setAttEndTime] = useState(formDefaults.attEndTime);
   const [attBreakMinutes, setAttBreakMinutes] = useState(formDefaults.attBreakMinutes);
+  const [attClosingDay, setAttClosingDay] = useState(formDefaults.attClosingDay);
   const [attLeaveTypes, setAttLeaveTypes] = useState<string[]>(formDefaults.attLeaveTypes);
   const [attLeaveInput, setAttLeaveInput] = useState("");
   const [savingAttendance, setSavingAttendance] = useState(false);
@@ -460,6 +463,7 @@ export function SettingsClient({
           end_time: attEndTime,
           break_minutes: Number(attBreakMinutes),
           leave_types: attLeaveTypes,
+          closing_day: Number(attClosingDay) || 0,
         },
         cloudsign: {
           enabled: cloudsignEnabled,
@@ -604,6 +608,7 @@ export function SettingsClient({
           end_time: attEndTime,
           break_minutes: Number(attBreakMinutes),
           leave_types: attLeaveTypes,
+          closing_day: Number(attClosingDay) || 0,
         } as Record<string, unknown>,
       });
       toast.success("勤怠設定を保存しました");
@@ -1602,6 +1607,12 @@ export function SettingsClient({
                           group: null,
                           groupStart: false,
                           gi,
+                        }, {
+                          key: "account-items",
+                          label: "勘定科目の確定（経理）",
+                          group: null,
+                          groupStart: false,
+                          gi,
                         });
                       }
                       return rows;
@@ -1723,6 +1734,21 @@ export function SettingsClient({
                   <div className="space-y-2">
                     <Label>休憩時間（分）</Label>
                     <Input type="number" min={0} max={480} step={15} value={attBreakMinutes} onChange={(e) => setAttBreakMinutes(e.target.value)} placeholder="60" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>勤怠の締め日</Label>
+                    <Select value={attClosingDay} onValueChange={setAttClosingDay}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">月末締め（1日〜末日）</SelectItem>
+                        {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                          <SelectItem key={d} value={String(d)}>{d}日締め（{d === 28 ? 29 : d + 1}日〜翌{d}日）</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">勤怠画面の集計期間（○月度）がこの締め日で区切られます</p>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">

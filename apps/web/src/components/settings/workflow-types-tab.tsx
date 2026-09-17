@@ -32,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, GripVertical, X } from "lucide-react";
+import { Plus, Trash2, GripVertical, X, ChevronUp, ChevronDown } from "lucide-react";
 import {
   createWorkflowType,
   updateWorkflowType,
@@ -41,20 +41,54 @@ import {
 } from "@/lib/actions/workflow";
 import { fetchWorkflowTypes } from "@/lib/queries/portal";
 import { fetchProfiles } from "@/lib/queries/lists";
-import { ROLE_LABELS, type Role } from "@/lib/constants";
+import { CSV_DEFAULT_ROLES, ROLE_LABELS, type Role } from "@/lib/constants";
+import {
+  describeStep,
+  isAttributeStep,
+  matchProfiles,
+  normalizeApprovalRoute,
+  type ApprovalStep,
+} from "@/lib/workflow-route";
 
 type WfType = Awaited<ReturnType<typeof fetchWorkflowTypes>>[number];
-type Profile = { id: string; display_name: string; role?: string | null };
+type Profile = { id: string; display_name: string; role?: string | null; department?: string | null };
 
 const FIELD_TYPE_LABELS: Record<FieldDef["type"], string> = {
-  text: "テキスト",
+  text: "テキスト（1行）",
+  textarea: "テキスト（複数行・改行あり）",
   number: "数値",
   date: "日付",
-  textarea: "テキストエリア",
   select: "選択肢",
 };
 
 const EMPTY_FIELD: FieldDef = { key: "", label: "", type: "text", required: false };
+
+/** 属性指名の選択肢。`role:sales` / `dept:営業部` / `role:sales|dept:営業部` 形式 */
+type AttributeOption = { value: string; label: string; step: Omit<ApprovalStep, "step_order"> };
+
+function buildAttributeOptions(profiles: Profile[]): AttributeOption[] {
+  const roles = CSV_DEFAULT_ROLES.filter((r) => r !== "admin");
+  const departments = Array.from(
+    new Set(profiles.map((p) => (p.department ?? "").trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, "ja"));
+
+  const opts: AttributeOption[] = [];
+  for (const r of roles) {
+    opts.push({ value: `role:${r}`, label: `ロール: ${ROLE_LABELS[r]}`, step: { approver_role: r } });
+  }
+  for (const d of departments) {
+    opts.push({ value: `dept:${d}`, label: `部署: ${d}`, step: { approver_department: d } });
+    // 「営業トップ」= 部署 × 経営層/管理者 のような組み合わせ
+    for (const r of ["executive", "admin"] as Role[]) {
+      opts.push({
+        value: `role:${r}|dept:${d}`,
+        label: `${d} の${ROLE_LABELS[r]}（${d}トップ）`,
+        step: { approver_role: r, approver_department: d, label: `${d}トップ` },
+      });
+    }
+  }
+  return opts;
+}
 
 export function WorkflowTypesTab() {
   const [types, setTypes] = useState<WfType[]>([]);
@@ -71,14 +105,14 @@ export function WorkflowTypesTab() {
   const [description, setDescription] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("");
   const [fields, setFields] = useState<FieldDef[]>([]);
-  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [routeSteps, setRouteSteps] = useState<Omit<ApprovalStep, "step_order">[]>([]);
   const [selectOptionsInput, setSelectOptionsInput] = useState<Record<number, string>>({});
 
   const load = useCallback(() => {
     Promise.all([fetchWorkflowTypes(), fetchProfiles()])
       .then(([t, p]) => {
         setTypes(t);
-        setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name, role: x.role })));
+        setProfiles(p.map(x => ({ id: x.id, display_name: x.display_name, role: x.role, department: x.department })));
       })
       .catch(() => toast.error("読み込みに失敗"))
       .finally(() => setLoading(false));
@@ -88,7 +122,7 @@ export function WorkflowTypesTab() {
 
   const openCreate = () => {
     setEditing(null);
-    setName(""); setDescription(""); setDeadlineDays(""); setFields([]); setApproverIds([]);
+    setName(""); setDescription(""); setDeadlineDays(""); setFields([]); setRouteSteps([]);
     setSelectOptionsInput({});
     setDialogOpen(true);
   };
@@ -103,8 +137,11 @@ export function WorkflowTypesTab() {
     const optMap: Record<number, string> = {};
     fs.forEach((f, i) => { if (f.options) optMap[i] = f.options.join("\n"); });
     setSelectOptionsInput(optMap);
-    const ar = ((t as WfType & { approval_route?: { approver_id: string }[] }).approval_route ?? []);
-    setApproverIds(ar.map((s: { approver_id: string }) => s.approver_id));
+    setRouteSteps(
+      normalizeApprovalRoute((t as WfType & { approval_route?: unknown }).approval_route).map(
+        ({ step_order: _order, ...rest }) => rest,
+      ),
+    );
     setDialogOpen(true);
   };
 
@@ -113,10 +150,27 @@ export function WorkflowTypesTab() {
   const updateField = (i: number, patch: Partial<FieldDef>) =>
     setFields(prev => prev.map((f, idx) => idx === i ? { ...f, ...patch } : f));
 
+  const stepKey = (s: Omit<ApprovalStep, "step_order">) =>
+    s.approver_id ? `id:${s.approver_id}` : `role:${s.approver_role ?? ""}|dept:${s.approver_department ?? ""}`;
+  const hasStep = (s: Omit<ApprovalStep, "step_order">) => routeSteps.some((x) => stepKey(x) === stepKey(s));
   const addApprover = (id: string) => {
-    if (id && !approverIds.includes(id)) setApproverIds(prev => [...prev, id]);
+    if (id && !hasStep({ approver_id: id })) setRouteSteps(prev => [...prev, { approver_id: id }]);
   };
-  const removeApprover = (id: string) => setApproverIds(prev => prev.filter(x => x !== id));
+  const addAttributeStep = (value: string) => {
+    const opt = attributeOptions.find((o) => o.value === value);
+    if (opt && !hasStep(opt.step)) setRouteSteps(prev => [...prev, opt.step]);
+  };
+  const removeStep = (i: number) => setRouteSteps(prev => prev.filter((_, idx) => idx !== i));
+  const moveStep = (i: number, dir: -1 | 1) =>
+    setRouteSteps(prev => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  const attributeOptions = buildAttributeOptions(profiles);
+  const approverIds = routeSteps.map((s) => s.approver_id).filter((id): id is string => Boolean(id));
 
   const handleSave = async () => {
     if (!name.trim()) { toast.error("種別名を入力してください"); return; }
@@ -128,7 +182,7 @@ export function WorkflowTypesTab() {
           ? selectOptionsInput[i].split("\n").map(s => s.trim()).filter(Boolean)
           : undefined,
       }));
-      const approval_route = approverIds.map((id, i) => ({ step_order: i + 1, approver_id: id }));
+      const approval_route: ApprovalStep[] = routeSteps.map((s, i) => ({ ...s, step_order: i + 1 }));
       const payload = {
         name: name.trim(),
         description: description.trim() || undefined,
@@ -200,7 +254,7 @@ export function WorkflowTypesTab() {
           <div className="space-y-1 mt-3">
             {items.map(t => {
               const fs = ((t as WfType & { fields_schema?: FieldDef[] }).fields_schema ?? []) as FieldDef[];
-              const ar = ((t as WfType & { approval_route?: { approver_id: string }[] }).approval_route ?? []);
+              const ar = normalizeApprovalRoute((t as WfType & { approval_route?: unknown }).approval_route);
               const ddDays = (t as WfType & { deadline_days?: number }).deadline_days;
               return (
                 <Card key={t.id} className="group cursor-pointer hover:bg-muted/40 transition-colors" onClick={() => openEdit(t)}>
@@ -306,7 +360,7 @@ export function WorkflowTypesTab() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {fields.length === 0 && (
-                  <p className="text-xs text-muted-foreground">「追加」ボタンで記入項目を設定できます（件名・金額は常に表示）</p>
+                  <p className="text-xs text-muted-foreground">「追加」ボタンで記入項目を設定できます（件名・金額・期限は常に表示）。例: 目的＝テキスト（複数行）、取引先名＝テキスト、支払方法＝選択肢</p>
                 )}
                 {fields.map((f, i) => (
                   <div key={i} className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/30">
@@ -354,7 +408,7 @@ export function WorkflowTypesTab() {
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">デフォルト承認ルート</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-xs text-muted-foreground">申請時に自動でセットされる承認者の順番を設定します（変更可）</p>
+                <p className="text-xs text-muted-foreground">申請時に自動でセットされる承認者の順番を設定します。メンバー指名と属性指名（例: 営業部トップ → 経営層）を混在できます</p>
                 {(/契約/.test(name) || editing?.key === "contract_08") && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -376,32 +430,47 @@ export function WorkflowTypesTab() {
                     )}
                   </div>
                 )}
-                {approverIds.length > 0 && (
+                {routeSteps.length > 0 && (
                   <div className="space-y-1.5">
-                    {approverIds.map((id, i) => {
-                      const p = profiles.find(x => x.id === id);
-                      const roleLabel = p?.role
-                        ? (ROLE_LABELS[p.role as Role] ?? p.role)
-                        : null;
+                    {routeSteps.map((s, i) => {
+                      const step: ApprovalStep = { ...s, step_order: i + 1 };
+                      const attr = isAttributeStep(step);
+                      const p = s.approver_id ? profiles.find(x => x.id === s.approver_id) : undefined;
+                      const roleLabel = p?.role ? (ROLE_LABELS[p.role as Role] ?? p.role) : null;
+                      const matched = attr ? matchProfiles(step, profiles) : [];
                       return (
-                        <div key={id} className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30">
-                          <span className="text-xs text-muted-foreground w-16 shrink-0">Step {i + 1}</span>
+                        <div key={`${stepKey(s)}-${i}`} className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30">
+                          <span className="text-xs text-muted-foreground w-14 shrink-0">Step {i + 1}</span>
                           <span className="text-sm flex-1 min-w-0 truncate">
-                            {p?.display_name ?? "不明"}
-                            {roleLabel && (
+                            {describeStep(step, profiles)}
+                            {attr ? (
                               <Badge
                                 variant="outline"
                                 className={`ml-1.5 text-[10px] h-4 px-1.5 align-middle ${
-                                  p?.role === "administration"
-                                    ? "border-teal-300 text-teal-700"
-                                    : ""
+                                  matched.length === 0 ? "border-amber-300 text-amber-700" : "border-violet-300 text-violet-700"
+                                }`}
+                                title={matched.map((m) => m.display_name).join("、")}
+                              >
+                                属性 {matched.length === 0 ? "該当者なし" : `該当 ${matched.length}名`}
+                              </Badge>
+                            ) : roleLabel && (
+                              <Badge
+                                variant="outline"
+                                className={`ml-1.5 text-[10px] h-4 px-1.5 align-middle ${
+                                  p?.role === "administration" ? "border-teal-300 text-teal-700" : ""
                                 }`}
                               >
                                 {roleLabel}
                               </Badge>
                             )}
                           </span>
-                          <Button size="icon" variant="ghost" className="size-6" onClick={() => removeApprover(id)}>
+                          <Button size="icon" variant="ghost" className="size-6" disabled={i === 0} onClick={() => moveStep(i, -1)} aria-label="上へ">
+                            <ChevronUp className="size-3" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="size-6" disabled={i === routeSteps.length - 1} onClick={() => moveStep(i, 1)} aria-label="下へ">
+                            <ChevronDown className="size-3" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="size-6" onClick={() => removeStep(i)} aria-label="削除">
                             <X className="size-3" />
                           </Button>
                         </div>
@@ -409,19 +478,39 @@ export function WorkflowTypesTab() {
                     })}
                   </div>
                 )}
-                {availableApprovers.length > 0 && (
-                  <Select onValueChange={addApprover} value="">
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="承認者を追加..." /></SelectTrigger>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {availableApprovers.length > 0 && (
+                    <Select onValueChange={addApprover} value="">
+                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="メンバーを指名して追加..." /></SelectTrigger>
+                      <SelectContent>
+                        {availableApprovers.map(p => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.display_name}
+                            {p.role ? `（${ROLE_LABELS[p.role as Role] ?? p.role}）` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Select onValueChange={addAttributeStep} value="">
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="属性（ロール／部署）で追加..." /></SelectTrigger>
                     <SelectContent>
-                      {availableApprovers.map(p => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.display_name}
-                          {p.role ? `（${ROLE_LABELS[p.role as Role] ?? p.role}）` : ""}
-                        </SelectItem>
-                      ))}
+                      {attributeOptions.map(o => {
+                        const n = matchProfiles({ ...o.step, step_order: 0 }, profiles).length;
+                        return (
+                          <SelectItem key={o.value} value={o.value} disabled={hasStep(o.step)}>
+                            {o.label}
+                            <span className="ml-1 text-[11px] text-muted-foreground">（{n}名）</span>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
-                )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  属性で追加したステップは、申請時点でその属性を持つメンバー（申請者本人は除く）へ自動で割り当てられます。
+                  部署はメンバー設定の「部署」欄が基準です。
+                </p>
               </CardContent>
             </Card>
           </div>

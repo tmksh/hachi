@@ -5,6 +5,7 @@ import { invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
 import { STANDALONE_WORKFLOW_KEYS } from "@/lib/tenant-host";
+import type { ApprovalStep } from "@/lib/workflow-route";
 
 /** PostgrestError を素のまま throw すると本番で Server Components render エラーに化ける */
 function actionError(
@@ -1228,7 +1229,4 @@ export type FieldDef = {
   options?: string[];
 };
 
-export type ApprovalStep = {
-  step_order: number;
-  approver_id: string;
-};
+export type { ApprovalStep };

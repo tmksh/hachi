@@ -22,7 +22,21 @@ import {
   Plus,
   Reply,
   Send,
+  Flag,
+  Folder,
+  FolderInput,
+  FolderPlus,
+  Inbox,
+  MoreHorizontal,
+  Trash2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,9 +49,16 @@ import { humanizeClientError } from "@/lib/humanize-error";
 import {
   markThreadRead,
   toggleThreadStar,
+  toggleThreadFlag,
+  moveThreadToFolder,
+  listEmailFolders,
+  createEmailFolder,
+  renameEmailFolder,
+  deleteEmailFolder,
   disconnectEmailAccount,
   replyToThread,
   type EmailAccount,
+  type EmailFolder,
   type MailProvider,
 } from "@/lib/actions/mail";
 import { fetchMailAccounts, fetchMailThread, fetchMailThreads } from "@/lib/queries/portal";
@@ -45,8 +66,14 @@ import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mo
 import { ConnectMailDialog } from "@/components/mail/connect-mail-dialog";
 import { guessReplyAddress } from "@/lib/mail-reply";
 
-type Thread = Awaited<ReturnType<typeof fetchMailThreads>>[number];
+type Thread = Awaited<ReturnType<typeof fetchMailThreads>>[number] & {
+  is_flagged?: boolean | null;
+  folder_id?: string | null;
+};
 type ThreadDetail = Awaited<ReturnType<typeof fetchMailThread>>;
+
+/** 固定フォルダ: 受信トレイ（全件） / スター / フラグ。それ以外は email_folders.id */
+type FolderKey = "inbox" | "starred" | "flagged" | string;
 
 const isMockId = (id: string) => id.startsWith("mock_");
 
@@ -97,6 +124,92 @@ export function MailClient({
   const [replyTo, setReplyTo] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [replying, setReplying] = useState(false);
+
+  // フォルダ分け・フラグ（No.143）
+  const [folders, setFolders] = useState<EmailFolder[]>([]);
+  const [activeFolder, setActiveFolder] = useState<FolderKey>("inbox");
+  const [folderDialog, setFolderDialog] = useState<{ mode: "create" } | { mode: "rename"; folder: EmailFolder } | null>(null);
+  const [folderName, setFolderName] = useState("");
+  const [folderSaving, setFolderSaving] = useState(false);
+
+  useEffect(() => {
+    listEmailFolders().then(setFolders).catch(() => setFolders([]));
+  }, []);
+
+  const visibleThreads = threads.filter((t: Thread) => {
+    if (activeFolder === "inbox") return true;
+    if (activeFolder === "starred") return Boolean(t.is_starred);
+    if (activeFolder === "flagged") return Boolean(t.is_flagged);
+    return t.folder_id === activeFolder;
+  });
+  const countFor = (key: FolderKey) =>
+    threads.filter((t: Thread) => {
+      if (key === "inbox") return !t.is_read;
+      if (key === "starred") return Boolean(t.is_starred);
+      if (key === "flagged") return Boolean(t.is_flagged);
+      return t.folder_id === key;
+    }).length;
+
+  const handleFlag = async (id: string, current: boolean) => {
+    setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, is_flagged: !current } : x)));
+    if (isMockId(id)) return;
+    const res = await toggleThreadFlag(id, !current);
+    if (!res.ok) {
+      setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, is_flagged: current } : x)));
+      toast.error(res.error);
+    }
+  };
+
+  const handleMove = async (id: string, folderId: string | null) => {
+    const prevFolder = threads.find((x) => x.id === id)?.folder_id ?? null;
+    setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, folder_id: folderId } : x)));
+    if (isMockId(id)) {
+      toast.success(folderId ? `「${folders.find((f) => f.id === folderId)?.name ?? ""}」へ移動しました` : "受信トレイへ戻しました");
+      return;
+    }
+    const res = await moveThreadToFolder(id, folderId);
+    if (!res.ok) {
+      setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, folder_id: prevFolder } : x)));
+      toast.error(res.error);
+      return;
+    }
+    toast.success(folderId ? `「${folders.find((f) => f.id === folderId)?.name ?? ""}」へ移動しました` : "受信トレイへ戻しました");
+  };
+
+  const openCreateFolder = () => { setFolderName(""); setFolderDialog({ mode: "create" }); };
+  const openRenameFolder = (folder: EmailFolder) => { setFolderName(folder.name); setFolderDialog({ mode: "rename", folder }); };
+
+  const saveFolder = async () => {
+    if (!folderDialog) return;
+    setFolderSaving(true);
+    try {
+      if (folderDialog.mode === "create") {
+        const res = await createEmailFolder(folderName);
+        if (!res.ok) { toast.error(res.error); return; }
+        setFolders((prev) => [...prev, res.folder]);
+        setActiveFolder(res.folder.id);
+        toast.success(`フォルダ「${res.folder.name}」を作成しました`);
+      } else {
+        const res = await renameEmailFolder(folderDialog.folder.id, folderName);
+        if (!res.ok) { toast.error(res.error); return; }
+        setFolders((prev) => prev.map((f) => (f.id === folderDialog.folder.id ? { ...f, name: folderName.trim() } : f)));
+        toast.success("フォルダ名を変更しました");
+      }
+      setFolderDialog(null);
+    } finally {
+      setFolderSaving(false);
+    }
+  };
+
+  const removeFolder = async (folder: EmailFolder) => {
+    if (!confirm(`フォルダ「${folder.name}」を削除しますか？（中のメールは受信トレイに戻ります）`)) return;
+    const res = await deleteEmailFolder(folder.id);
+    if (!res.ok) { toast.error(res.error); return; }
+    setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+    setThreads((prev) => prev.map((x) => (x.folder_id === folder.id ? { ...x, folder_id: null } : x)));
+    if (activeFolder === folder.id) setActiveFolder("inbox");
+    toast.success("フォルダを削除しました");
+  };
 
   useEffect(() => {
     const connected = searchParams.get("mail_connected") ?? searchParams.get("gmail_connected");
@@ -390,7 +503,96 @@ export function MailClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[200px_360px_1fr] gap-4">
+        {/* フォルダ（受信一覧の前段） */}
+        <Card className="overflow-hidden h-fit">
+          <CardContent className="p-2 space-y-0.5">
+            {([
+              { key: "inbox" as FolderKey, label: "受信トレイ", icon: Inbox, badge: "unread" as const },
+              { key: "starred" as FolderKey, label: "スター付き", icon: Star, badge: "count" as const },
+              { key: "flagged" as FolderKey, label: "フラグ付き", icon: Flag, badge: "count" as const },
+            ]).map(({ key, label, icon: Icon }) => {
+              const n = countFor(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveFolder(key)}
+                  className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+                    activeFolder === key ? "bg-accent font-medium" : "hover:bg-muted/60 text-foreground/80"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 shrink-0 ${key === "starred" ? "text-yellow-500" : key === "flagged" ? "text-rose-500" : "text-muted-foreground"}`} />
+                  <span className="flex-1 text-left truncate">{label}</span>
+                  {n > 0 && (
+                    <span className={`text-[10px] tabular-nums rounded-full px-1.5 py-0.5 ${key === "inbox" ? "bg-primary/10 text-primary font-semibold" : "bg-muted text-muted-foreground"}`}>
+                      {n}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            <div className="flex items-center justify-between px-2.5 pt-3 pb-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">フォルダ</span>
+              <button
+                type="button"
+                onClick={openCreateFolder}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="フォルダを作成"
+                title="フォルダを作成"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </button>
+            </div>
+            {folders.length === 0 && (
+              <p className="px-2.5 pb-2 text-[11px] text-muted-foreground leading-snug">
+                会社別・請求書などのフォルダを作成して、メールを振り分けられます。
+              </p>
+            )}
+            {folders.map((f) => {
+              const n = countFor(f.id);
+              return (
+                <div
+                  key={f.id}
+                  className={`group flex items-center gap-1 rounded-lg pr-1 transition-colors ${
+                    activeFolder === f.id ? "bg-accent" : "hover:bg-muted/60"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveFolder(f.id)}
+                    className={`flex-1 min-w-0 flex items-center gap-2 px-2.5 py-2 text-sm ${activeFolder === f.id ? "font-medium" : "text-foreground/80"}`}
+                  >
+                    <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 text-left truncate">{f.name}</span>
+                    {n > 0 && <span className="text-[10px] tabular-nums rounded-full px-1.5 py-0.5 bg-muted text-muted-foreground">{n}</span>}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-background"
+                        aria-label="フォルダ操作"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => openRenameFolder(f)} className="gap-2 text-sm">
+                        <Pencil className="h-3.5 w-3.5" />名前を変更
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => void removeFolder(f)} className="gap-2 text-sm text-destructive focus:text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />削除
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             {loading ? (
@@ -399,34 +601,60 @@ export function MailClient({
                   <Skeleton key={i} className="h-16" />
                 ))}
               </div>
-            ) : threads.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                {hasAccounts ? "同期済みのメールはありません。受信トレイが空か、右上の「同期」で再取得できます。" : "メールはありません"}
+            ) : visibleThreads.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                {threads.length === 0
+                  ? (hasAccounts ? "同期済みのメールはありません。受信トレイが空か、右上の「同期」で再取得できます。" : "メールはありません")
+                  : activeFolder === "starred"
+                    ? "スター付きのメールはありません"
+                    : activeFolder === "flagged"
+                      ? "フラグ付きのメールはありません"
+                      : "このフォルダにメールはありません。一覧の「…」から移動できます。"}
               </div>
             ) : (
               <div className="divide-y max-h-[600px] overflow-y-auto">
-                {threads.map((t) => (
+                {visibleThreads.map((t: Thread) => {
+                  const folderName = t.folder_id ? folders.find((f) => f.id === t.folder_id)?.name : null;
+                  return (
                   <div
                     key={t.id}
-                    className={`flex items-start gap-3 p-3 cursor-pointer glass-row transition-colors ${
+                    className={`group flex items-start gap-2 p-3 cursor-pointer glass-row transition-colors ${
                       selected?.id === t.id ? "bg-accent/30" : ""
                     } ${!t.is_read ? "bg-primary/5" : ""}`}
                     onClick={() => selectThread(t)}
                   >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStar(t.id, t.is_starred);
-                      }}
-                    >
-                      <Star
-                        className={`h-4 w-4 ${
-                          t.is_starred
-                            ? "fill-yellow-400 text-yellow-400"
-                            : "text-muted-foreground"
-                        }`}
-                      />
-                    </button>
+                    <div className="flex flex-col items-center gap-1.5 pt-0.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStar(t.id, t.is_starred);
+                        }}
+                        aria-label={t.is_starred ? "スターを外す" : "スターを付ける"}
+                      >
+                        <Star
+                          className={`h-4 w-4 ${
+                            t.is_starred
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-muted-foreground/60 hover:text-yellow-400"
+                          }`}
+                        />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleFlag(t.id, Boolean(t.is_flagged));
+                        }}
+                        aria-label={t.is_flagged ? "フラグを外す" : "フラグを付ける"}
+                      >
+                        <Flag
+                          className={`h-4 w-4 ${
+                            t.is_flagged
+                              ? "fill-rose-500 text-rose-500"
+                              : "text-muted-foreground/60 hover:text-rose-500"
+                          }`}
+                        />
+                      </button>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <p className={`text-sm truncate flex-1 ${!t.is_read ? "font-semibold" : ""}`}>
@@ -440,14 +668,57 @@ export function MailClient({
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{t.snippet}</p>
+                      {folderName && activeFolder === "inbox" && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">
+                          <Folder className="h-2.5 w-2.5" />{folderName}
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0">
-                      {t.last_message_at
-                        ? format(parseISO(t.last_message_at), "M/d", { locale: ja })
-                        : ""}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">
+                        {t.last_message_at
+                          ? format(parseISO(t.last_message_at), "M/d", { locale: ja })
+                          : ""}
+                      </span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 hover:bg-background"
+                            aria-label="フォルダへ移動"
+                            title="フォルダへ移動"
+                          >
+                            <FolderInput className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">フォルダへ移動</div>
+                          {folders.map((f) => (
+                            <DropdownMenuItem
+                              key={f.id}
+                              disabled={t.folder_id === f.id}
+                              onClick={() => void handleMove(t.id, f.id)}
+                              className="gap-2 text-sm"
+                            >
+                              <Folder className="h-3.5 w-3.5" />{f.name}
+                            </DropdownMenuItem>
+                          ))}
+                          {folders.length > 0 && <DropdownMenuSeparator />}
+                          {t.folder_id && (
+                            <DropdownMenuItem onClick={() => void handleMove(t.id, null)} className="gap-2 text-sm">
+                              <Inbox className="h-3.5 w-3.5" />受信トレイに戻す
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={openCreateFolder} className="gap-2 text-sm">
+                            <FolderPlus className="h-3.5 w-3.5" />新しいフォルダ...
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -527,6 +798,29 @@ export function MailClient({
         onOpenChange={setConnectOpen}
         onConnected={loadData}
       />
+
+      <Dialog open={!!folderDialog} onOpenChange={(o) => !o && setFolderDialog(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{folderDialog?.mode === "rename" ? "フォルダ名を変更" : "フォルダを作成"}</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={folderName}
+            onChange={(e) => setFolderName(e.target.value)}
+            placeholder="例: 〇〇建材、請求書、社内"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) void saveFolder();
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFolderDialog(null)}>キャンセル</Button>
+            <Button onClick={() => void saveFolder()} disabled={folderSaving || !folderName.trim()}>
+              {folderSaving ? "保存中..." : folderDialog?.mode === "rename" ? "変更" : "作成"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

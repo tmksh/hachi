@@ -638,6 +638,8 @@ function ConstructionDetailPageContent({
         <TabsContent value="budget" className="mt-4">
           <CostBudgetTab
             constructionId={id as string}
+            constructionNo={data.construction_no}
+            constructionTitle={data.title}
             contractAmount={contract?.amount ?? data.order_amount ?? undefined}
             initialOrders={data.orders as Order[]}
             estimates={((data as Detail & { estimates?: Array<{ id: string; estimate_no: string; title: string | null; total: number }> }).estimates ?? []).map((e: { id: string; estimate_no: string; title: string | null; total: number }) => ({

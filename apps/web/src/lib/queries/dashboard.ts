@@ -116,7 +116,7 @@ export async function fetchDashboardData() {
       .limit(15),
     supabase
       .from("todos")
-      .select("id, title, status, priority, due_date, assigned_to, tags")
+      .select("id, title, description, status, priority, due_date, assigned_to, tags, customer_id, deal_id, customer:customers(id, name)")
       .in("status", ["pending", "in_progress"])
       .order("due_date")
       .limit(10),

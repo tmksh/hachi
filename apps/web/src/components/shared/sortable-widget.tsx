@@ -112,7 +112,11 @@ export function SortableWidget({
     window.addEventListener("mouseup", onUp);
   };
 
-  const effectiveCols = stackFullWidth ? GRID_COLS : (cols ?? defaultCols);
+  // ユーザー指定幅があっても、現在のコンテナ幅でのデフォルトより狭くはしない
+  // （チャット展開で幅が縮んだときにカードが極小/極大にならないようにする）
+  const effectiveCols = stackFullWidth
+    ? GRID_COLS
+    : Math.min(GRID_COLS, Math.max(cols ?? defaultCols, defaultCols));
 
   return (
     <div

@@ -74,6 +74,78 @@ export const LEDGER_STATUS_META: Record<
   },
 };
 
+export const INVOICE_ATTACH_STEPS = [
+  "ordered",
+  "delivery",
+  "invoice_pdf",
+  "confirmed",
+  "approved",
+] as const;
+
+export type InvoiceAttachStepKey = (typeof INVOICE_ATTACH_STEPS)[number];
+
+export type InvoiceAttachStep = {
+  key: InvoiceAttachStepKey;
+  label: string;
+  done: boolean;
+  current: boolean;
+};
+
+const INVOICE_ATTACH_LABELS: Record<InvoiceAttachStepKey, string> = {
+  ordered: "発注",
+  delivery: "納品添付",
+  invoice_pdf: "請求PDF",
+  confirmed: "確認",
+  approved: "支払い確定",
+};
+
+/** PDF添付〜支払い確定までの進捗。詳細パネルとステータスカードで共有する。 */
+export function invoiceAttachProgress(
+  order: {
+    delivery_date?: string | null;
+    delivery_attachments?: unknown[] | null;
+    vendor_invoice_pdf_path?: string | null;
+    vendor_invoice_submitted_at?: string | null;
+    director_confirmed_at?: string | null;
+    accounting_approved_at?: string | null;
+  },
+  status: LedgerStatus,
+): InvoiceAttachStep[] {
+  const defs: Array<{ key: InvoiceAttachStepKey; done: boolean }> = [
+    { key: "ordered", done: status !== "none" },
+    {
+      key: "delivery",
+      done: Boolean(order.delivery_date)
+        || (Array.isArray(order.delivery_attachments) && order.delivery_attachments.length > 0),
+    },
+    {
+      key: "invoice_pdf",
+      done: Boolean(order.vendor_invoice_pdf_path)
+        || Boolean(order.vendor_invoice_submitted_at)
+        || status === "invoice_received"
+        || status === "confirmed"
+        || status === "payment_approved",
+    },
+    {
+      key: "confirmed",
+      done: Boolean(order.director_confirmed_at)
+        || status === "confirmed"
+        || status === "payment_approved",
+    },
+    {
+      key: "approved",
+      done: status === "payment_approved" || Boolean(order.accounting_approved_at),
+    },
+  ];
+  const currentIndex = defs.findIndex((d) => !d.done);
+  return defs.map((d, i) => ({
+    key: d.key,
+    label: INVOICE_ATTACH_LABELS[d.key],
+    done: d.done,
+    current: currentIndex === -1 ? i === defs.length - 1 : i === currentIndex,
+  }));
+}
+
 export type OrderDisplayStatus = "draft" | "submitted" | "approved" | "sent" | "concluded" | "rejected";
 
 export const ORDER_DISPLAY_STATUS_META: Record<

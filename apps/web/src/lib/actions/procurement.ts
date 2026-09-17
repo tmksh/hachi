@@ -772,17 +772,30 @@ export async function confirmVendorInvoice(orderId: string): Promise<ActionResul
   }
 }
 
-async function assertCanApproveVendorInvoice() {
-  const { supabase, companyId, role } = await getAuthContext();
+async function companyRolePermissions(companyId: string) {
+  const { supabase } = await getAuthContext();
   const { data: company } = await supabase
     .from("companies")
     .select("settings")
     .eq("id", companyId)
     .maybeSingle();
   const raw = (company?.settings as { role_permissions?: RolePermissions } | null)?.role_permissions;
-  const perms = mergeRolePermissions(raw ?? null);
+  return mergeRolePermissions(raw ?? null);
+}
+
+async function assertCanApproveVendorInvoice() {
+  const { companyId, role } = await getAuthContext();
+  const perms = await companyRolePermissions(companyId);
   if (!canAccessFeature("fulfillment_approve", [role], perms)) {
     throw new Error("経理承認の権限がありません。設定のロール・権限で「納品・検収の経理承認」を有効にしてください。");
+  }
+}
+
+async function assertCanConfirmAccountItems() {
+  const { companyId, role } = await getAuthContext();
+  const perms = await companyRolePermissions(companyId);
+  if (!canAccessFeature("account-items", [role], perms)) {
+    throw new Error("勘定科目を確定する権限がありません。経理ロールで操作してください。");
   }
 }
 
@@ -824,7 +837,7 @@ function constructionAssigneeId(order: ProcurementOrder): string | null {
 export async function returnVendorInvoice(input: {
   orderId: string;
   reason: string;
-}): Promise<ActionResult<{ order: ProcurementOrder; notified: boolean }>> {
+}): Promise<ActionResult<{ order: ProcurementOrder; notified: boolean; chatSent: boolean }>> {
   try {
     const reason = input.reason.trim();
     if (!reason) {
@@ -856,6 +869,7 @@ export async function returnVendorInvoice(input: {
 
     const assigneeId = constructionAssigneeId(order);
     let notified = false;
+    let chatSent = false;
     if (assigneeId) {
       try {
         const { notifySalesFlowUser } = await import("@/lib/actions/sales-flow");
@@ -873,8 +887,27 @@ export async function returnVendorInvoice(input: {
       } catch {
         notified = false;
       }
+      if (assigneeId !== user.id) {
+        const constructionLabel = [
+          order.construction?.construction_no,
+          order.construction?.title,
+        ].filter(Boolean).join(" ");
+        const { error: chatError } = await supabase.from("internal_messages").insert({
+          company_id: companyId,
+          sender_id: user.id,
+          recipient_id: assigneeId,
+          content: [
+            `【請求書差し戻し】${order.po_no ?? order.title}`,
+            constructionLabel ? `案件: ${constructionLabel}` : null,
+            `理由: ${reason}`,
+            "納品・検収で対応してください。",
+          ].filter(Boolean).join("\n"),
+          message_type: "chat",
+        });
+        chatSent = !chatError;
+      }
     }
-    return actionOk({ order, notified });
+    return actionOk({ order, notified, chatSent });
   } catch (e) {
     return actionFail(e, "差し戻しに失敗しました");
   }
@@ -884,6 +917,7 @@ export async function confirmAccountItems(
   items: Array<{ orderId: string; accountItem: string }>,
 ): Promise<ActionResult<{ updated: number }>> {
   try {
+    await assertCanConfirmAccountItems();
     const { supabase, companyId, user } = await getAuthContext();
     let updated = 0;
     for (const item of items) {
@@ -911,6 +945,7 @@ export async function updateOrderAccountItem(
   orderId: string,
   accountItem: string | null,
 ): Promise<ProcurementOrder> {
+  await assertCanConfirmAccountItems();
   return updateOrderProcurement(orderId, {
     account_item: accountItem?.trim() || null,
     account_item_source: "accounting",

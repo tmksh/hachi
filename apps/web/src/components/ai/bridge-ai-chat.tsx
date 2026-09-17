@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Send, X, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
-import { sendBridgeAiMessage } from "@/lib/actions/bridge-ai";
+import { sendBridgeAiMessage, type BridgeScheduleResult } from "@/lib/actions/bridge-ai";
 import { sendChatMessage } from "@/lib/actions/internal-messages";
 import { fetchChatContacts } from "@/lib/queries/internal-messages";
 import type { BridgeSeed } from "@/contexts/chat-panel-context";
@@ -68,6 +68,13 @@ type Contact = Awaited<ReturnType<typeof fetchChatContacts>>[number];
 
 function toApiHistory(messages: ChatMessage[]) {
   return messages.map(({ role, text }) => ({ role, text }));
+}
+
+/** 工程表ウィザードで登録された工程を、開いている工事詳細（工程表タブ）へリロードなしで通知する */
+export const BRIDGE_SCHEDULE_CREATED_EVENT = "bridge-schedule-created";
+function broadcastSchedule(schedule: BridgeScheduleResult | undefined) {
+  if (!schedule || schedule.tasks.length === 0) return;
+  window.dispatchEvent(new CustomEvent<BridgeScheduleResult>(BRIDGE_SCHEDULE_CREATED_EVENT, { detail: schedule }));
 }
 
 export function BridgeAiChat({
@@ -190,6 +197,7 @@ export function BridgeAiChat({
               new CustomEvent("bridge-estimate-draft-applied", { detail: { estimate: result.estimate } }),
             );
           }
+          broadcastSchedule(result.schedule);
         }
         if (seedGen.current !== gen) return;
         setMessages((m) => [...m, { role: "assistant", text: reply }]);
@@ -244,6 +252,7 @@ export function BridgeAiChat({
             new CustomEvent("bridge-estimate-draft-applied", { detail: { estimate: result.estimate } }),
           );
         }
+        broadcastSchedule(result.schedule);
       }
       setMessages((m) => [...m, { role: "assistant", text: reply }]);
     } catch (e) {
@@ -274,14 +283,21 @@ export function BridgeAiChat({
 
   return (
     <>
+      {/* 起動ボタン: モバイルは右下FAB、デスクトップは右端中央のタブ（右下の保存ボタン等と重ならない） */}
       {!open && (
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          className="fixed bottom-24 right-6 z-30 md:bottom-6 md:z-50 size-14 rounded-full shadow-lg flex items-center justify-center bg-background border border-border hover:scale-105 transition-transform"
-          aria-label="BRIDGE AI"
+          className={cn(
+            "fixed z-30 flex items-center justify-center bg-background border border-border shadow-lg transition-[transform,right] duration-300 ease-out",
+            "bottom-24 right-6 size-14 rounded-full hover:scale-105",
+            "md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:right-0 md:z-40 md:h-16 md:w-11 md:rounded-l-2xl md:rounded-r-none md:border-r-0 md:hover:scale-100 md:hover:w-12",
+          )}
+          style={internalChatOpen ? { right: INTERNAL_CHAT_PANEL_WIDTH } : undefined}
+          aria-label="BRIDGE AI を開く"
+          title="BRIDGE AI"
         >
-          <BrandMark className="h-9 w-auto" />
+          <BrandMark className="h-8 w-auto" />
         </button>
       )}
 

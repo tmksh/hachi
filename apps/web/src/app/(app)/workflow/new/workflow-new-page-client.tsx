@@ -3,10 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import { fetchProfiles } from "@/lib/queries/lists";
+import { useAuth } from "@/hooks/use-auth";
 import { fetchWorkflowTypes, LIST_STALE_MS, QK } from "@/lib/queries/portal";
 import { WorkflowNewClient } from "./workflow-new-client";
 
 export function WorkflowNewPageClient() {
+  const { profile } = useAuth();
+  const currentUserId = profile?.id ?? null;
   const { data: types, isPending: tPending } = useQuery({
     queryKey: QK.workflowTypes,
     queryFn: fetchWorkflowTypes,
@@ -23,7 +26,8 @@ export function WorkflowNewPageClient() {
   return (
     <WorkflowNewClient
       initialTypes={types}
-      initialProfiles={profiles.map((x) => ({ id: x.id, display_name: x.display_name }))}
+      initialProfiles={profiles.map((x) => ({ id: x.id, display_name: x.display_name, role: x.role, department: x.department }))}
+      currentUserId={currentUserId}
     />
   );
 }

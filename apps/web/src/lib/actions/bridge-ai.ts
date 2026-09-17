@@ -445,7 +445,25 @@ function fmtDate(d: Date): string {
  * 工事詳細ページで「工程表を作って」と言われたときの対話フロー。
  * AI設定の有無に依存せず動作する（質問3つ → construction_tasks へ自動登録）。
  */
-async function handleScheduleWizard(history: Message[], pathname: string): Promise<{ text: string; ok: boolean } | null> {
+export type BridgeScheduleTask = {
+  id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  progress: number | null;
+  status: string | null;
+  description?: string | null;
+  contractor_name?: string | null;
+  depends_on_task_id?: string | null;
+  sort_order?: number | null;
+};
+
+export type BridgeScheduleResult = { constructionId: string; tasks: BridgeScheduleTask[] };
+
+async function handleScheduleWizard(
+  history: Message[],
+  pathname: string,
+): Promise<{ text: string; ok: boolean; schedule?: BridgeScheduleResult } | null> {
   const path = pathname.split("?")[0];
   const m = path.match(/^\/constructions\/([0-9a-fA-F-]{36})/);
   if (!m) return null;
@@ -536,7 +554,10 @@ async function handleScheduleWizard(history: Message[], pathname: string): Promi
       };
     });
 
-    const { error } = await supabase.from("construction_tasks").insert(rows);
+    const { data: inserted, error } = await supabase
+      .from("construction_tasks")
+      .insert(rows)
+      .select("id, name, start_date, end_date, progress, status, description, contractor_name, depends_on_task_id, sort_order");
     if (error) throw error;
 
     const lines = rows.map(r => `・${r.name}: ${r.start_date.replace(/-/g, "/")} 〜 ${r.end_date.replace(/-/g, "/")}`);
@@ -547,8 +568,9 @@ async function handleScheduleWizard(history: Message[], pathname: string): Promi
         "",
         ...lines,
         "",
-        "「工程表」タブに反映済みです。ページを再読み込みすると表示されます。各工程はガントチャート上で編集・調整できます。",
+        "「工程表」タブに反映しました。各工程はガントチャート上で編集・調整できます。",
       ].join("\n"),
+      schedule: { constructionId, tasks: (inserted ?? []) as BridgeScheduleTask[] },
     };
   } catch (e) {
     console.error("[handleScheduleWizard] task insert failed", e);
@@ -634,7 +656,7 @@ async function callAnthropicChat(messages: Message[], config: { apiKey: string; 
 export async function sendBridgeAiMessage(
   history: Message[],
   pathname: string,
-): Promise<{ text: string; ok: boolean; estimate?: unknown }> {
+): Promise<{ text: string; ok: boolean; estimate?: unknown; schedule?: BridgeScheduleResult }> {
   // 工程表作成ウィザード（No.6）: AI設定に依存せず対話→自動生成
   const wizardReply = await handleScheduleWizard(history, pathname);
   if (wizardReply) return wizardReply;

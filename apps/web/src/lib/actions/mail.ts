@@ -163,6 +163,117 @@ export async function markThreadRead(id: string) {
     .in("account_id", accountIds);
 }
 
+export type EmailFolder = {
+  id: string;
+  name: string;
+  color: string | null;
+  sort_order: number;
+};
+
+/** 本人のメールフォルダ一覧（会社別・請求書など、利用者が自由に作成） */
+export async function listEmailFolders(): Promise<EmailFolder[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("email_folders")
+    .select("id, name, color, sort_order")
+    .eq("user_id", user.id)
+    .order("sort_order")
+    .order("created_at");
+  if (error) {
+    // マイグレーション未適用環境ではテーブルが無いので空扱い
+    console.error("[listEmailFolders]", error);
+    return [];
+  }
+  return (data ?? []) as EmailFolder[];
+}
+
+export async function createEmailFolder(name: string, color?: string | null): Promise<ActionResult<{ folder: EmailFolder }>> {
+  const trimmed = name.trim();
+  if (!trimmed) return actionFail("フォルダ名を入力してください", "フォルダ名を入力してください");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  if (!profile?.company_id) return actionFail("プロフィールが見つかりません", "プロフィールが見つかりません");
+  const { count } = await supabase
+    .from("email_folders")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+  const { data, error } = await supabase
+    .from("email_folders")
+    .insert({
+      company_id: profile.company_id,
+      user_id: user.id,
+      name: trimmed,
+      color: color ?? null,
+      sort_order: count ?? 0,
+    })
+    .select("id, name, color, sort_order")
+    .single();
+  if (error || !data) {
+    return actionFail(error, error?.code === "23505" ? "同じ名前のフォルダがあります" : "フォルダの作成に失敗しました");
+  }
+  return actionOk({ folder: data as EmailFolder });
+}
+
+export async function renameEmailFolder(id: string, name: string): Promise<ActionResult<{ done: true }>> {
+  const trimmed = name.trim();
+  if (!trimmed) return actionFail("フォルダ名を入力してください", "フォルダ名を入力してください");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+  const { error } = await supabase
+    .from("email_folders")
+    .update({ name: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) return actionFail(error, "フォルダ名の変更に失敗しました");
+  return actionOk({ done: true as const });
+}
+
+export async function deleteEmailFolder(id: string): Promise<ActionResult<{ done: true }>> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+  // 中のメールは受信トレイへ戻す（FK は ON DELETE SET NULL だが明示しておく）
+  await supabase.from("email_threads").update({ folder_id: null }).eq("folder_id", id);
+  const { error } = await supabase.from("email_folders").delete().eq("id", id).eq("user_id", user.id);
+  if (error) return actionFail(error, "フォルダの削除に失敗しました");
+  return actionOk({ done: true as const });
+}
+
+export async function moveThreadToFolder(threadId: string, folderId: string | null): Promise<ActionResult<{ done: true }>> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+  const accountIds = await myEmailAccountIds(supabase, user.id);
+  if (accountIds.length === 0) return actionFail("メールアカウントがありません", "メールアカウントがありません");
+  const { error } = await supabase
+    .from("email_threads")
+    .update({ folder_id: folderId })
+    .eq("id", threadId)
+    .in("account_id", accountIds);
+  if (error) return actionFail(error, "フォルダの移動に失敗しました");
+  return actionOk({ done: true as const });
+}
+
+export async function toggleThreadFlag(id: string, flagged: boolean): Promise<ActionResult<{ done: true }>> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+  const accountIds = await myEmailAccountIds(supabase, user.id);
+  if (accountIds.length === 0) return actionFail("メールアカウントがありません", "メールアカウントがありません");
+  const { error } = await supabase
+    .from("email_threads")
+    .update({ is_flagged: flagged })
+    .eq("id", id)
+    .in("account_id", accountIds);
+  if (error) return actionFail(error, "フラグの更新に失敗しました");
+  return actionOk({ done: true as const });
+}
+
 export async function toggleThreadStar(id: string, starred: boolean) {
   const supabase = await createClient();
   const {

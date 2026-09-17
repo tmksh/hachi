@@ -35,6 +35,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { useUnfollowedLeads } from "@/hooks/use-unfollowed-leads";
 import type { UnfollowedLead } from "@/lib/queries/dashboard";
@@ -59,6 +61,7 @@ import { computeBrandFromHex } from "@/lib/brand-color";
 import { cn } from "@/lib/utils";
 import { announcementActionHref } from "@/lib/notification-href";
 import { BombAlert } from "@/components/layout/bomb-alert";
+import { FontSizeSelector } from "@/components/settings/font-size-selector";
 
 import { ResponsiveTrendChart } from "@/components/dashboard/responsive-trend-chart";
 
@@ -67,6 +70,20 @@ const WidgetGrid = dynamic(
   { loading: () => <div className="flex flex-wrap gap-4 min-w-0 w-full"><Skeleton className="h-48 w-full md:w-[calc(33%-11px)] rounded-2xl" /><Skeleton className="h-48 w-full md:w-[calc(33%-11px)] rounded-2xl" /><Skeleton className="h-48 w-full md:w-[calc(33%-11px)] rounded-2xl" /></div> },
 );
 
+
+const DASHBOARD_ZOOM_KEY = "dashboard-zoom-v1";
+const DASHBOARD_ZOOMS = [90, 100, 110, 125] as const;
+type DashboardZoom = (typeof DASHBOARD_ZOOMS)[number];
+
+function readDashboardZoom(): DashboardZoom {
+  if (typeof window === "undefined") return 100;
+  try {
+    const n = Number(localStorage.getItem(DASHBOARD_ZOOM_KEY));
+    return (DASHBOARD_ZOOMS as readonly number[]).includes(n) ? n as DashboardZoom : 100;
+  } catch {
+    return 100;
+  }
+}
 
 function formatYen(n: number) {
   if (n >= 100_000_000) return `¥${(n / 100_000_000).toFixed(1)}億`;
@@ -99,10 +116,25 @@ export function DashboardClient({
   const [inquirySending, setInquirySending] = useState(false);
   const [dealsTab, setDealsTab] = useState<"deals" | "unfollowed">("deals");
   const [focusHighlight, setFocusHighlight] = useState(false);
+  const [focusSheetOpen, setFocusSheetOpen] = useState(false);
+  const [focusDetail, setFocusDetail] = useState<DashboardData["todos"][number] | null>(null);
+  const router = useRouter();
   const pendingFocusScroll = useRef(false);
   const now = new Date();
 
   const { widgets, hydrated, reorder, resizeWidget, toggleVisible } = useWidgets();
+  const [dashboardZoom, setDashboardZoom] = useState<DashboardZoom>(100);
+  useEffect(() => {
+    setDashboardZoom(readDashboardZoom());
+  }, []);
+  const applyDashboardZoom = (zoom: DashboardZoom) => {
+    setDashboardZoom(zoom);
+    try {
+      localStorage.setItem(DASHBOARD_ZOOM_KEY, String(zoom));
+    } catch {
+      /* ignore */
+    }
+  };
   const { gradientHex, solidHex, mode: brandMode, setGradientColor, setSolidColor, switchMode, reset: resetColor } = useBrandColor();
   const { openInternalChat, refreshInternalChat } = useInternalChat();
   const brandHex = brandMode === "solid" ? solidHex : gradientHex;
@@ -186,6 +218,24 @@ export function DashboardClient({
       (typeof t.due_date === "string" && t.due_date.slice(0, 10) <= todayKey)
     );
   const urgentCount = todos.filter(isUrgentTodo).length;
+
+  type FocusTodo = (typeof todos)[number];
+  const todoCustomerName = (t: FocusTodo): string | null => {
+    const c = (t as { customer?: { name?: string | null } | { name?: string | null }[] | null }).customer;
+    if (!c) return null;
+    const one = Array.isArray(c) ? c[0] : c;
+    return one?.name ?? null;
+  };
+  /** 行クリック: 顧客が紐づけばその顧客のToDoタブへ、無ければ右側スライドインで内容を表示 */
+  const openTodo = (t: FocusTodo) => {
+    const customerId = (t as { customer_id?: string | null }).customer_id;
+    if (customerId) {
+      router.push(`/crm/${customerId}?tab=todos`);
+      return;
+    }
+    setFocusDetail(t);
+    setFocusSheetOpen(true);
+  };
 
   const scrollToTodaysFocus = useCallback(() => {
     const el = document.getElementById("todays-focus");
@@ -347,7 +397,14 @@ export function DashboardClient({
                 {urgentCount > 0 && (
                   <span className="text-[9px] font-bold text-rose-500 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5">急ぎ{urgentCount}</span>
                 )}
-                <Link href="/bi"><ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" /></Link>
+                <button
+                  type="button"
+                  onClick={() => setFocusSheetOpen(true)}
+                  aria-label="今日のフォーカスをすべて表示"
+                  title="すべて表示"
+                >
+                  <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 hover:text-primary transition-colors" />
+                </button>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
@@ -358,13 +415,25 @@ export function DashboardClient({
               )) : visibleTodos.length ? visibleTodos.map((todo) => {
                 const isCompleted = todo.status === "completed";
                 const isUrgent = isUrgentTodo(todo);
+                const customerName = todoCustomerName(todo);
                 return (
-                  <div key={todo.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg group cursor-pointer transition-colors ${isUrgent ? "hover:bg-rose-50" : "hover:bg-[#D8EDE4]/50"}`}>
+                  <button
+                    type="button"
+                    key={todo.id}
+                    onClick={() => openTodo(todo)}
+                    title={customerName ? `${customerName} の顧客画面を開く` : "内容を表示"}
+                    className={`flex items-center gap-2 py-1.5 px-2 rounded-lg group cursor-pointer transition-colors text-left min-w-0 ${isUrgent ? "hover:bg-rose-50" : "hover:bg-[#D8EDE4]/50"}`}
+                  >
                     <div className={`h-3.5 w-3.5 rounded shrink-0 border flex items-center justify-center transition-colors ${isCompleted ? "border-slate-300 bg-slate-100" : "border-slate-200 group-hover:border-slate-300"}`}>
                       {isCompleted && <Check className="h-2 w-2 text-slate-500" strokeWidth={3} />}
                     </div>
-                    <span className={`text-sm flex-1 truncate ${isCompleted ? "line-through text-slate-300" : isUrgent ? "text-slate-800 font-semibold" : "text-slate-700"}`}>
-                      {todo.title}
+                    <span className="flex-1 min-w-0 flex flex-col leading-tight">
+                      <span className={`text-sm truncate ${isCompleted ? "line-through text-slate-300" : isUrgent ? "text-slate-800 font-semibold" : "text-slate-700"}`}>
+                        {todo.title}
+                      </span>
+                      {customerName && (
+                        <span className="text-[10px] text-slate-400 truncate">{customerName}</span>
+                      )}
                     </span>
                     {isUrgent && (
                       <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1 py-0.5 shrink-0">
@@ -372,7 +441,7 @@ export function DashboardClient({
                       </span>
                     )}
                     {isUrgent && <span className="h-1.5 w-1.5 rounded-full bg-rose-400 shrink-0" />}
-                  </div>
+                  </button>
                 );
               }) : (
                 <div className="col-span-2 flex flex-col items-center gap-1 py-4">
@@ -999,6 +1068,30 @@ export function DashboardClient({
 
             <div className="border-t border-border/60 mb-3" />
 
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">文字サイズ</p>
+            <div className="px-2 mb-3 [&>div]:border-0 [&>div]:pt-0">
+              <FontSizeSelector compact />
+            </div>
+
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">表示倍率</p>
+            <div className="segmented-control w-full mb-3">
+              {DASHBOARD_ZOOMS.map((zoom) => (
+                <button
+                  key={zoom}
+                  type="button"
+                  onClick={() => applyDashboardZoom(zoom)}
+                  className={cn(
+                    "segmented-control-btn flex-1 text-xs",
+                    dashboardZoom === zoom && "segmented-control-btn-active",
+                  )}
+                >
+                  {zoom}%
+                </button>
+              ))}
+            </div>
+
+            <div className="border-t border-border/60 mb-3" />
+
             {/* KPI セクション（No.56: 表示ON/OFF + 上下ボタンで並び替え） */}
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">KPI指標（並び替え可）</p>
             <div className="space-y-0.5 mb-3">
@@ -1047,6 +1140,7 @@ export function DashboardClient({
         </div>
       </div>
 
+      <div className="space-y-3 md:space-y-4" style={{ zoom: dashboardZoom / 100 }}>
       {/* KPI row — 個別表示制御 + ユーザー設定順（No.56） */}
       {orderedKpis.some((k) => isVisible(k.id)) && (
         <KpiRow
@@ -1077,6 +1171,93 @@ export function DashboardClient({
               );
             })}
       </WidgetGrid>
+      </div>
+
+      {/* 今日のフォーカス: 右側スライドイン（BIへは飛ばさない） */}
+      <Sheet
+        open={focusSheetOpen}
+        onOpenChange={(v) => {
+          setFocusSheetOpen(v);
+          if (!v) setFocusDetail(null);
+        }}
+      >
+        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-0 p-0">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-4 w-4 text-slate-400" />
+              {focusDetail ? "ToDoの内容" : "今日のフォーカス"}
+            </SheetTitle>
+            <SheetDescription>
+              {focusDetail
+                ? "顧客が紐づいていないToDoです。"
+                : `期限が近い・優先度の高いToDo ${todos.length}件。行をクリックすると顧客画面へ移動します。`}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {focusDetail ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">件名</p>
+                  <p className="text-base font-semibold text-slate-800 mt-0.5">{focusDetail.title}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">内容</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap mt-0.5">
+                    {(focusDetail as { description?: string | null }).description?.trim() || "（内容は登録されていません）"}
+                  </p>
+                </div>
+                <div className="flex gap-4 text-xs text-slate-500">
+                  <span>期限: {focusDetail.due_date ? format(new Date(focusDetail.due_date), "M/d (E)", { locale: ja }) : "未設定"}</span>
+                  <span>優先度: {focusDetail.priority === "high" ? "高" : focusDetail.priority === "low" ? "低" : "中"}</span>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setFocusDetail(null)}>一覧に戻る</Button>
+              </div>
+            ) : todos.length === 0 ? (
+              <div className="flex flex-col items-center gap-1 py-10">
+                <CheckCircle2 className="h-6 w-6 text-slate-300" />
+                <p className="text-xs text-slate-400">今日のToDoはすべて完了しています</p>
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {todos.map((todo) => {
+                  const isUrgent = isUrgentTodo(todo);
+                  const customerName = todoCustomerName(todo);
+                  return (
+                    <li key={todo.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const customerId = (todo as { customer_id?: string | null }).customer_id;
+                          if (customerId) {
+                            setFocusSheetOpen(false);
+                            router.push(`/crm/${customerId}?tab=todos`);
+                          } else {
+                            setFocusDetail(todo);
+                          }
+                        }}
+                        className={cn(
+                          "w-full flex items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors",
+                          isUrgent ? "hover:bg-rose-50" : "hover:bg-slate-50",
+                        )}
+                      >
+                        <span className={cn("mt-1.5 h-1.5 w-1.5 rounded-full shrink-0", isUrgent ? "bg-rose-400" : "bg-slate-300")} />
+                        <span className="flex-1 min-w-0">
+                          <span className={cn("block text-sm truncate", isUrgent ? "font-semibold text-slate-800" : "text-slate-700")}>{todo.title}</span>
+                          <span className="block text-[11px] text-slate-400 truncate">
+                            {customerName ?? "顧客未設定"}
+                            {todo.due_date ? ` ・ 期限 ${format(new Date(todo.due_date), "M/d", { locale: ja })}` : ""}
+                          </span>
+                        </span>
+                        <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 shrink-0 mt-1" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* 爆弾アラートプレビュー */}
       {showBombPreview && (

@@ -711,7 +711,7 @@ export function OrdersTab({ constructionId, initialOrders, constructionStartDate
               </div>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-              勘定科目は任意です。担当者が空でも作成でき、未設定は経理の「勘定科目の確定」で後からまとめます。帳票データ（全銀）に出す前に未設定があると警告します。
+              勘定科目は任意です。担当者が空でも作成でき、未設定は経理が納品・検収の請求一覧で後から確定します。帳票データ（全銀）に出す前に未設定があると警告します。
             </div>
           </div>
 

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCloudSignConfig, sendToCloudSign } from "@/lib/integrations/cloudsign";
 import { createWorkflowRequest } from "@/lib/actions/workflow";
+import { describeStep, normalizeApprovalRoute, resolveApprovalRoute } from "@/lib/workflow-route";
 import { dispatchWebhook } from "@/lib/webhooks";
 import {
   findTemplate,
@@ -79,8 +80,6 @@ async function resolveDefaultApprovalApprovers(
   return ids;
 }
 
-type ApprovalRouteStep = { approver_id: string; step_order?: number };
-
 const NON_CONTRACT_WF_KEYS = new Set([
   "estimate_margin",
   "budget_approval",
@@ -96,13 +95,6 @@ function isContractWorkflowType(t: { key: string; name: string }): boolean {
   if (/^contract[_-]?/i.test(t.key)) return true;
   if (/契約/.test(t.key) || /契約/.test(t.name)) return true;
   return false;
-}
-
-function normalizeApprovalRoute(route: unknown): ApprovalRouteStep[] {
-  if (!Array.isArray(route)) return [];
-  return (route as ApprovalRouteStep[])
-    .filter((s) => s && typeof s.approver_id === "string" && s.approver_id)
-    .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0));
 }
 
 function scoreContractWorkflowType(t: {
@@ -144,7 +136,7 @@ export async function getContractApprovalWorkflowTypes(): Promise<ContractApprov
       .order("created_at"),
     supabase
       .from("profiles")
-      .select("id, display_name, role")
+      .select("id, display_name, role, department")
       .eq("company_id", company_id),
   ]);
 
@@ -156,18 +148,21 @@ export async function getContractApprovalWorkflowTypes(): Promise<ContractApprov
     .sort((a, b) => scoreContractWorkflowType(b) - scoreContractWorkflowType(a));
 
   return contractTypes.map((t) => {
-    const route = normalizeApprovalRoute(t.approval_route);
-    const approvalSteps = route.map((s, i) => {
-      const profile = profileById.get(s.approver_id);
-      const role = profile?.role ?? null;
-      return {
-        stepOrder: s.step_order ?? i + 1,
-        approverId: s.approver_id,
-        displayName: profile?.name ?? "（未設定）",
-        role,
-        isAdministration: role === "administration",
-      };
-    });
+    // 属性指名（ロール/部署）のステップは現在のメンバーへ解決してから表示する
+    const resolved = resolveApprovalRoute(t.approval_route, profiles ?? []);
+    const approvalSteps = resolved.steps
+      .filter((s) => s.approverId)
+      .map((s, i) => {
+        const profile = profileById.get(s.approverId as string);
+        const role = profile?.role ?? null;
+        return {
+          stepOrder: s.step.step_order ?? i + 1,
+          approverId: s.approverId as string,
+          displayName: profile?.name ?? "（未設定）",
+          role,
+          isAdministration: role === "administration",
+        };
+      });
     return {
       id: t.id,
       key: t.key,
@@ -834,9 +829,20 @@ export async function submitContractWorkflow(
       );
     }
 
-    const approvalRoute = normalizeApprovalRoute(type.approval_route);
-    let approverIds = approvalRoute.length > 0
-      ? approvalRoute.map((s) => s.approver_id)
+    const { data: routeProfiles } = await supabase
+      .from("profiles")
+      .select("id, display_name, role, department")
+      .eq("company_id", company_id);
+    const resolvedRoute = resolveApprovalRoute(type.approval_route, routeProfiles ?? [], { excludeUserId: user_id });
+    if (resolvedRoute.unresolved.length > 0) {
+      const missing = resolvedRoute.unresolved.map((s) => describeStep(s, routeProfiles ?? [])).join("、");
+      return actionFail(
+        `承認ルートの「${missing}」に該当するメンバーがいません。設定＞組織＞メンバーで属性を確認してください`,
+        "承認者を解決できませんでした",
+      );
+    }
+    let approverIds = resolvedRoute.approverIds.length > 0
+      ? resolvedRoute.approverIds
       : await resolveDefaultApprovalApprovers(supabase, company_id);
 
     if (approverIds.length === 0) {

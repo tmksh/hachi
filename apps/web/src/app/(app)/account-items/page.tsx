@@ -1,5 +1,5 @@
-import { AccountItemsClient } from "./account-items-client";
+import { redirect } from "next/navigation";
 
 export default function AccountItemsPage() {
-  return <AccountItemsClient />;
+  redirect("/fulfillment#account-items");
 }

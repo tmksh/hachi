@@ -92,6 +92,7 @@ function getDaysInMonth(d: Date): number {
 
 /* セル幅 */
 const CELL_W: Record<ViewMode, number> = { day: 32, week: 52, month: 28 };
+const WEEKDAY_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
 /* 左固定エリア幅（名前列 + 日付2列） */
 const COL_NAME  = 200;
 const COL_DATE  = 100;
@@ -109,11 +110,23 @@ const EMPTY_FORM = {
 
 /* ステータス色 */
 const BAR_COLORS: Record<string, string> = {
-  not_started: "bg-slate-300",
-  in_progress:  "bg-slate-400",
-  completed:    "bg-slate-300",
-  on_hold:      "bg-amber-300",
+  not_started: "bg-slate-400",
+  in_progress:  "bg-teal-500",
+  completed:    "bg-emerald-400",
+  on_hold:      "bg-amber-400",
 };
+
+/* 週末カラム: 土=青系 / 日=赤系（グレー一色だとバーと区別がつかない: No.148） */
+function weekendColumnClass(d: Date): string | null {
+  if (d.getDay() === 6) return "bg-sky-100/70";
+  if (d.getDay() === 0) return "bg-rose-100/70";
+  return null;
+}
+function weekendHeaderClass(d: Date): string {
+  if (d.getDay() === 6) return "bg-sky-100 text-sky-700";
+  if (d.getDay() === 0) return "bg-rose-100 text-rose-700";
+  return "text-slate-400";
+}
 
 /** 先行工程の終端 → 後続工程の始端（FS）を折れ線＋矢印で描画 */
 function buildDependencyPath(fromX: number, fromY: number, toX: number, toY: number): string {
@@ -143,7 +156,38 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
     setTasks(next);
     onScheduleChange?.(next, computeScheduleProgress(next));
   }
-  const [viewMode, setViewMode] = useState<ViewMode>("month");
+
+  /* BRIDGE AI の工程表ウィザードが登録した工程をリロードなしで反映 */
+  useEffect(() => {
+    const onCreated = (event: Event) => {
+      const detail = (event as CustomEvent<{ constructionId: string; tasks: Array<Partial<Task> & { id: string; name: string }> }>).detail;
+      if (!detail || detail.constructionId !== constructionId || !detail.tasks?.length) return;
+      const prev = tasksRef.current;
+      const known = new Set(prev.map(t => t.id));
+      const added: Task[] = detail.tasks
+        .filter(t => !known.has(t.id))
+        .map(t => ({
+          id: t.id,
+          name: t.name,
+          start_date: t.start_date ?? null,
+          end_date: t.end_date ?? null,
+          progress: Number(t.progress ?? 0),
+          status: t.status ?? "not_started",
+          contractor_name: t.contractor_name ?? null,
+          depends_on_task_id: t.depends_on_task_id ?? null,
+          sort_order: t.sort_order ?? undefined,
+        }));
+      if (added.length === 0) return;
+      commitTasks([...prev, ...added]);
+      toast.success(`工程表に ${added.length} 件の工程を追加しました`);
+    };
+    window.addEventListener("bridge-schedule-created", onCreated);
+    return () => window.removeEventListener("bridge-schedule-created", onCreated);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [constructionId]);
+
+  // デフォルトは日表示（No.147: 月表示だと日単位の工程が読めない）
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [dialog, setDialog]     = useState<"add" | "edit" | null>(null);
   const [editTarget, setEditTarget] = useState<Task | null>(null);
   const [form, setForm]         = useState(EMPTY_FORM);
@@ -308,9 +352,6 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
     if (viewMode === "week") return d.getDay() === 1; // 月曜
     return d.getDate() === 1 || d.getDate() % 5 === 0;
   }
-
-  /* 週末判定 */
-  function isWeekend(d: Date) { return d.getDay() === 0 || d.getDay() === 6; }
 
   /* CRUD */
   function openAdd() { setForm(EMPTY_FORM); setEditTarget(null); setDialog("add"); }
@@ -498,16 +539,18 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
                     {Array.from({ length: timelineDays }).map((_, i) => {
                       const d    = addDays(timelineStart, i);
                       const show = showDateLabel(d);
-                      const wknd = isWeekend(d);
                       const today = i === todayOff;
                       return (
                         <div key={i} style={{ width: cw }}
                           className={cn(
-                            "flex-shrink-0 flex items-center justify-center text-[10px] border-r border-border/30 font-medium select-none",
-                            wknd   ? "bg-slate-200 text-slate-600" : "text-slate-400",
+                            "flex-shrink-0 flex flex-col items-center justify-center text-[10px] border-r border-border/30 font-medium select-none leading-none",
+                            weekendHeaderClass(d),
                             today  && "bg-blue-500 text-white font-bold rounded-sm",
                           )}>
-                          {show ? d.getDate() : ""}
+                          <span>{show ? d.getDate() : ""}</span>
+                          {viewMode === "day" && (
+                            <span className="text-[8px] opacity-80">{WEEKDAY_JA[d.getDay()]}</span>
+                          )}
                         </div>
                       );
                     })}
@@ -627,8 +670,9 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
                       {/* 週末カラム */}
                       {Array.from({ length: timelineDays }).map((_, i) => {
                         const d = addDays(timelineStart, i);
-                        if (!isWeekend(d)) return null;
-                        return <div key={i} className="absolute top-0 bottom-0 bg-slate-200" style={{ left: i * cw, width: cw }} />;
+                        const wk = weekendColumnClass(d);
+                        if (!wk) return null;
+                        return <div key={i} className={cn("absolute top-0 bottom-0", wk)} style={{ left: i * cw, width: cw }} />;
                       })}
                       {/* 月区切り縦線 */}
                       {monthHeaders.map((m, i) => (

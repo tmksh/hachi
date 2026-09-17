@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useChatPanelOpen } from "@/contexts/chat-panel-context";
 
 /**
  * グリッドコンテナ幅に応じてデフォルトのカラムスパンを返す。
@@ -15,12 +14,15 @@ import { useChatPanelOpen } from "@/contexts/chat-panel-context";
 function computeDefaultCols(containerWidth: number): number {
   if (containerWidth >= 1050) return 3;
   if (containerWidth >= 600) return 4;
-  return 6;
+  if (containerWidth >= 420) return 6;
+  return 12;
 }
+
+/** これ未満の幅では1列積み（スマホ幅、またはチャット2枚展開時） */
+const STACK_WIDTH = 420;
 
 /** ウィジェットグリッドのコンテナ幅計測・チャット開閉・デフォルト列数算出 */
 export function useWidgetGridLayout() {
-  const chatOpen = useChatPanelOpen();
   const gridRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -37,7 +39,9 @@ export function useWidgetGridLayout() {
     return () => ro.disconnect();
   }, []);
 
-  const stackFullWidth = chatOpen && containerWidth > 0;
+  // チャット展開時は全カードを col-span-12 にせず、縮んだコンテナ幅から列数を再計算する
+  // （以前は全幅積みにしていたため勤怠カード等が極端に横長になっていた）
+  const stackFullWidth = containerWidth > 0 && containerWidth < STACK_WIDTH;
   const defaultCols = computeDefaultCols(containerWidth);
 
   return { gridRef, containerWidth, stackFullWidth, defaultCols };

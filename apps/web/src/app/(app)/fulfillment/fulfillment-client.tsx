@@ -8,7 +8,8 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
-import { fetchProcurementOrders, LIST_STALE_MS, QK } from "@/lib/queries/portal";
+import { fetchProcurementMasters, fetchProcurementOrders, LIST_STALE_MS, MASTER_STALE_MS, QK } from "@/lib/queries/portal";
+import { AccountItemsClient } from "@/app/(app)/account-items/account-items-client";
 import { ArrowUpDown, ChevronDown, ChevronUp, CircleCheck, ClipboardList, FileText, PackageCheck, Paperclip, Receipt } from "lucide-react";
 import { buildPaymentSchedule } from "@/lib/construction/payment-schedule";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ import {
   resendInvoiceUrl,
   uploadDeliveryAttachments,
   getProcurementFileUrl,
+  updateOrderAccountItem,
   type ProcurementAttachment,
   type ProcurementOrder,
 } from "@/lib/actions/procurement";
@@ -49,6 +51,7 @@ import {
   formatDateSlash,
   billedExclOf,
   inclOf,
+  invoiceAttachProgress,
   isPaperInvoice,
   taxOf,
   todayIso,
@@ -111,6 +114,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
   const { profile } = useAuth();
   const { canAccess } = useCompanyPermissions();
   const canAccount = profile?.role ? canAccess("fulfillment_approve", permissionRoleSlugs(profile)) : false;
+  const canEditAccount = profile?.role ? canAccess("account-items", permissionRoleSlugs(profile)) : false;
   const queryClient = useQueryClient();
   const { data: orders = [], isPending } = useQuery({
     queryKey: QK.procurementOrders,
@@ -119,6 +123,24 @@ export function FulfillmentClient({ initialOrders }: Props) {
     initialData: initialOrders,
     initialDataUpdatedAt: initialOrders ? querySeedAt : undefined,
   });
+  const { data: masters } = useQuery({
+    queryKey: QK.procurementMasters,
+    queryFn: fetchProcurementMasters,
+    staleTime: MASTER_STALE_MS,
+  });
+  const accountItems = masters?.accountItems ?? [];
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#account-items") return;
+    if (!canEditAccount) return;
+    const scroll = () => {
+      document.getElementById("account-items")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    scroll();
+    const t = window.setTimeout(scroll, 250);
+    return () => window.clearTimeout(t);
+  }, [canEditAccount, orders.length]);
   const setOrders = (updater: ProcurementOrder[] | ((prev: ProcurementOrder[]) => ProcurementOrder[])) => {
     queryClient.setQueryData<ProcurementOrder[]>(QK.procurementOrders, (prev = []) =>
       typeof updater === "function" ? updater(prev) : updater,
@@ -275,19 +297,41 @@ export function FulfillmentClient({ initialOrders }: Props) {
         </Button>
       </PageHeader>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-        {FLOW.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setStatus(s)}
-            className={`rounded-xl border px-3 py-2 text-left ${LEDGER_STATUS_META[s].bar} ${status === s ? "ring-2 ring-emerald-500" : ""}`}
-          >
-            <p className="text-[11px] font-semibold">{LEDGER_STATUS_META[s].label}</p>
-            <p className="text-lg font-bold tabular-nums">{counts[s]}</p>
-            <p className="text-[10px] opacity-80 leading-snug">{LEDGER_STATUS_META[s].nextActor}</p>
-          </button>
-        ))}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="px-3 py-2 border-b">
+          <p className="text-xs font-semibold">PDF添付〜支払い確定の進捗</p>
+          <p className="text-[11px] text-muted-foreground">いま多い段階をクリックすると、その行だけ表示します。</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5">
+          {FLOW.map((s, i) => {
+            const current = status === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                className={cn(
+                  "relative px-3 py-2.5 text-left border-t md:border-t-0",
+                  i > 0 && "md:border-l",
+                  LEDGER_STATUS_META[s].bar,
+                  current && "ring-2 ring-inset ring-emerald-500",
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                    counts[s] > 0 ? "bg-white/80 text-slate-800" : "bg-white/40 text-slate-500",
+                  )}>
+                    {i + 1}
+                  </span>
+                  <p className="text-[11px] font-semibold leading-tight">{LEDGER_STATUS_META[s].label}</p>
+                </div>
+                <p className="mt-1 text-lg font-bold tabular-nums">{counts[s]}</p>
+                <p className="text-[10px] opacity-80 leading-snug">{LEDGER_STATUS_META[s].nextActor}</p>
+              </button>
+            );
+          })}
+        </div>
       </div>
       {counts.delivered > 0 && (
         <button
@@ -339,6 +383,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
               <Th onClick={() => toggleSort("po")}>発注番号</Th>
               <Th onClick={() => toggleSort("project")}>案件</Th>
               <Th onClick={() => toggleSort("vendor")}>業者名</Th>
+              <th className="px-3 py-2.5 text-left">勘定科目</th>
               <Th onClick={() => toggleSort("amount")} className="text-right">発注金額（税込）</Th>
               <Th onClick={() => toggleSort("due")}>納品予定日</Th>
               <Th onClick={() => toggleSort("delivery")}>納品日（=取引日）</Th>
@@ -349,7 +394,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
           </thead>
           <tbody>
             {listed.length === 0 ? (
-              <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">対象の発注がありません。承認・締結後の発注書がここに並びます。</td></tr>
+              <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">対象の発注がありません。承認・締結後の発注書がここに並びます。</td></tr>
             ) : listed.map((o) => {
               const ls = deriveLedgerStatus(o);
               const meta = LEDGER_STATUS_META[ls];
@@ -403,6 +448,37 @@ export function FulfillmentClient({ initialOrders }: Props) {
                       {paper && <Badge className="bg-amber-200 text-amber-950 hover:bg-amber-200">紙発注</Badge>}
                     </div>
                   </td>
+                  <td className="px-3 py-2.5 min-w-[8.5rem]" onClick={(e) => e.stopPropagation()}>
+                    {canEditAccount ? (
+                      <Select
+                        value={o.account_item || "__unset__"}
+                        onValueChange={async (v) => {
+                          const next = v === "__unset__" ? null : v;
+                          try {
+                            const updated = await updateOrderAccountItem(o.id, next);
+                            replace(updated);
+                            toast.success("勘定科目を更新しました");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "勘定科目の更新に失敗しました");
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="未設定" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__unset__">未設定</SelectItem>
+                          {accountItems.map((item) => (
+                            <SelectItem key={item} value={item}>{item}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className={o.account_item ? "text-sm" : "text-xs text-muted-foreground"}>
+                        {o.account_item || "未設定"}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-right font-semibold tabular-nums whitespace-nowrap">{yen(inclOf(billedExclOf(o)))}</td>
                   <td className="px-3 py-2.5 tabular-nums text-muted-foreground whitespace-nowrap">{formatDateSlash(o.completion_date ?? o.end_date)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-medium text-orange-700 whitespace-nowrap">{formatDateSlash(o.delivery_date)}</td>
@@ -424,7 +500,7 @@ export function FulfillmentClient({ initialOrders }: Props) {
                 </tr>
                 {isExpanded && (
                   <tr className="bg-slate-50">
-                    <td colSpan={10} className="px-3 pb-4 pt-0" onClick={(e) => e.stopPropagation()}>
+                    <td colSpan={11} className="px-3 pb-4 pt-0" onClick={(e) => e.stopPropagation()}>
                       <OrderExpandPanel
                         order={o}
                         status={ls}
@@ -452,6 +528,12 @@ export function FulfillmentClient({ initialOrders }: Props) {
           選択した旧データ（検収待ち）を一括で納品検収
         </Button>
       </div>
+
+      {canEditAccount && (
+        <div id="account-items" className="rounded-xl border bg-card p-4 scroll-mt-20">
+          <AccountItemsClient embedded initialOrders={orders} accountItems={accountItems} />
+        </div>
+      )}
 
       <DeliveryDialog
         key={deliveryTarget?.id ?? "delivery-closed"}
@@ -768,6 +850,40 @@ const EXPAND_ACCENT: Record<LedgerStatus, string> = {
   payment_approved: "border-l-green-600",
 };
 
+function InvoiceAttachStepper({
+  order,
+  status,
+}: {
+  order: ProcurementOrder;
+  status: LedgerStatus;
+}) {
+  const steps = invoiceAttachProgress(order, status);
+  return (
+    <div className="px-4 py-3 border-b bg-white">
+      <p className="text-[11px] font-semibold text-slate-500 mb-2">添付・確認の進捗</p>
+      <ol className="flex flex-wrap items-center gap-1.5">
+        {steps.map((step, i) => (
+          <li key={step.key} className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                step.done && "border-emerald-200 bg-emerald-50 text-emerald-800",
+                step.current && !step.done && "border-sky-300 bg-sky-50 text-sky-900",
+                !step.done && !step.current && "border-slate-200 bg-slate-50 text-slate-500",
+              )}
+            >
+              {step.done ? <CircleCheck className="h-3 w-3" /> : <span className="tabular-nums">{i + 1}</span>}
+              {step.label}
+              {step.current && !step.done && <span className="text-[10px] font-normal">いま</span>}
+            </span>
+            {i < steps.length - 1 && <span className="text-slate-300">→</span>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function OrderExpandPanel({
   order,
   status,
@@ -832,6 +948,8 @@ function OrderExpandPanel({
           {paper && <Badge className="bg-amber-100 text-amber-950 hover:bg-amber-100">紙発注</Badge>}
         </div>
       </div>
+
+      <InvoiceAttachStepper order={order} status={status} />
 
       <div className={cn(
         "grid divide-y md:divide-y-0 md:divide-x",
@@ -1389,7 +1507,7 @@ function ReturnInvoiceDialog({
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            担当ディレクターへ通知し、対応するまで支払い確定に進めません。
+            担当へToDoと社内チャットを送り、対応するまで支払い確定に進めません。
             {assignee ? ` 通知先: ${assignee.name}` : " 工事に担当者が未設定のため、通知できない場合があります。"}
           </p>
           <div className="space-y-1">
@@ -1416,9 +1534,11 @@ function ReturnInvoiceDialog({
                 return;
               }
               onSaved(res.order);
-              toast.success(res.notified
-                ? "差し戻しました。担当ディレクターへ通知しました"
-                : "差し戻しました。担当者が未設定のため通知は送っていません");
+              toast.success(res.chatSent
+                ? "差し戻しました。ToDoと社内チャットで担当へ送りました"
+                : res.notified
+                  ? "差し戻しました。担当へToDoを送りました"
+                  : "差し戻しました。担当者が未設定のため通知は送っていません");
             }}
           >
             差し戻す

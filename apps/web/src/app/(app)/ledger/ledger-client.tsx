@@ -525,7 +525,7 @@ export function LedgerClient({ initialOrders, masters: initialMasters }: Props) 
             勘定科目が未確定の請求が {unsetAccounts} 件あります。このまま出すと科目別集計が合いません。全銀フォーマットには科目は不要です。
           </p>
           <Button asChild size="sm" className="bg-red-600 hover:bg-red-700">
-            <Link href="/account-items">勘定科目の確定へ</Link>
+            <Link href="/fulfillment#account-items">納品・検収で勘定科目を確定</Link>
           </Button>
         </div>
       )}

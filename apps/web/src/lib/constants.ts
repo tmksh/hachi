@@ -26,7 +26,6 @@ export const NAV_GROUPS = [
       { key: "constructions", label: "工事管理", href: "/constructions" },
       { key: "fulfillment", label: "納品・検収", href: "/fulfillment" },
       { key: "ledger", label: "帳票データ作成", href: "/ledger" },
-      { key: "account-items", label: "勘定科目の確定", href: "/account-items" },
     ],
   },
   {

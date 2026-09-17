@@ -94,6 +94,7 @@ const ALLOWED_TABS = ["overview", "entry", "deals", "recording", "todo", "schedu
 
 function normalizeMainTab(tab: string | null) {
   if (tab === "files") return "documents";
+  if (tab === "todos") return "todo";
   return tab;
 }
 
@@ -159,7 +160,6 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
   );
 
   const isCorp = data.customer_type === "corporation" || !!data.company_name;
-  const totalDeal = related?.deals.reduce((s, d) => s + (d.value ?? 0), 0) ?? 0;
   const totalEst = related?.estimates.reduce((s, e) => s + (e.total ?? 0), 0) ?? 0;
   const totalCon = related?.contracts.reduce((s, c) => s + (c.amount ?? 0), 0) ?? 0;
 
@@ -424,7 +424,7 @@ function CrmDetailPageContent({ initialData, initialRelated, initialMasters }: C
 
           <KpiRow
             items={[
-              { label: "商談", value: related?.deals.length ?? 0, sub: `¥${(totalDeal / 10000).toFixed(0)}万`, icon: Briefcase },
+              { label: "商談", value: related?.deals.length ?? 0, sub: "件", icon: Briefcase },
               { label: "見積", value: related?.estimates.length ?? 0, sub: `¥${(totalEst / 10000).toFixed(0)}万`, icon: FileText },
               { label: "契約", value: related?.contracts.length ?? 0, sub: `¥${(totalCon / 10000).toFixed(0)}万`, icon: ClipboardList },
               {

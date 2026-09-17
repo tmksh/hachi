@@ -13,6 +13,22 @@ import {
 import { createWorkflowRequest } from "@/lib/actions/workflow";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { isWorkflowRemanded } from "@/lib/status-config";
+import { resolveApprovalRoute } from "@/lib/workflow-route";
+
+/** 承認ルート定義（指名＋属性指名）を現メンバーの承認者IDへ解決。未設定なら空配列 */
+async function resolveRouteApproverIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyId: string,
+  route: unknown,
+  requesterId: string,
+): Promise<string[]> {
+  if (!Array.isArray(route) || route.length === 0) return [];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, display_name, role, department")
+    .eq("company_id", companyId);
+  return resolveApprovalRoute(route, profiles ?? [], { excludeUserId: requesterId }).approverIds;
+}
 
 async function getCompanyContext() {
   const supabase = await createClient();
@@ -446,14 +462,8 @@ export async function submitEstimateApproval(input: {
       wfType = created;
     }
 
-    const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
-    // ルート未設定時はダイアログで選んだ承認者を使う
-    const routeIds = approvalRoute.length > 0
-      ? approvalRoute
-        .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0))
-        .map((s) => s.approver_id)
-        .filter(Boolean)
-      : [];
+    // ルート未設定時はダイアログで選んだ承認者を使う（属性指名ステップは現メンバーへ解決）
+    const routeIds = await resolveRouteApproverIds(supabase, company_id, wfType.approval_route, user_id);
     const approverIds = routeIds.length > 0
       ? routeIds
       : [input.approverId].filter(Boolean);
@@ -802,10 +812,8 @@ export async function submitBudgetApproval(input: {
       wfType = created;
     }
 
-    const approvalRoute = (wfType.approval_route ?? []) as Array<{ approver_id: string; step_order?: number }>;
-    const approverIds = approvalRoute.length > 0
-      ? approvalRoute.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0)).map((s) => s.approver_id)
-      : [input.approverId];
+    const routeIds = await resolveRouteApproverIds(supabase, company_id, wfType.approval_route, user_id);
+    const approverIds = routeIds.length > 0 ? routeIds : [input.approverId];
 
     const created = await createWorkflowRequest({
       type_id: wfType.id,
