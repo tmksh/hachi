@@ -1,7 +1,9 @@
 "use client";
 
 import { useQuerySeedAt } from "@/hooks/use-query-seed-at";
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
+import { loadPdfDocument, PdfPageCanvas } from "@/components/settings/pdf-page-canvas";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -760,7 +762,7 @@ const EXPAND_ACCENT: Record<LedgerStatus, string> = {
   none: "border-l-slate-300",
   ordered: "border-l-slate-400",
   delivered: "border-l-orange-400",
-  inspected: "border-l-emerald-500",
+  inspected: "border-l-[var(--brand-dark)]",
   invoice_received: "border-l-sky-500",
   confirmed: "border-l-violet-500",
   payment_approved: "border-l-green-600",
@@ -962,21 +964,117 @@ function OrderExpandPanel({
   );
 }
 
+function previewKind(fileName: string, mime?: string | null) {
+  if (mime === "application/pdf" || /\.pdf$/i.test(fileName)) return "pdf" as const;
+  if (mime?.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(fileName)) return "image" as const;
+  return "other" as const;
+}
+
+function invoicePreviewBlob(file: File, kind: "pdf" | "image" | "other") {
+  if (kind === "pdf" && file.type !== "application/pdf") {
+    return new Blob([file], { type: "application/pdf" });
+  }
+  return file;
+}
+
+function InvoicePdfPages({ source }: { source: string | ArrayBuffer }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [width, setWidth] = useState(0);
+  const [ratios, setRatios] = useState<number[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loaded: PDFDocumentProxy | null = null;
+    setDoc(null);
+    setError(null);
+    setRatios([]);
+    void loadPdfDocument(source)
+      .then((next) => {
+        if (cancelled) {
+          void next.destroy();
+          return;
+        }
+        loaded = next;
+        setDoc(next);
+      })
+      .catch(() => {
+        if (!cancelled) setError("PDFを表示できません");
+      });
+    return () => {
+      cancelled = true;
+      void loaded?.destroy();
+    };
+  }, [source]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const sync = () => setWidth(Math.floor(el.clientWidth));
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [doc]);
+
+  if (error) return <p className="text-xs text-red-600">{error}</p>;
+  if (!doc) return <p className="text-xs text-muted-foreground">読み込み中…</p>;
+
+  return (
+    <div
+      ref={wrapRef}
+      className="max-h-[min(70vh,560px)] space-y-2 overflow-y-auto rounded-lg border bg-slate-100 p-2"
+    >
+      {Array.from({ length: doc.numPages }, (_, i) => {
+        const ratio = ratios[i] || 1.414;
+        return (
+          <div key={i} className="relative w-full overflow-hidden bg-white shadow-sm" style={{ aspectRatio: `1 / ${ratio}` }}>
+            {width > 0 && (
+              <PdfPageCanvas
+                doc={doc}
+                pageNumber={i + 1}
+                width={width}
+                className="absolute inset-0 h-full w-full"
+                onRendered={(size) => {
+                  const next = size.height / Math.max(size.width, 1);
+                  setRatios((prev) => {
+                    if (prev[i] && Math.abs(prev[i] - next) < 0.01) return prev;
+                    const copy = prev.slice();
+                    copy[i] = next;
+                    return copy;
+                  });
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function InvoiceFilePreview({ path, file }: { path?: string | null; file?: File | null }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [pdfSource, setPdfSource] = useState<string | ArrayBuffer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileName = file?.name ?? path?.split("/").pop() ?? "請求書";
-  const isPdf = file?.type === "application/pdf" || /\.pdf$/i.test(fileName);
-  const isImage = file?.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(fileName);
+  const kind = previewKind(fileName, file?.type);
 
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
     setUrl(null);
+    setPdfSource(null);
     setError(null);
     if (file) {
-      objectUrl = URL.createObjectURL(file);
+      objectUrl = URL.createObjectURL(invoicePreviewBlob(file, kind));
       setUrl(objectUrl);
+      if (kind === "pdf") {
+        void file.arrayBuffer().then((buf) => {
+          if (!cancelled) setPdfSource(buf);
+        });
+      }
       return () => {
         cancelled = true;
         URL.revokeObjectURL(objectUrl!);
@@ -990,9 +1088,10 @@ function InvoiceFilePreview({ path, file }: { path?: string | null; file?: File 
         return;
       }
       setUrl(res.url);
+      if (kind === "pdf") setPdfSource(res.url);
     });
     return () => { cancelled = true; };
-  }, [path, file]);
+  }, [path, file, kind]);
 
   if (!file && !path) {
     return <p className="text-xs text-muted-foreground">PDFを選ぶとここに表示されます</p>;
@@ -1014,15 +1113,13 @@ function InvoiceFilePreview({ path, file }: { path?: string | null; file?: File 
         </Button>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      {!error && !url && <p className="text-xs text-muted-foreground">読み込み中…</p>}
-      {url && isPdf && (
-        <iframe title="請求書PDF" src={url} className="w-full h-[min(70vh,560px)] rounded-lg border bg-white" />
-      )}
-      {url && isImage && (
+      {!error && kind === "pdf" && !pdfSource && <p className="text-xs text-muted-foreground">読み込み中…</p>}
+      {kind === "pdf" && pdfSource && <InvoicePdfPages source={pdfSource} />}
+      {url && kind === "image" && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt="請求書" className="max-h-[min(70vh,560px)] w-full object-contain rounded-lg border bg-white" />
       )}
-      {url && !isPdf && !isImage && (
+      {url && kind === "other" && (
         <p className="text-xs text-muted-foreground">プレビューできない形式です。「別タブで開く」から確認してください。</p>
       )}
     </div>

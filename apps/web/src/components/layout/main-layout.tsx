@@ -49,7 +49,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const isAdminLogin = pathname === "/admin/login";
   const isAdminConsole = (pathname?.startsWith("/admin") ?? false) && !isAdminLogin;
   const pageBg = TEAL_PAGE_BG;
-  const [expanded, setExpanded] = useState(isAdminConsole);
+  const [expanded, setExpanded] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [bridgeSeed, setBridgeSeed] = useState<BridgeSeed | null>(null);
   const [internalChatSeed, setInternalChatSeed] = useState<InternalChatSeed | null>(null);

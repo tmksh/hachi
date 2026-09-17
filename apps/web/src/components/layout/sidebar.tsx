@@ -22,11 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   LayoutDashboard,
   Users,
   Factory,
@@ -142,16 +137,8 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
   }), [router, queryClient]);
   useEffect(() => () => navIntent.cancel(), [navIntent]);
   const prefetchNav = (href: string) => navIntent.schedule(href);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
-  /** 折りたたみ時: 選択中グループの詳細メニュー */
-  const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
+  const [userOpenGroup, setUserOpenGroup] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-
-  const [previousPathname, setPreviousPathname] = useState(pathname);
-  if (previousPathname !== pathname) {
-    setPreviousPathname(pathname);
-    setFlyoutGroup(null);
-  }
 
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -342,8 +329,32 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
     [profile, canAccess],
   );
 
+  const pathGroupKey = useMemo(
+    () =>
+      visibleGroups.find((g) =>
+        g.items.some((item) =>
+          item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href),
+        ),
+      )?.key ?? null,
+    [pathname, visibleGroups],
+  );
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
+    setUserOpenGroup(null);
+  }
+  const openGroup = userOpenGroup ?? pathGroupKey;
+
   const toggleGroup = (key: string) => {
-    setOpenGroup((prev) => prev === key ? null : key);
+    setUserOpenGroup((prev) => {
+      const current = prev ?? pathGroupKey;
+      return current === key ? null : key;
+    });
+  };
+
+  const openGroupFromCollapsed = (key: string) => {
+    setUserOpenGroup(key);
+    onExpandedChange(true);
   };
 
   const sidebarActiveItem = "text-white font-medium shadow-sm";
@@ -460,70 +471,24 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
                         </div>
                       )}
                   </div>
-                ) : active ? (
-                  /* 折りたたみ＋選択中: 再クリックで詳細メニュー */
-                  <Popover
-                    open={flyoutGroup === group.key}
-                    onOpenChange={(open) => setFlyoutGroup(open ? group.key : null)}
-                  >
-                    <PopoverTrigger asChild>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <button
                         type="button"
                         aria-label={group.label}
+                        onClick={() => openGroupFromCollapsed(group.key)}
                         className={cn(
                           "relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover",
-                          sidebarActiveItem,
+                          active ? sidebarActiveItem : "text-muted-foreground",
                         )}
-                        style={sidebarActiveStyle}
+                        style={active ? sidebarActiveStyle : undefined}
                       >
                         {Icon && <Icon className="h-5 w-5" />}
-                        <div
-                          className={cn(
-                            "absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[2px] w-1 h-5 rounded-r-full",
-                            sidebarActiveIndicator,
-                          )}
-                        />
                       </button>
-                    </PopoverTrigger>
-                    <PopoverContent side="right" align="start" sideOffset={8} className="w-52 p-2">
-                      <p className="px-2 pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        {group.label}
-                      </p>
-                      <div className="space-y-0.5">
-                        {group.items.map((item) => (
-                          <Link
-                            key={item.key}
-                            href={item.href}
-                            prefetch={false}
-                            onMouseEnter={() => prefetchNav(item.href)}
-                            onMouseLeave={navIntent.cancel}
-                            onFocus={() => navIntent.now(item.href)}
-                            onClick={() => setFlyoutGroup(null)}
-                            className={cn(
-                              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors block sidebar-nav-hover",
-                              isActive(item.href) ? sidebarActiveSubItem : "text-foreground",
-                            )}
-                            style={isActive(item.href) ? sidebarActiveStyle : undefined}
-                          >
-                            {item.label}
-                          </Link>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  /* 折りたたみ＋未選択: 先頭ページへ遷移のみ */
-                  <Link
-                    href={group.items[0]?.href ?? "#"}
-                    prefetch={false}
-                    onMouseEnter={() => group.items[0] && prefetchNav(group.items[0].href)}
-                    onMouseLeave={navIntent.cancel}
-                    onFocus={() => group.items[0] && navIntent.now(group.items[0].href)}
-                    aria-label={group.label}
-                    className="relative flex h-11 w-11 items-center justify-center rounded-xl sidebar-nav-hover text-muted-foreground"
-                  >
-                    {Icon && <Icon className="h-5 w-5" />}
-                  </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{group.label}</TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             );

@@ -25,7 +25,7 @@ export async function loadPdfDocument(src: string | ArrayBuffer): Promise<PDFDoc
   const task =
     typeof src === "string"
       ? pdfjs.getDocument(src)
-      : pdfjs.getDocument({ data: new Uint8Array(src) });
+      : pdfjs.getDocument({ data: new Uint8Array(src.slice(0)) });
   return task.promise;
 }
 
