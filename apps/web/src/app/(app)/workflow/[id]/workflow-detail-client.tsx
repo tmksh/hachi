@@ -31,8 +31,8 @@ import {
   getWorkflowApprovalSupport,
   resubmitWorkflowRequest,
   cancelWorkflowRequest,
-  type FieldDef,
 } from "@/lib/actions/workflow";
+import type { FieldDef } from "@/lib/workflow-route";
 import { fetchWorkflowRequest, QK } from "@/lib/queries/portal";
 import { saveContractAdminSupplement } from "@/lib/actions/contract-features";
 import type { ApprovalSupportResult } from "@/lib/integrations/linq-ai/types";

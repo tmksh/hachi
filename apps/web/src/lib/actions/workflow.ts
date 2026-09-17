@@ -5,7 +5,7 @@ import { invalidateMyCompanyCache } from "@/lib/supabase/auth-context";
 import { dispatchWebhook } from "@/lib/webhooks";
 import type { WorkflowRequest, WorkflowStep } from "@/lib/database.types";
 import { STANDALONE_WORKFLOW_KEYS } from "@/lib/tenant-host";
-import type { ApprovalStep } from "@/lib/workflow-route";
+import type { ApprovalStep, FieldDef } from "@/lib/workflow-route";
 
 /** PostgrestError を素のまま throw すると本番で Server Components render エラーに化ける */
 function actionError(
@@ -1220,13 +1220,3 @@ export async function deleteWorkflowType(id: string) {
     .eq("id", id);
   if (updErr) throw actionError(updErr ?? delErr, "ワークフロー種別の削除に失敗しました");
 }
-
-export type FieldDef = {
-  key: string;
-  label: string;
-  type: "text" | "number" | "date" | "textarea" | "select";
-  required?: boolean;
-  options?: string[];
-};
-
-export type { ApprovalStep };

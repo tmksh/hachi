@@ -37,7 +37,6 @@ import {
   createWorkflowType,
   updateWorkflowType,
   deleteWorkflowType,
-  type FieldDef,
 } from "@/lib/actions/workflow";
 import { fetchWorkflowTypes } from "@/lib/queries/portal";
 import { fetchProfiles } from "@/lib/queries/lists";
@@ -48,6 +47,7 @@ import {
   matchProfiles,
   normalizeApprovalRoute,
   type ApprovalStep,
+  type FieldDef,
 } from "@/lib/workflow-route";
 
 type WfType = Awaited<ReturnType<typeof fetchWorkflowTypes>>[number];

@@ -15,6 +15,14 @@ export type ApprovalStep = {
   label?: string | null;
 };
 
+export type FieldDef = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "textarea" | "select";
+  required?: boolean;
+  options?: string[];
+};
+
 export type RouteProfile = {
   id: string;
   display_name?: string | null;

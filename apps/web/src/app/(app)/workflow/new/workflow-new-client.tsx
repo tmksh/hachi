@@ -18,11 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, Save } from "lucide-react";
-import {
-  createWorkflowRequest,
-  type FieldDef,
-} from "@/lib/actions/workflow";
-import { describeStep, resolveApprovalRoute, type ResolvedRoute } from "@/lib/workflow-route";
+import { createWorkflowRequest } from "@/lib/actions/workflow";
+import { describeStep, resolveApprovalRoute, type FieldDef, type ResolvedRoute } from "@/lib/workflow-route";
 import { QK } from "@/lib/queries/portal";
 import type { fetchWorkflowTypes } from "@/lib/queries/portal";
 
