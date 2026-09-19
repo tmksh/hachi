@@ -171,6 +171,7 @@ export function PdfBuilderEditClient({
   initialPdfUrl,
   customFieldKeys = [],
   onSaveTemplate,
+  onSaved,
   previewContext = PREVIEW_CONTEXT,
 }: {
   id: string;
@@ -179,6 +180,7 @@ export function PdfBuilderEditClient({
   initialPdfUrl: string | null;
   customFieldKeys?: string[];
   onSaveTemplate?: (template: PdfFormTemplate) => Promise<void>;
+  onSaved?: () => void;
   previewContext?: FillContext;
 }) {
   const router = useRouter();
@@ -209,18 +211,25 @@ export function PdfBuilderEditClient({
   const pageSlots = allPageSlots[activePage] ?? [];
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfSource, setPdfSource] = useState<string | null>(initialPdfUrl);
+  const [pdfRevision, setPdfRevision] = useState(initialTemplate?.updatedAt ?? "");
   const localPdfUrlRef = useRef<string | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   const issues = pdfMappingIssues(fields, allPageSlots);
   const draftTemplate: PdfFormTemplate = {
     id: isNew ? "new" : id, name: name.trim(), docType,
     isActive: initialTemplate?.isActive ?? false,
     storagePath, fileName, pageCount: pageSizes.length, pageSizes, fields,
-    createdAt: initialTemplate?.createdAt ?? "", updatedAt: initialTemplate?.updatedAt ?? "",
+    createdAt: initialTemplate?.createdAt ?? "", updatedAt: pdfRevision || initialTemplate?.updatedAt || "",
   };
   const configurationIssues = validatePdfTemplate(draftTemplate);
   useEffect(() => () => {
     if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
   }, []);
+
+  useEffect(() => {
+    if (localPdfUrlRef.current) return;
+    setPdfSource(initialPdfUrl);
+  }, [initialPdfUrl]);
 
   // ─── サーバーから受け取った PDF をクライアントで描画 ───
   useEffect(() => {
@@ -278,6 +287,7 @@ export function PdfBuilderEditClient({
       if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
       localPdfUrlRef.current = URL.createObjectURL(file);
       setPdfSource(localPdfUrlRef.current);
+      setPdfRevision(new Date().toISOString());
       setDoc(d);
       setPageSizes(sizes);
       setStoragePath(path);
@@ -286,6 +296,7 @@ export function PdfBuilderEditClient({
       if (name === "新規テンプレート") {
         setName(file.name.replace(/\.pdf$/i, ""));
       }
+      if (doc) toast.success("PDFを差し替えました。保存すると書類作成にも反映されます");
     } catch (e: unknown) {
       toast.error(`インポート失敗: ${e instanceof Error ? e.message : "不明なエラー"}`);
     } finally {
@@ -438,6 +449,7 @@ export function PdfBuilderEditClient({
       };
       if (onSaveTemplate) await onSaveTemplate(tpl);
       else await savePdfFormTemplate(tpl);
+      onSaved?.();
       toast.success("保存しました");
       if (!onSaveTemplate) router.push("/settings?tab=pdf_builder");
     } catch (e: unknown) {
@@ -506,6 +518,24 @@ export function PdfBuilderEditClient({
             ))}</select>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+        <input
+          ref={replaceInputRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void handleFile(f);
+          }}
+        />
+        {doc && (
+          <Button size="sm" variant="outline" disabled={uploading || analyzing || !!pendingField} onClick={() => replaceInputRef.current?.click()}>
+            {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
+            PDFを差し替え
+          </Button>
+        )}
         <Button size="sm" variant="outline" disabled={!doc || analyzing || analysisFailed || !!pendingField} onClick={() => setPreviewOpen(true)}><Eye className="mr-1 h-4 w-4" />入力プレビュー</Button>
         <Button size="sm" onClick={handleSave} disabled={saving || loading || analyzing || analysisFailed || !!pendingField || !doc || !storagePath}>
           {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}

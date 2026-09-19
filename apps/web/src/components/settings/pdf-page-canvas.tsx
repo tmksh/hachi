@@ -19,14 +19,20 @@ export async function loadPdfjs() {
   return pdfjsPromise;
 }
 
+/** 署名URLのブラウザキャッシュを避け、常に最新のPDF本文を読む */
+export const PDF_DOCUMENT_FETCH_INIT: RequestInit = { cache: "no-store" };
+
+export async function readPdfSourceBytes(src: string): Promise<Uint8Array> {
+  const res = await fetch(src, PDF_DOCUMENT_FETCH_INIT);
+  if (!res.ok) throw new Error("PDFを取得できませんでした");
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 /** URL または ArrayBuffer から PDFDocumentProxy を読み込む */
 export async function loadPdfDocument(src: string | ArrayBuffer): Promise<PDFDocumentProxy> {
   const pdfjs = await loadPdfjs();
-  const task =
-    typeof src === "string"
-      ? pdfjs.getDocument(src)
-      : pdfjs.getDocument({ data: new Uint8Array(src.slice(0)) });
-  return task.promise;
+  const data = typeof src === "string" ? await readPdfSourceBytes(src) : new Uint8Array(src.slice(0));
+  return pdfjs.getDocument({ data }).promise;
 }
 
 type Props = {
@@ -37,8 +43,8 @@ type Props = {
   onRendered?: (size: { width: number; height: number }) => void;
   className?: string;
   /**
-   * PDF 注釈（AcroForm の見た目など）を描画するか。
-   * 差し込みプレビューでは HTML オーバーレイと二重になるため false にする。
+   * PDF注釈を描画するか。白塗り・図形注釈は編集画面と同じく含める。
+   * フォーム項目の見た目は HTML オーバーレイが上に乗る。
    */
   renderAnnotations?: boolean;
 };

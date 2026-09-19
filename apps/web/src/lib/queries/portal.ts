@@ -467,6 +467,11 @@ export async function fetchPdfFormTemplates() {
   return resolvePdfFormTemplates(raw);
 }
 
+export async function fetchLatestPdfFormTemplate(id: string) {
+  const list = await fetchPdfFormTemplates();
+  return { list, template: list.find((t) => t.id === id) ?? null };
+}
+
 export async function fetchFinancialsBundle() {
   const supabase = createClient();
   const [items, { data: statements }, { data: settings }] = await Promise.all([

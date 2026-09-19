@@ -175,6 +175,13 @@ test('print document preserves physical page sizes for portrait, landscape and A
   assert.ok(html.includes('.sheet:last-child { break-after:auto; }'));
 });
 
+test('preview remounts when the stored PDF path or revision changes', () => {
+  const prev = { id: 'tpl', storagePath: 'pdf-form-templates/old.pdf', updatedAt: '2026-09-01T00:00:00Z' };
+  const next = { ...prev, storagePath: 'pdf-form-templates/new.pdf', updatedAt: '2026-09-19T00:00:00Z' };
+  assert.notEqual(api.pdfFormDocumentKey(prev), api.pdfFormDocumentKey(next));
+  assert.notEqual(api.pdfFormDocumentKey(next), api.pdfFormDocumentKey(next, 'blob:local'));
+});
+
 test('all six fixture definitions validate and keep all 65 distinct fields after saving', () => {
   const patterns=JSON.parse(fs.readFileSync('scripts/fixtures/pdf-patterns/patterns.json','utf8'));
   assert.equal(patterns.length,6);

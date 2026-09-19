@@ -33,7 +33,7 @@ import {
 } from "@/lib/contract-document-archive";
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
 import { ContractDocumentEditorLayout } from "@/components/contracts/contract-document-editor-layout";
-import { fetchPdfFormTemplates } from "@/lib/queries/portal";
+import { fetchLatestPdfFormTemplate, fetchPdfFormTemplates } from "@/lib/queries/portal";
 import { buildFillContext, type PdfFormTemplate } from "@/lib/pdf-form-template";
 import type { Customer } from "@/lib/database.types";
 import { PdfFormFiller } from "@/components/settings/pdf-form-filler";
@@ -144,7 +144,10 @@ export function ContractTab({ constructionId, customerId, constructionNo, fillCu
         </div>
         <div className="flex items-center gap-2">
           {formTemplates.length > 0 && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setFormPicker(true)}>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => {
+              void fetchPdfFormTemplates().then(setFormTemplates).catch(() => {});
+              setFormPicker(true);
+            }}>
               <Download className="h-3.5 w-3.5" />PDFフォームで出力
             </Button>
           )}
@@ -207,7 +210,12 @@ export function ContractTab({ constructionId, customerId, constructionNo, fillCu
                 key={t.id}
                 onClick={() => {
                   setFormPicker(false);
-                  setFillerTpl(t);
+                  void fetchLatestPdfFormTemplate(t.id)
+                    .then(({ list, template }) => {
+                      setFormTemplates(list);
+                      setFillerTpl(template ?? t);
+                    })
+                    .catch(() => setFillerTpl(t));
                 }}
                 className="flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-muted"
               >

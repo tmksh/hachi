@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { PageLoadingFallback } from "@/components/shared/page-loading-fallback";
 import type { PdfFormDocType } from "@/lib/pdf-form-template";
@@ -17,6 +17,7 @@ import { PdfBuilderEditClient } from "./pdf-builder-edit-client";
 function PdfBuilderEditPageContent() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const initDocType = (searchParams.get("type") ?? "contract") as PdfFormDocType;
   const isNew = id === "new";
 
@@ -28,7 +29,7 @@ function PdfBuilderEditPageContent() {
   const initialTemplate = isNew ? null : templates?.find((t) => t.id === id) ?? null;
 
   const { data: pdfUrl, isPending: urlPending } = useQuery({
-    queryKey: ["pdf-template-url", initialTemplate?.storagePath ?? ""],
+    queryKey: ["pdf-template-url", initialTemplate?.storagePath ?? "", initialTemplate?.updatedAt ?? ""],
     queryFn: () =>
       initialTemplate
         ? getSignedStorageUrl("documents", initialTemplate.storagePath).catch(() => null)
@@ -48,11 +49,16 @@ function PdfBuilderEditPageContent() {
 
   return (
     <PdfBuilderEditClient
+      key={`${initialTemplate?.id ?? id}:${initialTemplate?.storagePath ?? ""}:${initialTemplate?.updatedAt ?? ""}`}
       id={id}
       initDocType={initDocType}
       initialTemplate={initialTemplate}
       initialPdfUrl={pdfUrl ?? null}
       customFieldKeys={customFieldKeys ?? []}
+      onSaved={() => {
+        void queryClient.invalidateQueries({ queryKey: QK.pdfTemplates });
+        void queryClient.invalidateQueries({ queryKey: ["pdf-template-url"] });
+      }}
     />
   );
 }

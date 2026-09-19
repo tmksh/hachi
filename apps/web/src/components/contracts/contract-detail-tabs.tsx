@@ -41,7 +41,7 @@ import { ContractDocumentEditorLayout } from "@/components/contracts/contract-do
 import { fetchCompany } from "@/lib/queries/portal";
 import { resolvePdfTemplates, type PdfTemplate } from "@/lib/pdf-template";
 import { TemplatePicker } from "@/components/contracts/contract-doc-editor-parts";
-import { fetchPdfFormTemplates } from "@/lib/queries/portal";
+import { fetchLatestPdfFormTemplate, fetchPdfFormTemplates } from "@/lib/queries/portal";
 import { buildFillContext, type PdfFormTemplate } from "@/lib/pdf-form-template";
 import { PdfFormFillerPanel } from "@/components/settings/pdf-form-filler";
 import { ContractPdfTemplatePicker } from "@/components/contracts/contract-pdf-template-picker";
@@ -659,7 +659,10 @@ function DocumentsTab({
             <RotateCcw className="h-3.5 w-3.5" />同期
           </Button>
           {formTemplates.length > 0 && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5" title="アップロードPDF" onClick={() => setPdfFormPicker(true)}>
+            <Button variant="ghost" size="sm" className="h-8 text-xs px-2.5" title="アップロードPDF" onClick={() => {
+              void fetchPdfFormTemplates().then(setFormTemplates).catch(() => {});
+              setPdfFormPicker(true);
+            }}>
               PDFフォーム
             </Button>
           )}
@@ -704,7 +707,15 @@ function DocumentsTab({
       <ContractPdfTemplatePicker
         open={pdfFormPicker}
         onOpenChange={setPdfFormPicker}
-        onSelectForm={(t) => { setPdfFormPicker(false); setFillerTpl(t); }}
+        onSelectForm={(t) => {
+          setPdfFormPicker(false);
+          void fetchLatestPdfFormTemplate(t.id)
+            .then(({ list, template }) => {
+              setFormTemplates(list);
+              setFillerTpl(template ?? t);
+            })
+            .catch(() => setFillerTpl(t));
+        }}
         formTemplates={formTemplates}
       />
 

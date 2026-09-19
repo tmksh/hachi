@@ -197,6 +197,14 @@ export type PdfFormTemplate = {
 
 export const PDF_FORM_TEMPLATES_KEY = "pdf_form_templates";
 
+/** 差し替え後のPDFをプレビュー・本番で取り直すためのキー */
+export function pdfFormDocumentKey(
+  template: Pick<PdfFormTemplate, "id" | "storagePath" | "updatedAt">,
+  pdfSource?: string | null,
+): string {
+  return [template.id, template.storagePath, template.updatedAt, pdfSource ?? ""].join(":");
+}
+
 export function newFieldDefaults(type: PdfFieldType, page: number): Omit<PdfFormField, "id"> {
   return {
     page,

@@ -26,6 +26,7 @@ import {
   validatePdfFieldInputs,
   validatePdfTemplate,
   pdfFieldsForPage,
+  pdfFormDocumentKey,
   fieldOverlayBox,
   overlayFontSizePx,
   overlayJustify,
@@ -55,7 +56,7 @@ type DialogProps = {
 
 /** タブ内インライン表示：左に入力項目、右に PDF プレビュー */
 export function PdfFormFillerPanel(props: PanelProps) {
-  return <PdfFormFillerContent key={`${props.template.id}:${props.template.updatedAt}:${props.ctx.recordId ?? ""}`} {...props} />;
+  return <PdfFormFillerContent key={`${pdfFormDocumentKey(props.template, props.pdfSource)}:${props.ctx.recordId ?? ""}`} {...props} />;
 }
 
 function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: PanelProps) {
@@ -108,7 +109,7 @@ function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: 
       }
     })();
     return () => { cancelled = true; };
-  }, [template.storagePath, pdfSource]);
+  }, [template.storagePath, template.updatedAt, pdfSource]);
 
   useEffect(() => {
     const el = previewColRef.current;
@@ -198,7 +199,7 @@ function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: 
             canvas,
             canvasContext: c,
             viewport: vp,
-            annotationMode: 0,
+            annotationMode: 1,
           } as Parameters<typeof page.render>[0]) as unknown as {
             promise: Promise<void>;
           }
@@ -335,7 +336,6 @@ function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: 
                         doc={doc}
                         pageNumber={p + 1}
                         width={renderW}
-                        renderAnnotations={false}
                         className="pointer-events-none absolute inset-0 h-full w-full"
                       />
                     )}
