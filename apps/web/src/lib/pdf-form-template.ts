@@ -205,6 +205,68 @@ export function pdfFormDocumentKey(
   return [template.id, template.storagePath, template.updatedAt, pdfSource ?? ""].join(":");
 }
 
+export type PdfFormTemplateEdit = {
+  name: string;
+  docType: PdfFormDocType;
+  storagePath: string;
+  fileName: string;
+  fields: PdfFormField[];
+};
+
+export type PdfFormTemplateDraft = PdfFormTemplateEdit & {
+  id: string;
+  pageCount: number;
+  pageSizes: { width: number; height: number }[];
+  savedUpdatedAt: string;
+};
+
+export const PDF_FORM_TEMPLATE_DRAFT_PREFIX = "pdf-form-template-draft:";
+
+export function pdfFormTemplateDraftKey(id: string): string {
+  return `${PDF_FORM_TEMPLATE_DRAFT_PREFIX}${id}`;
+}
+
+/** 解析で変わる pageSizes は含めず、利用者が編集した配置だけを比較する */
+export function pdfFormTemplateEditSnapshot(edit: PdfFormTemplateEdit): string {
+  return JSON.stringify({
+    name: edit.name.trim(),
+    docType: edit.docType,
+    storagePath: edit.storagePath,
+    fileName: edit.fileName,
+    fields: edit.fields,
+  });
+}
+
+export function pdfFormTemplateIsDirty(current: PdfFormTemplateEdit, saved: PdfFormTemplateEdit): boolean {
+  return pdfFormTemplateEditSnapshot(current) !== pdfFormTemplateEditSnapshot(saved);
+}
+
+export function parsePdfFormTemplateDraft(raw: string | null | undefined): PdfFormTemplateDraft | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as PdfFormTemplateDraft;
+    if (!v || typeof v !== "object" || typeof v.storagePath !== "string" || !Array.isArray(v.fields)) return null;
+    return {
+      ...v,
+      pageSizes: Array.isArray(v.pageSizes) ? v.pageSizes : [],
+      pageCount: Number.isFinite(Number(v.pageCount)) ? Number(v.pageCount) : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** サーバの方が新しい保存なら下書きは捨て、同じ内容なら復元しない */
+export function shouldRestorePdfFormTemplateDraft(
+  draft: PdfFormTemplateDraft | null,
+  saved: PdfFormTemplateEdit & { updatedAt?: string },
+): boolean {
+  if (!draft) return false;
+  if (!pdfFormTemplateIsDirty(draft, saved)) return false;
+  if (saved.updatedAt && draft.savedUpdatedAt && saved.updatedAt > draft.savedUpdatedAt) return false;
+  return true;
+}
+
 export function newFieldDefaults(type: PdfFieldType, page: number): Omit<PdfFormField, "id"> {
   return {
     page,

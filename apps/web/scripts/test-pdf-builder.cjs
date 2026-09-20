@@ -175,6 +175,20 @@ test('print document preserves physical page sizes for portrait, landscape and A
   assert.ok(html.includes('.sheet:last-child { break-after:auto; }'));
 });
 
+test('unsaved mapping drafts restore unless the server already has a newer save', () => {
+  const title = field('t', 'construction_title');
+  const saved = { name: '契約書', docType: 'contract', storagePath: 'old.pdf', fileName: 'old.pdf', fields: [title], updatedAt: '2026-09-01T00:00:00Z' };
+  const draft = { id: 'tpl', ...saved, name: '契約書_最終', fields: [title, field('m', 'manual')], savedUpdatedAt: '2026-09-01T00:00:00Z', pageCount: 1, pageSizes: [] };
+  assert.equal(api.pdfFormTemplateIsDirty(draft, saved), true);
+  assert.equal(api.pdfFormTemplateIsDirty(saved, saved), false);
+  assert.equal(api.shouldRestorePdfFormTemplateDraft(draft, saved), true);
+  assert.equal(api.shouldRestorePdfFormTemplateDraft({ ...draft, name: saved.name, fields: saved.fields }, saved), false);
+  assert.equal(api.shouldRestorePdfFormTemplateDraft({ ...draft, savedUpdatedAt: '2026-08-01T00:00:00Z' }, { ...saved, updatedAt: '2026-09-10T00:00:00Z' }), false);
+  assert.equal(api.parsePdfFormTemplateDraft('not-json'), null);
+  assert.equal(api.parsePdfFormTemplateDraft(JSON.stringify(draft)).name, '契約書_最終');
+  assert.equal(api.pdfFormTemplateDraftKey('tpl'), 'pdf-form-template-draft:tpl');
+});
+
 test('preview remounts when the stored PDF path or revision changes', () => {
   const prev = { id: 'tpl', storagePath: 'pdf-form-templates/old.pdf', updatedAt: '2026-09-01T00:00:00Z' };
   const next = { ...prev, storagePath: 'pdf-form-templates/new.pdf', updatedAt: '2026-09-19T00:00:00Z' };

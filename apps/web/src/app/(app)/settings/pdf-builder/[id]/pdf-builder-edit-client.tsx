@@ -6,6 +6,16 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PdfFormFillerPanel } from "@/components/settings/pdf-form-filler";
 import { pdfMappingIssues } from "@/lib/pdf-form-mapping";
 import { Input } from "@/components/ui/input";
@@ -46,7 +56,7 @@ import {
   Copy,
 } from "lucide-react";
 import { toast } from "sonner";
-import { uploadToStorage } from "@/lib/storage-browser";
+import { getSignedStorageUrl, uploadToStorage } from "@/lib/storage-browser";
 import { savePdfFormTemplate } from "@/lib/actions/pdf-form-templates";
 import {
   loadPdfDocument,
@@ -63,12 +73,18 @@ import {
   changeFieldType,
   changeFieldBinding,
   validatePdfTemplate,
+  parsePdfFormTemplateDraft,
+  pdfFormTemplateDraftKey,
+  pdfFormTemplateIsDirty,
+  shouldRestorePdfFormTemplateDraft,
   type FillContext,
   type PdfFieldType,
   type PdfFieldBinding,
   type PdfFormDocType,
   type PdfFormField,
   type PdfFormTemplate,
+  type PdfFormTemplateDraft,
+  type PdfFormTemplateEdit,
 } from "@/lib/pdf-form-template";
 import { slotPlacementForPalette, slotsFromPdfPage, type FormSlot } from "@/lib/pdf-form-snap";
 
@@ -212,8 +228,20 @@ export function PdfBuilderEditClient({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfSource, setPdfSource] = useState<string | null>(initialPdfUrl);
   const [pdfRevision, setPdfRevision] = useState(initialTemplate?.updatedAt ?? "");
+  const [savedEdit, setSavedEdit] = useState<PdfFormTemplateEdit>({
+    name: initialTemplate?.name ?? "新規テンプレート",
+    docType: initialTemplate?.docType ?? initDocType,
+    storagePath: initialTemplate?.storagePath ?? "",
+    fileName: initialTemplate?.fileName ?? "",
+    fields: initialTemplate?.fields ?? [],
+  });
+  const [leaveHref, setLeaveHref] = useState<string | null>(null);
   const localPdfUrlRef = useRef<string | null>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const skipServerPdfLoadRef = useRef(false);
+  const restoredDraftRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const persistDraftRef = useRef<() => void>(() => {});
   const issues = pdfMappingIssues(fields, allPageSlots);
   const draftTemplate: PdfFormTemplate = {
     id: isNew ? "new" : id, name: name.trim(), docType,
@@ -222,8 +250,100 @@ export function PdfBuilderEditClient({
     createdAt: initialTemplate?.createdAt ?? "", updatedAt: pdfRevision || initialTemplate?.updatedAt || "",
   };
   const configurationIssues = validatePdfTemplate(draftTemplate);
+  const currentEdit: PdfFormTemplateEdit = { name, docType, storagePath, fileName, fields };
+  const dirty = pdfFormTemplateIsDirty(currentEdit, savedEdit);
+  dirtyRef.current = dirty;
+  const draftStorageId = isNew ? "new" : id;
+  persistDraftRef.current = () => {
+    if (!pdfFormTemplateIsDirty(currentEdit, savedEdit)) return;
+    const payload: PdfFormTemplateDraft = {
+      id: draftStorageId,
+      name,
+      docType,
+      storagePath,
+      fileName,
+      pageCount: pageSizes.length,
+      pageSizes,
+      fields,
+      savedUpdatedAt: initialTemplate?.updatedAt ?? "",
+    };
+    try {
+      localStorage.setItem(pdfFormTemplateDraftKey(draftStorageId), JSON.stringify(payload));
+    } catch {
+      /* 下書き保存に失敗しても編集は続ける */
+    }
+  };
+
   useEffect(() => () => {
     if (localPdfUrlRef.current) URL.revokeObjectURL(localPdfUrlRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (restoredDraftRef.current) return;
+    restoredDraftRef.current = true;
+    const raw = typeof window === "undefined" ? null : localStorage.getItem(pdfFormTemplateDraftKey(isNew ? "new" : id));
+    const draft = parsePdfFormTemplateDraft(raw);
+    const saved: PdfFormTemplateEdit & { updatedAt?: string } = {
+      name: initialTemplate?.name ?? "新規テンプレート",
+      docType: initialTemplate?.docType ?? initDocType,
+      storagePath: initialTemplate?.storagePath ?? "",
+      fileName: initialTemplate?.fileName ?? "",
+      fields: initialTemplate?.fields ?? [],
+      updatedAt: initialTemplate?.updatedAt ?? "",
+    };
+    if (!shouldRestorePdfFormTemplateDraft(draft, saved) || !draft) return;
+    skipServerPdfLoadRef.current = !!draft.storagePath && draft.storagePath !== saved.storagePath;
+    setName(draft.name);
+    setDocType(draft.docType);
+    setStoragePath(draft.storagePath);
+    setFileName(draft.fileName);
+    setFields(draft.fields);
+    if (draft.pageSizes.length) setPageSizes(draft.pageSizes);
+    toast.message("未保存の配置を復元しました。保存するまで書類作成には反映されません。");
+    if (!skipServerPdfLoadRef.current) return;
+    let cancelled = false;
+    getSignedStorageUrl("documents", draft.storagePath)
+      .then((url) => {
+        if (cancelled) return;
+        setPdfSource(url);
+        return loadPdfDocument(url).then((d) => { if (!cancelled) setDoc(d); });
+      })
+      .catch(() => { if (!cancelled) toast.error("差し替え中のPDFの復元に失敗しました"); });
+    return () => { cancelled = true; };
+  }, [id, isNew, initDocType, initialTemplate]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const timer = window.setTimeout(() => persistDraftRef.current(), 250);
+    return () => window.clearTimeout(timer);
+  }, [dirty, name, docType, storagePath, fileName, fields, pageSizes]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      persistDraftRef.current();
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onDocumentClick = (e: MouseEvent) => {
+      if (!dirtyRef.current || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = (e.target as HTMLElement | null)?.closest?.("a[href]");
+      if (!link || link.getAttribute("target") === "_blank" || link.hasAttribute("download")) return;
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+      const url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLeaveHref(`${url.pathname}${url.search}${url.hash}`);
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onDocumentClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onDocumentClick, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -240,6 +360,7 @@ export function PdfBuilderEditClient({
       return;
     }
     if (!initialPdfUrl) return;
+    if (skipServerPdfLoadRef.current) return;
     let cancelled = false;
     setLoading(true);
     loadPdfDocument(initialPdfUrl)
@@ -450,8 +571,14 @@ export function PdfBuilderEditClient({
       if (onSaveTemplate) await onSaveTemplate(tpl);
       else await savePdfFormTemplate(tpl);
       onSaved?.();
+      setSavedEdit({ name: tpl.name, docType: tpl.docType, storagePath: tpl.storagePath, fileName: tpl.fileName, fields: tpl.fields });
+      try {
+        localStorage.removeItem(pdfFormTemplateDraftKey(isNew ? "new" : id));
+        if (!isNew) localStorage.removeItem(pdfFormTemplateDraftKey(tpl.id));
+      } catch { /* 下書きの削除失敗は保存成功を妨げない */ }
+      dirtyRef.current = false;
       toast.success("保存しました");
-      if (!onSaveTemplate) router.push("/settings?tab=pdf_builder");
+      if (isNew && !onSaveTemplate) router.replace(`/settings/pdf-builder/${tpl.id}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -499,7 +626,15 @@ export function PdfBuilderEditClient({
       {/* ヘッダー */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push("/settings?tab=pdf_builder")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => {
+              if (dirty) setLeaveHref("/settings?tab=pdf_builder");
+              else router.push("/settings?tab=pdf_builder");
+            }}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Input
@@ -516,6 +651,7 @@ export function PdfBuilderEditClient({
             {Object.entries(PDF_FORM_DOC_TYPE_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}</select>
+          {dirty && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">未保存</span>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
         <input
@@ -570,6 +706,30 @@ export function PdfBuilderEditClient({
           <PdfFormFillerPanel template={draftTemplate} ctx={previewContext} pdfSource={pdfSource ?? undefined} className="min-h-0 overflow-auto" />
         </DialogContent>
       </Dialog>
+      <AlertDialog open={!!leaveHref} onOpenChange={(open) => { if (!open) setLeaveHref(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>保存せずに離れますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              配置した項目はまだ保存されていません。離れると書類作成には反映されません。同じテンプレートを開き直すと、この端末の未保存の配置を復元します。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>編集を続ける</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                persistDraftRef.current();
+                const href = leaveHref;
+                dirtyRef.current = false;
+                setLeaveHref(null);
+                if (href) router.push(href);
+              }}
+            >
+              離れる
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* インポート未済 */}
       {!doc ? (
