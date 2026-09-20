@@ -12,6 +12,8 @@ import {
   getAdminBiStatusBreakdown,
   getAdminBiGrossRateDistribution,
   getAdminLinqAiSettings,
+  getAdminCompanyUsage,
+  getAdminAiUsage,
 } from "@/lib/actions/admin";
 import { LIST_STALE_MS } from "@/lib/queries/portal";
 import { AdminClient } from "./admin-client";
@@ -27,6 +29,8 @@ async function fetchAdminBundle() {
     biStatus,
     biDist,
     aiSettings,
+    companyUsage,
+    aiUsage,
   ] = await Promise.all([
     getAdminStats(),
     getAdminCompanies(),
@@ -37,6 +41,8 @@ async function fetchAdminBundle() {
     getAdminBiStatusBreakdown(),
     getAdminBiGrossRateDistribution(),
     getAdminLinqAiSettings(),
+    getAdminCompanyUsage(),
+    getAdminAiUsage(),
   ]);
   return {
     stats,
@@ -48,6 +54,8 @@ async function fetchAdminBundle() {
     biStatus,
     biDist,
     aiSettings,
+    companyUsage,
+    aiUsage,
   };
 }
 

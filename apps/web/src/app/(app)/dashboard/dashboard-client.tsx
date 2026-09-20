@@ -109,12 +109,16 @@ export function DashboardClient({
   const queryClient = useQueryClient();
   const { data, isLoading: loading } = useDashboardData(initialData);
   const { data: attendanceEntry } = useTodayAttendance(initialAttendance);
-  const { data: unfollowedData, isLoading: unfollowedLoading } = useUnfollowedLeads(7, initialUnfollowedLeads);
+  const [dealsTab, setDealsTab] = useState<"deals" | "unfollowed">("deals");
+  const { data: unfollowedData, isLoading: unfollowedLoading } = useUnfollowedLeads(
+    7,
+    initialUnfollowedLeads,
+    dealsTab === "unfollowed",
+  );
   const unfollowedLeads = unfollowedData ?? [];
   const [inquiryTarget, setInquiryTarget] = useState<UnfollowedLead | null>(null);
   const [inquiryContent, setInquiryContent] = useState("");
   const [inquirySending, setInquirySending] = useState(false);
-  const [dealsTab, setDealsTab] = useState<"deals" | "unfollowed">("deals");
   const [focusHighlight, setFocusHighlight] = useState(false);
   const [focusSheetOpen, setFocusSheetOpen] = useState(false);
   const [focusDetail, setFocusDetail] = useState<DashboardData["todos"][number] | null>(null);
@@ -407,7 +411,7 @@ export function DashboardClient({
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-1">
               {loading ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 py-1.5 px-2">
                   <Skeleton className="h-3 w-3 rounded shrink-0" /><Skeleton className="h-2.5 flex-1" />

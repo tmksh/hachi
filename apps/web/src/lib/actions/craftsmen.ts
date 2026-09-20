@@ -105,10 +105,10 @@ export async function getVendorCandidates(): Promise<VendorCandidate[]> {
       .order("name")
       .limit(500);
     if (retry.error) throw retry.error;
-    return (retry.data ?? []) as VendorCandidate[];
+    return ((retry.data ?? []) as VendorCandidate[]).filter((c) => c.system_key !== "management");
   }
   if (error) throw error;
-  return (data ?? []) as VendorCandidate[];
+  return ((data ?? []) as VendorCandidate[]).filter((c) => c.system_key !== "management");
 }
 
 export async function getCraftsman(id: string) {

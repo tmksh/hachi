@@ -14,6 +14,7 @@
     "qa:performance-db": "node scripts/test-performance-db.cjs",
     "qa:read-only-routes": "node scripts/test-read-only-routes.cjs",
     "qa:budget-totals": "node scripts/test-budget-totals.cjs",
+    "qa:management-fee": "node scripts/test-management-fee.cjs",
     "qa:inventory": "node scripts/inventory-ui-operations.cjs",
     "qa:full-preflight": "node scripts/full-qa-preflight.cjs"
   },

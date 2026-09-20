@@ -18,6 +18,10 @@ import {
   getAdminLinqAiSettings,
   updateAdminLinqAiSettings,
   testAdminLinqAiConnection,
+  getAdminCompanyUsage,
+  getAdminAiUsage,
+  type AdminCompanyUsage,
+  type AdminAiUsageSummary,
 } from "@/lib/actions/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -154,6 +158,8 @@ export type AdminInitialData = {
   biStatus: BiStatus;
   biDist: BiDist;
   aiSettings: Awaited<ReturnType<typeof getAdminLinqAiSettings>>;
+  companyUsage: AdminCompanyUsage[];
+  aiUsage: AdminAiUsageSummary;
 };
 
 export function AdminClient({ initialData }: { initialData: AdminInitialData }) {
@@ -188,6 +194,8 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [companyUsage, setCompanyUsage] = useState(initialData.companyUsage);
+  const [aiUsage, setAiUsage] = useState(initialData.aiUsage);
 
   const loadAiSettings = useCallback(async () => {
     const s = await getAdminLinqAiSettings();
@@ -200,14 +208,17 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
-    const [s, c, u, ov, rank, trend, status, dist] = await Promise.all([
+    const [s, c, u, ov, rank, trend, status, dist, usage, apiUsage] = await Promise.all([
       getAdminStats(), getAdminCompanies(), getAdminUsers(),
       getAdminBiOverview(), getAdminBiCompanyRanking(),
       getAdminBiMonthlyTrend(), getAdminBiStatusBreakdown(),
       getAdminBiGrossRateDistribution(),
+      getAdminCompanyUsage(),
+      getAdminAiUsage(),
     ]);
     setStats(s); setCompanies(c ?? []); setUsers(u ?? []);
     setBi(ov); setBiRanking(rank); setBiTrend(trend); setBiStatus(status); setBiDist(dist);
+    setCompanyUsage(usage); setAiUsage(apiUsage);
     await loadAiSettings().catch(() => {});
     setLoading(false);
   }, [loadAiSettings]);
@@ -499,6 +510,55 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
               )}
             </ChartPanel>
           </div>
+
+          <ChartPanel
+            title="利用状況"
+            icon={Activity}
+            flush
+            right={<span className="text-[11px] text-muted-foreground">{companyUsage.length}社</span>}
+          >
+            {loading ? (
+              <div className="px-4 pb-4 space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-8 rounded-lg" />)}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50/80 text-[11px] text-muted-foreground">
+                      <th className="px-3 py-1.5 text-left font-medium">企業</th>
+                      <th className="px-3 py-1.5 text-right font-medium">ユーザー</th>
+                      <th className="px-3 py-1.5 text-right font-medium">工事</th>
+                      <th className="px-3 py-1.5 text-right font-medium">状態</th>
+                      <th className="px-3 py-1.5 text-right font-medium">最終利用</th>
+                      <th className="px-3 py-1.5 text-right font-medium">API</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {companyUsage.length === 0 ? (
+                      <tr><td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">データがありません</td></tr>
+                    ) : companyUsage.map((row) => (
+                      <tr key={row.companyId} className="border-b last:border-0 hover:bg-slate-50/80 transition-colors">
+                        <td className="px-3 py-2">
+                          <span className="text-xs font-medium truncate block max-w-[180px]">{row.companyName}</span>
+                          <span className="text-[10px] text-muted-foreground">{row.plan ?? "Free"}</span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs tabular-nums">{row.userCount}</td>
+                        <td className="px-3 py-2 text-right text-xs tabular-nums">{row.constructionCount}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Badge variant="outline" className={cn("text-[10px]", row.active30d ? "border-emerald-200 text-emerald-700 bg-emerald-50" : "text-muted-foreground")}>
+                            {row.active30d ? "利用中" : "休眠"}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
+                          {row.lastActivityAt ? format(new Date(row.lastActivityAt), "yyyy/MM/dd", { locale: ja }) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs tabular-nums">{row.aiCalls}回</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </ChartPanel>
         </div>}
 
         {/* 企業一覧 */}
@@ -579,6 +639,39 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
         {/* AI設定 */}
         {currentTab === "ai" && <div className="mt-4">
           <div className="space-y-4">
+            <CompactKpiGrid
+              loading={loading}
+              items={[
+                { label: "API呼び出し", value: aiUsage.totalCalls.toLocaleString(), sub: "累計", icon: Sparkles },
+                { label: "直近30日", value: aiUsage.last30dCalls.toLocaleString(), sub: "回", icon: Activity },
+                { label: "トークン", value: aiUsage.totalTokens.toLocaleString(), icon: Wallet },
+                { label: "利用企業", value: `${aiUsage.byCompany.filter((c) => c.calls > 0).length}/${companyUsage.length}`, icon: Building2 },
+              ]}
+            />
+            {aiUsage.byCompany.length > 0 && (
+              <Card variant="inset">
+                <CardContent className="p-0">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50/80 text-[11px] text-muted-foreground">
+                        <th className="px-3 py-1.5 text-left font-medium">企業</th>
+                        <th className="px-3 py-1.5 text-right font-medium">呼び出し</th>
+                        <th className="px-3 py-1.5 text-right font-medium">トークン</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiUsage.byCompany.slice(0, 20).map((row) => (
+                        <tr key={row.companyId} className="border-b last:border-0">
+                          <td className="px-3 py-2 text-xs font-medium">{row.companyName}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{row.calls}</td>
+                          <td className="px-3 py-2 text-right text-xs tabular-nums">{row.tokens.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
             {/* ヘッダーカード */}
             <Card>
               <CardContent className="flex items-start gap-4 py-4">

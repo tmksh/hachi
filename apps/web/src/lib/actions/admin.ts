@@ -100,6 +100,114 @@ export async function getAdminUsers() {
   }>;
 }
 
+export type AdminCompanyUsage = {
+  companyId: string;
+  companyName: string;
+  plan: string | null;
+  userCount: number;
+  constructionCount: number;
+  lastActivityAt: string | null;
+  active30d: boolean;
+  aiCalls: number;
+  aiTokens: number;
+};
+
+export type AdminAiUsageSummary = {
+  totalCalls: number;
+  totalTokens: number;
+  last30dCalls: number;
+  byCompany: Array<{ companyId: string; companyName: string; calls: number; tokens: number }>;
+};
+
+export async function getAdminCompanyUsage(): Promise<AdminCompanyUsage[]> {
+  const supabase = await assertSuperAdmin();
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+
+  const [companies, constructions, { data: profiles }, usage] = await Promise.all([
+    supabase.from("companies").select("id, name, settings").order("name"),
+    fetchAllConstructions(supabase),
+    supabase.from("profiles").select("company_id"),
+    supabase
+      .from("ai_usage_events")
+      .select("company_id, tokens_in, tokens_out")
+      .then((res) => (res.error ? [] : (res.data ?? []))),
+  ]);
+
+  const userCountByCompany = new Map<string, number>();
+  for (const profile of profiles ?? []) {
+    userCountByCompany.set(profile.company_id, (userCountByCompany.get(profile.company_id) ?? 0) + 1);
+  }
+
+  const usageByCompany = new Map<string, { calls: number; tokens: number }>();
+  for (const row of usage) {
+    const current = usageByCompany.get(row.company_id) ?? { calls: 0, tokens: 0 };
+    current.calls += 1;
+    current.tokens += Number(row.tokens_in ?? 0) + Number(row.tokens_out ?? 0);
+    usageByCompany.set(row.company_id, current);
+  }
+
+  return (companies.data ?? []).map((company) => {
+    const rows = constructions.filter((c) => c.company_id === company.id);
+    const lastActivityAt = rows.reduce<string | null>((latest, row) => {
+      const at = row.created_at;
+      if (!at) return latest;
+      if (!latest || at > latest) return at;
+      return latest;
+    }, null);
+    const settings = (company.settings ?? {}) as Record<string, unknown>;
+    const plan = typeof settings.plan === "string" && settings.plan.length > 0 ? settings.plan : null;
+    const ai = usageByCompany.get(company.id) ?? { calls: 0, tokens: 0 };
+    return {
+      companyId: company.id,
+      companyName: company.name,
+      plan,
+      userCount: userCountByCompany.get(company.id) ?? 0,
+      constructionCount: rows.length,
+      lastActivityAt,
+      active30d: Boolean(lastActivityAt && new Date(lastActivityAt) >= since),
+      aiCalls: ai.calls,
+      aiTokens: ai.tokens,
+    };
+  });
+}
+
+export async function getAdminAiUsage(): Promise<AdminAiUsageSummary> {
+  const supabase = await assertSuperAdmin();
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+  const [{ data, error }, companies] = await Promise.all([
+    supabase.from("ai_usage_events").select("company_id, tokens_in, tokens_out, created_at"),
+    fetchAllCompanies(supabase),
+  ]);
+  if (error || !data) {
+    return { totalCalls: 0, totalTokens: 0, last30dCalls: 0, byCompany: [] };
+  }
+  const names = new Map(companies.map((c) => [c.id, c.name]));
+  const byCompany = new Map<string, { calls: number; tokens: number }>();
+  let last30dCalls = 0;
+  for (const row of data) {
+    const current = byCompany.get(row.company_id) ?? { calls: 0, tokens: 0 };
+    current.calls += 1;
+    current.tokens += Number(row.tokens_in ?? 0) + Number(row.tokens_out ?? 0);
+    byCompany.set(row.company_id, current);
+    if (row.created_at && new Date(row.created_at) >= since) last30dCalls += 1;
+  }
+  return {
+    totalCalls: data.length,
+    totalTokens: data.reduce((sum, row) => sum + Number(row.tokens_in ?? 0) + Number(row.tokens_out ?? 0), 0),
+    last30dCalls,
+    byCompany: [...byCompany.entries()]
+      .map(([companyId, value]) => ({
+        companyId,
+        companyName: names.get(companyId) ?? "不明",
+        calls: value.calls,
+        tokens: value.tokens,
+      }))
+      .sort((a, b) => b.calls - a.calls),
+  };
+}
+
 /* ─────────────────────── BI: 全国加盟店横断ダッシュボード ─────────────────────── */
 
 type ConstructionRow = {

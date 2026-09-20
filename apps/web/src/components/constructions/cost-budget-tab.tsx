@@ -429,15 +429,15 @@ function mapEstimateToBudgetRows(
     category_id: string | null;
     name: string;
     notes: string | null;
+    vendor_name?: string | null;
     cost_amount: number;
     selling_amount: number;
     is_text_row?: boolean | null;
   }[],
-  /** 実行予算移行後は予備費（現場対応分・旧予備予備費）のみ明細側へ戻す（議事録） */
-  reserveFee2Amount = 0,
+  managementFeeAmount = 0,
 ): ContractorRow[] {
-  const calcItems = items.filter((item) => !item.is_text_row);
-  if (!calcItems.length && reserveFee2Amount <= 0) return [];
+  const calcItems = items.filter((item) => !item.is_text_row && item.vendor_name !== "経営調整費");
+  if (!calcItems.length && managementFeeAmount <= 0) return [];
   const catMap = new Map(categories.map((c) => [c.id, c.name]));
   const groups = new Map<string, { name: string; workTypes: Set<string>; budget: number; order_amount: number }>();
 
@@ -473,19 +473,18 @@ function mapEstimateToBudgetRows(
     monthly: {},
   }));
 
-  // 予備費（現場対応分）を明細行として戻す。担当者が金額ベースで付け替え可能
-  if (reserveFee2Amount > 0) {
+  if (managementFeeAmount > 0) {
     rows.push({
-      id: `est-reserve2-${Date.now()}`,
+      id: `est-management-${Date.now()}`,
       status: "未発注" as const,
       name: "",
-      work_type: "予備費（現場対応分）",
+      work_type: "経営調整費（会社規定）",
       account_item: "",
       account_item_source: "",
       budget: 0,
       add_contracts: [0, 0],
       management_budget: 0,
-      order_amount: reserveFee2Amount,
+      order_amount: managementFeeAmount,
       add_orders: [0, 0, 0],
       monthly: {},
     });
@@ -522,6 +521,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const persistEnabledRef = useRef(false);
   const [accountItems, setAccountItems] = useState<string[]>(PROCUREMENT_ACCOUNT_ITEMS.map((i) => i.name));
   const [history, setHistory] = useState<AccountItemHistory[]>([]);
 
@@ -540,6 +540,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
 
   useEffect(() => {
     let cancelled = false;
+    persistEnabledRef.current = false;
     setLoaded(false);
     fetchCostBudget(constructionId).then((data) => {
       if (cancelled) return;
@@ -610,7 +611,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
   // 変更を検知して自動保存（デバウンス）
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !persistEnabledRef.current) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     autosaveTimer.current = setTimeout(() => {
       void persist(rows, comments, { silent: true });
@@ -633,6 +634,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
         return current < estimateTotal ? estimateTotal : current;
       });
     }
+    persistEnabledRef.current = true;
     setSaved(false);
     toast.success("見積もりから工事台帳を作成しました");
   }, [contractColCount, orderColCount, propAmount, history]);
@@ -647,11 +649,12 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
           category_id: string | null;
           name: string;
           notes: string | null;
+          vendor_name?: string | null;
           cost_amount: number;
           selling_amount: number;
           is_text_row?: boolean | null;
         }[],
-        Number((est as { reserve_fee_2_amount?: number | null }).reserve_fee_2_amount ?? 0),
+        Number((est as { reserve_fee_1_amount?: number | null }).reserve_fee_1_amount ?? 0),
       );
       toast.dismiss(loadingId);
       if (newRows.length === 0) {
@@ -670,6 +673,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
   }, [rows.length, applyEstimateRows]);
 
   const handleReferenceChangeOrder = useCallback((co: { id: string; title: string; diff_amount: number }) => {
+    persistEnabledRef.current = true;
     setRows((prev) => [
       ...prev,
       padRow({
@@ -811,6 +815,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
   /* ── row update helpers ── */
   const updateField = useCallback(
     <K extends keyof ContractorRow>(id: string, field: K, value: ContractorRow[K]) => {
+      persistEnabledRef.current = true;
       setRows(prev => prev.map(r => {
         if (r.id !== id) return r;
         const next = { ...r, [field]: value } as ContractorRow;
@@ -823,6 +828,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
     }, [history]
   );
   const updateContractCol = useCallback((id: string, colIdx: number, value: number) => {
+    persistEnabledRef.current = true;
     setRows(prev => prev.map(r => {
       if (r.id !== id) return r;
       const add_contracts = [...r.add_contracts];
@@ -832,6 +838,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
     setSaved(false);
   }, []);
   const updateOrderCol = useCallback((id: string, colIdx: number, value: number) => {
+    persistEnabledRef.current = true;
     setRows(prev => prev.map(r => {
       if (r.id !== id) return r;
       const add_orders = [...r.add_orders];
@@ -841,16 +848,19 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
     setSaved(false);
   }, []);
   const updateMonthly = useCallback((id: string, month: string, value: number) => {
+    persistEnabledRef.current = true;
     setRows(prev => prev.map(r =>
       r.id === id ? { ...r, monthly: { ...r.monthly, [month]: value } } : r
     ));
     setSaved(false);
   }, []);
   const addRow = () => {
+    persistEnabledRef.current = true;
     setRows(prev => [...prev, newEmptyRow(contractColCount, orderColCount)]);
     setSaved(false);
   };
   const addContractCol = () => {
+    persistEnabledRef.current = true;
     setContractColCount(c => c + 1);
     setRows(prev => prev.map(r => ({ ...r, add_contracts: [...r.add_contracts, 0] })));
     setSaved(false);
@@ -861,6 +871,7 @@ export function CostBudgetTab({ constructionId, constructionNo, constructionTitl
     setSaved(false);
   };
   const deleteRow = (id: string) => {
+    persistEnabledRef.current = true;
     setRows(prev => prev.filter(r => r.id !== id));
     setSelectedIds(prev => {
       if (!prev.has(id)) return prev;

@@ -194,9 +194,9 @@ export type Estimate = {
   gross_profit_rate: number;
   reserve_fee_1_rate: number;
   reserve_fee_2_rate: number;
-  /** 経営調整費（会社規定%・担当者編集不可）金額。明細外サマリーで記入（旧称: 予備費） */
+  /** 経営調整費（会社規定%・自動計上・担当者編集不可） */
   reserve_fee_1_amount?: number;
-  /** 予備費（担当者がリスク用に計上）金額。明細外サマリーで記入（旧称: 予備予備費） */
+  /** 予備費（担当者がリスク用に明細行で任意計上）。レガシー列 */
   reserve_fee_2_amount?: number;
   default_gross_profit_rate: number;
   /** 事業部門。部門別規定粗利率の判定に使用（No.72） */

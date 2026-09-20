@@ -386,6 +386,7 @@ export function WorkflowDetailClient({
     && !adminSupplemented,
   );
   const PAYLOAD_LABELS: Record<string, string> = {
+    reason: "申請理由・内容",
     estimate_id: "見積ID",
     customer_name: "顧客名",
     gross_profit_rate: "粗利率",
@@ -408,7 +409,7 @@ export function WorkflowDetailClient({
     if (!requestRemanded && ["remanded_at", "remand_comment"].includes(k)) return false;
     if (data.status !== "rejected" && ["rejected_at", "reject_comment"].includes(k)) return false;
     return true;
-  });
+  }).sort(([a], [b]) => (a === "reason" ? -1 : b === "reason" ? 1 : 0));
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -555,9 +556,9 @@ export function WorkflowDetailClient({
                 return (
                   <div key={k} className="space-y-1">
                     <span className="text-muted-foreground text-xs">{label}</span>
-                    {def?.type === "textarea" ? (
+                    {def?.type === "textarea" || k === "reason" ? (
                       <Textarea
-                        rows={2}
+                        rows={k === "reason" ? 4 : 2}
                         value={editPayload[k] ?? ""}
                         onChange={(e) => setEditPayload((p) => ({ ...p, [k]: e.target.value }))}
                       />
@@ -568,6 +569,14 @@ export function WorkflowDetailClient({
                         onChange={(e) => setEditPayload((p) => ({ ...p, [k]: e.target.value }))}
                       />
                     )}
+                  </div>
+                );
+              }
+              if (k === "reason") {
+                return (
+                  <div key={k} className="space-y-1">
+                    <span className="text-muted-foreground text-xs">{label}</span>
+                    <p className="whitespace-pre-wrap break-words rounded-md bg-muted/40 px-3 py-2 text-sm">{String(v)}</p>
                   </div>
                 );
               }

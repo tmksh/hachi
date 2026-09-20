@@ -19,7 +19,7 @@ function computeDefaultCols(containerWidth: number): number {
 }
 
 /** これ未満の幅では1列積み（スマホ幅、またはチャット2枚展開時） */
-const STACK_WIDTH = 420;
+const STACK_WIDTH = 520;
 
 /** ウィジェットグリッドのコンテナ幅計測・チャット開閉・デフォルト列数算出 */
 export function useWidgetGridLayout() {

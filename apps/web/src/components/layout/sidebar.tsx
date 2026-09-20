@@ -400,6 +400,38 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
           )}
         </div>
 
+        {expanded ? (
+          <div className="flex shrink-0 flex-col gap-1 px-2 pb-1">
+            <button onClick={() => onBridgeChatOpen?.()} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
+              <BrandMark className="h-5 w-5 shrink-0" />
+              <span className="whitespace-nowrap">BRIDGE AI</span>
+            </button>
+            <button onClick={() => setSearchOpen(true)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
+              <Search className="h-5 w-5 shrink-0" />
+              <span className="whitespace-nowrap">検索</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex shrink-0 flex-col gap-1 px-1 items-center pb-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={() => onBridgeChatOpen?.()} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
+                  <BrandMark className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">BRIDGE AI</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={() => setSearchOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
+                  <Search className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">検索</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+
         {/* Nav Groups */}
         <nav
           className={cn(
@@ -506,14 +538,6 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
         >
           {expanded ? (
             <>
-              <button onClick={() => onBridgeChatOpen?.()} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
-                <BrandMark className="h-5 w-5 shrink-0" />
-                <span className="whitespace-nowrap">BRIDGE AI</span>
-              </button>
-              <button onClick={() => setSearchOpen(true)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
-                <Search className="h-5 w-5 shrink-0" />
-                <span className="whitespace-nowrap">検索</span>
-              </button>
               <button onClick={() => setNotifOpen(true)} className="relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground sidebar-nav-hover hover:text-foreground transition-colors">
                 <Bell className="h-5 w-5 shrink-0" />
                 <span className="whitespace-nowrap">通知</span>
@@ -578,22 +602,6 @@ export const Sidebar = memo(function Sidebar({ profile, onSignOut, expanded, onE
             </>
           ) : (
             <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={() => onBridgeChatOpen?.()} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
-                    <BrandMark className="h-5 w-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">BRIDGE AI</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={() => setSearchOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">
-                    <Search className="h-5 w-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">検索</TooltipContent>
-              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button onClick={() => setNotifOpen(true)} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground sidebar-nav-hover transition-colors">

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveLinqAiConfig } from "@/lib/integrations/linq-ai/platform-config";
 import { sanitizeMeetingTitle } from "@/lib/integrations/linq-ai";
+import { recordLinqAiUsage } from "@/lib/integrations/linq-ai/usage";
 
 export const maxDuration = 60; // Netlify 上での最大実行時間（秒）
 
@@ -141,7 +142,15 @@ async function requestTranscription(blob: Blob, apiKey: string, model: string): 
     body: formData,
   });
   if (!res.ok) return null;
-  return await res.text();
+  const text = await res.text();
+  if (text) {
+    void recordLinqAiUsage({
+      kind: "transcribe",
+      provider: "openai",
+      model,
+    });
+  }
+  return text;
 }
 
 async function transcribeAudio(blob: Blob, apiKey: string, model: string): Promise<string | null> {

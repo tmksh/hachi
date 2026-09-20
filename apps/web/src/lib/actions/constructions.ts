@@ -1214,6 +1214,11 @@ export async function copyEstimateForConstruction(constructionId: string, source
   return newEstimate;
 }
 
+export async function refreshEstimateTotals(estimateId: string) {
+  const supabase = await createClient();
+  return recalculateEstimateTotals(supabase, estimateId);
+}
+
 async function recalculateEstimateTotals(
   supabase: Awaited<ReturnType<typeof createClient>>,
   estimateId: string,
@@ -1225,7 +1230,7 @@ async function recalculateEstimateTotals(
   ] = await Promise.all([
     supabase
       .from("estimate_items")
-      .select("category_id, selling_amount, cost_amount, is_text_row")
+      .select("category_id, selling_amount, cost_amount, is_text_row, vendor_craftsman_id")
       .eq("estimate_id", estimateId),
     supabase
       .from("estimate_categories")
@@ -1233,7 +1238,7 @@ async function recalculateEstimateTotals(
       .eq("estimate_id", estimateId),
     supabase
       .from("estimates")
-      .select("id")
+      .select("id, company_id")
       .eq("id", estimateId)
       .single(),
   ]);
@@ -1241,24 +1246,68 @@ async function recalculateEstimateTotals(
   throwIfSupabaseError(catsError);
   throwIfSupabaseError(estError);
 
+  const vendorIds = [
+    ...new Set(
+      (items ?? [])
+        .map((item) => item.vendor_craftsman_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const managementIds = new Set<string>();
+  const reserveIds = new Set<string>();
+  if (vendorIds.length > 0) {
+    const { data: crafts } = await supabase
+      .from("craftsmen")
+      .select("id, kind, system_key")
+      .in("id", vendorIds);
+    for (const craftsman of crafts ?? []) {
+      if (craftsman.kind !== "system") continue;
+      if (craftsman.system_key === "management") managementIds.add(craftsman.id);
+      if (craftsman.system_key === "reserve") reserveIds.add(craftsman.id);
+    }
+  }
+
+  const itemsForTotals = (items ?? []).filter(
+    (item) => !item.vendor_craftsman_id || !managementIds.has(item.vendor_craftsman_id),
+  );
+
   const { effectiveCategoryAmounts } = await import("@/lib/estimate-category-totals");
+  const { calcManagementFeeAmount, normalizeFeeRate } = await import("@/lib/estimate-management-fee");
 
   // 大項目直接入力と配下詳細行の優先ロジック（No.68: 詳細行があれば詳細優先）
   let subtotal = 0;
   let lineCost = 0;
   for (const cat of categories ?? []) {
-    const catItems = (items ?? []).filter((i) => i.category_id === cat.id);
+    const catItems = itemsForTotals.filter((i) => i.category_id === cat.id);
     const eff = effectiveCategoryAmounts(cat, catItems);
     subtotal += eff.selling_amount;
     lineCost += eff.cost_amount;
   }
-  // 未分類（独立テキスト行含む）はテキスト行を除いてそのまま加算
-  const uncategorized = (items ?? []).filter((i) => !i.category_id && !i.is_text_row);
+  const uncategorized = itemsForTotals.filter((i) => !i.category_id && !i.is_text_row);
   subtotal += uncategorized.reduce((s, i) => s + Number(i.selling_amount ?? 0), 0);
   lineCost += uncategorized.reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
 
-  // No.106: 経営調整費・予備費は明細行（発注業者=システム予約）に一本化。明細外サマリーは加算しない
-  const costTotal = lineCost;
+  const reserveCost = (items ?? [])
+    .filter((item) => item.vendor_craftsman_id && reserveIds.has(item.vendor_craftsman_id) && !item.is_text_row)
+    .reduce((sum, item) => sum + Number(item.cost_amount ?? 0), 0);
+
+  const { data: setting } = est?.company_id
+    ? await supabase
+        .from("bi_annual_settings")
+        .select("reserve_fee_rate")
+        .eq("company_id", est.company_id)
+        .order("fiscal_year", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+  const feeRate = normalizeFeeRate(setting?.reserve_fee_rate);
+  const managementFee = calcManagementFeeAmount({
+    sellingTotal: subtotal,
+    reserveCost,
+    rate: feeRate,
+  });
+
+  const costTotal = lineCost + managementFee;
   const tax = Math.floor(subtotal * 0.1);
   const total = subtotal + tax;
   const grossProfit = subtotal - costTotal;
@@ -1270,6 +1319,8 @@ async function recalculateEstimateTotals(
     .from("estimates")
     .update({
       ...totals,
+      reserve_fee_1_amount: managementFee,
+      reserve_fee_1_rate: feeRate,
       updated_at: new Date().toISOString(),
     })
     .eq("id", estimateId);
@@ -1542,9 +1593,7 @@ export async function updateEstimateItem(itemId: string, patch: EstimateItemUpda
         .select("kind, system_key")
         .eq("id", patch.vendor_craftsman_id)
         .single();
-      isReserveRow =
-        craftsman?.kind === "system" &&
-        (craftsman?.system_key === "reserve" || craftsman?.system_key === "management");
+      isReserveRow = craftsman?.kind === "system" && craftsman?.system_key === "reserve";
     } else {
       isReserveRow = false;
     }

@@ -1,6 +1,7 @@
 "use server";
 
 import { resolveLinqAiConfig } from "@/lib/integrations/linq-ai/platform-config";
+import { recordLinqAiUsage } from "@/lib/integrations/linq-ai/usage";
 import { format, addDays } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -607,8 +608,21 @@ async function callOpenAiChat(messages: Message[], config: { apiKey: string; mod
     }),
   });
   if (!res.ok) return null;
-  const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-  return json.choices?.[0]?.message?.content ?? null;
+  const json = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  const text = json.choices?.[0]?.message?.content ?? null;
+  if (text) {
+    void recordLinqAiUsage({
+      kind: "chat",
+      provider: "openai",
+      model: config.model,
+      tokensIn: json.usage?.prompt_tokens,
+      tokensOut: json.usage?.completion_tokens,
+    });
+  }
+  return text;
 }
 
 async function callGeminiChat(messages: Message[], config: { apiKey: string; model: string }): Promise<string | null> {
@@ -629,8 +643,21 @@ async function callGeminiChat(messages: Message[], config: { apiKey: string; mod
     },
   );
   if (!res.ok) return null;
-  const json = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-  return json.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  const json = await res.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  };
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  if (text) {
+    void recordLinqAiUsage({
+      kind: "chat",
+      provider: "google",
+      model: config.model,
+      tokensIn: json.usageMetadata?.promptTokenCount,
+      tokensOut: json.usageMetadata?.candidatesTokenCount,
+    });
+  }
+  return text;
 }
 
 async function callAnthropicChat(messages: Message[], config: { apiKey: string; model: string }): Promise<string | null> {
@@ -649,8 +676,21 @@ async function callAnthropicChat(messages: Message[], config: { apiKey: string; 
     }),
   });
   if (!res.ok) return null;
-  const json = await res.json() as { content?: Array<{ text?: string }> };
-  return json.content?.[0]?.text ?? null;
+  const json = await res.json() as {
+    content?: Array<{ text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+  const text = json.content?.[0]?.text ?? null;
+  if (text) {
+    void recordLinqAiUsage({
+      kind: "chat",
+      provider: "anthropic",
+      model: config.model,
+      tokensIn: json.usage?.input_tokens,
+      tokensOut: json.usage?.output_tokens,
+    });
+  }
+  return text;
 }
 
 export async function sendBridgeAiMessage(
@@ -789,6 +829,7 @@ ${text.slice(0, 4000)}`;
     }
 
     if (!result) return { ok: false, result: text };
+    void recordLinqAiUsage({ kind: "linq", provider, model: llmConfig.model });
     return { ok: true, result };
   } catch {
     return { ok: false, result: text };

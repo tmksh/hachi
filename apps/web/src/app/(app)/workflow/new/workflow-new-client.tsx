@@ -43,6 +43,7 @@ export function WorkflowNewClient({ initialTypes, initialProfiles, currentUserId
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [reason, setReason] = useState("");
   const [route, setRoute] = useState<ResolvedRoute>({ approverIds: [], unresolved: [], steps: [] });
   const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
 
@@ -70,6 +71,7 @@ export function WorkflowNewClient({ initialTypes, initialProfiles, currentUserId
 
   const handleSave = async () => {
     if (!title.trim() || !typeId) { toast.error("種別と件名を入力してください"); return; }
+    if (!reason.trim()) { toast.error("申請理由・内容を入力してください"); return; }
     const fields = ((selectedType as WfType & { fields_schema?: FieldDef[] })?.fields_schema ?? []) as FieldDef[];
     const required = fields.filter(f => f.required);
     const missing = required.find(f => !dynamicValues[f.key]?.trim());
@@ -81,7 +83,7 @@ export function WorkflowNewClient({ initialTypes, initialProfiles, currentUserId
 
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = { ...dynamicValues };
+      const payload: Record<string, unknown> = { reason: reason.trim(), ...dynamicValues };
       const result = await createWorkflowRequest({
         type_id: typeId,
         title: title.trim(),
@@ -160,6 +162,15 @@ export function WorkflowNewClient({ initialTypes, initialProfiles, currentUserId
                       {ddDays && <span className="text-xs text-muted-foreground ml-1">（推奨: {ddDays}日以内）</span>}
                     </Label>
                     <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>申請理由・内容 *</Label>
+                    <Textarea
+                      rows={4}
+                      value={reason}
+                      onChange={e => setReason(e.target.value)}
+                      placeholder="何のための申請か、背景・目的・依頼内容を記入してください（承認者が金額と日付だけで判断しなくて済むように）"
+                    />
                   </div>
 
                   {fieldsDef.map(f => (

@@ -109,11 +109,24 @@ const EMPTY_FORM = {
 };
 
 /* ステータス色 */
-const BAR_COLORS: Record<string, string> = {
-  not_started: "bg-slate-400",
-  in_progress:  "bg-teal-500",
-  completed:    "bg-emerald-400",
-  on_hold:      "bg-amber-400",
+/* 工程ごとに色を割り当てる（並び順ベース）。状態は不透明度・リングで表現する */
+const BAR_PALETTE = [
+  "bg-teal-500",
+  "bg-sky-500",
+  "bg-violet-500",
+  "bg-rose-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-indigo-500",
+  "bg-orange-500",
+  "bg-fuchsia-500",
+  "bg-cyan-600",
+];
+const BAR_STATUS_CLASS: Record<string, string> = {
+  not_started: "opacity-80",
+  in_progress:  "",
+  completed:    "opacity-50",
+  on_hold:      "ring-2 ring-inset ring-amber-300 opacity-70",
 };
 
 /* 週末カラム: 土=青系 / 日=赤系（グレー一色だとバーと区別がつかない: No.148） */
@@ -260,12 +273,12 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
   }
 
   /* バー計算 */
-  function getBar(s: Date | null, e: Date | null, status: string) {
+  function getBar(s: Date | null, e: Date | null, status: string, index: number) {
     if (!s || !e) return null;
     return {
       left:  Math.max(0, diffDays(timelineStart, s)) * cw,
       width: Math.max(cw, (diffDays(s, e) + 1) * cw),
-      color: BAR_COLORS[status] ?? BAR_COLORS.not_started,
+      color: cn(BAR_PALETTE[index % BAR_PALETTE.length], BAR_STATUS_CLASS[status] ?? BAR_STATUS_CLASS.not_started),
     };
   }
 
@@ -570,7 +583,7 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
             ) : (
               tasks.map((task, idx) => {
                 const eff  = effectiveDates(task);
-                const bar  = getBar(eff.s, eff.e, task.status);
+                const bar  = getBar(eff.s, eff.e, task.status, idx);
                 const done = task.status === "completed";
                 const dragging = drag?.taskId === task.id;
                 const depName = task.depends_on_task_id
@@ -688,7 +701,6 @@ export function GanttTab({ constructionId, initialTasks, onScheduleChange }: Pro
                           className={cn(
                             "absolute rounded-full flex items-center overflow-hidden select-none touch-none",
                             bar.color,
-                            done && "opacity-50",
                             dragging ? "ring-2 ring-blue-400 z-10 cursor-grabbing" : "transition-all cursor-grab",
                           )}
                           style={{

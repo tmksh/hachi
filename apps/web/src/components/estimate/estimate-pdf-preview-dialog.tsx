@@ -135,7 +135,8 @@ function toEstimatePdfData(
         const sell = Number(item.selling_amount) || 0;
         return sell > 0;
       }
-      // 原価内訳: テキスト行も出し、売価0の計算行も含める
+      // 原価内訳: テキスト行も出し、売価0の計算行も含める。経営調整費は表下サマリー。
+      if (item.vendor_name === "経営調整費") return false;
       return true;
     })
     .map((item) => ({
@@ -191,8 +192,7 @@ function toEstimatePdfData(
     subtotal: estimate.subtotal ?? 0,
     tax: estimate.tax ?? 0,
     total: estimate.total ?? 0,
-    // No.106: 経営調整費・予備費は明細原価に含まれる
-    cost_total: estimate.cost_total ?? lineCost,
+    cost_total: estimate.cost_total ?? (lineCost + (Number(estimate.reserve_fee_1_amount) || 0)),
     reserve_fee_1_amount: Number(estimate.reserve_fee_1_amount) || 0,
     reserve_fee_2_amount: Number(estimate.reserve_fee_2_amount) || 0,
     categories,
@@ -528,7 +528,15 @@ function CostBreakdownTable({ data, itemCount }: { data: EstimatePdfPreviewData;
               ...data.items.filter((i) => !i.category_id).map(renderItemRow),
             ]
           : data.items.map(renderItemRow)}
-        {/* No.106: 経営調整費・予備費は明細行側に一本化（表下サマリー行は廃止） */}
+        {data.reserve_fee_1_amount > 0 && (
+          <tr style={{ background: "#fffbeb" }}>
+            <td style={{ ...nameCell, color: "#b45309" }}>経営調整費（会社規定・自動計上）</td>
+            <td style={numCell}>1</td>
+            <td style={unitCell}>式</td>
+            <td style={numCell}>¥{data.reserve_fee_1_amount.toLocaleString()}</td>
+            <td style={numCell}>¥{data.reserve_fee_1_amount.toLocaleString()}</td>
+          </tr>
+        )}
         {Array.from({ length: Math.max(0, 6 - itemCount) }).map((_, i) => (
           <tr key={`empty-${i}`}>
             <td colSpan={5} style={{ border: "1px solid #cbd5e1", padding: "10px" }}>&nbsp;</td>

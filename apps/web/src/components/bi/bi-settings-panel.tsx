@@ -311,7 +311,7 @@ export function BiSettingsPanel({
         return;
       }
       setReserveReleased(release);
-      toast.success(release ? "予備費を利益に戻しました（決算）" : "予備費の決算戻しを取り消しました");
+      toast.success(release ? "経営調整費を利益に戻しました（決算）" : "経営調整費の決算戻しを取り消しました");
     } finally {
       setReleasingReserve(false);
     }
@@ -608,12 +608,12 @@ export function BiSettingsPanel({
         </CardContent>
       </Card>
 
-      {/* ── 予備費（会社確保分・社員にも表示）── */}
+      {/* ── 経営調整費（会社確保分・社員にも表示）── */}
       <Card className={canEditReserve ? "border-amber-200/70" : ""}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-amber-600" />
-            予備費（会社確保分・目安2%）
+            経営調整費（会社規定・目安1〜2%）
             {!canEditReserve && (
               <span className="ml-1 inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
                 <Lock className="h-3 w-3" />設定権限がありません
@@ -640,7 +640,7 @@ export function BiSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">予備費率（売上に対する%）</Label>
+              <Label className="text-xs text-muted-foreground">経営調整費率（見積全体に対する%）</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -658,21 +658,21 @@ export function BiSettingsPanel({
           </div>
           <div className="text-xs text-muted-foreground">
             承認の基準 ＝ <span className="font-semibold text-amber-700">{(baseRatePct + reserveRatePct).toFixed(1)}%</span>
-            （会社指定{baseRatePct.toFixed(1)}% ＋ 予備費{reserveRatePct.toFixed(1)}%）。見積・実行予算の粗利率がこれを下回ると上長承認が必要です。
+            （会社指定{baseRatePct.toFixed(1)}% ＋ 経営調整費{reserveRatePct.toFixed(1)}%）。見積・実行予算の粗利率がこれを下回ると上長承認が必要です。
           </div>
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg p-2.5">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
             <span>
-              会社への上納分（固定確保）です。社員にも表示し、非表示による不信感を防ぎます。
-              BIダッシュボードでは利益から控除した保守的な数字を表示し、決算時に利益へ戻せます。
-              見積・実行予算では「会社指定粗利＋予備費」を満たさない場合に上長へ承認申請が必要になります。
+              見積全体（予備費を含む）に対して会社率を原価として一律計上します。担当者は明細で編集できません。
+              社員にも表示し、非表示による不信感を防ぎます。BIでは利益から控除した保守的な数字を表示し、決算時に利益へ戻せます。
+              見積・実行予算では「会社指定粗利＋経営調整費」を満たさない場合に上長へ承認申請が必要になります。
             </span>
           </div>
           {canEditReserve && reserveRatePct > 0 && (
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5">
               <div className="text-xs">
                 <p className="font-medium">
-                  決算処理：予備費を利益に戻す
+                  決算処理：経営調整費を利益に戻す
                 </p>
                 <p className="text-muted-foreground mt-0.5">
                   {reserveReleased
@@ -687,7 +687,7 @@ export function BiSettingsPanel({
                 disabled={releasingReserve}
                 onClick={() => void handleToggleReserveRelease(!reserveReleased)}
               >
-                {releasingReserve ? "処理中..." : reserveReleased ? "決算戻しを取消" : "決算：予備費を利益に戻す"}
+                {releasingReserve ? "処理中..." : reserveReleased ? "決算戻しを取消" : "決算：経営調整費を利益に戻す"}
               </Button>
             </div>
           )}

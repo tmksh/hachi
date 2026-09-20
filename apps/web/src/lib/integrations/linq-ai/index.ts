@@ -12,6 +12,7 @@
 
 import { addDays, format } from "date-fns";
 import { resolveLinqAiConfig } from "./platform-config";
+import { recordLinqAiUsage } from "./usage";
 import type {
   AppointmentParseResult,
   ApprovalSupportResult,
@@ -66,9 +67,21 @@ async function callOpenAi(prompt: string, config: LinqAiConfig, systemPrompt?: s
     console.error("[linq-ai] OpenAI error:", res.status, await res.text().catch(() => ""));
     return null;
   }
-  const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const json = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
   const text = json.choices?.[0]?.message?.content ?? null;
-  if (text) console.info(`[linq-ai] OpenAI ${model} ${Date.now() - started}ms`);
+  if (text) {
+    console.info(`[linq-ai] OpenAI ${model} ${Date.now() - started}ms`);
+    void recordLinqAiUsage({
+      kind: "linq",
+      provider: "openai",
+      model,
+      tokensIn: json.usage?.prompt_tokens,
+      tokensOut: json.usage?.completion_tokens,
+    });
+  }
   return text;
 }
 
@@ -94,9 +107,21 @@ async function callAnthropic(prompt: string, config: LinqAiConfig, systemPrompt?
     console.error("[linq-ai] Anthropic error:", res.status, await res.text().catch(() => ""));
     return null;
   }
-  const json = await res.json() as { content?: Array<{ text?: string }> };
+  const json = await res.json() as {
+    content?: Array<{ text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
   const text = json.content?.[0]?.text ?? null;
-  if (text) console.info(`[linq-ai] Anthropic ${model} ${Date.now() - started}ms`);
+  if (text) {
+    console.info(`[linq-ai] Anthropic ${model} ${Date.now() - started}ms`);
+    void recordLinqAiUsage({
+      kind: "linq",
+      provider: "anthropic",
+      model,
+      tokensIn: json.usage?.input_tokens,
+      tokensOut: json.usage?.output_tokens,
+    });
+  }
   return text;
 }
 
@@ -121,9 +146,19 @@ async function callGemini(prompt: string, config: LinqAiConfig): Promise<string 
   }
   const json = await res.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
   };
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-  if (text) console.info(`[linq-ai] Gemini ${model} ${Date.now() - started}ms`);
+  if (text) {
+    console.info(`[linq-ai] Gemini ${model} ${Date.now() - started}ms`);
+    void recordLinqAiUsage({
+      kind: "linq",
+      provider: "google",
+      model,
+      tokensIn: json.usageMetadata?.promptTokenCount,
+      tokensOut: json.usageMetadata?.candidatesTokenCount,
+    });
+  }
   return text;
 }
 

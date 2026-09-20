@@ -30,7 +30,7 @@ type Props = {
   grossProfitRate: number;
   defaultGrossProfitRate?: number | null;
   estimateStatus?: string | null;
-  /** 明細行に経営調整費・予備費が計上済みか（No.106） */
+  /** 互換用。経営調整費は会社率で自動計上するため常に true */
   systemFeesOk?: boolean;
   onConfirmed?: () => void;
   /** 承認ステータスが変わったとき（親の差戻しバナー更新用） */
@@ -43,7 +43,7 @@ export function EstimateApprovalActions({
   grossProfitRate,
   defaultGrossProfitRate,
   estimateStatus,
-  systemFeesOk = false,
+  systemFeesOk = true,
   onConfirmed,
   onStatusChange,
 }: Props) {
@@ -96,7 +96,7 @@ export function EstimateApprovalActions({
 
   const openDialog = () => {
     if (!reserveOk) {
-      toast.error("経営調整費・予備費を明細行（発注業者）で計上してから申請してください");
+      toast.error("見積内容を確認してから申請してください");
       return;
     }
     if (profiles.length === 0) {
@@ -119,7 +119,7 @@ export function EstimateApprovalActions({
       onConfirmed?.();
       onStatusChange?.();
     } catch (e) {
-      toast.error(humanizeClientError(e, "確定に失敗しました。経営調整費・予備費の計上と粗利率を確認してください"));
+      toast.error(humanizeClientError(e, "確定に失敗しました。粗利率を確認してください"));
     } finally {
       setConfirming(false);
     }
@@ -127,7 +127,7 @@ export function EstimateApprovalActions({
 
   const handleSubmit = async () => {
     if (!reserveOk) {
-      toast.error("経営調整費・予備費を明細行（発注業者）で計上してから申請してください");
+      toast.error("見積内容を確認してから申請してください");
       return;
     }
     if (!comment.trim()) { toast.error("申請コメントを入力してください"); return; }
@@ -149,7 +149,7 @@ export function EstimateApprovalActions({
       setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId: result.workflowRequestId, remandComment: null } : prev);
       onStatusChange?.();
     } catch (e) {
-      toast.error(humanizeClientError(e, "申請に失敗しました。経営調整費・予備費の計上と承認者選択を確認して再度お試しください"));
+      toast.error(humanizeClientError(e, "申請に失敗しました。承認者選択を確認して再度お試しください"));
     } finally {
       setSubmitting(false);
     }

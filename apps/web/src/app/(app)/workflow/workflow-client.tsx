@@ -114,7 +114,14 @@ export function WorkflowClient({ initialRows }: WorkflowClientProps) {
               {filtered.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">該当なし</TableCell></TableRow> : filtered.map(r => (
                 <TableRow key={r.id} className="cursor-pointer glass-row" onMouseEnter={() => router.prefetch(`/workflow/${r.id}`)} onClick={() => router.push(`/workflow/${r.id}`)}>
                   <TableCell><Badge variant="outline">{TYPE_LABELS[r.workflow_type?.key ?? ""] || "その他"}</Badge></TableCell>
-                  <TableCell className="font-medium">{r.title}</TableCell>
+                  <TableCell className="font-medium">
+                    <div>{r.title}</div>
+                    {typeof (r.payload as Record<string, unknown> | null)?.reason === "string" && (
+                      <div className="text-xs text-muted-foreground font-normal truncate max-w-[360px]">
+                        {String((r.payload as Record<string, unknown>).reason)}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>{r.requester?.display_name ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.amount ? `¥${r.amount.toLocaleString()}` : "-"}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>

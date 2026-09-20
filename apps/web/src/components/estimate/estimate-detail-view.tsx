@@ -88,6 +88,7 @@ import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actio
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
 import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
+import { calcManagementFeeAmount } from "@/lib/estimate-management-fee";
 import { humanizeClientError } from "@/lib/humanize-error";
 import { useBridgeChat } from "@/contexts/chat-panel-context";
 const ESTIMATE_STATUS_MAP: Record<string, string> = {
@@ -318,7 +319,6 @@ function VendorInput({
     const rank = (c: VendorCandidate) => {
       if (c.kind !== "system") return 3;
       if (c.system_key === "reserve") return 0;
-      if (c.system_key === "management") return 1;
       return 2;
     };
     const d = rank(a) - rank(b);
@@ -419,16 +419,14 @@ function VendorInput({
                     variant="outline"
                     className={cn(
                       "text-[9px] py-0 shrink-0",
-                      c.system_key === "reserve" || c.system_key === "management"
+                      c.system_key === "reserve"
                         ? "border-amber-300 text-amber-700 bg-amber-50"
                         : "border-slate-300 text-slate-500",
                     )}
                   >
                     {c.system_key === "reserve"
                       ? "予備費"
-                      : c.system_key === "management"
-                        ? "経営調整費"
-                        : "システム予約"}
+                      : "システム予約"}
                   </Badge>
                 )}
               </button>
@@ -440,19 +438,20 @@ function VendorInput({
   );
 }
 
-/** システム原価行（予備費・経営調整費）かどうか（種別フラグ・No.61/67/106） */
+/** システム原価行（予備費）かどうか。経営調整費は明細行にしない */
 function isSystemCostCandidate(candidates: VendorCandidate[], craftsmanId: string | null): boolean {
   if (!craftsmanId) return false;
   const c = candidates.find((x) => x.id === craftsmanId);
-  return (
-    c?.kind === "system" &&
-    (c?.system_key === "reserve" || c?.system_key === "management")
-  );
+  return c?.kind === "system" && c?.system_key === "reserve";
+}
+
+function isManagementVendor(candidates: VendorCandidate[], craftsmanId: string | null | undefined): boolean {
+  if (!craftsmanId) return false;
+  return candidates.find((x) => x.id === craftsmanId)?.system_key === "management";
 }
 
 function systemCostLabel(candidates: VendorCandidate[], craftsmanId: string | null | undefined): string {
   const c = craftsmanId ? candidates.find((x) => x.id === craftsmanId) : undefined;
-  if (c?.system_key === "management") return "経営調整費";
   if (c?.system_key === "reserve") return "予備費";
   return "予備費";
 }
@@ -1168,7 +1167,9 @@ export function EstimateDetailView({
       .catch(() => {});
   }, [estimate.id]);
   const categories: EstimateCategory[] = estimate.categories ?? [];
-  const items: EstimateItem[] = estimate.items ?? [];
+  const items: EstimateItem[] = (estimate.items ?? []).filter(
+    (item) => !isManagementVendor(vendorCandidates, item.vendor_craftsman_id) && item.vendor_name !== "経営調整費",
+  );
 
   const itemsByCategory = categories.map((cat) => ({
     category: cat,
@@ -1248,18 +1249,10 @@ export function EstimateDetailView({
     return { sell, cost };
   })();
 
-  // No.106: 表下サマリー廃止。発注業者=経営調整費／予備費の明細行（原価>0）で計上判定
-  const managementVendorId = vendorCandidates.find((c) => c.system_key === "management")?.id;
   const reserveVendorId = vendorCandidates.find((c) => c.system_key === "reserve")?.id;
-  const managementCost = items
-    .filter((i) => i.vendor_craftsman_id === managementVendorId)
-    .reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
   const reserveCost = items
-    .filter((i) => i.vendor_craftsman_id === reserveVendorId)
+    .filter((i) => i.vendor_craftsman_id === reserveVendorId || i.vendor_name === "予備費")
     .reduce((s, i) => s + Number(i.cost_amount ?? 0), 0);
-  const systemFeesOk =
-    managementCost > 0 &&
-    items.some((i) => i.vendor_craftsman_id === reserveVendorId && Number(i.cost_amount ?? 0) > 0);
 
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const [inlineAdd, setInlineAdd] = useState<"category" | string | null>(null);
@@ -1642,11 +1635,19 @@ export function EstimateDetailView({
 
   // 明細からライブ算出（estimate.cost_total が古いと¥0表示になるため画面上はこちらを正とする）
   const liveSell = effectiveLineTotals.sell;
-  const liveCost = effectiveLineTotals.cost;
+  const reservePercentPreview = marginInfo?.reservePercent ?? 0;
+  const managementCost = marginInfo
+    ? calcManagementFeeAmount({
+        sellingTotal: liveSell,
+        reserveCost,
+        rate: reservePercentPreview / 100,
+      })
+    : Number(estimate.reserve_fee_1_amount ?? 0);
+  const liveDetailCost = effectiveLineTotals.cost;
+  const liveCost = liveDetailCost + managementCost;
   const liveTax = Math.floor(liveSell * 0.1);
   const liveTotal = liveSell + liveTax;
   const liveGross = liveSell - liveCost;
-  const liveDetailCost = Math.max(0, liveCost - managementCost);
   const liveGrossRate = liveSell > 0 ? (liveGross / liveSell) * 100 : 0;
   const grossRate = liveGrossRate || (estimate.gross_profit_rate ?? 0);
   // 承認の基準は部門/会社設定（指定粗利率＋経営調整費率）をサーバーから取得
@@ -1807,7 +1808,15 @@ export function EstimateDetailView({
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onClick={() => {
-                  setPdfData(toEstimatePdfPreviewData(estimate, pdfCustomer));
+                  setPdfData(toEstimatePdfPreviewData({
+                    ...estimate,
+                    items,
+                    subtotal: liveSell,
+                    tax: liveTax,
+                    total: liveTotal,
+                    cost_total: liveCost,
+                    reserve_fee_1_amount: managementCost,
+                  }, pdfCustomer));
                   setPdfOpen(true);
                 }}
               >
@@ -1815,7 +1824,15 @@ export function EstimateDetailView({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
-                  setPdfData(toCostBreakdownPdfPreviewData(estimate, pdfCustomer));
+                  setPdfData(toCostBreakdownPdfPreviewData({
+                    ...estimate,
+                    items,
+                    subtotal: liveSell,
+                    tax: liveTax,
+                    total: liveTotal,
+                    cost_total: liveCost,
+                    reserve_fee_1_amount: managementCost,
+                  }, pdfCustomer));
                   setPdfOpen(true);
                 }}
               >
@@ -1829,7 +1846,7 @@ export function EstimateDetailView({
             grossProfitRate={grossRate}
             defaultGrossProfitRate={estimate.default_gross_profit_rate}
             estimateStatus={estimate.status}
-            systemFeesOk={systemFeesOk}
+            systemFeesOk
             onConfirmed={() => {
               onEstimateChange({
                 ...estimate,
@@ -1862,7 +1879,7 @@ export function EstimateDetailView({
               <div className="flex justify-between gap-2 text-muted-foreground">
                 <span>
                   経営調整費
-                  {reservePercent > 0 ? `（売価の${reservePercent.toFixed(0)}%・会社規定）` : ""}
+                  {reservePercent > 0 ? `（見積全体の${reservePercent.toFixed(0)}%・会社規定）` : ""}
                 </span>
                 <span className="tabular-nums">¥{managementCost.toLocaleString()}</span>
               </div>
@@ -2319,14 +2336,19 @@ export function EstimateDetailView({
                 </td>
               </tr>
             ) : null}
-            {/* No.106: 表下のサマリー入力は廃止。明細の発注業者で経営調整費・予備費を計上 */}
-            {!systemFeesOk && (
-              <tr className="bg-rose-50 border-t border-rose-200">
-                <td colSpan={11} className="px-3 py-2 text-[11px] text-rose-800 font-medium">
-                  経営調整費・予備費が明細に計上されていません。発注業者で「経営調整費」「予備費」を選び原価を入れてください。未計上のままでは確定・提出できません。
-                </td>
-              </tr>
-            )}
+            <tr className="bg-amber-50/70 border-t border-amber-200/80">
+              <td colSpan={5} className="px-3 py-2 text-right text-xs text-amber-900">
+                経営調整費
+                {reservePercent > 0
+                  ? `（売価＋予備費の${reservePercent.toFixed(0)}%・会社規定・自動）`
+                  : "（会社規定率・自動／未設定）"}
+              </td>
+              <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-xs text-amber-900">
+                ¥{managementCost.toLocaleString()}
+              </td>
+              <td colSpan={2} className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">¥0</td>
+              <td colSpan={2} className="px-3 py-2" />
+            </tr>
             <tr className="bg-slate-100/70 border-t border-border/40 font-bold">
               <td colSpan={5} className="px-3 py-3 text-right text-sm">合計</td>
               <td colSpan={2} className="px-3 py-3 text-right tabular-nums text-base">¥{liveCost.toLocaleString()}</td>
