@@ -4,13 +4,15 @@ import { MainLayout } from "@/components/layout/main-layout";
 
 export default function AppLayout({
   children,
+  detail,
 }: {
   children: React.ReactNode;
+  detail: React.ReactNode;
 }) {
   return (
     <QueryProvider>
       <AuthProvider>
-        <MainLayout>{children}</MainLayout>
+        <MainLayout>{children}{detail}</MainLayout>
       </AuthProvider>
     </QueryProvider>
   );

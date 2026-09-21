@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { PDF_FORM_ANNOTATION_MODE } from "@/lib/pdf-form-render";
 
 let pdfjsPromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
@@ -43,10 +44,10 @@ type Props = {
   onRendered?: (size: { width: number; height: number }) => void;
   className?: string;
   /**
-   * PDF注釈を描画するか。白塗り・図形注釈は編集画面と同じく含める。
-   * フォーム項目の見た目は HTML オーバーレイが上に乗る。
+   * AcroForm 入力欄を描画するか。差し込みでは HTML と二重になるため false。
+   * 白塗り・スタンプ等の通常の注釈は常に描画する。
    */
-  renderAnnotations?: boolean;
+  renderFormFields?: boolean;
 };
 
 /** PDF の1ページを canvas に描画する */
@@ -56,7 +57,7 @@ export function PdfPageCanvas({
   width,
   onRendered,
   className,
-  renderAnnotations = true,
+  renderFormFields = true,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export function PdfPageCanvas({
           canvas,
           canvasContext: ctx,
           viewport,
-          annotationMode: renderAnnotations ? 1 : 0,
+          annotationMode: renderFormFields ? 1 : PDF_FORM_ANNOTATION_MODE,
         } as Parameters<typeof page.render>[0]);
         await (renderTask as unknown as { promise: Promise<void> }).promise;
         if (!cancelled) {
@@ -105,7 +106,7 @@ export function PdfPageCanvas({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [doc, pageNumber, width, onRendered, renderAnnotations]);
+  }, [doc, pageNumber, width, onRendered, renderFormFields]);
 
   if (error) {
     return <div className="text-xs text-destructive p-4">{error}</div>;

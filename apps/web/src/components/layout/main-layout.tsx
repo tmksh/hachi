@@ -25,7 +25,6 @@ function BrandColorBootstrap() {
 }
 
 const BRIDGE_AI_PANEL_WIDTH = 400;
-const INTERNAL_CHAT_WIDTH = 360;
 const SIDEBAR_EXPANDED_PAD = 196 + 12 + 12;
 const SIDEBAR_COLLAPSED_PAD = 68 + 12 + 12;
 
@@ -63,6 +62,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         autoSend: opts.autoSend,
       });
     }
+    setChatOpen(false);
     setInternalChatOpen(true);
   }, []);
   const openBridgeChat = useCallback((opts?: OpenBridgeChatOptions) => {
@@ -75,6 +75,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         estimateDraft: opts?.estimateDraft,
       });
     }
+    setInternalChatOpen(false);
     setChatOpen(true);
   }, []);
   const clearBridgeSeed = useCallback(() => setBridgeSeed(null), []);
@@ -84,9 +85,9 @@ export function MainLayout({ children }: MainLayoutProps) {
     () =>
       ({
         "--main-pl": `${expanded ? SIDEBAR_EXPANDED_PAD : SIDEBAR_COLLAPSED_PAD}px`,
-        "--main-pr": `${(chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0) + (internalChatOpen ? INTERNAL_CHAT_WIDTH : 0)}px`,
+        "--main-pr": `${chatOpen ? BRIDGE_AI_PANEL_WIDTH : 0}px`,
       }) as CSSProperties,
-    [expanded, chatOpen, internalChatOpen],
+    [expanded, chatOpen],
   );
 
   if (isAdminLogin) {

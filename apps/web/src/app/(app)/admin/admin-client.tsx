@@ -18,8 +18,7 @@ import {
   getAdminLinqAiSettings,
   updateAdminLinqAiSettings,
   testAdminLinqAiConnection,
-  getAdminCompanyUsage,
-  getAdminAiUsage,
+  getAdminUsageSummary,
   type AdminCompanyUsage,
   type AdminAiUsageSummary,
 } from "@/lib/actions/admin";
@@ -208,19 +207,23 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
-    const [s, c, u, ov, rank, trend, status, dist, usage, apiUsage] = await Promise.all([
-      getAdminStats(), getAdminCompanies(), getAdminUsers(),
-      getAdminBiOverview(), getAdminBiCompanyRanking(),
-      getAdminBiMonthlyTrend(), getAdminBiStatusBreakdown(),
-      getAdminBiGrossRateDistribution(),
-      getAdminCompanyUsage(),
-      getAdminAiUsage(),
-    ]);
-    setStats(s); setCompanies(c ?? []); setUsers(u ?? []);
-    setBi(ov); setBiRanking(rank); setBiTrend(trend); setBiStatus(status); setBiDist(dist);
-    setCompanyUsage(usage); setAiUsage(apiUsage);
-    await loadAiSettings().catch(() => {});
-    setLoading(false);
+    try {
+      const [s, c, u, ov, rank, trend, status, dist, usage] = await Promise.all([
+        getAdminStats(), getAdminCompanies(), getAdminUsers(),
+        getAdminBiOverview(), getAdminBiCompanyRanking(),
+        getAdminBiMonthlyTrend(), getAdminBiStatusBreakdown(),
+        getAdminBiGrossRateDistribution(),
+        getAdminUsageSummary(),
+      ]);
+      setStats(s); setCompanies(c ?? []); setUsers(u ?? []);
+      setBi(ov); setBiRanking(rank); setBiTrend(trend); setBiStatus(status); setBiDist(dist);
+      setCompanyUsage(usage.companyUsage); setAiUsage(usage.aiUsage);
+      await loadAiSettings().catch(() => {});
+    } catch {
+      setErrorMsg("運営管理データを取得できませんでした。再読み込みしてください。");
+    } finally {
+      setLoading(false);
+    }
   }, [loadAiSettings]);
 
   useEffect(() => {
@@ -528,7 +531,7 @@ export function AdminClient({ initialData }: { initialData: AdminInitialData }) 
                       <th className="px-3 py-1.5 text-right font-medium">ユーザー</th>
                       <th className="px-3 py-1.5 text-right font-medium">工事</th>
                       <th className="px-3 py-1.5 text-right font-medium">状態</th>
-                      <th className="px-3 py-1.5 text-right font-medium">最終利用</th>
+                      <th className="px-3 py-1.5 text-right font-medium" title="ログイン・工事更新・AI利用の最新日時">最終利用</th>
                       <th className="px-3 py-1.5 text-right font-medium">API</th>
                     </tr>
                   </thead>

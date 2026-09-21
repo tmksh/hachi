@@ -250,12 +250,31 @@ export async function moveThreadToFolder(threadId: string, folderId: string | nu
   if (!user) return actionFail("ログインが必要です", "ログインが必要です");
   const accountIds = await myEmailAccountIds(supabase, user.id);
   if (accountIds.length === 0) return actionFail("メールアカウントがありません", "メールアカウントがありません");
-  const { error } = await supabase
+  if (folderId) {
+    const { data: folder, error } = await supabase.from("email_folders").select("id")
+      .eq("id", folderId).eq("user_id", user.id).maybeSingle();
+    if (error || !folder) return actionFail(error, "移動先のフォルダが見つかりません");
+  }
+  const { data, error } = await supabase
     .from("email_threads")
-    .update({ folder_id: folderId })
+    .update({ folder_id: folderId, is_spam: false })
     .eq("id", threadId)
-    .in("account_id", accountIds);
-  if (error) return actionFail(error, "フォルダの移動に失敗しました");
+    .in("account_id", accountIds).select("id").maybeSingle();
+  if (error || !data) return actionFail(error, "フォルダの移動に失敗しました");
+  return actionOk({ done: true as const });
+}
+
+/** アプリ内の迷惑メール分類。外部メールプロバイダーへの送信・削除は行わない。 */
+export async function setThreadSpam(id: string, spam: boolean): Promise<ActionResult<{ done: true }>> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return actionFail("ログインが必要です", "ログインが必要です");
+  const accountIds = await myEmailAccountIds(supabase, user.id);
+  if (!accountIds.length) return actionFail("メールアカウントがありません", "メールアカウントがありません");
+  const { data, error } = await supabase.from("email_threads")
+    .update({ is_spam: spam, folder_id: null }).eq("id", id).in("account_id", accountIds)
+    .select("id").maybeSingle();
+  if (error || !data) return actionFail(error, "迷惑メールの振り分けに失敗しました");
   return actionOk({ done: true as const });
 }
 

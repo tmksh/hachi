@@ -48,13 +48,14 @@ async function getCompanyReservePercent(
   supabase: Awaited<ReturnType<typeof createClient>>,
   companyId: string,
 ): Promise<number> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("bi_annual_settings")
     .select("reserve_fee_rate")
     .eq("company_id", companyId)
     .order("fiscal_year", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) throw new Error("会社の経営調整費率を取得できませんでした");
   const rate = Number(data?.reserve_fee_rate ?? 0);
   return rate > 0 ? rate * 100 : 0;
 }
@@ -68,13 +69,14 @@ async function getCompanyBaseMarginPercent(
   supabase: Awaited<ReturnType<typeof createClient>>,
   companyId: string,
 ): Promise<number | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("bi_annual_settings")
     .select("base_gross_profit_rate")
     .eq("company_id", companyId)
     .order("fiscal_year", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) throw new Error("会社の粗利基準を取得できませんでした");
   const raw = Number(data?.base_gross_profit_rate ?? NaN);
   if (!Number.isFinite(raw) || raw <= 0) return null;
   return raw > 1 ? raw : raw * 100;

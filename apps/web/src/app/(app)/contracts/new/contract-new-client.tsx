@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
@@ -23,6 +24,7 @@ export function ContractNewClient({
   initialProfiles,
 }: ContractNewClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const customers = initialCustomers;
   const estimates = initialEstimates;
@@ -61,6 +63,7 @@ export function ContractNewClient({
         notes: notes || undefined,
       });
       toast.success("契約を登録しました");
+      await queryClient.invalidateQueries({ queryKey: ["contracts"] });
       router.push("/contracts");
     } catch {
       toast.error("登録に失敗しました");

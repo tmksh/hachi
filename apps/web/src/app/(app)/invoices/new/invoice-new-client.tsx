@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ export function InvoiceNewClient({
   initialConstructions: { id: string; title: string }[];
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState(initialCustomers);
   const [constructions, setConstructions] = useState(initialConstructions);
@@ -49,7 +51,9 @@ export function InvoiceNewClient({
     setSaving(true);
     try {
       await createInvoice({ customer_id: customerId || undefined, construction_id: constructionId || undefined, recipient: recipient || undefined, invoice_date: invoiceDate || undefined, due_date: dueDate || undefined }, items.filter(i => i.description.trim()).map(i => ({ description: i.description, quantity: i.quantity, unit_price: i.unit_price, amount: i.quantity * i.unit_price })));
-      toast.success("請求書を作成しました"); router.push("/invoices");
+      toast.success("請求書を作成しました");
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      router.push("/invoices");
     } catch { toast.error("作成に失敗"); } finally { setSaving(false); }
   };
 

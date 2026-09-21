@@ -167,15 +167,16 @@ export type PdfFormField = {
   align: "left" | "center" | "right";
 };
 
-export type PdfFormDocType = "contract" | "estimate" | "invoice";
+export type PdfFormDocType = "contract" | "estimate" | "invoice" | "purchase_order";
 
 export const PDF_FORM_DOC_TYPE_LABELS: Record<PdfFormDocType, string> = {
   contract: "契約書",
   estimate: "見積書",
   invoice: "請求書",
+  purchase_order: "発注書",
 };
 
-export const PDF_FORM_DOC_TYPES: PdfFormDocType[] = ["contract", "estimate", "invoice"];
+export const PDF_FORM_DOC_TYPES: PdfFormDocType[] = ["contract", "estimate", "invoice", "purchase_order"];
 
 export type PdfFormTemplate = {
   id: string;

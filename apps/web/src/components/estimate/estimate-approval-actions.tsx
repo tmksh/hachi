@@ -1,5 +1,6 @@
 "use client";
 
+import { useEstimateMarginInfo } from "@/hooks/use-estimate-margin-info";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/select";
 import { AlertTriangle, CheckCircle, CornerUpLeft, FileCheck, Loader2 } from "lucide-react";
 import {
-  getEstimateMarginThreshold,
   submitEstimateApproval,
   confirmEstimateIssued,
 } from "@/lib/actions/sales-flow";
@@ -47,7 +47,7 @@ export function EstimateApprovalActions({
   onConfirmed,
   onStatusChange,
 }: Props) {
-  const [marginInfo, setMarginInfo] = useState<Awaited<ReturnType<typeof getEstimateMarginThreshold>>>(null);
+  const { data: marginInfo, refetch: refreshMarginInfo } = useEstimateMarginInfo(estimateId, departmentName);
   const [profiles, setProfiles] = useState<{ id: string; display_name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [comment, setComment] = useState("");
@@ -56,10 +56,6 @@ export function EstimateApprovalActions({
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    const loadMargin = () => {
-      getEstimateMarginThreshold(estimateId).then(setMarginInfo).catch(() => {});
-    };
-    loadMargin();
     fetchProfiles()
       .then((p) =>
         setProfiles(
@@ -70,15 +66,6 @@ export function EstimateApprovalActions({
       )
       .catch(() => {});
 
-    const onVisible = () => {
-      if (document.visibilityState === "visible") loadMargin();
-    };
-    window.addEventListener("focus", loadMargin);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("focus", loadMargin);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
   }, [estimateId, departmentName]);
 
   const threshold = marginInfo?.threshold
@@ -92,7 +79,7 @@ export function EstimateApprovalActions({
     || estimateStatus === "accepted"
     || approvalStatus === "approved";
 
-  const reserveOk = systemFeesOk;
+  const reserveOk = systemFeesOk && Boolean(marginInfo);
 
   const openDialog = () => {
     if (!reserveOk) {
@@ -107,6 +94,7 @@ export function EstimateApprovalActions({
   };
 
   const handleConfirm = async () => {
+    if (!reserveOk) return;
     setConfirming(true);
     try {
       const result = await confirmEstimateIssued(estimateId);
@@ -115,7 +103,7 @@ export function EstimateApprovalActions({
         return;
       }
       toast.success("見積を確定（発行済み）にしました");
-      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "approved", status: "issued" } : prev);
+      void refreshMarginInfo();
       onConfirmed?.();
       onStatusChange?.();
     } catch (e) {
@@ -146,7 +134,7 @@ export function EstimateApprovalActions({
       toast.success(canReapply ? "再申請を送信しました" : "上長への承認申請を送信しました");
       setDialogOpen(false);
       setComment("");
-      setMarginInfo((prev) => prev ? { ...prev, approvalStatus: "pending", workflowRequestId: result.workflowRequestId, remandComment: null } : prev);
+      void refreshMarginInfo();
       onStatusChange?.();
     } catch (e) {
       toast.error(humanizeClientError(e, "申請に失敗しました。承認者選択を確認して再度お試しください"));
@@ -170,7 +158,7 @@ export function EstimateApprovalActions({
         size="sm"
         className="bg-emerald-600 hover:bg-emerald-700"
         onClick={() => void handleConfirm()}
-        disabled={confirming}
+        disabled={confirming || !reserveOk}
       >
         {confirming ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileCheck className="h-4 w-4 mr-1" />}
         確定する

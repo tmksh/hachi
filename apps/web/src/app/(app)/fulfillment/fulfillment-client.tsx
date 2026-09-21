@@ -498,17 +498,6 @@ export function FulfillmentClient({ initialOrders }: Props) {
                     />
                   </td>
                 </tr>
-                {isExpanded && (
-                  <tr className="bg-slate-50">
-                    <td colSpan={11} className="px-3 pb-4 pt-0" onClick={(e) => e.stopPropagation()}>
-                      <OrderExpandPanel
-                        order={o}
-                        status={ls}
-                        onPreview={() => setPreviewTarget(o)}
-                      />
-                    </td>
-                  </tr>
-                )}
                 </Fragment>
               );
             })}
@@ -534,6 +523,16 @@ export function FulfillmentClient({ initialOrders }: Props) {
           <AccountItemsClient embedded initialOrders={orders} accountItems={accountItems} />
         </div>
       )}
+
+      <Dialog open={Boolean(expandedId)} onOpenChange={(open) => { if (!open) setExpandedId(null); }}>
+        <DialogContent className="sm:max-w-5xl max-h-[90dvh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>納品・検収の詳細</DialogTitle></DialogHeader>
+          {(() => {
+            const order = orders.find((o) => o.id === expandedId);
+            return order ? <OrderExpandPanel order={order} status={deriveLedgerStatus(order)} onPreview={() => setPreviewTarget(order)} /> : null;
+          })()}
+        </DialogContent>
+      </Dialog>
 
       <DeliveryDialog
         key={deliveryTarget?.id ?? "delivery-closed"}
@@ -1097,17 +1096,15 @@ function invoicePreviewBlob(file: File, kind: "pdf" | "image" | "other") {
 
 function InvoicePdfPages({ source }: { source: string | ArrayBuffer }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadedState, setLoadedState] = useState<{ source: string | ArrayBuffer; doc: PDFDocumentProxy | null; error: string | null } | null>(null);
+  const doc = loadedState?.source === source ? loadedState.doc : null;
+  const error = loadedState?.source === source ? loadedState.error : null;
   const [width, setWidth] = useState(0);
   const [ratios, setRatios] = useState<number[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     let loaded: PDFDocumentProxy | null = null;
-    setDoc(null);
-    setError(null);
-    setRatios([]);
     void loadPdfDocument(source)
       .then((next) => {
         if (cancelled) {
@@ -1115,10 +1112,11 @@ function InvoicePdfPages({ source }: { source: string | ArrayBuffer }) {
           return;
         }
         loaded = next;
-        setDoc(next);
+        setRatios([]);
+        setLoadedState({ source, doc: next, error: null });
       })
       .catch(() => {
-        if (!cancelled) setError("PDFを表示できません");
+        if (!cancelled) setLoadedState({ source, doc: null, error: "PDFを表示できません" });
       });
     return () => {
       cancelled = true;
@@ -1173,42 +1171,30 @@ function InvoicePdfPages({ source }: { source: string | ArrayBuffer }) {
 }
 
 function InvoiceFilePreview({ path, file }: { path?: string | null; file?: File | null }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [pdfSource, setPdfSource] = useState<string | ArrayBuffer | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ path?: string | null; file?: File | null; url: string | null; pdfSource: string | ArrayBuffer | null; error: string | null } | null>(null);
+  const current = preview?.path === path && preview?.file === file ? preview : null;
+  const url = current?.url ?? null;
+  const pdfSource = current?.pdfSource ?? null;
+  const error = current?.error ?? null;
   const fileName = file?.name ?? path?.split("/").pop() ?? "請求書";
   const kind = previewKind(fileName, file?.type);
 
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
-    setUrl(null);
-    setPdfSource(null);
-    setError(null);
-    if (file) {
-      objectUrl = URL.createObjectURL(invoicePreviewBlob(file, kind));
-      setUrl(objectUrl);
-      if (kind === "pdf") {
-        void file.arrayBuffer().then((buf) => {
-          if (!cancelled) setPdfSource(buf);
-        });
+    void (async () => {
+      if (file) {
+        objectUrl = URL.createObjectURL(invoicePreviewBlob(file, kind));
+        const source = kind === "pdf" ? await file.arrayBuffer() : null;
+        if (!cancelled) setPreview({ path, file, url: objectUrl, pdfSource: source, error: null });
+      } else if (path) {
+        const res = await getProcurementFileUrl(path);
+        if (!cancelled) setPreview({ path, file, url: res.ok ? res.url : null, pdfSource: res.ok && kind === "pdf" ? res.url : null, error: res.ok ? null : res.error });
       }
-      return () => {
-        cancelled = true;
-        URL.revokeObjectURL(objectUrl!);
-      };
-    }
-    if (!path) return;
-    void getProcurementFileUrl(path).then((res) => {
-      if (cancelled) return;
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      setUrl(res.url);
-      if (kind === "pdf") setPdfSource(res.url);
+    })().catch(() => {
+      if (!cancelled) setPreview({ path, file, url: null, pdfSource: null, error: "ファイルを表示できません" });
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [path, file, kind]);
 
   if (!file && !path) {

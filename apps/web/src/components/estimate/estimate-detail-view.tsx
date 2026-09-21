@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useEstimateMarginInfo } from "@/hooks/use-estimate-margin-info";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -86,7 +87,6 @@ import { updateEstimate } from "@/lib/actions/estimates";
 import { ESTIMATE_QK, ESTIMATE_STALE_MS, ESTIMATE_DETAIL_STALE_MS, fetchEstimates, fetchEstimate } from "@/lib/queries/estimates";
 import { getDepartmentMarginRates, type DepartmentMarginRate } from "@/lib/actions/deals";
 import { EstimateApprovalActions } from "@/components/estimate/estimate-approval-actions";
-import { getEstimateMarginThreshold } from "@/lib/actions/sales-flow";
 import { toMarginThresholdPercent } from "@/lib/estimate-margin";
 import { calcManagementFeeAmount } from "@/lib/estimate-management-fee";
 import { humanizeClientError } from "@/lib/humanize-error";
@@ -302,7 +302,6 @@ function VendorInput({
 
   useEffect(() => {
     if (!open) return;
-    setQuery("");
     const t = window.setTimeout(() => searchRef.current?.focus(), 0);
     return () => window.clearTimeout(t);
   }, [open]);
@@ -347,7 +346,7 @@ function VendorInput({
   const label = vendorName.trim() || "業者を検索";
 
   return (
-    <Popover open={open} onOpenChange={(o) => !disabled && setOpen(o)}>
+    <Popover open={open} onOpenChange={(o) => { if (!disabled) { setOpen(o); if (o) setQuery(""); } }}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -1125,15 +1124,9 @@ export function EstimateDetailView({
   const [bulkRateCost, setBulkRateCost] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkRateSell, setBulkRateSell] = useState(String(Math.round(toMarginThresholdPercent(estimate.default_gross_profit_rate))));
   const [bulkApplying, setBulkApplying] = useState(false);
-  const [marginInfo, setMarginInfo] = useState<{
-    threshold: number;
-    baseThreshold: number;
-    reservePercent: number;
-    baseSource?: "department" | "company" | "estimate_default";
-    approvalStatus: string;
-    remandComment: string | null;
-    workflowRequestId: string | null;
-  } | null>(null);
+  const marginQuery = useEstimateMarginInfo(estimate.id, estimate.department_name);
+  const marginInfo = marginQuery.data;
+  const refreshMarginInfo = marginQuery.refetch;
   // 経営調整費は社員にも表示（非表示による不信感を防止）
   const canSeeReserve = true;
   // 発注業者のインクリメンタルサーチ候補（業者マスタ・システム予約含む）
@@ -1150,22 +1143,6 @@ export function EstimateDetailView({
       .catch(() => {});
   }, []);
 
-  const refreshMarginInfo = useCallback(() => {
-    getEstimateMarginThreshold(estimate.id)
-      .then((r) => {
-        if (!r) return;
-        setMarginInfo({
-          threshold: r.threshold,
-          baseThreshold: r.baseThreshold,
-          reservePercent: r.reservePercent,
-          baseSource: r.baseSource,
-          approvalStatus: r.approvalStatus ?? "none",
-          remandComment: r.remandComment ?? null,
-          workflowRequestId: r.workflowRequestId ?? null,
-        });
-      })
-      .catch(() => {});
-  }, [estimate.id]);
   const categories: EstimateCategory[] = estimate.categories ?? [];
   const items: EstimateItem[] = (estimate.items ?? []).filter(
     (item) => !isManagementVendor(vendorCandidates, item.vendor_craftsman_id) && item.vendor_name !== "経営調整費",
@@ -1270,9 +1247,6 @@ export function EstimateDetailView({
     seededEstimateIdRef.current = null;
   }, [estimate.id]);
 
-  useEffect(() => {
-    refreshMarginInfo();
-  }, [refreshMarginInfo]);
 
   useEffect(() => {
     if (loading || !estimate.id) return;
@@ -1677,6 +1651,19 @@ export function EstimateDetailView({
   const isReturned = approvalStatus === "returned";
   const isRejected = approvalStatus === "rejected";
   const showApprovalNotice = isReturned || isRejected;
+
+  if (!marginInfo) {
+    return (
+      <div className="rounded-xl border p-6" role="status">
+        {marginQuery.isError ? (
+          <div className="space-y-3">
+            <p>経営調整費・承認基準を取得できませんでした。金額を確定する前に再取得してください。</p>
+            <Button variant="outline" onClick={() => void refreshMarginInfo()}>再取得</Button>
+          </div>
+        ) : <p>会社設定と見積金額を確認しています…</p>}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("space-y-3", loading && "opacity-60")}>

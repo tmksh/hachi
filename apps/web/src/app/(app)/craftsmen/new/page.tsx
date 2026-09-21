@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { CraftsmanMasterFields } from "@/components/craftsmen/craftsman-master-f
 
 export default function CraftsmanNewPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -49,7 +51,9 @@ export default function CraftsmanNewPage() {
         contract_rate: null,
         payment_notes: null,
       });
-      toast.success("登録しました"); router.push("/craftsmen");
+      toast.success("登録しました");
+      await queryClient.invalidateQueries({ queryKey: ["craftsmen"] });
+      router.push("/craftsmen");
     } catch { toast.error("登録に失敗"); } finally { setSaving(false); }
   };
 

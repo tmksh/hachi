@@ -379,23 +379,22 @@ function procurementUpdateErrorMessage(message: string): string {
     : message;
 }
 
-export async function updateOrderProcurement(
+async function updateOrderProcurement(
   orderId: string,
   patch: Record<string, unknown>,
+  expectedStatuses?: string[],
 ): Promise<ProcurementOrder> {
   const { supabase, companyId } = await getAuthContext();
-  const { data: updated, error: updateError } = await supabase
-    .from("contractor_orders")
+  let update = supabase.from("contractor_orders")
     .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("id", orderId)
-    .eq("company_id", companyId)
-    .select("id")
-    .maybeSingle();
+    .eq("id", orderId).eq("company_id", companyId);
+  if (expectedStatuses) update = update.in("ledger_status", expectedStatuses);
+  const { data: updated, error: updateError } = await update.select("id").maybeSingle();
   if (updateError) {
     throw new Error(procurementUpdateErrorMessage(updateError.message));
   }
   if (!updated) {
-    throw new Error("発注が見つかりません");
+    throw new Error(expectedStatuses ? "他の操作で状態が変更されています。一覧を更新して確認してください。" : "発注が見つかりません");
   }
 
   const { data, error } = await supabase
@@ -490,21 +489,21 @@ export async function attachStaffInvoicePdf(
       return actionFail("PDFまたは画像を添付してください", "PDFまたは画像を添付してください");
     }
 
-    const path = `procurement/${companyId}/${orderId}/vendor-invoice/${Date.now()}-${safeFileName(file.name)}`;
-    await uploadToStorage("documents", path, file, {
-      contentType: file.type || (isPdf ? "application/pdf" : "application/octet-stream"),
-      upsert: false,
-    });
-
     const invoiceNo = String(formData.get("invoiceNo") ?? "").trim();
     const rawAmount = String(formData.get("invoiceAmount") ?? "").trim();
     if (rawAmount === "") {
       return actionFail("請求書の金額を入力してください", "請求書の金額を入力してください");
     }
     const invoiceAmount = Number(rawAmount);
-    if (!Number.isFinite(invoiceAmount)) {
+    if (!Number.isFinite(invoiceAmount) || invoiceAmount < 0) {
       return actionFail("請求書の金額が不正です", "請求書の金額が不正です");
     }
+    const path = `procurement/${companyId}/${orderId}/vendor-invoice/${Date.now()}-${safeFileName(file.name)}`;
+    await uploadToStorage("documents", path, file, {
+      contentType: file.type || (isPdf ? "application/pdf" : "application/octet-stream"),
+      upsert: false,
+    });
+
     const tradeDate = current.delivery_date || current.inspection_date || todayIso();
     const patch: Record<string, unknown> = {
       vendor_invoice_pdf_path: path,
@@ -516,11 +515,11 @@ export async function attachStaffInvoicePdf(
     };
     let order: ProcurementOrder;
     try {
-      order = await updateOrderProcurement(orderId, patch);
+      order = await updateOrderProcurement(orderId, patch, ["inspected"]);
     } catch (e) {
       if (invoiceAmount != null && /vendor_invoice_amount/i.test(e instanceof Error ? e.message : "")) {
         delete patch.vendor_invoice_amount;
-        order = await updateOrderProcurement(orderId, patch);
+        order = await updateOrderProcurement(orderId, patch, ["inspected"]);
       } else {
         throw e;
       }
@@ -533,8 +532,8 @@ export async function attachStaffInvoicePdf(
 
 export async function getProcurementFileUrl(path: string): Promise<ActionResult<{ url: string }>> {
   try {
-    await getAuthContext();
-    if (!path.startsWith("procurement/")) {
+    const { companyId } = await getAuthContext();
+    if (!path.startsWith(`procurement/${companyId}/`) || path.split("/").includes("..")) {
       return actionFail("不正なパスです", "不正なパスです");
     }
     const url = await getSignedStorageUrlAsAdmin("documents", path, 3600);
@@ -575,7 +574,7 @@ export async function registerDelivery(input: {
     if (input.attachments && input.attachments.length > 0) {
       patch.delivery_attachments = input.attachments;
     }
-    const order = await updateOrderProcurement(input.orderId, patch);
+    const order = await updateOrderProcurement(input.orderId, patch, ["ordered", "delivered"]);
     return actionOk({ order });
   } catch (e) {
     return actionFail(e, "納品の登録に失敗しました");
@@ -631,7 +630,7 @@ export async function registerDeliveryAndInspect(input: {
     if (input.attachments && input.attachments.length > 0) {
       patch.delivery_attachments = input.attachments;
     }
-    const order = await updateOrderProcurement(input.orderId, patch);
+    const order = await updateOrderProcurement(input.orderId, patch, ["ordered", "delivered"]);
 
     let mail: { sent: boolean; to?: string; error?: string } = { sent: false };
     if (input.sendEmail) {
@@ -676,7 +675,7 @@ export async function completeInspection(input: {
         delivery_date: null,
         delivery_content: null,
         delivery_attachments: [],
-      });
+      }, ["delivered"]);
       return actionOk({ order });
     }
 
@@ -691,7 +690,7 @@ export async function completeInspection(input: {
       ledger_status: "inspected",
       invoice_token: token,
       invoice_token_expires_at: `${expires}T23:59:59.000Z`,
-    });
+    }, ["delivered"]);
 
     let mail: { sent: boolean; to?: string; error?: string } = { sent: false };
     if (input.sendEmail) {
@@ -765,7 +764,7 @@ export async function confirmVendorInvoice(orderId: string): Promise<ActionResul
     const order = await updateOrderProcurement(orderId, {
       director_confirmed_at: new Date().toISOString(),
       ledger_status: "confirmed",
-    });
+    }, ["invoice_received"]);
     return actionOk({ order });
   } catch (e) {
     return actionFail(e, "請求書の確認に失敗しました");
@@ -819,7 +818,7 @@ export async function approveVendorInvoice(orderId: string): Promise<ActionResul
     const order = await updateOrderProcurement(orderId, {
       accounting_approved_at: new Date().toISOString(),
       ledger_status: "payment_approved",
-    });
+    }, ["confirmed"]);
     return actionOk({ order });
   } catch (e) {
     return actionFail(e, "支払い確定に失敗しました");
@@ -865,7 +864,7 @@ export async function returnVendorInvoice(input: {
       director_confirmed_at: null,
       accounting_approved_at: null,
       vendor_invoice_remarks: `差し戻し: ${reason}`,
-    });
+    }, ["invoice_received", "confirmed"]);
 
     const assigneeId = constructionAssigneeId(order);
     let notified = false;
@@ -1383,16 +1382,22 @@ export async function submitVendorInvoice(input: {
       ledger_status: "invoice_received",
       updated_at: new Date().toISOString(),
     };
-    if (input.pdfPath) patch.vendor_invoice_pdf_path = input.pdfPath;
-    let { error } = await admin
-      .from("contractor_orders")
-      .update(patch)
-      .eq("id", order.id);
+    if (input.pdfPath) {
+      if (!input.pdfPath.startsWith(`procurement/${order.company_id}/${order.id}/vendor-invoice/`) || input.pdfPath.split("/").includes("..")) {
+        return actionFail("不正な添付ファイルです", "不正な添付ファイルです");
+      }
+      patch.vendor_invoice_pdf_path = input.pdfPath;
+    }
+    const submit = () => admin.from("contractor_orders").update(patch)
+      .eq("id", order.id).eq("invoice_token", input.token).eq("ledger_status", "inspected")
+      .is("vendor_invoice_submitted_at", null).select("id").maybeSingle();
+    let { data: submitted, error } = await submit();
     if (error && /vendor_invoice_amount/i.test(error.message)) {
       delete patch.vendor_invoice_amount;
-      ({ error } = await admin.from("contractor_orders").update(patch).eq("id", order.id));
+      ({ data: submitted, error } = await submit());
     }
     if (error) return actionFail(error.message, "送信に失敗しました");
+    if (!submitted) return actionFail("すでに受領済み、または状態が変更されています", "すでに受領済み、または状態が変更されています");
     return actionOk({ submitted: true as const });
   } catch (e) {
     return actionFail(e, "送信に失敗しました");

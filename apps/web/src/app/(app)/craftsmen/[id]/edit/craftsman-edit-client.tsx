@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save, X, Plus } from "lucide-react";
 import { updateCraftsman } from "@/lib/actions/craftsmen";
-import type { fetchCraftsman } from "@/lib/queries/portal";
+import { QK, type fetchCraftsman } from "@/lib/queries/portal";
 import { splitLeadingCode } from "@/lib/procurement";
 import { CraftsmanMasterFields } from "@/components/craftsmen/craftsman-master-fields";
 import { specialtyLabel } from "@/lib/craftsmen-options";
@@ -85,6 +86,7 @@ type CraftsmanEditClientProps = {
 
 export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(initialCraftsman.name);
   const [companyName, setCompanyName] = useState(initialCraftsman.company_name ?? "");
@@ -117,7 +119,7 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
     if (!name.trim()) { toast.error("名前を入力してください"); return; }
     setSaving(true);
     try {
-      await updateCraftsman(id, {
+      const saved = await updateCraftsman(id, {
         name: name.trim(),
         company_name: companyName || null,
         phone: phone || null,
@@ -141,6 +143,12 @@ export function CraftsmanEditClient({ id, initialCraftsman }: CraftsmanEditClien
         bank_account_number: bankAccountNumber || null,
         bank_account_kana: bankAccountKana || null,
       });
+      queryClient.setQueryData(QK.craftsman(id), saved);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["craftsmen"] }),
+        queryClient.invalidateQueries({ queryKey: QK.procurementOrders }),
+        queryClient.invalidateQueries({ queryKey: QK.procurementMasters }),
+      ]);
       toast.success("更新しました");
       router.push(`/craftsmen/${id}`);
     } catch { toast.error("更新に失敗"); } finally { setSaving(false); }

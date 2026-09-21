@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -50,6 +50,7 @@ import {
   markThreadRead,
   toggleThreadStar,
   toggleThreadFlag,
+  setThreadSpam,
   moveThreadToFolder,
   listEmailFolders,
   createEmailFolder,
@@ -64,15 +65,17 @@ import {
 import { fetchMailAccounts, fetchMailThread, fetchMailThreads } from "@/lib/queries/portal";
 import { MOCK_MAIL_THREADS, MOCK_MAIL_THREAD_DETAILS } from "@/lib/mocks/mail-mock";
 import { ConnectMailDialog } from "@/components/mail/connect-mail-dialog";
+import { threadMatchesFolder } from "@/lib/mail-folders";
 import { guessReplyAddress } from "@/lib/mail-reply";
 
 type Thread = Awaited<ReturnType<typeof fetchMailThreads>>[number] & {
+  is_spam?: boolean | null;
   is_flagged?: boolean | null;
   folder_id?: string | null;
 };
 type ThreadDetail = Awaited<ReturnType<typeof fetchMailThread>>;
 
-/** 固定フォルダ: 受信トレイ（全件） / スター / フラグ。それ以外は email_folders.id */
+/** 固定フォルダ: 受信トレイ / 迷惑メール / スター / フラグ。それ以外は email_folders.id */
 type FolderKey = "inbox" | "starred" | "flagged" | string;
 
 const isMockId = (id: string) => id.startsWith("mock_");
@@ -136,19 +139,24 @@ export function MailClient({
     listEmailFolders().then(setFolders).catch(() => setFolders([]));
   }, []);
 
-  const visibleThreads = threads.filter((t: Thread) => {
-    if (activeFolder === "inbox") return true;
-    if (activeFolder === "starred") return Boolean(t.is_starred);
-    if (activeFolder === "flagged") return Boolean(t.is_flagged);
-    return t.folder_id === activeFolder;
-  });
-  const countFor = (key: FolderKey) =>
-    threads.filter((t: Thread) => {
-      if (key === "inbox") return !t.is_read;
-      if (key === "starred") return Boolean(t.is_starred);
-      if (key === "flagged") return Boolean(t.is_flagged);
-      return t.folder_id === key;
-    }).length;
+  const visibleThreads = threads.filter((t) => threadMatchesFolder(t, activeFolder));
+  const countFor = (key: FolderKey) => threads.filter((t) =>
+    threadMatchesFolder(t, key) && (key !== "inbox" || !t.is_read),
+  ).length;
+
+  const handleSpam = async (id: string, spam: boolean) => {
+    try {
+      if (!isMockId(id)) {
+        const result = await setThreadSpam(id, spam);
+        if (!result.ok) throw new Error(result.error);
+      }
+      setThreads((prev) => prev.map((t) => t.id === id ? { ...t, is_spam: spam, folder_id: null } : t));
+      if (selected?.id === id) setSelected(null);
+      toast.success(spam ? "迷惑メールへ移動しました" : "受信トレイへ戻しました");
+    } catch (error) {
+      toast.error(humanizeClientError(error, "迷惑メールの振り分けに失敗しました"));
+    }
+  };
 
   const handleFlag = async (id: string, current: boolean) => {
     setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, is_flagged: !current } : x)));
@@ -161,15 +169,16 @@ export function MailClient({
   };
 
   const handleMove = async (id: string, folderId: string | null) => {
-    const prevFolder = threads.find((x) => x.id === id)?.folder_id ?? null;
-    setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, folder_id: folderId } : x)));
+    const previous = threads.find((x) => x.id === id);
+    const prevFolder = previous?.folder_id ?? null;
+    setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, folder_id: folderId, is_spam: false } : x)));
     if (isMockId(id)) {
       toast.success(folderId ? `「${folders.find((f) => f.id === folderId)?.name ?? ""}」へ移動しました` : "受信トレイへ戻しました");
       return;
     }
     const res = await moveThreadToFolder(id, folderId);
     if (!res.ok) {
-      setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, folder_id: prevFolder } : x)));
+      setThreads((prev) => prev.map((x) => (x.id === id ? { ...x, folder_id: prevFolder, is_spam: previous?.is_spam } : x)));
       toast.error(res.error);
       return;
     }
@@ -211,6 +220,32 @@ export function MailClient({
     toast.success("フォルダを削除しました");
   };
 
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [accs, data] = await Promise.all([
+        fetchMailAccounts(),
+        fetchMailThreads().catch(() => []),
+      ]);
+      setAccounts(accs);
+      if (accs.length > 0) {
+        setThreads(data ?? []);
+        setUseMock(false);
+      } else if (!data || data.length === 0) {
+        setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
+        setUseMock(true);
+      } else {
+        setThreads(data);
+        setUseMock(false);
+      }
+    } catch {
+      setThreads([]);
+      setUseMock(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const connected = searchParams.get("mail_connected") ?? searchParams.get("gmail_connected");
     const error = searchParams.get("mail_error") ?? searchParams.get("gmail_error");
@@ -238,33 +273,9 @@ export function MailClient({
       };
       toast.error(msgs[error] ?? `エラー: ${error}`, { duration: 8000 });
     }
-  }, [searchParams]);
+  }, [searchParams, loadData]);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [accs, data] = await Promise.all([
-        fetchMailAccounts(),
-        fetchMailThreads().catch(() => []),
-      ]);
-      setAccounts(accs);
-      if (accs.length > 0) {
-        setThreads(data ?? []);
-        setUseMock(false);
-      } else if (!data || data.length === 0) {
-        setThreads(MOCK_MAIL_THREADS as unknown as Thread[]);
-        setUseMock(true);
-      } else {
-        setThreads(data);
-        setUseMock(false);
-      }
-    } catch {
-      setThreads([]);
-      setUseMock(false);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
 
   const handleSync = async (provider?: MailProvider) => {
     const targetProvider = provider ?? accounts[0]?.provider;
@@ -509,6 +520,7 @@ export function MailClient({
           <CardContent className="p-2 space-y-0.5">
             {([
               { key: "inbox" as FolderKey, label: "受信トレイ", icon: Inbox, badge: "unread" as const },
+              { key: "spam" as FolderKey, label: "迷惑メール", icon: AlertCircle, badge: "count" as const },
               { key: "starred" as FolderKey, label: "スター付き", icon: Star, badge: "count" as const },
               { key: "flagged" as FolderKey, label: "フラグ付き", icon: Flag, badge: "count" as const },
             ]).map(({ key, label, icon: Icon }) => {
@@ -705,6 +717,9 @@ export function MailClient({
                             </DropdownMenuItem>
                           ))}
                           {folders.length > 0 && <DropdownMenuSeparator />}
+                          <DropdownMenuItem onClick={() => void handleSpam(t.id, !t.is_spam)} className="gap-2 text-sm">
+                            <AlertCircle className="h-3.5 w-3.5" />{t.is_spam ? "迷惑メールを解除" : "迷惑メールへ移動"}
+                          </DropdownMenuItem>
                           {t.folder_id && (
                             <DropdownMenuItem onClick={() => void handleMove(t.id, null)} className="gap-2 text-sm">
                               <Inbox className="h-3.5 w-3.5" />受信トレイに戻す

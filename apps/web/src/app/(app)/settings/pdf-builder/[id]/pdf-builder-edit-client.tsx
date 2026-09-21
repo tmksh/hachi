@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { QK } from "@/lib/queries/portal";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -200,6 +202,7 @@ export function PdfBuilderEditClient({
   previewContext?: FillContext;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isNew = id === "new";
 
   const [loading, setLoading] = useState(false);
@@ -569,7 +572,14 @@ export function PdfBuilderEditClient({
         updatedAt: now,
       };
       if (onSaveTemplate) await onSaveTemplate(tpl);
-      else await savePdfFormTemplate(tpl);
+      else {
+        const saved = await savePdfFormTemplate(tpl);
+        // 再編集時も保存済みのPDFパス・項目を使い、一覧の古いキャッシュを残さない。
+        queryClient.setQueryData<PdfFormTemplate[]>(QK.pdfTemplates, (current) =>
+          current ? [...current.filter((item) => item.id !== saved.id), saved] : [saved],
+        );
+        await queryClient.invalidateQueries({ queryKey: QK.pdfTemplates, refetchType: "none" });
+      }
       onSaved?.();
       setSavedEdit({ name: tpl.name, docType: tpl.docType, storagePath: tpl.storagePath, fileName: tpl.fileName, fields: tpl.fields });
       try {

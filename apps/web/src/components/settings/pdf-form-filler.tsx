@@ -38,6 +38,7 @@ import { slotsFromPdfPage, type FormSlot } from "@/lib/pdf-form-snap";
 import { pdfMappingIssues } from "@/lib/pdf-form-mapping";
 import { pdfFieldOverlayHtml, pdfPrintDocumentHtml, type PdfPrintPage } from "@/lib/pdf-form-print";
 import { cn } from "@/lib/utils";
+import { PDF_FORM_ANNOTATION_MODE } from "@/lib/pdf-form-render";
 
 type PanelProps = {
   template: PdfFormTemplate;
@@ -199,7 +200,7 @@ function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: 
             canvas,
             canvasContext: c,
             viewport: vp,
-            annotationMode: 1,
+            annotationMode: PDF_FORM_ANNOTATION_MODE,
           } as Parameters<typeof page.render>[0]) as unknown as {
             promise: Promise<void>;
           }
@@ -336,6 +337,7 @@ function PdfFormFillerContent({ template, ctx, onClose, className, pdfSource }: 
                         doc={doc}
                         pageNumber={p + 1}
                         width={renderW}
+                        renderFormFields={false}
                         className="pointer-events-none absolute inset-0 h-full w-full"
                       />
                     )}

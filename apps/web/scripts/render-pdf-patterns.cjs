@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Node CommonJS test entry point. */
 // Emit the application's actual print HTML for each synthetic fixture. No browser emulation.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -12,6 +13,7 @@ function load(file) {
   return mod.exports;
 }
 const api = load('src/lib/pdf-form-template.ts');
+const {PDF_FORM_ANNOTATION_MODE} = load('src/lib/pdf-form-render.ts');
 const {pdfFieldOverlayHtml,pdfPrintDocumentHtml} = load('src/lib/pdf-form-print.ts');
 const {pdfMappingIssues} = load('src/lib/pdf-form-mapping.ts');
 const {slotsFromPdfPage} = load('src/lib/pdf-form-snap.ts');
@@ -31,7 +33,7 @@ const {slotsFromPdfPage} = load('src/lib/pdf-form-snap.ts');
     for(let i=0;i<doc.numPages;i++) {
       const page=await doc.getPage(i+1), vp=page.getViewport({scale:1}), large=page.getViewport({scale:2});
       const canvas=createCanvas(Math.ceil(large.width),Math.ceil(large.height));
-      await page.render({canvasContext:canvas.getContext('2d'),viewport:large,annotationMode:0}).promise;
+      await page.render({canvasContext:canvas.getContext('2d'),viewport:large,annotationMode:PDF_FORM_ANNOTATION_MODE}).promise;
       slots.push(await slotsFromPdfPage(page));
       pages.push({width:vp.width,height:vp.height,image:canvas.toDataURL('image/jpeg',.92),overlays:api.pdfFieldsForPage(template.fields,i).map(f=>pdfFieldOverlayHtml(f,api.formatPdfFieldValue(f,value(f)),vp.width,vp.width,vp.height)).join('')});
     }

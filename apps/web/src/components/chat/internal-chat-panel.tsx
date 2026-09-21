@@ -209,7 +209,7 @@ export function InternalChatPanel({
 
       <aside
         className="fixed top-0 right-0 z-50 h-screen flex flex-col bg-background border-l border-border shadow-xl"
-        style={{ width: INTERNAL_CHAT_WIDTH }}
+        style={{ width: INTERNAL_CHAT_WIDTH, maxWidth: "100vw" }}
         aria-label="チャット"
       >
         {/* ヘッダー */}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ function ConstructionNewPageContent({
   initialAssigneeCandidates = [],
 }: ConstructionNewClientProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [contracts, setContracts] = useState(initialContracts);
   const [profiles, setProfiles] = useState(initialProfiles);
@@ -268,12 +270,14 @@ function ConstructionNewPageContent({
           ? "登録しました。現場担当へ通知を送信しました"
           : "登録しました",
       );
+      await queryClient.invalidateQueries({ queryKey: ["constructions"] });
       router.push("/constructions");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "登録に失敗";
       // 工事本体は登録済みで通知だけ失敗した場合もメッセージを出す
       if (msg.includes("通知")) {
         toast.warning(msg);
+        await queryClient.invalidateQueries({ queryKey: ["constructions"] });
         router.push("/constructions");
       } else {
         toast.error(msg);

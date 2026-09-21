@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
+import { QK } from "@/lib/queries/portal";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ const ROLE_DESCRIPTIONS: Partial<Record<Role, string>> = {
 
 export default function CirculationNewPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -81,8 +84,8 @@ export default function CirculationNewPage() {
           ? "全員に投稿しました"
           : `${targetRoles.size}ロールに通知を送信しました`
       );
+      await queryClient.invalidateQueries({ queryKey: QK.announcements });
       router.push("/circulation");
-      router.refresh();
     } catch (e) {
       const message = e instanceof Error && e.message ? e.message : "投稿に失敗しました";
       toast.error(message);

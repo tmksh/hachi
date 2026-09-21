@@ -16,7 +16,9 @@
     "qa:budget-totals": "node scripts/test-budget-totals.cjs",
     "qa:management-fee": "node scripts/test-management-fee.cjs",
     "qa:inventory": "node scripts/inventory-ui-operations.cjs",
-    "qa:full-preflight": "node scripts/full-qa-preflight.cjs"
+    "qa:full-preflight": "node scripts/full-qa-preflight.cjs",
+    "qa:september": "node --test scripts/test-september-qa.cjs scripts/test-mail-rls.cjs scripts/test-admin-usage.cjs",
+    "qa:pdf-updates": "node --test scripts/test-pdf-updates.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
