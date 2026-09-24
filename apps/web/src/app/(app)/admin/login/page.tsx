@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { loginErrorToast } from "@/lib/auth-login-error";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -30,9 +31,8 @@ export default function AdminLoginPage() {
     });
 
     if (error || !data.user) {
-      toast.error("ログインに失敗しました", {
-        description: "メールアドレスまたはパスワードが正しくありません",
-      });
+      const { title, description } = loginErrorToast(error);
+      toast.error(title, { description });
       setIsSubmitting(false);
       return;
     }

@@ -17,6 +17,7 @@ import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { decideLoginHost, isSuperAdminEmail } from "@/lib/tenant-host";
+import { loginErrorToast } from "@/lib/auth-login-error";
 interface LoginFormProps {
   companyName?: string | null;
   tenantId?: string | null;
@@ -52,9 +53,8 @@ export function LoginForm({ companyName, tenantId }: LoginFormProps) {
     });
 
     if (error) {
-      toast.error("ログインに失敗しました", {
-        description: "メールアドレスまたはパスワードが正しくありません",
-      });
+      const { title, description } = loginErrorToast(error);
+      toast.error(title, { description });
       return;
     }
 
