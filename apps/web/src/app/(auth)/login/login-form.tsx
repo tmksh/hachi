@@ -17,7 +17,7 @@ import { googleCalendarOAuthOptions } from "@/lib/google-oauth-scopes";
 import { useBrandColor } from "@/hooks/use-brand-color";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { decideLoginHost, isSuperAdminEmail } from "@/lib/tenant-host";
-import { loginErrorToast } from "@/lib/auth-login-error";
+import { isLoginRateLimitError, loginErrorToast } from "@/lib/auth-login-error";
 interface LoginFormProps {
   companyName?: string | null;
   tenantId?: string | null;
@@ -58,11 +58,18 @@ export function LoginForm({ companyName, tenantId }: LoginFormProps) {
       return;
     }
 
-    const { data: auth } = await supabase.auth.getUser();
+    const { data: auth, error: userError } = await supabase.auth.getUser();
     const user = auth.user;
-    if (!user) {
-      await supabase.auth.signOut();
-      toast.error("この会社のアカウントではありません");
+    if (userError || !user) {
+      await supabase.auth.signOut({ scope: "local" });
+      if (isLoginRateLimitError(userError)) {
+        const limited = loginErrorToast(userError);
+        toast.error(limited.title, { description: limited.description });
+      } else {
+        toast.error("ログインに失敗しました", {
+          description: "セッションを確認できませんでした。ページを再読み込みしてからもう一度お試しください",
+        });
+      }
       return;
     }
 
